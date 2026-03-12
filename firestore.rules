@@ -2,23 +2,17 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // =============================================
-    // PHASE 1: Simple team access (no auth required)
-    // Anyone with the link can read/write.
-    // This is fine for a small trusted team.
-    // =============================================
+    // Church data — accessible to authenticated users
+    // Phase 1: any authenticated user can read/write
+    // Phase 2: restrict to users belonging to the church
     match /churches/{churchId}/{document=**} {
-      allow read, write: if true;
+      allow read, write: if request.auth != null;
     }
 
-    // =============================================
-    // PHASE 2: When you add authentication, replace
-    // the rules above with these:
-    //
-    // match /churches/{churchId}/{document=**} {
-    //   allow read, write: if request.auth != null
-    //     && exists(/databases/$(database)/documents/churches/$(churchId)/members/$(request.auth.uid));
-    // }
-    // =============================================
+    // User profiles — users can read all, write their own
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
   }
 }

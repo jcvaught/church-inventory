@@ -1,4 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="12" fill="#3d3428"/>
-  <text x="32" y="44" font-size="36" text-anchor="middle" fill="white">⛪</text>
+  <rect width="64" height="64" rx="14" fill="#1B2A4A"/>
+  <path d="M42 16a20 20 0 1 0 0 28" stroke="#2A7D6E" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+  <path d="M38 22a12 12 0 1 0 0 14" stroke="#D4A843" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.7"/>
+  <circle cx="36" cy="29" r="4.5" fill="#2A7D6E"/>
+  <circle cx="46" cy="16" r="3.5" fill="#D4A843"/>
+  <circle cx="46" cy="42" r="3.5" fill="#D4A843"/>
 </svg>

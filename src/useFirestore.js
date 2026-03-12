@@ -1,71 +1,300 @@
-// ╔══════════════════════════════════════════════════════════════╗
-// ║  useFirestore — Real-time database hook                     ║
-// ║  Handles reading, writing, and syncing all inventory data   ║
-// ║  across every device in real time.                          ║
-// ╚══════════════════════════════════════════════════════════════╝
-
 import { useState, useEffect, useCallback } from 'react';
 import {
-  doc, setDoc, onSnapshot, getDoc
+  doc, setDoc, getDoc, deleteDoc, getDocs,
+  collection, onSnapshot, addDoc, updateDoc, query, orderBy
 } from 'firebase/firestore';
-import { db, CHURCH_ID } from './firebase.js';
-import {
-  SEED_ELECTRONICS, SEED_TOOLS, SEED_CONSUMABLES, SEED_USERS
-} from './data/seedData.js';
+import { db } from './firebase.js';
 
-// All data for the church lives in one Firestore document.
-// This keeps things simple and avoids complex queries.
-// Firestore docs can hold up to 1MB — plenty for thousands of items.
-const docRef = doc(db, 'churches', CHURCH_ID);
-
-const INITIAL_STATE = {
-  electronics: SEED_ELECTRONICS,
-  tools: SEED_TOOLS,
-  consumables: SEED_CONSUMABLES,
-  log: [],
-  reservations: [],
-  users: SEED_USERS,
-};
-
-export function useFirestore() {
-  const [data, setData] = useState(null);
+export function useFirestore(churchId) {
+  const [settings, setSettings] = useState(null);
+  const [config, setConfig] = useState(null);
+  const [items, setItems] = useState([]);
+  const [supplies, setSupplies] = useState([]);
+  const [activityLog, setActivityLog] = useState([]);
+  const [reservations, setReservations] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Listen for real-time updates
+  // Subscribe to all collections
   useEffect(() => {
-    const unsubscribe = onSnapshot(
-      docRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          setData(snapshot.data());
-        } else {
-          // First time — seed the database
-          setDoc(docRef, INITIAL_STATE)
-            .then(() => setData(INITIAL_STATE))
-            .catch((err) => setError(err.message));
-        }
-        setLoading(false);
-      },
-      (err) => {
-        console.error('Firestore error:', err);
-        setError(err.message);
-        setLoading(false);
-      }
-    );
+    if (!churchId) return;
+    const unsubs = [];
+    let loaded = 0;
+    const totalSubs = 6;
+    const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
-    return () => unsubscribe();
-  }, []);
+    // Config
+    unsubs.push(onSnapshot(doc(db, 'churches', churchId, 'config', 'main'), (snap) => {
+      if (snap.exists()) setConfig(snap.data());
+      checkDone();
+    }, (err) => { setError(err.message); checkDone(); }));
 
-  // Generic updater — merges partial updates into the document
-  const update = useCallback(async (updates) => {
+    // Settings
+    unsubs.push(onSnapshot(doc(db, 'churches', churchId, 'config', 'settings'), (snap) => {
+      if (snap.exists()) setSettings(snap.data());
+      checkDone();
+    }, (err) => { setError(err.message); checkDone(); }));
+
+    // Items
+    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'items'), (snap) => {
+      setItems(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
+      checkDone();
+    }, (err) => { setError(err.message); checkDone(); }));
+
+    // Supplies
+    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'supplies'), (snap) => {
+      setSupplies(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
+      checkDone();
+    }, (err) => { setError(err.message); checkDone(); }));
+
+    // Activity Log
+    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'activityLog'), (snap) => {
+      const logs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+      logs.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+      setActivityLog(logs);
+      checkDone();
+    }, (err) => { setError(err.message); checkDone(); }));
+
+    // Reservations
+    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'reservations'), (snap) => {
+      setReservations(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
+      checkDone();
+    }, (err) => { setError(err.message); checkDone(); }));
+
+    return () => unsubs.forEach(u => u());
+  }, [churchId]);
+
+  // Load users for this church (not real-time, refresh on demand)
+  const loadUsers = useCallback(async () => {
+    if (!churchId) return;
     try {
-      await setDoc(docRef, updates, { merge: true });
+      const snap = await getDocs(collection(db, 'users'));
+      const churchUsers = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(u => u.churchId === churchId);
+      setUsers(churchUsers);
     } catch (err) {
-      console.error('Update error:', err);
-      setError(err.message);
+      console.error('Error loading users:', err);
     }
-  }, []);
+  }, [churchId]);
 
-  return { data, loading, error, update };
+  useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  // ── Settings ──
+  const updateSettings = useCallback(async (updates) => {
+    try {
+      await setDoc(doc(db, 'churches', churchId, 'config', 'settings'), updates, { merge: true });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const updateConfig = useCallback(async (updates) => {
+    try {
+      await setDoc(doc(db, 'churches', churchId, 'config', 'main'), updates, { merge: true });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  // ── Items ──
+  const addItem = useCallback(async (item, userId, userName) => {
+    try {
+      const ref = await addDoc(collection(db, 'churches', churchId, 'items'), {
+        ...item,
+        createdBy: userId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      await logActivity('add_item', item.itemId, userId, userName, { description: item.description });
+      return ref.id;
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const updateItem = useCallback(async (docId, updates, userId, userName) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'items', docId), {
+        ...updates,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const checkOutItem = useCallback(async (docId, data, userId, userName) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'items', docId), {
+        status: 'Checked Out',
+        assignedTo: data.person,
+        checkOutDate: data.date,
+        expectedReturn: data.returnDate,
+        updatedAt: new Date().toISOString()
+      });
+      await logActivity('check_out', data.itemId, userId, userName, {
+        person: data.person,
+        purpose: data.purpose,
+        ministry: data.ministry,
+        expectedReturn: data.returnDate
+      });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const returnItem = useCallback(async (docId, data, userId, userName) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'items', docId), {
+        status: 'Available',
+        assignedTo: '',
+        checkOutDate: '',
+        expectedReturn: '',
+        condition: data.condition,
+        updatedAt: new Date().toISOString()
+      });
+      await logActivity('return', data.itemId, userId, userName, {
+        condition: data.condition,
+        returnedBy: data.person
+      });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const retireItem = useCallback(async (docId, data, userId, userName) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'items', docId), {
+        status: 'Disposed',
+        disposedReason: data.reason,
+        disposedDate: data.date,
+        disposedBy: userId,
+        disposedNotes: data.notes,
+        recoveryValue: data.recoveryValue || null,
+        updatedAt: new Date().toISOString()
+      });
+      await logActivity('dispose', data.itemId, userId, userName, {
+        reason: data.reason,
+        notes: data.notes
+      });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const markRepair = useCallback(async (docId, data, userId, userName) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'items', docId), {
+        status: 'Under Repair',
+        repairIssue: data.issue,
+        repairHandler: data.handler,
+        repairExpectedDate: data.expectedDate,
+        updatedAt: new Date().toISOString()
+      });
+      await logActivity('mark_repair', data.itemId, userId, userName, {
+        issue: data.issue,
+        handler: data.handler
+      });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const markRepaired = useCallback(async (docId, data, userId, userName) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'items', docId), {
+        status: 'Available',
+        repairIssue: '',
+        repairHandler: '',
+        repairExpectedDate: '',
+        updatedAt: new Date().toISOString()
+      });
+      await logActivity('mark_repaired', data.itemId, userId, userName, {});
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  // ── Supplies ──
+  const addSupply = useCallback(async (supply, userId, userName) => {
+    try {
+      await addDoc(collection(db, 'churches', churchId, 'supplies'), {
+        ...supply,
+        createdBy: userId,
+        createdAt: new Date().toISOString()
+      });
+      await logActivity('add_supply', supply.supplyId, userId, userName, { description: supply.description });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const useSupply = useCallback(async (docId, data, userId, userName) => {
+    try {
+      const ref = doc(db, 'churches', churchId, 'supplies', docId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return;
+      const current = snap.data();
+      const newQty = Math.max(0, (current.quantity || 0) - Number(data.qty));
+      await updateDoc(ref, { quantity: newQty });
+      await logActivity('use_supply', current.supplyId, userId, userName, {
+        quantityUsed: Number(data.qty),
+        purpose: data.purpose,
+        remaining: newQty
+      });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const restockSupply = useCallback(async (docId, data, userId, userName) => {
+    try {
+      const ref = doc(db, 'churches', churchId, 'supplies', docId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return;
+      const current = snap.data();
+      const newQty = (current.quantity || 0) + Number(data.qty);
+      await updateDoc(ref, {
+        quantity: newQty,
+        lastRestocked: new Date().toISOString()
+      });
+      await logActivity('restock', current.supplyId, userId, userName, {
+        quantityAdded: Number(data.qty),
+        source: data.source,
+        newTotal: newQty
+      });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  // ── Activity Log ──
+  const logActivity = useCallback(async (action, itemId, userId, userName, details = {}) => {
+    try {
+      await addDoc(collection(db, 'churches', churchId, 'activityLog'), {
+        action,
+        itemId,
+        performedBy: userId,
+        performedByName: userName,
+        timestamp: new Date().toISOString(),
+        details
+      });
+    } catch (err) { console.error('Log error:', err); }
+  }, [churchId]);
+
+  // ── Reservations ──
+  const addReservation = useCallback(async (res, userId, userName) => {
+    try {
+      await addDoc(collection(db, 'churches', churchId, 'reservations'), {
+        ...res,
+        requestedBy: userId,
+        requestedByName: userName,
+        status: 'Pending',
+        createdAt: new Date().toISOString()
+      });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const updateReservation = useCallback(async (docId, updates) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'reservations', docId), updates);
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  // ── User management ──
+  const updateUser = useCallback(async (userId, updates) => {
+    try {
+      await updateDoc(doc(db, 'users', userId), updates);
+      await loadUsers();
+    } catch (err) { setError(err.message); }
+  }, [loadUsers]);
+
+  return {
+    config, settings, items, supplies, activityLog, reservations, users,
+    loading, error,
+    updateSettings, updateConfig, loadUsers,
+    addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired,
+    addSupply, useSupply, restockSupply,
+    logActivity,
+    addReservation, updateReservation,
+    updateUser
+  };
 }
