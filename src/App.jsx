@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { useAuth } from './useAuth.js';
 import { useFirestore } from './useFirestore.js';
 
@@ -19,6 +19,18 @@ const inp = { width:"100%", padding:"11px 14px", borderRadius:10, border:"1px so
 const btnP = { padding:"11px 24px", borderRadius:10, border:"none", background:B.teal, color:B.white, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:f1, letterSpacing:.2 };
 const btnS = { padding:"11px 24px", borderRadius:10, border:"1px solid "+B.sand, background:B.white, color:B.textDark, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:f1 };
 const btnD = { padding:"11px 24px", borderRadius:10, border:"1px solid #FECACA", background:B.redPale, color:B.red, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:f1 };
+
+/* ═══ MOBILE CONTEXT + HOOK ═══ */
+const MobileCtx = createContext(false);
+function useWindowWidth() {
+  const [w, setW] = useState(window.innerWidth);
+  useEffect(() => {
+    const h = () => setW(window.innerWidth);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
+  return w;
+}
 
 /* ═══ LOGO (Option C: Arc & Nodes) ═══ */
 function Logo({ size = 40, light = false }) {
@@ -54,12 +66,13 @@ function FullLogo({ size = 38, light = false }) {
 
 /* ═══ UI Primitives ═══ */
 function Modal({ open, onClose, title, wide, children }) {
+  const isMobile = useContext(MobileCtx);
   if (!open) return null;
-  return <div style={{ position:"fixed", inset:0, zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={onClose}>
+  return <div style={{ position:"fixed", inset:0, zIndex:1000, display:"flex", alignItems:isMobile?"flex-end":"center", justifyContent:"center" }} onClick={onClose}>
     <div style={{ position:"absolute", inset:0, background:"rgba(27,42,74,0.45)", backdropFilter:"blur(6px)" }}/>
-    <div style={{ position:"relative", background:B.cream, borderRadius:18, padding:"30px 34px", maxWidth:wide?720:520, width:"92%", maxHeight:"88vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(27,42,74,0.18)" }} onClick={e=>e.stopPropagation()}>
+    <div style={{ position:"relative", background:B.cream, borderRadius:isMobile?"18px 18px 0 0":18, padding:isMobile?"22px 18px 28px":"30px 34px", maxWidth:wide?720:520, width:isMobile?"100%":"92%", maxHeight:isMobile?"92vh":"88vh", overflowY:"auto", boxShadow:"0 -8px 40px rgba(27,42,74,0.18)" }} onClick={e=>e.stopPropagation()}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:22 }}>
-        <h3 style={{ margin:0, fontSize:20, fontFamily:f1, fontWeight:700, color:B.navy }}>{title}</h3>
+        <h3 style={{ margin:0, fontSize:isMobile?17:20, fontFamily:f1, fontWeight:700, color:B.navy }}>{title}</h3>
         <button onClick={onClose} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", color:B.textLight }}>&times;</button>
       </div>
       {children}
@@ -562,8 +575,9 @@ function Dashboard({ store, userProfile }) {
 /* ═══ ALL ITEMS PAGE ══════════════════════════ */
 /* ═══════════════════════════════════════════════ */
 
-function ItemsPage({ store, userProfile }) {
+function ItemsPage({ store, userProfile, initialItemId }) {
   const { items, settings, addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired } = store;
+  const isMobile = useContext(MobileCtx);
   const activeItems = items.filter(i => i.status !== "Disposed");
   const disposedItems = items.filter(i => i.status === "Disposed");
 
@@ -580,6 +594,14 @@ function ItemsPage({ store, userProfile }) {
   const [showRepair, setShowRepair] = useState(null);     // item object
   const [showRetire, setShowRetire] = useState(null);     // item object
   const [showDetail, setShowDetail] = useState(null);     // item object
+
+  // Deep-link: open item from ?item= URL param
+  const deepLinked = useRef(false);
+  useEffect(() => {
+    if (!initialItemId || deepLinked.current || !items.length) return;
+    const found = items.find(i => i.itemId === initialItemId);
+    if (found) { setShowDetail(found); deepLinked.current = true; }
+  }, [initialItemId, items]);
 
   // Forms
   const emptyItem = { itemId:"", description:"", location:"", ministry:"", status:"Available", condition:"Good", notes:"", tags:[] };
@@ -768,13 +790,14 @@ function ItemsPage({ store, userProfile }) {
 
   // ── Item detail row ──
   function ItemRow({ item }) {
+    const isMob = useContext(MobileCtx);
     const overdue = item.status === "Checked Out" && item.expectedReturn && item.expectedReturn < today;
     return (
       <div
         onClick={()=>setShowDetail(showDetail?._docId === item._docId ? null : item)}
         style={{
           display:"flex", alignItems:"center", justifyContent:"space-between",
-          padding:"14px 18px", borderRadius:12, cursor:"pointer",
+          padding:isMob?"12px 14px":"14px 18px", borderRadius:12, cursor:"pointer",
           background: overdue ? B.redPale : B.white,
           border: overdue ? "1px solid #FECACA" : "1px solid "+B.sand,
           transition:"all 0.15s", flexWrap:"wrap", gap:10
@@ -782,21 +805,22 @@ function ItemsPage({ store, userProfile }) {
         onMouseEnter={e=>{ if(!overdue) e.currentTarget.style.borderColor=B.teal; e.currentTarget.style.boxShadow="0 2px 8px rgba(42,125,110,0.08)"; }}
         onMouseLeave={e=>{ e.currentTarget.style.borderColor=overdue?"#FECACA":B.sand; e.currentTarget.style.boxShadow="none"; }}
       >
-        <div style={{ display:"flex", alignItems:"center", gap:12, flex:1, minWidth:200 }}>
-          <div style={{ width:40, height:40, borderRadius:10, background:B.tealPale, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>📋</div>
-          <div>
-            <div style={{ fontWeight:600, fontSize:14, color:B.navy }}>{item.description || "Unnamed"}</div>
+        <div style={{ display:"flex", alignItems:"center", gap:12, flex:1, minWidth:0 }}>
+          <div style={{ width:38, height:38, borderRadius:10, background:B.tealPale, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>📋</div>
+          <div style={{ minWidth:0 }}>
+            <div style={{ fontWeight:600, fontSize:14, color:B.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.description || "Unnamed"}</div>
             <div style={{ fontSize:12, color:B.textLight, display:"flex", gap:8, flexWrap:"wrap", marginTop:2 }}>
               <span style={{ fontFamily:"monospace", letterSpacing:1 }}>{item.itemId}</span>
-              {item.location && <span>📍 {item.location}</span>}
+              {item.location && !isMob && <span>📍 {item.location}</span>}
               {item.assignedTo && <span>👤 {item.assignedTo}</span>}
               {overdue && <span style={{ color:B.red, fontWeight:700 }}>OVERDUE</span>}
             </div>
           </div>
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", flexShrink:0 }}>
           <Badge status={item.status} />
-          {itemActions(item)}
+          {/* On mobile, all actions are in the detail modal — tap the row to open */}
+          {!isMob && itemActions(item)}
         </div>
       </div>
     );
@@ -896,6 +920,30 @@ function ItemsPage({ store, userProfile }) {
             </div>
           )}
           {showDetail.notes && <div style={{ marginTop:14 }}><span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", fontFamily:f1 }}>Notes</span><div style={{ fontSize:14, marginTop:2, color:B.textMid }}>{showDetail.notes}</div></div>}
+
+          {/* QR Code */}
+          {(() => {
+            const itemUrl = window.location.origin + window.location.pathname.replace(/\/+$/, '') + '?item=' + encodeURIComponent(showDetail.itemId);
+            const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=8&data=${encodeURIComponent(itemUrl)}`;
+            return (
+              <div style={{ marginTop:18, paddingTop:16, borderTop:"1px solid "+B.sand }}>
+                <div style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:10 }}>QR Code — Scan to open this item</div>
+                <div style={{ display:"flex", alignItems:"flex-start", gap:16, flexWrap:"wrap" }}>
+                  <img src={qrSrc} alt={`QR for ${showDetail.itemId}`} style={{ width:110, height:110, borderRadius:8, border:"1px solid "+B.sand, flexShrink:0 }} />
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, color:B.textMid, marginBottom:8, wordBreak:"break-all", lineHeight:1.5 }}>{itemUrl}</div>
+                    <a
+                      href={`https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=20&data=${encodeURIComponent(itemUrl)}`}
+                      target="_blank" rel="noreferrer"
+                      style={{ ...btnS, fontSize:11, padding:"5px 12px", textDecoration:"none", display:"inline-block", color:B.textDark }}>
+                      ↓ Download QR
+                    </a>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{ display:"flex", gap:8, marginTop:20, flexWrap:"wrap" }}>
             {itemActions(showDetail)}
             {showDetail.status !== "Disposed" && (
@@ -1055,6 +1103,7 @@ function ItemsPage({ store, userProfile }) {
 
 function SuppliesPage({ store, userProfile }) {
   const { supplies, settings, addSupply, useSupply, restockSupply } = store;
+  const isMobile = useContext(MobileCtx);
 
   const [search, setSearch] = useState("");
   const [showLowOnly, setShowLowOnly] = useState(false);
@@ -1200,7 +1249,7 @@ function SuppliesPage({ store, userProfile }) {
           </p>
         </div>
       ) : (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(320px, 1fr))", gap:12 }}>
+        <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill, minmax(300px, 1fr))", gap:12 }}>
           {filtered.map(s => {
             const isLow = s.quantity <= s.minQuantity;
             const isEmpty = s.quantity === 0;
@@ -1793,6 +1842,15 @@ function AppShell({ authHook }) {
   const store = useFirestore(userProfile.churchId);
   const [tab, setTab] = useState("dashboard");
   const [menuOpen, setMenuOpen] = useState(false);
+  const isMobile = useWindowWidth() < 768;
+  const [initialItemId] = useState(() => new URLSearchParams(window.location.search).get('item'));
+
+  useEffect(() => {
+    if (initialItemId) {
+      window.history.replaceState({}, '', window.location.pathname);
+      setTab('inventory');
+    }
+  }, []);
 
   if (store.loading) return <Spinner />;
 
@@ -1808,11 +1866,12 @@ function AppShell({ authHook }) {
   const pendingRes = (store.reservations || []).filter(r => r.status === "Pending");
 
   return (
+    <MobileCtx.Provider value={isMobile}>
     <div style={{ fontFamily:f2, background:`linear-gradient(170deg, ${B.cream} 0%, ${B.warmGray} 100%)`, minHeight:"100vh", color:B.textDark }}>
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 
       {/* ═══ HEADER ═══ */}
-      <div style={{ background:`linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 60%, #2C4066 100%)`, padding:"18px 28px 14px", color:B.white, position:"relative", overflow:"hidden" }}>
+      <div style={{ background:`linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 60%, #2C4066 100%)`, padding:isMobile?"14px 16px 14px":"18px 28px 14px", color:B.white, position:"relative", overflow:"hidden" }}>
         <div style={{ position:"absolute", inset:0, opacity:0.04, backgroundImage:"radial-gradient(circle at 2px 2px, white 1px, transparent 0)", backgroundSize:"24px 24px" }}/>
         <div style={{ maxWidth:1100, margin:"0 auto", position:"relative" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
@@ -1840,15 +1899,15 @@ function AppShell({ authHook }) {
             </div>
           </div>
 
-          {/* Tabs */}
-          <div style={{ display:"flex", gap:2, marginTop:16, marginBottom:-14, overflowX:"auto" }}>
+          {/* Tabs — desktop only */}
+          {!isMobile && <div style={{ display:"flex", gap:2, marginTop:16, marginBottom:-14, overflowX:"auto" }}>
             {[["dashboard","Dashboard"],["inventory","All Items"],["supplies","Supplies"],["reservations","Reservations"],["log","Activity Log"],["settings","Settings"]].map(([k,v]) =>
               <button key={k} onClick={()=>{setTab(k);setMenuOpen(false);}} style={tabBtn(k)}>{v}
                 {k==="supplies"&&lowStock.length>0&&<span style={{ marginLeft:6, background:B.red, color:"#fff", borderRadius:10, padding:"1px 7px", fontSize:10, fontWeight:700 }}>{lowStock.length}</span>}
                 {k==="reservations"&&pendingRes.length>0&&<span style={{ marginLeft:6, background:B.gold, color:"#fff", borderRadius:10, padding:"1px 7px", fontSize:10, fontWeight:700 }}>{pendingRes.length}</span>}
               </button>
             )}
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -1856,20 +1915,45 @@ function AppShell({ authHook }) {
       <div style={{ height:3, background:`linear-gradient(90deg, ${B.teal}, ${B.gold})` }}/>
 
       {/* Page content */}
-      <div style={{ maxWidth:1100, margin:"0 auto", padding:"28px 28px 60px" }} onClick={()=>menuOpen&&setMenuOpen(false)}>
+      <div style={{ maxWidth:1100, margin:"0 auto", padding:isMobile?"16px 14px 96px":"28px 28px 60px" }} onClick={()=>menuOpen&&setMenuOpen(false)}>
         {tab === "dashboard" && <Dashboard store={store} userProfile={userProfile} />}
         {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} />}
-        {tab === "inventory" && <ItemsPage store={store} userProfile={userProfile} />}
+        {tab === "inventory" && <ItemsPage store={store} userProfile={userProfile} initialItemId={initialItemId} />}
         {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
         {tab === "reservations" && <ReservationsPage store={store} userProfile={userProfile} />}
         {tab === "log" && <ActivityLogPage store={store} />}
       </div>
 
-      {/* Footer */}
-      <div style={{ background:B.navy, padding:"24px 28px", textAlign:"center" }}>
-        <FullLogo size={26} light={true} />
-        <p style={{ color:"rgba(255,255,255,0.25)", fontSize:11, fontFamily:f1, marginTop:10 }}>churchopshub.com</p>
-      </div>
+      {/* Footer — desktop only */}
+      {!isMobile && (
+        <div style={{ background:B.navy, padding:"24px 28px", textAlign:"center" }}>
+          <FullLogo size={26} light={true} />
+          <p style={{ color:"rgba(255,255,255,0.25)", fontSize:11, fontFamily:f1, marginTop:10 }}>churchopshub.com</p>
+        </div>
+      )}
+
+      {/* Mobile Bottom Nav */}
+      {isMobile && (
+        <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:200, background:B.white, borderTop:"1px solid "+B.sand, display:"flex", paddingBottom:"env(safe-area-inset-bottom, 0px)" }}>
+          {[
+            ["dashboard","Home","🏠"],
+            ["inventory","Items","📦"],
+            ["supplies","Stock","🧴"],
+            ["reservations","Reserve","📅"],
+            ["log","Log","📋"],
+            ["settings","Settings","⚙️"],
+          ].map(([k,label,icon]) => (
+            <button key={k} onClick={()=>{setTab(k);setMenuOpen(false);}}
+              style={{ flex:1, padding:"8px 2px 6px", border:"none", background:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:tab===k?B.teal:B.textLight, position:"relative" }}>
+              <span style={{ fontSize:20 }}>{icon}</span>
+              <span style={{ fontSize:9, fontWeight:700, fontFamily:f1, letterSpacing:.3 }}>{label}</span>
+              {k==="supplies"&&lowStock.length>0&&<span style={{ position:"absolute", top:4, right:"calc(50% - 16px)", background:B.red, color:"#fff", borderRadius:10, padding:"0 4px", fontSize:9, fontWeight:700, minWidth:14, textAlign:"center" }}>{lowStock.length}</span>}
+              {k==="reservations"&&pendingRes.length>0&&<span style={{ position:"absolute", top:4, right:"calc(50% - 16px)", background:B.gold, color:"#fff", borderRadius:10, padding:"0 4px", fontSize:9, fontWeight:700, minWidth:14, textAlign:"center" }}>{pendingRes.length}</span>}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
+    </MobileCtx.Provider>
   );
 }
