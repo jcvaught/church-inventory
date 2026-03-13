@@ -110,6 +110,44 @@ function exportItemsCSV(items) {
   URL.revokeObjectURL(a.href);
 }
 
+/* ═══ EXPORT SUPPLIES CSV ═══ */
+function exportSuppliesCSV(supplies) {
+  const cols = ['supplyId','description','location','ministry','quantity','minQuantity','unit'];
+  const header = cols.join(',');
+  const rows = supplies.map(s => cols.map(c => {
+    const v = s[c];
+    if (v == null || v === '') return '';
+    const str = String(v);
+    return (str.includes(',') || str.includes('"') || str.includes('\n')) ? `"${str.replace(/"/g,'""')}"` : str;
+  }).join(','));
+  const csv = [header, ...rows].join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
+    download: `supplies-${new Date().toISOString().split('T')[0]}.csv`
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+/* ═══ EXPORT RESERVATIONS CSV ═══ */
+function exportReservationsCSV(reservations) {
+  const cols = ['itemId','itemDesc','eventName','eventDate','returnDate','purpose','ministry','status','requestedByName','approvedByName','notes'];
+  const header = cols.join(',');
+  const rows = reservations.map(r => cols.map(c => {
+    const v = r[c];
+    if (v == null || v === '') return '';
+    const str = String(v);
+    return (str.includes(',') || str.includes('"') || str.includes('\n')) ? `"${str.replace(/"/g,'""')}"` : str;
+  }).join(','));
+  const csv = [header, ...rows].join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
+    download: `reservations-${new Date().toISOString().split('T')[0]}.csv`
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
 /* ═══ LOGO (Option C: Arc & Nodes) ═══ */
 function Logo({ size = 40, light = false }) {
   const c1 = light ? "#fff" : B.teal;
@@ -523,6 +561,7 @@ function SettingsPage({ store, userProfile }) {
 
 function Dashboard({ store, userProfile }) {
   const { items, supplies, activityLog, reservations } = store;
+  const [myCheckouts, setMyCheckouts] = useState(false);
   const activeItems = items.filter(i => i.status !== "Disposed");
   const counts = {
     total: activeItems.length,
@@ -534,6 +573,8 @@ function Dashboard({ store, userProfile }) {
 
   const today = new Date().toISOString().split("T")[0];
   const checkedOut = activeItems.filter(i => i.status === "Checked Out");
+  const myName = userProfile?.name || "";
+  const displayedCheckouts = myCheckouts ? checkedOut.filter(i => i.assignedTo === myName) : checkedOut;
   const overdue = checkedOut.filter(i => i.expectedReturn && i.expectedReturn < today);
   const lowStock = supplies.filter(c => c.quantity <= c.minQuantity);
   const pendingRes = reservations.filter(r => r.status === "Pending");
@@ -602,10 +643,18 @@ function Dashboard({ store, userProfile }) {
 
       {/* Checked Out */}
       <div style={{ background:B.white, borderRadius:14, padding:24, border:"1px solid "+B.sand, boxShadow:"0 1px 3px rgba(27,42,74,0.06)", marginBottom:20 }}>
-        <h3 style={{ margin:"0 0 14px", fontFamily:f1, fontSize:17, fontWeight:700, color:B.navy }}>Currently Checked Out</h3>
-        {checkedOut.length === 0 ? <p style={{ color:B.textLight, fontSize:14 }}>No items currently checked out.</p> :
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14, flexWrap:"wrap", gap:8 }}>
+          <h3 style={{ margin:0, fontFamily:f1, fontSize:17, fontWeight:700, color:B.navy }}>Currently Checked Out</h3>
+          {checkedOut.length > 0 && (
+            <div style={{ display:"flex", borderRadius:8, overflow:"hidden", border:"1px solid "+B.sand }}>
+              <button onClick={()=>setMyCheckouts(false)} style={{ padding:"5px 14px", fontSize:12, fontFamily:f1, fontWeight:600, border:"none", cursor:"pointer", background:!myCheckouts?B.teal:B.white, color:!myCheckouts?B.white:B.textMid }}>All</button>
+              <button onClick={()=>setMyCheckouts(true)} style={{ padding:"5px 14px", fontSize:12, fontFamily:f1, fontWeight:600, border:"none", borderLeft:"1px solid "+B.sand, cursor:"pointer", background:myCheckouts?B.teal:B.white, color:myCheckouts?B.white:B.textMid }}>Mine</button>
+            </div>
+          )}
+        </div>
+        {displayedCheckouts.length === 0 ? <p style={{ color:B.textLight, fontSize:14 }}>{myCheckouts ? "You have no items checked out." : "No items currently checked out."}</p> :
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-            {checkedOut.map(item => (
+            {displayedCheckouts.map(item => (
               <div key={item._docId} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 16px", borderRadius:10, background:B.goldLight, border:"1px solid #E8DFC0", flexWrap:"wrap", gap:8 }}>
                 <div>
                   <span style={{ fontWeight:600, fontSize:14 }}>{item.description}</span>
@@ -668,8 +717,12 @@ function ItemsPage({ store, userProfile, initialItemId }) {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [locationFilter, setLocationFilter] = useState("all");
+  const [locationFilter, setLocationFilter] = useState(() => localStorage.getItem('inv_locationFilter') || 'all');
+  const [ministryFilter, setMinistryFilter] = useState(() => localStorage.getItem('inv_ministryFilter') || 'all');
   const [showDisposed, setShowDisposed] = useState(false);
+
+  function setLocation(v) { setLocationFilter(v); localStorage.setItem('inv_locationFilter', v); }
+  function setMinistry(v) { setMinistryFilter(v); localStorage.setItem('inv_ministryFilter', v); }
 
   // Modals
   const [showAdd, setShowAdd] = useState(false);
@@ -712,6 +765,7 @@ function ItemsPage({ store, userProfile, initialItemId }) {
     if (search && !item.description?.toLowerCase().includes(search.toLowerCase()) && !item.itemId?.toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter !== "all" && item.status !== statusFilter) return false;
     if (locationFilter !== "all" && item.location !== locationFilter) return false;
+    if (ministryFilter !== "all" && item.ministry !== ministryFilter) return false;
     return true;
   });
 
@@ -984,9 +1038,15 @@ function ItemsPage({ store, userProfile, initialItemId }) {
             <option value="Under Repair">Under Repair ({counts["Under Repair"]})</option>
           </select>
           {locations.length > 0 && (
-            <select value={locationFilter} onChange={e=>setLocationFilter(e.target.value)} style={{...inp, width:"auto", flex:"0 1 180px"}}>
+            <select value={locationFilter} onChange={e=>setLocation(e.target.value)} style={{...inp, width:"auto", flex:"0 1 180px"}}>
               <option value="all">All Locations</option>
               {locations.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+          )}
+          {ministries.length > 0 && (
+            <select value={ministryFilter} onChange={e=>setMinistry(e.target.value)} style={{...inp, width:"auto", flex:"0 1 180px"}}>
+              <option value="all">All Ministries</option>
+              {ministries.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           )}
         </div>
@@ -1399,7 +1459,10 @@ function SuppliesPage({ store, userProfile }) {
       {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:0 }}>Supplies & Consumables</h2>
-        <button onClick={()=>{setSupForm(emptySupply);setShowAdd(true);}} style={btnP}>+ Add Supply</button>
+        <div style={{ display:"flex", gap:8 }}>
+          {supplies.length > 0 && <button onClick={()=>exportSuppliesCSV(supplies)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
+          <button onClick={()=>{setSupForm(emptySupply);setShowAdd(true);}} style={btnP}>+ Add Supply</button>
+        </div>
       </div>
 
       {msg && <div style={{ background:B.tealPale, border:"1px solid "+B.teal, borderRadius:10, padding:"10px 16px", marginBottom:16, color:B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}>{msg}</div>}
@@ -1873,7 +1936,10 @@ function ReservationsPage({ store, userProfile }) {
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:0 }}>Reservations</h2>
-        <button onClick={()=>{setForm(emptyRes);setShowAdd(true);}} style={btnP}>+ New Reservation</button>
+        <div style={{ display:"flex", gap:8 }}>
+          {reservations.length > 0 && <button onClick={()=>exportReservationsCSV(reservations)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
+          <button onClick={()=>{setForm(emptyRes);setShowAdd(true);}} style={btnP}>+ New Reservation</button>
+        </div>
       </div>
 
       {/* Quick Stats */}
