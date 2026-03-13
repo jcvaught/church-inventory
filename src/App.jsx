@@ -388,6 +388,7 @@ function SettingsPage({ store, userProfile }) {
     setNewCode("");
   }
 
+  const isAdmin = userProfile?.role === "admin";
   const listCard = (key, title, icon) => {
     const items = settings[key] || [];
     return (
@@ -396,7 +397,7 @@ function SettingsPage({ store, userProfile }) {
           <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>{icon} {title}</h3>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <span style={{ fontSize:13, color:B.textLight }}>{items.length} items</span>
-            <button onClick={() => openListEditor(key, title)} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Edit</button>
+            {isAdmin && <button onClick={() => openListEditor(key, title)} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Edit</button>}
           </div>
         </div>
         <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
@@ -475,10 +476,16 @@ function SettingsPage({ store, userProfile }) {
                 <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                   <span style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:600, fontFamily:f1, background: u.role==="admin"?B.goldLight:B.tealPale, color:u.role==="admin"?"#96750E":B.teal }}>{u.role}</span>
                   {!u.active && <span style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:600, background:B.redPale, color:B.red }}>Inactive</span>}
-                  {userProfile?.role === "admin" && u.id !== userProfile.id && u.active && (
+                  {isAdmin && u.id !== userProfile.id && (
+                    <button onClick={()=>updateUser(u.id, {role: u.role==="admin" ? "user" : "admin"})}
+                      style={{ ...btnS, padding:"4px 10px", fontSize:11, color: u.role==="admin" ? B.textMid : "#96750E", borderColor: u.role==="admin" ? B.sand : B.gold }}>
+                      {u.role==="admin" ? "Remove Admin" : "Make Admin"}
+                    </button>
+                  )}
+                  {isAdmin && u.id !== userProfile.id && u.active && (
                     <button onClick={()=>updateUser(u.id, {active:false})} style={{ ...btnS, padding:"4px 10px", fontSize:11, color:B.red, borderColor:"#FECACA" }}>Deactivate</button>
                   )}
-                  {userProfile?.role === "admin" && !u.active && (
+                  {isAdmin && !u.active && (
                     <button onClick={()=>updateUser(u.id, {active:true})} style={{ ...btnS, padding:"4px 10px", fontSize:11, color:B.teal, borderColor:B.tealPale }}>Reactivate</button>
                   )}
                 </div>
@@ -698,6 +705,7 @@ function ItemsPage({ store, userProfile, initialItemId }) {
   const tagOptions = settings?.tags || [];
   const userId = userProfile?.id || userProfile?.uid;
   const userName = userProfile?.name || "Unknown";
+  const isAdmin = userProfile?.role === "admin";
 
   // Filter logic
   const displayItems = (showDisposed ? disposedItems : activeItems).filter(item => {
@@ -714,6 +722,8 @@ function ItemsPage({ store, userProfile, initialItemId }) {
   // ── Add Item ──
   async function handleAdd() {
     if (!itemForm.itemId.trim() || !itemForm.description.trim()) return;
+    const duplicate = items.find(i => i.itemId === itemForm.itemId.trim());
+    if (duplicate) { flash(`Item ID "${itemForm.itemId.trim()}" already exists. Use a unique ID.`); return; }
     setSaving(true);
     let photoUrl = "";
     if (photoFile) {
@@ -879,7 +889,7 @@ function ItemsPage({ store, userProfile, initialItemId }) {
   function itemActions(item) {
     const acts = [];
     if (item.status === "Available") {
-      acts.push(<button key="co" onClick={(e)=>{e.stopPropagation();setCoForm({ person:"", purpose:"", ministry:item.ministry||"", date:today, returnDate:"" });setShowCheckOut(item);}} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Check Out</button>);
+      acts.push(<button key="co" onClick={(e)=>{e.stopPropagation();setCoForm({ person:userName, purpose:"", ministry:item.ministry||"", date:today, returnDate:"" });setShowCheckOut(item);}} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Check Out</button>);
       acts.push(<button key="rep" onClick={(e)=>{e.stopPropagation();setShowRepair(item);}} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>Repair</button>);
     }
     if (item.status === "Checked Out" || item.status === "In Use") {
@@ -1089,7 +1099,7 @@ function ItemsPage({ store, userProfile, initialItemId }) {
           <div style={{ display:"flex", gap:8, marginTop:20, flexWrap:"wrap" }}>
             {itemActions(showDetail)}
             <button onClick={()=>printLabel(showDetail, config?.churchName)} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>🖨 Print Label</button>
-            {showDetail.status !== "Disposed" && (
+            {isAdmin && showDetail.status !== "Disposed" && (
               <button onClick={()=>{setRetireForm({ reason:"Broken", date:today, notes:"", recoveryValue:"" });setShowRetire(showDetail);setShowDetail(null);}} style={{ ...btnD, padding:"6px 14px", fontSize:12 }}>Retire</button>
             )}
           </div>
@@ -1263,7 +1273,7 @@ function ItemsPage({ store, userProfile, initialItemId }) {
 /* ═══════════════════════════════════════════════ */
 
 function SuppliesPage({ store, userProfile }) {
-  const { supplies, settings, addSupply, useSupply, restockSupply } = store;
+  const { supplies, settings, addSupply, updateSupply, useSupply, restockSupply } = store;
   const isMobile = useContext(MobileCtx);
 
   const [search, setSearch] = useState("");
@@ -1271,12 +1281,14 @@ function SuppliesPage({ store, userProfile }) {
 
   // Modals
   const [showAdd, setShowAdd] = useState(false);
+  const [showEditSupply, setShowEditSupply] = useState(null); // supply object
   const [showUse, setShowUse] = useState(null);      // supply object
   const [showRestock, setShowRestock] = useState(null); // supply object
 
   // Forms
   const emptySupply = { supplyId:"", description:"", location:"", ministry:"", quantity:0, minQuantity:5, unit:"each" };
   const [supForm, setSupForm] = useState(emptySupply);
+  const [editSupForm, setEditSupForm] = useState(emptySupply);
   const [useForm, setUseForm] = useState({ qty:"1", purpose:"" });
   const [restockForm, setRestockForm] = useState({ qty:"", source:"" });
   const [saving, setSaving] = useState(false);
@@ -1315,6 +1327,22 @@ function SuppliesPage({ store, userProfile }) {
     setSupForm(emptySupply);
     setSaving(false);
     flash("Supply added!");
+  }
+
+  // ── Edit Supply ──
+  async function handleEditSupply() {
+    if (!showEditSupply || !editSupForm.description.trim()) return;
+    setSaving(true);
+    await updateSupply(showEditSupply._docId, {
+      description: editSupForm.description.trim(),
+      location: editSupForm.location,
+      ministry: editSupForm.ministry,
+      minQuantity: Number(editSupForm.minQuantity) || 5,
+      unit: editSupForm.unit || "each"
+    });
+    setShowEditSupply(null);
+    setSaving(false);
+    flash("Supply updated!");
   }
 
   // ── Use ──
@@ -1446,6 +1474,7 @@ function SuppliesPage({ store, userProfile }) {
                     {s.lastRestocked && ` · Restocked ${s.lastRestocked.split("T")[0]}`}
                   </span>
                   <div style={{ display:"flex", gap:6 }}>
+                    <button onClick={()=>{setEditSupForm({ supplyId:s.supplyId, description:s.description, location:s.location||"", ministry:s.ministry||"", quantity:s.quantity, minQuantity:s.minQuantity||5, unit:s.unit||"each" });setShowEditSupply(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Edit</button>
                     <button onClick={()=>{setUseForm({ qty:"1", purpose:"" });setShowUse(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Use</button>
                     <button onClick={()=>{setRestockForm({ qty:"", source:"" });setShowRestock(s);}} style={{ ...btnP, padding:"5px 12px", fontSize:11 }}>Restock</button>
                   </div>
@@ -1479,6 +1508,30 @@ function SuppliesPage({ store, userProfile }) {
         </div>
         <button onClick={handleAdd} disabled={saving||!supForm.supplyId.trim()||!supForm.description.trim()} style={{ ...btnP, width:"100%", opacity:(saving||!supForm.supplyId.trim()||!supForm.description.trim())?.5:1, marginTop:4 }}>
           {saving ? "Saving..." : "Add Supply"}
+        </button>
+      </Modal>
+
+      {/* ═══ EDIT SUPPLY MODAL ═══ */}
+      <Modal open={!!showEditSupply} onClose={()=>setShowEditSupply(null)} title={`Edit Supply: ${showEditSupply?.supplyId||""}`}>
+        <FF label="Description"><input style={inp} value={editSupForm.description} onChange={e=>setEditSupForm({...editSupForm, description:e.target.value})} placeholder="e.g. AA Batteries"/></FF>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+          <FF label="Location"><select style={inp} value={editSupForm.location} onChange={e=>setEditSupForm({...editSupForm, location:e.target.value})}>
+            <option value="">— Select —</option>
+            {locations.map(l => <option key={l} value={l}>{l}</option>)}
+          </select></FF>
+          <FF label="Ministry"><select style={inp} value={editSupForm.ministry} onChange={e=>setEditSupForm({...editSupForm, ministry:e.target.value})}>
+            <option value="">— Select —</option>
+            {ministries.map(m => <option key={m} value={m}>{m}</option>)}
+          </select></FF>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+          <FF label="Min Qty (alert)"><input style={inp} type="number" min="0" value={editSupForm.minQuantity} onChange={e=>setEditSupForm({...editSupForm, minQuantity:e.target.value})}/></FF>
+          <FF label="Unit"><select style={inp} value={editSupForm.unit} onChange={e=>setEditSupForm({...editSupForm, unit:e.target.value})}>
+            <option value="each">Each</option><option value="pack">Pack</option><option value="box">Box</option><option value="roll">Roll</option><option value="ream">Ream</option><option value="case">Case</option><option value="gallon">Gallon</option><option value="bottle">Bottle</option>
+          </select></FF>
+        </div>
+        <button onClick={handleEditSupply} disabled={saving||!editSupForm.description.trim()} style={{ ...btnP, width:"100%", opacity:(saving||!editSupForm.description.trim())?.5:1, marginTop:4 }}>
+          {saving ? "Saving..." : "Save Changes"}
         </button>
       </Modal>
 
@@ -1702,6 +1755,7 @@ function ReservationsPage({ store, userProfile }) {
 
   const emptyRes = { itemDocId:"", itemId:"", itemDesc:"", eventName:"", eventDate:"", returnDate:"", purpose:"", ministry:"", notes:"" };
   const [form, setForm] = useState(emptyRes);
+  const [conflictErr, setConflictErr] = useState("");
 
   function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }
 
@@ -1724,6 +1778,20 @@ function ReservationsPage({ store, userProfile }) {
 
   async function handleAdd() {
     if (!form.itemDocId || !form.eventName.trim() || !form.eventDate) return;
+    setConflictErr("");
+    const aStart = form.eventDate;
+    const aEnd = form.returnDate || form.eventDate;
+    const conflict = reservations.find(r => {
+      if (r.itemDocId !== form.itemDocId) return false;
+      if (r.status !== "Pending" && r.status !== "Approved") return false;
+      const bStart = r.eventDate;
+      const bEnd = r.returnDate || r.eventDate;
+      return aStart <= bEnd && aEnd >= bStart;
+    });
+    if (conflict) {
+      setConflictErr(`Conflict: "${conflict.eventName}" (${conflict.status}) already has this item on ${conflict.eventDate}${conflict.returnDate && conflict.returnDate !== conflict.eventDate ? " – "+conflict.returnDate : ""}. Pick a different item or date.`);
+      return;
+    }
     setSaving(true);
     try {
       await addReservation({
@@ -1874,7 +1942,7 @@ function ReservationsPage({ store, userProfile }) {
       )}
 
       {/* ═══ ADD RESERVATION MODAL ═══ */}
-      <Modal open={showAdd} onClose={()=>setShowAdd(false)} title="New Reservation" wide>
+      <Modal open={showAdd} onClose={()=>{setShowAdd(false);setConflictErr("");}} title="New Reservation" wide>
         <FF label="Equipment *">
           <select style={{...inp, cursor:"pointer"}} value={form.itemDocId} onChange={e=>handleSelectItem(e.target.value)}>
             <option value="">Select an item...</option>
@@ -1895,8 +1963,13 @@ function ReservationsPage({ store, userProfile }) {
         <FF label="Additional Notes">
           <textarea style={{...inp, minHeight:60, resize:"vertical"}} value={form.notes} onChange={e=>setForm(f=>({...f, notes:e.target.value}))} placeholder="Any special requirements..."/>
         </FF>
+        {conflictErr && (
+          <div style={{ background:B.redPale, border:"1px solid #FECACA", borderRadius:10, padding:"10px 14px", marginBottom:12, fontSize:13, color:B.red, fontWeight:500 }}>
+            {conflictErr}
+          </div>
+        )}
         <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:8 }}>
-          <button onClick={()=>setShowAdd(false)} style={btnS}>Cancel</button>
+          <button onClick={()=>{setShowAdd(false);setConflictErr("");}} style={btnS}>Cancel</button>
           <button onClick={handleAdd} disabled={saving||!form.itemDocId||!form.eventName.trim()||!form.eventDate} style={{ ...btnP, opacity:(!form.itemDocId||!form.eventName.trim()||!form.eventDate||saving)?.5:1 }}>
             {saving?"Submitting...":"Submit Request"}
           </button>

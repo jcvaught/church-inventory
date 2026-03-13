@@ -246,6 +246,12 @@ export function useFirestore(churchId) {
     } catch (err) { setError(err.message); }
   }, [churchId]);
 
+  const updateSupply = useCallback(async (docId, updates) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'supplies', docId), updates);
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
   // ── Activity Log ──
   const logActivity = useCallback(async (action, itemId, userId, userName, details = {}) => {
     try {
@@ -292,7 +298,7 @@ export function useFirestore(churchId) {
     loading, error,
     updateSettings, updateConfig, loadUsers,
     addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired,
-    addSupply, useSupply, restockSupply,
+    addSupply, updateSupply, useSupply, restockSupply,
     logActivity,
     addReservation, updateReservation,
     updateUser
