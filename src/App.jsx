@@ -110,6 +110,72 @@ function exportItemsCSV(items) {
   URL.revokeObjectURL(a.href);
 }
 
+/* ═══ PRINT FULL INVENTORY ═══ */
+function printInventory(items, churchName, groupBy = "location") {
+  const activeItems = items.filter(i => i.status !== "Disposed");
+  const groups = {};
+  activeItems.forEach(item => {
+    const key = item[groupBy] || "— Unassigned —";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(item);
+  });
+  const sortedGroups = Object.keys(groups).sort();
+  const statusColors = { Available:"#2A7D6E", "Checked Out":"#96750E", "In Use":"#1A65C7", "Under Repair":"#D94F4F", Disposed:"#7C5BA0" };
+  const rows = sortedGroups.map(group => `
+    <div class="group">
+      <div class="group-header">${group}</div>
+      <table>
+        <thead><tr><th>ID</th><th>Description</th><th>Status</th><th>Condition</th><th>${groupBy === "location" ? "Ministry" : "Location"}</th><th>Assigned To</th></tr></thead>
+        <tbody>${groups[group].map(i => `
+          <tr>
+            <td class="mono">${i.itemId||""}</td>
+            <td>${i.description||""}</td>
+            <td style="color:${statusColors[i.status]||"#333"};font-weight:600">${i.status||""}</td>
+            <td>${i.condition||""}</td>
+            <td>${groupBy === "location" ? (i.ministry||"") : (i.location||"")}</td>
+            <td>${i.assignedTo||""}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>`).join("");
+  const win = window.open("", "_blank");
+  if (!win) return;
+  win.document.write(`<!DOCTYPE html><html><head><title>Inventory — ${churchName||"ChurchOpsHub"}</title><style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,sans-serif;font-size:12px;color:#1B2A4A;padding:32px}
+    h1{font-size:20px;font-weight:700;margin-bottom:4px}
+    .meta{font-size:11px;color:#8B93A1;margin-bottom:24px}
+    .group{margin-bottom:28px;page-break-inside:avoid}
+    .group-header{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#2A7D6E;border-bottom:2px solid #2A7D6E;padding-bottom:4px;margin-bottom:8px}
+    table{width:100%;border-collapse:collapse}
+    th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#8B93A1;padding:6px 8px;border-bottom:1px solid #E8E4DC}
+    td{padding:7px 8px;border-bottom:1px solid #F2F0EB;font-size:12px}
+    tr:last-child td{border-bottom:none}
+    .mono{font-family:monospace;letter-spacing:1px}
+    .summary{display:flex;gap:24px;margin-bottom:20px;padding:14px 18px;background:#F2F0EB;border-radius:8px}
+    .summary-item{text-align:center}
+    .summary-item .num{font-size:22px;font-weight:700}
+    .summary-item .lbl{font-size:10px;color:#8B93A1;text-transform:uppercase;letter-spacing:1px}
+    @media print{body{padding:16px}.no-print{display:none}}
+  </style></head><body>
+  <h1>${churchName||"ChurchOpsHub"} — Inventory Report</h1>
+  <div class="meta">Generated ${new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})} · ${activeItems.length} active items · Grouped by ${groupBy}</div>
+  <div class="summary">
+    <div class="summary-item"><div class="num">${activeItems.length}</div><div class="lbl">Total</div></div>
+    <div class="summary-item"><div class="num" style="color:#2A7D6E">${activeItems.filter(i=>i.status==="Available").length}</div><div class="lbl">Available</div></div>
+    <div class="summary-item"><div class="num" style="color:#96750E">${activeItems.filter(i=>i.status==="Checked Out").length}</div><div class="lbl">Checked Out</div></div>
+    <div class="summary-item"><div class="num" style="color:#1A65C7">${activeItems.filter(i=>i.status==="In Use").length}</div><div class="lbl">In Use</div></div>
+    <div class="summary-item"><div class="num" style="color:#D94F4F">${activeItems.filter(i=>i.status==="Under Repair").length}</div><div class="lbl">Repair</div></div>
+  </div>
+  <div class="no-print" style="margin-bottom:16px;display:flex;gap:8px">
+    <button onclick="window.print()" style="padding:8px 18px;background:#2A7D6E;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">Print</button>
+    <button onclick="window.close()" style="padding:8px 18px;background:#eee;border:none;border-radius:6px;cursor:pointer;font-size:13px">Close</button>
+  </div>
+  ${rows}
+  </body></html>`);
+  win.document.close();
+}
+
 /* ═══ EXPORT SUPPLIES CSV ═══ */
 function exportSuppliesCSV(supplies) {
   const cols = ['supplyId','description','location','ministry','quantity','minQuantity','unit'];
@@ -562,6 +628,7 @@ function SettingsPage({ store, userProfile }) {
 function Dashboard({ store, userProfile }) {
   const { items, supplies, activityLog, reservations } = store;
   const [myCheckouts, setMyCheckouts] = useState(false);
+  const [activityRange, setActivityRange] = useState(30);
   const activeItems = items.filter(i => i.status !== "Disposed");
   const counts = {
     total: activeItems.length,
@@ -670,25 +737,37 @@ function Dashboard({ store, userProfile }) {
 
       {/* Recent Activity */}
       <div style={{ background:B.white, borderRadius:14, padding:24, border:"1px solid "+B.sand, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
-        <h3 style={{ margin:"0 0 14px", fontFamily:f1, fontSize:17, fontWeight:700, color:B.navy }}>Recent Activity</h3>
-        {activityLog.length === 0 ? <p style={{ color:B.textLight, fontSize:14 }}>No activity yet. Start by adding items to your inventory!</p> :
-          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-            {activityLog.slice(0, 10).map(l => {
-              const icons = { check_out:"📤", return:"↩️", add_item:"➕", dispose:"🗑️", restock:"📦", use_supply:"📉", mark_repair:"🔧", mark_repaired:"✅", add_supply:"➕", reservation_approved:"✅📅", reservation_denied:"❌📅" };
-              return (
-                <div key={l._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", borderRadius:8, background:B.warmGray }}>
-                  <span style={{ fontSize:16 }}>{icons[l.action]||"📋"}</span>
-                  <div style={{ flex:1 }}>
-                    <span style={{ fontWeight:600, fontSize:13 }}>{l.action.replace(/_/g," ")}</span>
-                    <span style={{ color:B.textLight, fontSize:12, marginLeft:6 }}>({l.itemId})</span>
-                    <span style={{ color:B.textMid, fontSize:12 }}> — {l.performedByName}</span>
-                  </div>
-                  <span style={{ fontSize:11, color:B.textLight }}>{l.timestamp?.split("T")[0]}</span>
-                </div>
-              );
-            })}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14, flexWrap:"wrap", gap:8 }}>
+          <h3 style={{ margin:0, fontFamily:f1, fontSize:17, fontWeight:700, color:B.navy }}>Recent Activity</h3>
+          <div style={{ display:"flex", borderRadius:8, overflow:"hidden", border:"1px solid "+B.sand }}>
+            {[7,30,90,"all"].map(r => (
+              <button key={r} onClick={()=>setActivityRange(r)}
+                style={{ padding:"5px 12px", fontSize:12, fontFamily:f1, fontWeight:600, border:"none", borderLeft: r!==7 ? "1px solid "+B.sand : "none", cursor:"pointer", background:activityRange===r?B.teal:B.white, color:activityRange===r?B.white:B.textMid }}>
+                {r === "all" ? "All" : `${r}d`}
+              </button>
+            ))}
           </div>
-        }
+        </div>
+        {(() => {
+          const cutoff = activityRange === "all" ? null : new Date(Date.now() - activityRange * 86400000).toISOString();
+          const filtered = cutoff ? activityLog.filter(l => l.timestamp >= cutoff) : activityLog;
+          const icons = { check_out:"📤", return:"↩️", add_item:"➕", dispose:"🗑️", restock:"📦", use_supply:"📉", mark_repair:"🔧", mark_repaired:"✅", add_supply:"➕", reservation_approved:"✅📅", reservation_denied:"❌📅" };
+          return filtered.length === 0
+            ? <p style={{ color:B.textLight, fontSize:14 }}>{activityLog.length === 0 ? "No activity yet. Start by adding items to your inventory!" : `No activity in the last ${activityRange} days.`}</p>
+            : <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                {filtered.slice(0, 20).map(l => (
+                  <div key={l._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", borderRadius:8, background:B.warmGray }}>
+                    <span style={{ fontSize:16 }}>{icons[l.action]||"📋"}</span>
+                    <div style={{ flex:1 }}>
+                      <span style={{ fontWeight:600, fontSize:13 }}>{l.action.replace(/_/g," ")}</span>
+                      <span style={{ color:B.textLight, fontSize:12, marginLeft:6 }}>({l.itemId})</span>
+                      <span style={{ color:B.textMid, fontSize:12 }}> — {l.performedByName}</span>
+                    </div>
+                    <span style={{ fontSize:11, color:B.textLight }}>{l.timestamp?.split("T")[0]}</span>
+                  </div>
+                ))}
+              </div>;
+        })()}
       </div>
 
       {/* Empty state */}
@@ -1012,6 +1091,7 @@ function ItemsPage({ store, userProfile, initialItemId }) {
         <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:0 }}>All Items</h2>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
           {activeItems.length > 0 && <button onClick={()=>exportItemsCSV(activeItems)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
+          {activeItems.length > 0 && <button onClick={()=>printInventory(activeItems, config?.churchName)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>🖨 Print</button>}
           <button onClick={()=>{setItemForm(emptyItem);setPhotoFile(null);setPhotoPreview(null);setShowAdd(true);}} style={btnP}>+ Add Item</button>
         </div>
       </div>
@@ -1333,7 +1413,7 @@ function ItemsPage({ store, userProfile, initialItemId }) {
 /* ═══════════════════════════════════════════════ */
 
 function SuppliesPage({ store, userProfile }) {
-  const { supplies, settings, addSupply, updateSupply, useSupply, restockSupply } = store;
+  const { supplies, settings, activityLog, addSupply, updateSupply, useSupply, restockSupply } = store;
   const isMobile = useContext(MobileCtx);
 
   const [search, setSearch] = useState("");
@@ -1344,6 +1424,7 @@ function SuppliesPage({ store, userProfile }) {
   const [showEditSupply, setShowEditSupply] = useState(null); // supply object
   const [showUse, setShowUse] = useState(null);      // supply object
   const [showRestock, setShowRestock] = useState(null); // supply object
+  const [showHistory, setShowHistory] = useState(null); // supply object
 
   // Forms
   const emptySupply = { supplyId:"", description:"", location:"", ministry:"", quantity:0, minQuantity:5, unit:"each" };
@@ -1537,6 +1618,7 @@ function SuppliesPage({ store, userProfile }) {
                     {s.lastRestocked && ` · Restocked ${s.lastRestocked.split("T")[0]}`}
                   </span>
                   <div style={{ display:"flex", gap:6 }}>
+                    <button onClick={()=>setShowHistory(s)} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>History</button>
                     <button onClick={()=>{setEditSupForm({ supplyId:s.supplyId, description:s.description, location:s.location||"", ministry:s.ministry||"", quantity:s.quantity, minQuantity:s.minQuantity||5, unit:s.unit||"each" });setShowEditSupply(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Edit</button>
                     <button onClick={()=>{setUseForm({ qty:"1", purpose:"" });setShowUse(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Use</button>
                     <button onClick={()=>{setRestockForm({ qty:"", source:"" });setShowRestock(s);}} style={{ ...btnP, padding:"5px 12px", fontSize:11 }}>Restock</button>
@@ -1596,6 +1678,33 @@ function SuppliesPage({ store, userProfile }) {
         <button onClick={handleEditSupply} disabled={saving||!editSupForm.description.trim()} style={{ ...btnP, width:"100%", opacity:(saving||!editSupForm.description.trim())?.5:1, marginTop:4 }}>
           {saving ? "Saving..." : "Save Changes"}
         </button>
+      </Modal>
+
+      {/* ═══ SUPPLY HISTORY MODAL ═══ */}
+      <Modal open={!!showHistory} onClose={()=>setShowHistory(null)} title={`History: ${showHistory?.description||""}`}>
+        {showHistory && (() => {
+          const supplyLog = activityLog.filter(l => l.itemId === showHistory.supplyId);
+          const icons = { add_supply:"➕", use_supply:"📉", restock:"📦" };
+          const labels = { add_supply:"Added", use_supply:"Used", restock:"Restocked" };
+          return supplyLog.length === 0
+            ? <p style={{ color:B.textLight, fontSize:14, textAlign:"center", padding:20 }}>No history yet.</p>
+            : <div style={{ maxHeight:400, overflowY:"auto", borderRadius:8, border:"1px solid "+B.sand }}>
+                {supplyLog.slice(0, 100).map((l, i) => (
+                  <div key={l._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderBottom:i<supplyLog.length-1?"1px solid "+B.sand:"none", background:i%2===0?B.white:B.warmGray }}>
+                    <span style={{ fontSize:16, flexShrink:0 }}>{icons[l.action]||"📋"}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <span style={{ fontSize:13, fontWeight:600, color:B.textDark }}>{labels[l.action]||l.action}</span>
+                      {l.details?.quantityUsed != null && <span style={{ fontSize:12, color:B.red }}> −{l.details.quantityUsed}</span>}
+                      {l.details?.quantityAdded != null && <span style={{ fontSize:12, color:B.teal }}> +{l.details.quantityAdded}</span>}
+                      {(l.details?.purpose || l.details?.source) && <span style={{ fontSize:12, color:B.textMid }}> · {l.details.purpose||l.details.source}</span>}
+                      {l.details?.remaining != null && <span style={{ fontSize:12, color:B.textLight }}> (→ {l.details.remaining} left)</span>}
+                      <span style={{ fontSize:11, color:B.textLight }}> · {l.performedByName}</span>
+                    </div>
+                    <span style={{ fontSize:11, color:B.textLight, flexShrink:0 }}>{l.timestamp?.split("T")[0]}</span>
+                  </div>
+                ))}
+              </div>;
+        })()}
       </Modal>
 
       {/* ═══ USE SUPPLY MODAL ═══ */}
