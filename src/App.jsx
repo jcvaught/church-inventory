@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { useAuth } from './useAuth.js';
 import { useFirestore } from './useFirestore.js';
+import { storage } from './firebase.js';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 /* ════════════════════════════════════════ */
 /* ═══ BRAND TOKENS ═══════════════════════ */
@@ -30,6 +32,57 @@ function useWindowWidth() {
     return () => window.removeEventListener('resize', h);
   }, []);
   return w;
+}
+
+/* ═══ PRINT LABEL ═══ */
+function printLabel(item, churchName) {
+  const appUrl = window.location.origin + window.location.pathname.replace(/\/+$/, '') + '?item=' + encodeURIComponent(item.itemId);
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=12&data=${encodeURIComponent(appUrl)}`;
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write(`<!DOCTYPE html><html><head><title>${item.itemId}</title><style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,sans-serif;display:flex;justify-content:center;padding:32px;background:#fff}
+    .label{border:2px solid #1B2A4A;border-radius:12px;padding:22px 26px;width:340px;text-align:center}
+    .org{font-size:10px;color:#8B93A1;text-transform:uppercase;letter-spacing:2px;font-weight:600;margin-bottom:14px}
+    .desc{font-size:22px;font-weight:700;color:#1B2A4A;line-height:1.2;margin-bottom:6px}
+    .id{font-family:monospace;font-size:16px;letter-spacing:3px;color:#5A6477;margin-bottom:16px}
+    hr{border:none;border-top:1px solid #E8E4DC;margin:10px 0}
+    .meta{font-size:12px;color:#8B93A1;margin:4px 0}
+    @media print{body{padding:0}}
+  </style></head><body>
+  <div class="label">
+    <div class="org">${churchName||'ChurchOpsHub'} · Inventory</div>
+    <div class="desc">${item.description}</div>
+    <div class="id">${item.itemId}</div>
+    <img src="${qrSrc}" width="180" height="180" style="display:block;margin:0 auto 16px" onload="window.print()">
+    <hr>
+    ${item.location?`<div class="meta">📍 ${item.location}</div>`:''}
+    ${item.ministry?`<div class="meta">⛪ ${item.ministry}</div>`:''}
+    ${item.condition?`<div class="meta">Condition: ${item.condition}</div>`:''}
+  </div>
+  </body></html>`);
+  win.document.close();
+}
+
+/* ═══ EXPORT CSV ═══ */
+function exportItemsCSV(items) {
+  const cols = ['itemId','description','location','ministry','status','condition','tags','assignedTo','checkOutDate','expectedReturn','notes'];
+  const header = cols.join(',');
+  const rows = items.map(item => cols.map(c => {
+    const v = item[c];
+    if (Array.isArray(v)) return `"${v.join('; ')}"`;
+    if (v == null || v === '') return '';
+    const s = String(v);
+    return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g,'""')}"` : s;
+  }).join(','));
+  const csv = [header, ...rows].join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
+    download: `inventory-${new Date().toISOString().split('T')[0]}.csv`
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
 }
 
 /* ═══ LOGO (Option C: Arc & Nodes) ═══ */
@@ -576,7 +629,7 @@ function Dashboard({ store, userProfile }) {
 /* ═══════════════════════════════════════════════ */
 
 function ItemsPage({ store, userProfile, initialItemId }) {
-  const { items, settings, addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired } = store;
+  const { items, settings, config, activityLog, addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired } = store;
   const isMobile = useContext(MobileCtx);
   const activeItems = items.filter(i => i.status !== "Disposed");
   const disposedItems = items.filter(i => i.status === "Disposed");
@@ -612,6 +665,8 @@ function ItemsPage({ store, userProfile, initialItemId }) {
   const [retireForm, setRetireForm] = useState({ reason:"Broken", date:"", notes:"", recoveryValue:"" });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
 
   const locations = settings?.locations || [];
   const ministries = settings?.ministries || [];
@@ -635,6 +690,14 @@ function ItemsPage({ store, userProfile, initialItemId }) {
   async function handleAdd() {
     if (!itemForm.itemId.trim() || !itemForm.description.trim()) return;
     setSaving(true);
+    let photoUrl = "";
+    if (photoFile) {
+      try {
+        const sRef = storageRef(storage, `churches/${userProfile.churchId}/items/${itemForm.itemId.trim()}-${Date.now()}`);
+        await uploadBytes(sRef, photoFile);
+        photoUrl = await getDownloadURL(sRef);
+      } catch (err) { console.warn('Photo upload failed:', err.message); }
+    }
     await addItem({
       itemId: itemForm.itemId.trim(),
       description: itemForm.description.trim(),
@@ -644,12 +707,15 @@ function ItemsPage({ store, userProfile, initialItemId }) {
       condition: itemForm.condition || "Good",
       notes: itemForm.notes,
       tags: itemForm.tags || [],
+      photoUrl,
       assignedTo: "",
       checkOutDate: "",
       expectedReturn: ""
     }, userId, userName);
     setShowAdd(false);
     setItemForm(emptyItem);
+    setPhotoFile(null);
+    setPhotoPreview(null);
     setSaving(false);
     flash("Item added to inventory!");
   }
@@ -658,6 +724,14 @@ function ItemsPage({ store, userProfile, initialItemId }) {
   async function handleEdit() {
     if (!showEdit) return;
     setSaving(true);
+    let photoUrl = showEdit.photoUrl || "";
+    if (photoFile) {
+      try {
+        const sRef = storageRef(storage, `churches/${userProfile.churchId}/items/${itemForm.itemId.trim()}-${Date.now()}`);
+        await uploadBytes(sRef, photoFile);
+        photoUrl = await getDownloadURL(sRef);
+      } catch (err) { console.warn('Photo upload failed:', err.message); }
+    }
     await updateItem(showEdit._docId, {
       itemId: itemForm.itemId.trim(),
       description: itemForm.description.trim(),
@@ -665,9 +739,12 @@ function ItemsPage({ store, userProfile, initialItemId }) {
       ministry: itemForm.ministry,
       condition: itemForm.condition,
       notes: itemForm.notes,
-      tags: itemForm.tags || []
+      tags: itemForm.tags || [],
+      photoUrl
     }, userId, userName);
     setShowEdit(null);
+    setPhotoFile(null);
+    setPhotoPreview(null);
     setSaving(false);
     flash("Item updated!");
   }
@@ -758,6 +835,8 @@ function ItemsPage({ store, userProfile, initialItemId }) {
       tags: item.tags || [],
       status: item.status
     });
+    setPhotoFile(null);
+    setPhotoPreview(item.photoUrl || null);
     setShowEdit(item);
   }
 
@@ -840,7 +919,10 @@ function ItemsPage({ store, userProfile, initialItemId }) {
       {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:0 }}>All Items</h2>
-        <button onClick={()=>{setItemForm(emptyItem);setShowAdd(true);}} style={btnP}>+ Add Item</button>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          {activeItems.length > 0 && <button onClick={()=>exportItemsCSV(activeItems)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
+          <button onClick={()=>{setItemForm(emptyItem);setPhotoFile(null);setPhotoPreview(null);setShowAdd(true);}} style={btnP}>+ Add Item</button>
+        </div>
       </div>
 
       {/* Success message */}
@@ -900,6 +982,12 @@ function ItemsPage({ store, userProfile, initialItemId }) {
       {/* Detail Expand */}
       {showDetail && (
         <Modal open={true} onClose={()=>setShowDetail(null)} title={showDetail.description || "Item Details"}>
+          {/* Photo */}
+          {showDetail.photoUrl && (
+            <div style={{ marginBottom:16, textAlign:"center" }}>
+              <img src={showDetail.photoUrl} alt={showDetail.description} style={{ maxWidth:"100%", maxHeight:220, borderRadius:10, border:"1px solid "+B.sand, objectFit:"contain" }} />
+            </div>
+          )}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
             <div><span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", fontFamily:f1 }}>Item ID</span><div style={{ fontFamily:"monospace", fontSize:14, marginTop:2 }}>{showDetail.itemId}</div></div>
             <div><span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", fontFamily:f1 }}>Status</span><div style={{ marginTop:4 }}><Badge status={showDetail.status}/></div></div>
@@ -944,8 +1032,36 @@ function ItemsPage({ store, userProfile, initialItemId }) {
             );
           })()}
 
+          {/* Item History */}
+          {(() => {
+            const history = activityLog.filter(l => l.itemId === showDetail.itemId);
+            if (!history.length) return null;
+            const icons = { check_out:"📤", return:"↩️", add_item:"➕", dispose:"🗑️", mark_repair:"🔧", mark_repaired:"✅" };
+            const labels = { check_out:"Checked Out", return:"Returned", add_item:"Added", dispose:"Retired", mark_repair:"Sent to Repair", mark_repaired:"Repair Complete" };
+            return (
+              <div style={{ marginTop:18, paddingTop:16, borderTop:"1px solid "+B.sand }}>
+                <div style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:8 }}>History ({history.length})</div>
+                <div style={{ maxHeight:200, overflowY:"auto", borderRadius:8, border:"1px solid "+B.sand }}>
+                  {history.slice(0, 50).map((l, i) => (
+                    <div key={l._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderBottom:i<history.length-1?"1px solid "+B.sand:"none", background:i%2===0?B.white:B.warmGray }}>
+                      <span style={{ fontSize:14, flexShrink:0 }}>{icons[l.action]||"📋"}</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <span style={{ fontSize:12, fontWeight:600, color:B.textDark }}>{labels[l.action]||l.action.replace(/_/g," ")}</span>
+                        {l.details?.person && <span style={{ fontSize:12, color:B.textMid }}> · {l.details.person}</span>}
+                        {l.details?.condition && <span style={{ fontSize:12, color:B.textMid }}> · {l.details.condition}</span>}
+                        <span style={{ fontSize:11, color:B.textLight }}> · {l.performedByName}</span>
+                      </div>
+                      <span style={{ fontSize:11, color:B.textLight, flexShrink:0 }}>{l.timestamp?.split("T")[0]}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{ display:"flex", gap:8, marginTop:20, flexWrap:"wrap" }}>
             {itemActions(showDetail)}
+            <button onClick={()=>printLabel(showDetail, config?.churchName)} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>🖨 Print Label</button>
             {showDetail.status !== "Disposed" && (
               <button onClick={()=>{setRetireForm({ reason:"Broken", date:today, notes:"", recoveryValue:"" });setShowRetire(showDetail);setShowDetail(null);}} style={{ ...btnD, padding:"6px 14px", fontSize:12 }}>Retire</button>
             )}
@@ -985,6 +1101,15 @@ function ItemsPage({ store, userProfile, initialItemId }) {
           </FF>
         )}
         <FF label="Notes"><textarea style={{...inp, minHeight:60, resize:"vertical"}} value={itemForm.notes} onChange={e=>setItemForm({...itemForm, notes:e.target.value})} placeholder="Optional notes..."/></FF>
+        <FF label="Photo (optional)">
+          {photoPreview && (
+            <div style={{ marginBottom:8, position:"relative", display:"inline-block" }}>
+              <img src={photoPreview} alt="Preview" style={{ width:120, height:80, objectFit:"cover", borderRadius:8, border:"1px solid "+B.sand, display:"block" }} />
+              <button type="button" onClick={()=>{setPhotoFile(null);setPhotoPreview(null);}} style={{ position:"absolute", top:-6, right:-6, width:20, height:20, borderRadius:"50%", background:B.red, color:"#fff", border:"none", cursor:"pointer", fontSize:13, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+            </div>
+          )}
+          <div><input type="file" accept="image/*" id="photo-add" style={{ display:"none" }} onChange={e=>{const f=e.target.files[0];if(f){setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));}}}/><label htmlFor="photo-add" style={{ ...btnS, display:"inline-block", cursor:"pointer", padding:"7px 16px", fontSize:13 }}>{photoPreview?"📷 Change Photo":"📷 Add Photo"}</label></div>
+        </FF>
         <button onClick={handleAdd} disabled={saving||!itemForm.itemId.trim()||!itemForm.description.trim()} style={{ ...btnP, width:"100%", opacity:(saving||!itemForm.itemId.trim()||!itemForm.description.trim())?.5:1, marginTop:4 }}>
           {saving ? "Saving..." : "Add Item"}
         </button>
@@ -1022,6 +1147,15 @@ function ItemsPage({ store, userProfile, initialItemId }) {
           </FF>
         )}
         <FF label="Notes"><textarea style={{...inp, minHeight:60, resize:"vertical"}} value={itemForm.notes} onChange={e=>setItemForm({...itemForm, notes:e.target.value})} placeholder="Optional notes..."/></FF>
+        <FF label="Photo (optional)">
+          {photoPreview && (
+            <div style={{ marginBottom:8, position:"relative", display:"inline-block" }}>
+              <img src={photoPreview} alt="Preview" style={{ width:120, height:80, objectFit:"cover", borderRadius:8, border:"1px solid "+B.sand, display:"block" }} />
+              <button type="button" onClick={()=>{setPhotoFile(null);setPhotoPreview(null);}} style={{ position:"absolute", top:-6, right:-6, width:20, height:20, borderRadius:"50%", background:B.red, color:"#fff", border:"none", cursor:"pointer", fontSize:13, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+            </div>
+          )}
+          <div><input type="file" accept="image/*" id="photo-edit" style={{ display:"none" }} onChange={e=>{const f=e.target.files[0];if(f){setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));}}}/><label htmlFor="photo-edit" style={{ ...btnS, display:"inline-block", cursor:"pointer", padding:"7px 16px", fontSize:13 }}>{photoPreview?"📷 Change Photo":"📷 Add Photo"}</label></div>
+        </FF>
         <button onClick={handleEdit} disabled={saving} style={{ ...btnP, width:"100%", opacity:saving?.5:1, marginTop:4 }}>
           {saving ? "Saving..." : "Save Changes"}
         </button>
