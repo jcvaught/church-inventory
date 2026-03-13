@@ -20,10 +20,10 @@ This is a single-page React 18 + Vite PWA — **ChurchOpsHub** — a multi-tenan
 
 ```
 src/
-├── App.jsx           ← Entire UI: all page components, modals, primitives (~1800 lines)
+├── App.jsx           ← Entire UI: all page components, modals, primitives (~2200 lines)
 ├── useAuth.js        ← Firebase Auth hook (email/password + Google, church setup/join)
 ├── useFirestore.js   ← All Firestore read/write operations as a single hook
-├── firebase.js       ← Firebase app init; exports `db`, `auth`, `googleProvider`
+├── firebase.js       ← Firebase app init; exports `db`, `auth`, `googleProvider`, `storage`
 ├── main.jsx          ← React entry point
 └── data/
     └── referenceData.js  ← Static reference inventory (not auto-seeded; reference only)
@@ -50,7 +50,7 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/supplies` | Consumable supplies with quantity tracking |
 | `churches/{churchId}/activityLog` | Audit trail (every action logged) |
 | `churches/{churchId}/reservations` | Future item reservation requests |
-| `users/{uid}` | User profile with `churchId`, `role` (`admin`/`member`), `name`, `email` |
+| `users/{uid}` | User profile with `churchId`, `role` (`admin`/`user`), `name`, `email`, `active` |
 
 `churchId` is always `{creatorUid}-church` (set at church creation time).
 
@@ -67,6 +67,13 @@ All church data is namespaced under `churches/{churchId}/`:
 - Shared style objects: `inp` (inputs), `btnP` (primary button), `btnS` (secondary), `btnD` (danger).
 - Reusable primitives defined in `App.jsx`: `Modal`, `FF` (form field wrapper), `Badge` (status pill), `Stat` (dashboard stat card), `Spinner`.
 - Tab keys: `dashboard`, `settings`, `inventory`, `supplies`, `reservations`, `log`.
+- `MobileCtx` React context + `useWindowWidth()` hook drive mobile layout. Components read `useContext(MobileCtx)` — no prop drilling needed. Breakpoint is 768px.
+- Mobile: tabs hidden, bottom nav bar fixed at bottom, modals slide up from bottom.
+- **Deep linking:** `?item=ITEM_ID` URL param auto-opens item detail. URL cleaned with `history.replaceState` after read.
+- **QR codes:** Generated via `https://api.qrserver.com` (no npm package). Links back to the app with `?item=` param.
+- **Firebase Storage** (Blaze plan): item photos stored under `churches/{churchId}/items/`. Images are client-side resized to max 1200px / 82% JPEG quality before upload via Canvas API (`resizeImageForUpload`).
+- **Role enforcement:** `isAdmin = userProfile?.role === "admin"`. Only admins can retire items, edit dropdown lists (Locations/Ministries/Tags), and promote/demote other users.
+- **localStorage:** Items page persists `locationFilter` and `ministryFilter` under keys `inv_locationFilter` / `inv_ministryFilter`.
 
 ### Item Status Values
 
