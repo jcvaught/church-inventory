@@ -86,7 +86,7 @@ All church data is namespaced under `churches/{churchId}/`:
 - Overdue escalation visibility per user
 - Countdown on approved reservations ("3 days away")
 
-### Session 7 — Reporting & History ✅ (in progress)
+### Session 7 — Reporting & History ✅ Done
 - Full inventory print view (all active items grouped by location or ministry)
 - Supply usage history drawer (filter activityLog by supplyId)
 - Dashboard activity stats date range filter (7/30/90 days)
@@ -100,6 +100,49 @@ All church data is namespaced under `churches/{churchId}/`:
 - Public item request form (shareable URL for non-app users)
 - Barcode scanning via device camera
 - Multi-location / campus-aware filtering
+
+## Public Launch Checklist
+
+The data model is already multi-tenant (`churches/{churchId}/`). The following must be completed before opening the app to other churches.
+
+### 🔴 Critical — Fix Before Any Public Use
+
+**Firestore security rules** — Currently any authenticated user can read/write any church's data. Must scope rules to the user's own `churchId` using `get()` in `firestore.rules`:
+```
+function userChurchId() {
+  return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.churchId;
+}
+match /churches/{churchId}/{document=**} {
+  allow read, write: if request.auth != null && userChurchId() == churchId;
+}
+```
+Also scope admin-only user writes (role/active changes) so non-admins can't elevate themselves.
+
+**Storage security rules** — Same problem as Firestore. Any authenticated user can read/write any church's photos. Apply the same `churchId` check in `storage.rules`.
+
+**Password reset UI** — No "Forgot password?" link exists on the login screen. Firebase Auth supports it natively via `sendPasswordResetEmail()`. Users who forget their password are currently locked out.
+
+### 🟡 Important — Before Soft Launch
+
+**Email verification** — Add `sendEmailVerification()` after registration to reduce fake/abuse accounts.
+
+**Church creation rate limiting** — Nothing prevents one person from creating hundreds of churches. Consider limiting by email or adding a honeypot field.
+
+**Firebase budget alert** — Set a billing budget in Google Cloud Console to catch unexpected usage spikes (already on Blaze pay-as-you-go).
+
+**Terms of Service & Privacy Policy** — Legally required when handling data for multiple organizations. Must be linked from the registration screen.
+
+### 🟢 Polish — For Full Public Launch
+
+**Custom domain** — Replace `church-inventory-9615c.firebaseapp.com` with a real domain (e.g., `churchopshub.com`) for auth and hosting.
+
+**Landing / marketing page** — Currently the app URL goes straight to the login screen. New visitors need a page explaining what ChurchOpsHub is.
+
+**Onboarding flow** — After church creation, guide the admin through adding their first location, ministry, and item.
+
+**Account & data deletion** — GDPR and similar laws require users to be able to delete their account and all associated data.
+
+**Error monitoring** — Integrate Sentry (free tier) or similar so production errors are caught before users report them.
 
 ### Deployment
 
