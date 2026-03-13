@@ -79,6 +79,28 @@ All church data is namespaced under `churches/{churchId}/`:
 
 `Available` | `Checked Out` | `In Use` | `Under Repair` | `Disposed`
 
+## Roadmap
+
+### Session 6 — Notifications & Awareness
+- Email notifications when a reservation is approved/denied (EmailJS, no backend)
+- Overdue escalation visibility per user
+- Countdown on approved reservations ("3 days away")
+
+### Session 7 — Reporting & History ✅ (in progress)
+- Full inventory print view (all active items grouped by location or ministry)
+- Supply usage history drawer (filter activityLog by supplyId)
+- Dashboard activity stats date range filter (7/30/90 days)
+
+### Session 8 — UX Polish
+- Bulk actions (select multiple items to check out, change location, or export)
+- Item duplication ("Duplicate item" to clone similar items)
+- Keyboard shortcuts (N to add item, / to focus search, Esc to close modal)
+
+### Bigger Lift (Later)
+- Public item request form (shareable URL for non-app users)
+- Barcode scanning via device camera
+- Multi-location / campus-aware filtering
+
 ### Deployment
 
 Deployed via Vercel (auto-detect Vite). Firebase config is hardcoded in `src/firebase.js` (not via env vars).
