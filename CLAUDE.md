@@ -43,8 +43,9 @@ src/
 │   ├── ActivityLogPage.jsx
 │   ├── SettingsPage.jsx       ← Includes Subscription & Billing card for admins
 │   └── hubs/
-│       ├── MaintenancePage.jsx ← Maintenance Hub (Phase 3)
-│       └── InsightsPage.jsx    ← Insights Hub (Phase 4): utilization, ministry, seasonal, financial, supply analytics (Recharts)
+│       ├── MaintenancePage.jsx  ← Maintenance Hub (Phase 3)
+│       ├── InsightsPage.jsx     ← Insights Hub (Phase 4): utilization, ministry, seasonal, financial, supply analytics (Recharts)
+│       └── CoordinationPage.jsx ← Coordination Hub (Phase 6): checkout bundles, email notification settings
 ├── utils/
 │   ├── csv.js                 ← exportItemsCSV, exportSuppliesCSV, exportReservationsCSV
 │   ├── print.js               ← printLabel, printInventory
@@ -55,7 +56,7 @@ src/
 
 ### Data Flow
 
-`App` (in `App.jsx`) → `AppShell` (also in `App.jsx`) → renders one of seven tab pages, each receiving `store`, `userProfile`, and `subscription` as props.
+`App` (in `App.jsx`) → `AppShell` (also in `App.jsx`) → renders one of eight tab pages, each receiving `store`, `userProfile`, and `subscription` as props.
 
 - `useAuth()` handles authentication state and exposes `userProfile` (Firestore user record with `churchId`, `role`, `name`).
 - `useFirestore(churchId)` subscribes in real-time to all Firestore collections for that church and exposes CRUD operations.
@@ -80,6 +81,8 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/maintenanceTickets/{id}/comments` | Comment subcollection: `text`, `authorId`, `authorName`, `createdAt` |
 | `churches/{churchId}/vendors` | Maintenance Hub: vendor/contractor directory |
 | `churches/{churchId}/config/settings.maintenanceTags` | `string[]` — tag autocomplete for maintenance tickets; new tags added via `arrayUnion` |
+| `churches/{churchId}/bundles` | Coordination Hub: checkout bundles; fields: `name`, `description`, `items[{docId,itemId,description,location}]`, `createdBy`, `createdByName`, `createdAt` |
+| `churches/{churchId}/config/notifications` | Coordination Hub: EmailJS config; fields: `enabled`, `serviceId`, `publicKey`, `templateApproved`, `templateDenied` |
 | `users/{uid}` | User profile with `churchId`, `role` (`admin`/`manager`/`user`), `name`, `email`, `active`, `allowedHubs[]`, `managedMinistries[]` |
 | `suggestions/{docId}` | **Top-level** (not church-scoped) — cross-church user suggestions; fields: `text`, `category`, `submittedBy`, `submittedByName`, `churchId`, `churchName`, `submittedAt` |
 
@@ -97,7 +100,7 @@ All church data is namespaced under `churches/{churchId}/`:
 - Two font families: `f1 = 'Outfit'` (headings/UI), `f2 = 'Source Sans 3'` (body text) — loaded from Google Fonts at runtime.
 - Shared style objects: `inp` (inputs), `btnP` (primary button), `btnS` (secondary), `btnD` (danger) — all from `src/components/brand/tokens.js`.
 - Reusable primitives in `src/components/primitives/`: `Modal`, `FF` (form field wrapper), `Badge` (status pill), `Stat` (dashboard stat card), `Spinner`, `UpgradeGate`.
-- Tab keys: `dashboard`, `inventory`, `supplies`, `reservations`, `log`, `insights`, `maintenance`, `settings`. Hub tabs (`insights`, `maintenance`) hidden from users whose `allowedHubs[]` excludes them; shown with 🔒 when church hasn't subscribed.
+- Tab keys: `dashboard`, `inventory`, `supplies`, `reservations`, `log`, `insights`, `maintenance`, `coordination`, `settings`. Hub tabs hidden from users whose `allowedHubs[]` excludes them; shown with 🔒 when church hasn't subscribed (drives discovery).
 - `MobileCtx` React context + `useWindowWidth()` hook in `src/hooks/useMobile.js`. Components read `useContext(MobileCtx)` — no prop drilling needed. Breakpoint is 768px.
 - Mobile: tabs hidden, bottom nav bar fixed at bottom, modals slide up from bottom.
 - **Deep linking:** `?item=ITEM_ID` URL param auto-opens item detail. URL cleaned with `history.replaceState` after read.
@@ -124,8 +127,8 @@ Everything existing stays free. 10 team members per church included.
 | **Team Hub** | $9/mo (25 users) or $19/mo (unlimited) | ✅ Done — Phase 5 |
 | **Insights Hub** | $7/mo | ✅ Done — Phase 4 |
 | **Maintenance Hub** | $7/mo | ✅ Done — Phase 3 |
-| **Coordination Hub** | $7/mo | Planned — Phase 6 |
-| **Accountability Hub** | $5/mo | Planned — Phase 6 |
+| **Coordination Hub** | $7/mo | ✅ Done — Phase 6 |
+| **Accountability Hub** | $5/mo | Planned — Phase 7 |
 | **All-In Bundle** | $29/mo | Planned |
 
 ### Grandfathering
@@ -165,7 +168,7 @@ Hub visibility is controlled at two levels:
 
 ## Roadmap
 
-### ✅ Done — Phases 1–5
+### ✅ Done — Phases 1–6
 
 **Phases 1–3:**
 - Code restructured into component/page/hook/utils files
@@ -186,10 +189,11 @@ Hub visibility is controlled at two levels:
 - `userCanSeeHub(hubName)` in `App.jsx`: admins see all; manager/user sees intersection of church `hubs[]` and `allowedHubs[]`; `allowedHubs: null` = inherit all (backward compat)
 - Hub tabs hidden (not locked) when user's `allowedHubs` excludes them; Firestore rules unchanged
 
-### Phase 6 — Coordination Hub
-- Email notifications (EmailJS): reservation approved/denied, overdue, low-stock
-- Checkout bundles ("Sunday Morning Setup" = predefined item groups)
-- Recurring reservations
+**Phase 6 — Coordination Hub:**
+- `CoordinationPage.jsx`: checkout bundles (create/edit/delete, per-item availability indicator, bulk checkout skips unavailable items); EmailJS notification settings (Service ID, Public Key, template IDs for approved/denied, test-send button)
+- `ReservationsPage.jsx`: recurring reservations (weekly/biweekly/monthly + end date, live instance count preview, `recurrenceGroupId` links series); recurring badge on cards; auto-email requester on approve/deny if EmailJS configured
+- `useFirestore`: `bundles` collection subscription + CRUD; `config/notifications` subscription + `updateNotificationConfig`; `totalSubs` 9→11
+- `@emailjs/browser` installed; email sent client-side via dynamic import on approve/deny actions
 
 ### Phase 7 — Accountability Hub
 - Physical audit mode (QR scan walk-through)
