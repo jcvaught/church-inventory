@@ -83,7 +83,7 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/maintenanceTickets/{id}/comments` | Comment subcollection: `text`, `authorId`, `authorName`, `createdAt` |
 | `churches/{churchId}/vendors` | Maintenance Hub: vendor/contractor directory |
 | `churches/{churchId}/config/settings.maintenanceTags` | `string[]` — tag autocomplete for maintenance tickets; new tags added via `arrayUnion` |
-| `users/{uid}` | User profile with `churchId`, `role` (`admin`/`user`), `name`, `email`, `active` |
+| `users/{uid}` | User profile with `churchId`, `role` (`admin`/`manager`/`user`), `name`, `email`, `active`, `allowedHubs[]`, `managedMinistries[]` |
 | `suggestions/{docId}` | **Top-level** (not church-scoped) — cross-church user suggestions; fields: `text`, `category`, `submittedBy`, `submittedByName`, `churchId`, `churchName`, `submittedAt` |
 
 `churchId` is always `{creatorUid}-church` (set at church creation time).
@@ -106,7 +106,7 @@ All church data is namespaced under `churches/{churchId}/`:
 - **Deep linking:** `?item=ITEM_ID` URL param auto-opens item detail. URL cleaned with `history.replaceState` after read.
 - **QR codes:** Generated via `https://api.qrserver.com` (no npm package). Links back to the app with `?item=` param.
 - **Firebase Storage** (Blaze plan): item photos stored under `churches/{churchId}/items/`. Images are client-side resized to max 1200px / 82% JPEG quality before upload via Canvas API (`resizeImageForUpload`).
-- **Role enforcement:** `isAdmin = userProfile?.role === "admin"`. Only admins can retire items, edit dropdown lists (Locations/Ministries/Tags), and promote/demote other users.
+- **Role enforcement:** `isAdmin = userProfile?.role === "admin"`. Only admins can retire items, edit dropdown lists (Locations/Ministries/Tags), and promote/demote other users. Roles: `admin` / `manager` (Phase 5) / `user`. Hub visibility per user controlled by `allowedHubs[]` on user profile (see Per-User Hub Access).
 - **localStorage:** Items page persists `locationFilter` and `ministryFilter` under keys `inv_locationFilter` / `inv_ministryFilter`.
 
 ### Item Status Values
@@ -153,6 +153,18 @@ Existing churches at launch: 12 months Founder status (unlimited users, all hubs
 - Hub tabs always visible (with 🔒 when locked) to drive discovery
 - Payment: Stripe (Cloud Functions — not yet wired up; mailto CTA for now)
 
+### Per-User Hub Access (Phase 5)
+Hub visibility is controlled at two levels:
+1. **Church level** — subscription `hubs[]` determines which hubs the church has paid for
+2. **User level** — `allowedHubs[]` on `users/{uid}` determines which of those hubs a given user can see
+
+**Rules:**
+- `admin` role always sees all church hubs — no `allowedHubs` check needed
+- `manager` and `user` roles: visible hubs = intersection of church `hubs[]` and user `allowedHubs[]`
+- `allowedHubs` null/missing = user inherits all church hubs (default for backward compatibility)
+- Admins assign hub access per-user in Settings > Team Members (only showing hubs the church has)
+- This is a **UI/UX concern only** — Firestore rules do not change; all church members can still read all church data under `churches/{churchId}/`
+
 ## Roadmap
 
 ### ✅ Done — Phases 1–3
@@ -169,8 +181,10 @@ Existing churches at launch: 12 months Founder status (unlimited users, all hubs
 
 ### Phase 5 — Team Hub
 - 10-user soft cap with upgrade banner
-- "Manager" role with ministry-scoped permissions
-- `managedMinistries[]` field on user profiles
+- Three roles: `admin` (full access), `manager` (assigned hubs + managed ministries), `user` (assigned hubs only)
+- `managedMinistries[]` field on user profiles — managers scoped to their ministries
+- `allowedHubs[]` field on user profiles — per-user hub visibility (null = all church hubs)
+- Admin UI in Settings > Team Members to assign hubs and ministries per user
 
 ### Phase 6 — Coordination Hub
 - Email notifications (EmailJS): reservation approved/denied, overdue, low-stock
