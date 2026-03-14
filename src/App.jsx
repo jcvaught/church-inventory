@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useContext } from 'react';
+import { useState, useEffect, useRef, useContext, useMemo } from 'react';
 import { useAuth } from './useAuth.js';
 import { useFirestore } from './useFirestore.js';
 import { useSubscription } from './hooks/useSubscription.js';
@@ -226,7 +226,7 @@ function AuthScreen({ authHook }) {
 /* ═══════════════════════════════════════════════ */
 
 function SettingsPage({ store, userProfile, subscription, user }) {
-  const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, loadUsers, submitSuggestion, loadSuggestions } = store;
+  const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
   const [newItem, setNewItem] = useState("");
@@ -402,7 +402,6 @@ function SettingsPage({ store, userProfile, subscription, user }) {
       <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Team Members</h3>
-          <button onClick={loadUsers} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>Refresh</button>
         </div>
         {users.length === 0 ? <p style={{ color:B.textLight, fontSize:14 }}>No team members yet.</p> :
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -557,22 +556,27 @@ function Dashboard({ store, userProfile }) {
   const [myCheckouts, setMyCheckouts] = useState(false);
   const [activityRange, setActivityRange] = useState(30);
   const [activityVisible, setActivityVisible] = useState(20);
-  const activeItems = items.filter(i => i.status !== "Disposed");
-  const counts = {
+  const activeItems = useMemo(() => items.filter(i => i.status !== "Disposed"), [items]);
+  const counts = useMemo(() => ({
     total: activeItems.length,
     avail: activeItems.filter(i => i.status === "Available").length,
     inUse: activeItems.filter(i => i.status === "In Use").length,
     co: activeItems.filter(i => i.status === "Checked Out").length,
     repair: activeItems.filter(i => i.status === "Under Repair").length,
-  };
+  }), [activeItems]);
 
-  const today = new Date().toISOString().split("T")[0];
-  const checkedOut = activeItems.filter(i => i.status === "Checked Out");
+  const today = useMemo(() => new Date().toISOString().split("T")[0], []);
   const myName = userProfile?.name || "";
-  const displayedCheckouts = myCheckouts ? checkedOut.filter(i => i.assignedTo === myName) : checkedOut;
-  const overdue = checkedOut.filter(i => i.expectedReturn && i.expectedReturn < today);
-  const lowStock = supplies.filter(c => c.quantity <= c.minQuantity);
-  const pendingRes = reservations.filter(r => r.status === "Pending");
+  const checkedOut = useMemo(() => activeItems.filter(i => i.status === "Checked Out"), [activeItems]);
+  const displayedCheckouts = useMemo(() => myCheckouts ? checkedOut.filter(i => i.assignedTo === myName) : checkedOut, [myCheckouts, checkedOut, myName]);
+  const overdue = useMemo(() => checkedOut.filter(i => i.expectedReturn && i.expectedReturn < today), [checkedOut, today]);
+  const lowStock = useMemo(() => supplies.filter(c => c.quantity <= c.minQuantity), [supplies]);
+  const pendingRes = useMemo(() => reservations.filter(r => r.status === "Pending"), [reservations]);
+
+  const activityFiltered = useMemo(() => {
+    const cutoff = activityRange === "all" ? null : new Date(Date.now() - activityRange * 86400000).toISOString();
+    return cutoff ? activityLog.filter(l => l.timestamp >= cutoff) : activityLog;
+  }, [activityRange, activityLog]);
 
   return (
     <div>
@@ -677,13 +681,11 @@ function Dashboard({ store, userProfile }) {
           </div>
         </div>
         {(() => {
-          const cutoff = activityRange === "all" ? null : new Date(Date.now() - activityRange * 86400000).toISOString();
-          const filtered = cutoff ? activityLog.filter(l => l.timestamp >= cutoff) : activityLog;
           const icons = { check_out:"📤", return:"↩️", add_item:"➕", dispose:"🗑️", restock:"📦", use_supply:"📉", mark_repair:"🔧", mark_repaired:"✅", add_supply:"➕", reservation_approved:"✅📅", reservation_denied:"❌📅" };
-          return filtered.length === 0
+          return activityFiltered.length === 0
             ? <p style={{ color:B.textLight, fontSize:14 }}>{activityLog.length === 0 ? "No activity yet. Start by adding items to your inventory!" : `No activity in the last ${activityRange} days.`}</p>
             : <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                {filtered.slice(0, activityVisible).map(l => (
+                {activityFiltered.slice(0, activityVisible).map(l => (
                   <div key={l._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", borderRadius:8, background:B.warmGray }}>
                     <span style={{ fontSize:16 }}>{icons[l.action]||"📋"}</span>
                     <div style={{ flex:1 }}>
@@ -694,9 +696,9 @@ function Dashboard({ store, userProfile }) {
                     <span style={{ fontSize:11, color:B.textLight }}>{l.timestamp?.split("T")[0]}</span>
                   </div>
                 ))}
-                {filtered.length > activityVisible && (
+                {activityFiltered.length > activityVisible && (
                   <button onClick={()=>setActivityVisible(v=>v+20)} style={{ alignSelf:"center", marginTop:4, background:"none", border:"1px solid "+B.sand, borderRadius:8, padding:"7px 20px", fontSize:13, fontFamily:f1, fontWeight:600, color:B.teal, cursor:"pointer" }}>
-                    Load more ({filtered.length - activityVisible} remaining)
+                    Load more ({activityFiltered.length - activityVisible} remaining)
                   </button>
                 )}
               </div>;
@@ -724,8 +726,8 @@ function Dashboard({ store, userProfile }) {
 function ItemsPage({ store, userProfile, initialItemId }) {
   const { items, settings, config, activityLog, addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired } = store;
   const isMobile = useContext(MobileCtx);
-  const activeItems = items.filter(i => i.status !== "Disposed");
-  const disposedItems = items.filter(i => i.status === "Disposed");
+  const activeItems = useMemo(() => items.filter(i => i.status !== "Disposed"), [items]);
+  const disposedItems = useMemo(() => items.filter(i => i.status === "Disposed"), [items]);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -780,13 +782,13 @@ function ItemsPage({ store, userProfile, initialItemId }) {
   const isAdmin = userProfile?.role === "admin";
 
   // Filter logic
-  const displayItems = (showDisposed ? disposedItems : activeItems).filter(item => {
+  const displayItems = useMemo(() => (showDisposed ? disposedItems : activeItems).filter(item => {
     if (search && !item.description?.toLowerCase().includes(search.toLowerCase()) && !item.itemId?.toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter !== "all" && item.status !== statusFilter) return false;
     if (locationFilter !== "all" && item.location !== locationFilter) return false;
     if (ministryFilter !== "all" && item.ministry !== ministryFilter) return false;
     return true;
-  });
+  }), [showDisposed, disposedItems, activeItems, search, statusFilter, locationFilter, ministryFilter]);
 
   // Helpers
   function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }

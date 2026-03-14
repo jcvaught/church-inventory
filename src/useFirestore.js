@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   doc, setDoc, getDoc, deleteDoc, getDocs,
-  collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion
+  collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction
 } from 'firebase/firestore';
 import { db } from './firebase.js';
 
@@ -23,7 +23,7 @@ export function useFirestore(churchId) {
     if (!churchId) return;
     const unsubs = [];
     let loaded = 0;
-    const totalSubs = 8;
+    const totalSubs = 9;
     const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
     // Config
@@ -78,24 +78,14 @@ export function useFirestore(churchId) {
       checkDone();
     }, (err) => { setError(err.message); checkDone(); }));
 
+    // Users — scoped to this church via query (real-time)
+    unsubs.push(onSnapshot(query(collection(db, 'users'), where('churchId', '==', churchId)), (snap) => {
+      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      checkDone();
+    }, (err) => { setError(err.message); checkDone(); }));
+
     return () => unsubs.forEach(u => u());
   }, [churchId]);
-
-  // Load users for this church (not real-time, refresh on demand)
-  const loadUsers = useCallback(async () => {
-    if (!churchId) return;
-    try {
-      const snap = await getDocs(collection(db, 'users'));
-      const churchUsers = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(u => u.churchId === churchId);
-      setUsers(churchUsers);
-    } catch (err) {
-      console.error('Error loading users:', err);
-    }
-  }, [churchId]);
-
-  useEffect(() => { loadUsers(); }, [loadUsers]);
 
   // ── Settings ──
   const updateSettings = useCallback(async (updates) => {
@@ -305,29 +295,27 @@ export function useFirestore(churchId) {
   const updateUser = useCallback(async (userId, updates) => {
     try {
       await updateDoc(doc(db, 'users', userId), updates);
-      await loadUsers();
     } catch (err) { setError(err.message); }
-  }, [loadUsers]);
+  }, []);
 
   const removeUser = useCallback(async (userId) => {
     try {
       await deleteDoc(doc(db, 'users', userId));
-      await loadUsers();
     } catch (err) { setError(err.message); }
-  }, [loadUsers]);
+  }, []);
 
   // ── Maintenance Tickets ──
   const addTicket = useCallback(async (ticket, userId, userName) => {
     try {
-      // Max-based ticket numbering (avoids gaps from deletions)
-      const snap = await getDocs(collection(db, 'churches', churchId, 'maintenanceTickets'));
-      let maxNum = 0;
-      snap.docs.forEach(d => {
-        const tn = d.data().ticketNumber || '';
-        const match = tn.match(/^MNT-(\d+)$/);
-        if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+      // Atomic ticket numbering via transaction on config/main
+      let ticketNumber;
+      const configRef = doc(db, 'churches', churchId, 'config', 'main');
+      await runTransaction(db, async (t) => {
+        const configSnap = await t.get(configRef);
+        const maxNum = (configSnap.data()?.maxTicketNumber || 0) + 1;
+        ticketNumber = 'MNT-' + String(maxNum).padStart(3, '0');
+        t.update(configRef, { maxTicketNumber: maxNum });
       });
-      const ticketNumber = 'MNT-' + String(maxNum + 1).padStart(3, '0');
       const ref = await addDoc(collection(db, 'churches', churchId, 'maintenanceTickets'), {
         ...ticket,
         ticketNumber,
@@ -396,7 +384,7 @@ export function useFirestore(churchId) {
 
   const loadSuggestions = useCallback(async () => {
     try {
-      const snap = await getDocs(query(collection(db, 'suggestions'), orderBy('submittedAt', 'desc')));
+      const snap = await getDocs(query(collection(db, 'suggestions'), orderBy('submittedAt', 'desc'), limit(100)));
       return snap.docs.map(d => ({ id: d.id, ...d.data() }));
     } catch (err) {
       setError(err.message);
@@ -424,7 +412,7 @@ export function useFirestore(churchId) {
     config, settings, items, supplies, activityLog, reservations, users,
     maintenanceTickets, vendors,
     loading, error,
-    updateSettings, updateConfig, loadUsers,
+    updateSettings, updateConfig,
     addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired,
     addSupply, updateSupply, useSupply, restockSupply,
     logActivity,

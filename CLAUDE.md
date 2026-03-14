@@ -295,26 +295,17 @@ Findings from a full efficiency audit. Fix in priority order before hub expansio
 
 ### 🔴 Firestore — High Priority
 
-**`loadUsers` scans entire users collection** (`useFirestore.js`)
-`getDocs(collection(db, 'users'))` fetches every user doc across all churches, then filters client-side. Should use `query(..., where('churchId', '==', churchId))` with a real-time `onSnapshot` listener instead of on-demand `getDocs`. Also creates a shallow re-run cycle: `useCallback` → `useEffect([loadUsers])` → triggers on every `churchId` change.
+~~**`loadUsers` scans entire users collection**~~ ✅ Fixed — replaced `getDocs(collection(db, 'users'))` + client-side filter with a real-time `onSnapshot` listener using `where('churchId', '==', churchId)`. Removed manual `loadUsers()` calls from `updateUser`/`removeUser`; removed Refresh button from Team Members UI. `totalSubs` bumped to 9.
 
-**Ticket numbering is O(n) per new ticket** (`useFirestore.js`)
-`addTicket()` reads all `maintenanceTickets` docs to find the current max ticket number (`MNT-###`). Scales linearly with ticket count. Fix: store `maxTicketNumber` as a field on `churches/{churchId}/config/main` and use Firestore `increment(1)` atomically.
+~~**Ticket numbering is O(n) per new ticket**~~ ✅ Fixed — `addTicket()` now uses `runTransaction` to atomically read and increment `maxTicketNumber` on `config/main`. No longer scans all tickets on creation.
 
-**Suggestions load has no limit** (`useFirestore.js`)
-`loadSuggestions()` reads the entire `suggestions` collection with no cap. Should add `.limit(100)` (paginate with `startAfter()` if needed in the future).
+~~**Suggestions load has no limit**~~ ✅ Fixed — added `.limit(100)` to `loadSuggestions()` query.
 
 ### 🟡 React — Medium Priority
 
-**No `useMemo` on expensive derived state** (`App.jsx`)
-Three hot paths recalculate on every render:
-- Dashboard: `activeItems` filtered 5–8 times for counts, checkouts, overdue
-- ItemsPage: `displayItems` re-filtered on every keystroke (search + 3 dropdowns)
-- Activity log: cutoff date + filter recalculated in an inline IIFE
-Wrap each in `useMemo` with appropriate dependencies.
+~~**No `useMemo` on expensive derived state**~~ ✅ Fixed — wrapped `activeItems`, `counts`, `checkedOut`, `overdue`, `lowStock`, `pendingRes`, and `activityFiltered` in Dashboard; `activeItems`, `disposedItems`, `displayItems` in ItemsPage. Activity log filter lifted out of inline IIFE into `useMemo`.
 
-**`useWindowWidth` fires on every pixel during resize** (`useMobile.js`)
-Raw `addEventListener('resize', ...)` with no debounce triggers hundreds of re-renders per second while the user drags the window. Add a 100ms debounce.
+~~**`useWindowWidth` fires on every pixel during resize**~~ ✅ Fixed — added 100ms debounce to the resize handler in `useMobile.js`.
 
 ### 🟢 Longer Term (pre-hub expansion)
 
