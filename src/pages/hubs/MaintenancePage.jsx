@@ -1,9 +1,9 @@
-import { useState, useEffect, useContext, useRef } from 'react';
+import { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { collection, onSnapshot, query as fsQuery, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../firebase.js';
 import { MobileCtx } from '../../hooks/useMobile.js';
-import { B, f1, f2, inp, btnP, btnS } from '../../components/brand/tokens.js';
+import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { Stat } from '../../components/primitives/Stat.jsx';
@@ -204,7 +204,7 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
                 <div key={c.id} style={{ background:B.warmGray, borderRadius:10, padding:'10px 14px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
                     <span style={{ fontWeight:700, fontSize:13, color:B.navy, fontFamily:f1 }}>{c.authorName}</span>
-                    <span style={{ fontSize:11, color:B.textLight }}>{c.createdAt?.split('T')[0]}</span>
+                    <span style={{ fontSize:11, color:B.textLight }}>{c.createdAt ? (c.createdAt.slice(0,10) === new Date().toISOString().slice(0,10) ? new Date(c.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : c.createdAt.slice(0,10)) : ''}</span>
                   </div>
                   <div style={{ fontSize:13, color:B.textDark, lineHeight:1.5 }}>{c.text}</div>
                 </div>
@@ -249,7 +249,7 @@ const getEmptyTicket = () => ({ name:'', description:'', priority:'Medium', tags
 const getEmptyVendor = () => ({ name:'', phone:'', email:'', specialty:'', notes:'' });
 
 export function MaintenancePage({ store, userProfile }) {
-  const { items, maintenanceTickets, vendors, users, settings, addTicket, updateTicket, addTicketComment, addMaintenanceTags, addVendor } = store;
+  const { items, maintenanceTickets, vendors, users, settings, addTicket, updateTicket, deleteTicket, addTicketComment, addMaintenanceTags, addVendor, updateVendor, deleteVendor } = store;
   const isMobile = useContext(MobileCtx);
 
   const userId = userProfile?.id || userProfile?.uid;
@@ -261,9 +261,13 @@ export function MaintenancePage({ store, userProfile }) {
 
   // ── State ──
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('maint_viewMode') || 'kanban');
+  const [filterSearch, setFilterSearch] = useState('');
+  const [filterPriority, setFilterPriority] = useState('');
+  const [filterMyTickets, setFilterMyTickets] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
   const [showAddVendor, setShowAddVendor] = useState(false);
+  const [showEditVendor, setShowEditVendor] = useState(null); // vendor object being edited
   const [showVendors, setShowVendors] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
@@ -386,6 +390,8 @@ export function MaintenancePage({ store, userProfile }) {
     try {
       const vendorName = detailEdits.vendorId ? (vendors.find(v => v._docId === detailEdits.vendorId)?.name || null) : null;
       const linkedItem = activeItems.find(i => i._docId === detailEdits.linkedItemDocId);
+      const wasComplete = showDetail.status === 'Complete';
+      const isNowComplete = detailEdits.status === 'Complete';
       const updates = {
         ...detailEdits,
         vendorName,
@@ -395,6 +401,7 @@ export function MaintenancePage({ store, userProfile }) {
         linkedItemDescription: linkedItem?.description || null,
         estimatedCost: detailEdits.estimatedCost ? Number(detailEdits.estimatedCost) : null,
         actualCost: detailEdits.actualCost ? Number(detailEdits.actualCost) : null,
+        completedAt: isNowComplete && !wasComplete ? new Date().toISOString() : (isNowComplete ? showDetail.completedAt : null),
       };
       await updateTicket(showDetail._docId, updates);
       if (detailEdits.tags?.length > 0 && addMaintenanceTags) {
@@ -458,6 +465,32 @@ export function MaintenancePage({ store, userProfile }) {
     flash('Vendor added!');
   }
 
+  async function handleUpdateVendor() {
+    if (!showEditVendor || !vendorForm.name.trim()) return;
+    setSaving(true);
+    const { _docId, createdAt, ...rest } = showEditVendor;
+    await updateVendor(_docId, { ...rest, ...vendorForm });
+    setShowEditVendor(null);
+    setVendorForm(getEmptyVendor());
+    setSaving(false);
+    flash('Vendor updated!');
+  }
+
+  async function handleDeleteVendor(vendor) {
+    if (!window.confirm(`Delete "${vendor.name}"? This cannot be undone.`)) return;
+    await deleteVendor(vendor._docId);
+    flash('Vendor deleted.');
+  }
+
+  async function handleDeleteTicket() {
+    if (!showDetail?._docId) return;
+    if (!window.confirm(`Delete "${showDetail.name}"? This cannot be undone.`)) return;
+    await deleteTicket(showDetail._docId);
+    setShowDetail(null);
+    setDetailEdits({});
+    flash('Ticket deleted.');
+  }
+
   function toggleCollapse(status) {
     setCollapsedStatuses(prev => {
       const next = new Set(prev);
@@ -469,9 +502,22 @@ export function MaintenancePage({ store, userProfile }) {
 
   // ── Stats ──
   const thisMonthStart = new Date().toISOString().slice(0, 7) + '-01';
+  const today = new Date();
   const backlogCount = maintenanceTickets.filter(t => t.status === 'Backlog').length;
   const inProgressCount = maintenanceTickets.filter(t => t.status === 'In Progress').length;
   const completedThisMonth = maintenanceTickets.filter(t => t.status === 'Complete' && (t.completedAt || '').slice(0, 10) >= thisMonthStart).length;
+  const overdueCount = maintenanceTickets.filter(t => t.dueDate && new Date(t.dueDate) < today && t.status !== 'Complete' && t.status !== 'Cancelled').length;
+
+  // ── Filtered tickets ──
+  const filteredTickets = useMemo(() => {
+    const search = filterSearch.toLowerCase();
+    return maintenanceTickets.filter(t => {
+      if (filterPriority && t.priority !== filterPriority) return false;
+      if (filterMyTickets && !t.assignees?.some(a => a.uid === userId)) return false;
+      if (search && !t.name?.toLowerCase().includes(search) && !t.description?.toLowerCase().includes(search) && !t.tags?.some(tag => tag.includes(search))) return false;
+      return true;
+    });
+  }, [maintenanceTickets, filterSearch, filterPriority, filterMyTickets, userId]);
 
   // ── Render ──
   return (
@@ -497,7 +543,7 @@ export function MaintenancePage({ store, userProfile }) {
         <Stat label="Backlog" value={backlogCount} icon="📋" color={B.textMid}/>
         <Stat label="In Progress" value={inProgressCount} icon="🔵" color="#1A65C7"/>
         <Stat label="Completed This Month" value={completedThisMonth} icon="✅" color={B.teal}/>
-        <Stat label="Total Vendors" value={vendors.length} icon="🏢"/>
+        <Stat label="Overdue" value={overdueCount} icon="⚠️" color={overdueCount > 0 ? B.red : B.textMid}/>
       </div>
 
       {msg && (
@@ -517,7 +563,13 @@ export function MaintenancePage({ store, userProfile }) {
               <div style={{ display:'grid', gridTemplateColumns:isMobile ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap:10 }}>
                 {vendors.map(v => (
                   <div key={v._docId} style={{ padding:'14px 16px', borderRadius:10, background:B.warmGray, border:'1px solid '+B.sand }}>
-                    <div style={{ fontWeight:600, fontSize:14, color:B.navy, marginBottom:4 }}>{v.name}</div>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:4 }}>
+                      <div style={{ fontWeight:600, fontSize:14, color:B.navy }}>{v.name}</div>
+                      <div style={{ display:'flex', gap:6, flexShrink:0, marginLeft:8 }}>
+                        <button onClick={() => { setVendorForm({ name:v.name||'', phone:v.phone||'', email:v.email||'', specialty:v.specialty||'', notes:v.notes||'' }); setShowEditVendor(v); }} style={{ border:'none', background:'none', cursor:'pointer', fontSize:13, color:B.textLight, padding:'2px 4px' }} title="Edit">✏️</button>
+                        <button onClick={() => handleDeleteVendor(v)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:13, color:B.textLight, padding:'2px 4px' }} title="Delete">🗑️</button>
+                      </div>
+                    </div>
                     {v.specialty && <div style={{ fontSize:12, color:B.teal, fontFamily:f1, marginBottom:4 }}>{v.specialty}</div>}
                     {v.phone && <div style={{ fontSize:12, color:B.textMid }}>📞 {v.phone}</div>}
                     {v.email && <div style={{ fontSize:12, color:B.textMid }}>✉️ {v.email}</div>}
@@ -530,6 +582,30 @@ export function MaintenancePage({ store, userProfile }) {
         </div>
       )}
 
+      {/* Filter Bar */}
+      <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap', alignItems:'center' }}>
+        <input
+          style={{ ...inp, flex:1, minWidth:160, maxWidth:280 }}
+          placeholder="Search tickets..."
+          value={filterSearch}
+          onChange={e => setFilterSearch(e.target.value)}
+        />
+        <select style={{ ...inp, width:'auto', cursor:'pointer' }} value={filterPriority} onChange={e => setFilterPriority(e.target.value)}>
+          <option value="">All priorities</option>
+          {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <button
+          type="button"
+          onClick={() => setFilterMyTickets(v => !v)}
+          style={{ padding:'9px 14px', borderRadius:10, border:'1px solid '+(filterMyTickets ? B.teal : B.sand), background:filterMyTickets ? B.tealPale : B.white, color:filterMyTickets ? B.teal : B.textMid, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:filterMyTickets ? 700 : 500, whiteSpace:'nowrap' }}
+        >
+          My tickets
+        </button>
+        {(filterSearch || filterPriority || filterMyTickets) && (
+          <button type="button" onClick={() => { setFilterSearch(''); setFilterPriority(''); setFilterMyTickets(false); }} style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, cursor:'pointer' }}>Clear</button>
+        )}
+      </div>
+
       {/* View Toggle */}
       <div style={{ display:'flex', gap:8, marginBottom:18, alignItems:'center' }}>
         <div style={{ display:'flex', background:B.warmGray, borderRadius:10, padding:3 }}>
@@ -540,7 +616,7 @@ export function MaintenancePage({ store, userProfile }) {
           ))}
         </div>
         <span style={{ color:B.textLight, fontSize:13, marginLeft:4 }}>
-          {maintenanceTickets.length} ticket{maintenanceTickets.length !== 1 ? 's' : ''}
+          {filteredTickets.length}{filteredTickets.length !== maintenanceTickets.length ? ` of ${maintenanceTickets.length}` : ''} ticket{maintenanceTickets.length !== 1 ? 's' : ''}
         </span>
       </div>
 
@@ -557,7 +633,7 @@ export function MaintenancePage({ store, userProfile }) {
       {viewMode === 'kanban' && maintenanceTickets.length > 0 && (
         <div style={{ display:'flex', gap:12, overflowX:isMobile ? 'hidden' : 'auto', flexDirection:isMobile ? 'column' : 'row', paddingBottom:8, alignItems:'flex-start' }}>
           {STATUSES.map(status => (
-            <KanbanColumn key={status} status={status} tickets={maintenanceTickets.filter(t => t.status === status)} onTicketClick={openDetail} isMobile={isMobile}/>
+            <KanbanColumn key={status} status={status} tickets={filteredTickets.filter(t => t.status === status)} onTicketClick={openDetail} isMobile={isMobile}/>
           ))}
         </div>
       )}
@@ -566,7 +642,7 @@ export function MaintenancePage({ store, userProfile }) {
       {viewMode === 'list' && maintenanceTickets.length > 0 && (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           {STATUSES.map(status => {
-            const tickets = maintenanceTickets.filter(t => t.status === status);
+            const tickets = filteredTickets.filter(t => t.status === status);
             const collapsed = collapsedStatuses.has(status);
             const sc = statusColors[status];
             return (
@@ -708,7 +784,8 @@ export function MaintenancePage({ store, userProfile }) {
                 Created by <strong>{showDetail.createdByName || showDetail.reportedByName}</strong> on {showDetail.createdAt?.split('T')[0]}
                 {showDetail.completedAt && <> · Completed {showDetail.completedAt.split('T')[0]}</>}
               </div>
-              <div style={{ display:'flex', gap:8 }}>
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                <button onClick={handleDeleteTicket} style={{ ...btnD, fontSize:13, padding:'9px 14px' }}>Delete</button>
                 <button onClick={() => { setShowDetail(null); setDetailEdits({}); }} style={btnS}>Cancel</button>
                 <button onClick={handleUpdateTicket} disabled={saving || !detailEdits.name?.trim()} style={{ ...btnP, opacity:(saving || !detailEdits.name?.trim()) ? .5 : 1 }}>
                   {saving ? 'Saving...' : 'Save Changes'}
@@ -729,6 +806,30 @@ export function MaintenancePage({ store, userProfile }) {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* ═══ EDIT VENDOR MODAL ═══ */}
+      <Modal open={!!showEditVendor} onClose={() => { setShowEditVendor(null); setVendorForm(getEmptyVendor()); }} title="Edit Vendor">
+        <FF label="Vendor / Company Name *">
+          <input style={inp} value={vendorForm.name} onChange={e => setVendorForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. Smith's HVAC"/>
+        </FF>
+        <FF label="Specialty">
+          <input style={inp} value={vendorForm.specialty} onChange={e => setVendorForm(f => ({ ...f, specialty:e.target.value }))} placeholder="e.g. HVAC, Electrical, AV Systems"/>
+        </FF>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+          <FF label="Phone">
+            <input style={inp} value={vendorForm.phone} onChange={e => setVendorForm(f => ({ ...f, phone:e.target.value }))} placeholder="(555) 000-0000"/>
+          </FF>
+          <FF label="Email">
+            <input style={inp} type="email" value={vendorForm.email} onChange={e => setVendorForm(f => ({ ...f, email:e.target.value }))} placeholder="contact@vendor.com"/>
+          </FF>
+        </div>
+        <FF label="Notes">
+          <textarea style={{ ...inp, minHeight:60, resize:'vertical' }} value={vendorForm.notes} onChange={e => setVendorForm(f => ({ ...f, notes:e.target.value }))} placeholder="Contract details, hours, etc."/>
+        </FF>
+        <button onClick={handleUpdateVendor} disabled={saving || !vendorForm.name.trim()} style={{ ...btnP, width:'100%', opacity:(saving || !vendorForm.name.trim()) ? .5 : 1, marginTop:4 }}>
+          {saving ? 'Saving...' : 'Save Changes'}
+        </button>
       </Modal>
 
       {/* ═══ ADD VENDOR MODAL ═══ */}

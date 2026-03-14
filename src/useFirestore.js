@@ -408,6 +408,12 @@ export function useFirestore(churchId) {
     } catch (err) { setError(err.message); }
   }, [churchId]);
 
+  const deleteVendor = useCallback(async (docId) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'vendors', docId));
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
   return {
     config, settings, items, supplies, activityLog, reservations, users,
     maintenanceTickets, vendors,
@@ -419,7 +425,7 @@ export function useFirestore(churchId) {
     addReservation, updateReservation,
     updateUser, removeUser,
     addTicket, updateTicket, addTicketComment, deleteTicket, addMaintenanceTags,
-    addVendor, updateVendor,
+    addVendor, updateVendor, deleteVendor,
     submitSuggestion, loadSuggestions
   };
 }
