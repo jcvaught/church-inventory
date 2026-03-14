@@ -82,6 +82,7 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/maintenanceTickets` | Maintenance Hub: repair tickets (MNT-### numbering) |
 | `churches/{churchId}/vendors` | Maintenance Hub: vendor/contractor directory |
 | `users/{uid}` | User profile with `churchId`, `role` (`admin`/`user`), `name`, `email`, `active` |
+| `suggestions/{docId}` | **Top-level** (not church-scoped) — cross-church user suggestions; fields: `text`, `category`, `submittedBy`, `submittedByName`, `churchId`, `churchName`, `submittedAt` |
 
 `churchId` is always `{creatorUid}-church` (set at church creation time).
 
@@ -156,6 +157,7 @@ Existing churches at launch: 12 months Founder status (unlimited users, all hubs
 - Code restructured into component/page/hook/utils files
 - Subscription infrastructure (useSubscription, UpgradeGate, subscription doc on church creation)
 - Maintenance Hub: tickets (MNT-### numbering), priority/category/status, vendor directory, stats
+- User Suggestions: all users can submit categorized suggestions (Feature Request / Bug Report / Other) from SettingsPage; stored in top-level `suggestions` collection (cross-church); owner-only report panel gated by `userProfile?.email === 'jcvaught@gmail.com'` in UI and by `request.auth.token.email` in Firestore rules
 
 ### Phase 4 — Insights Hub
 - Item utilization stats, ministry usage breakdown, seasonal trends
