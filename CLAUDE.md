@@ -309,4 +309,4 @@ Findings from a full efficiency audit. Fix in priority order before hub expansio
 
 ### 🟢 Longer Term (pre-hub expansion)
 
-**Extract remaining pages out of `App.jsx`** — currently 2300+ lines with all 7 pages inline. `MaintenancePage` is already extracted; finish extracting `SettingsPage`, `Dashboard`, `ItemsPage`, `SuppliesPage`, `ReservationsPage`, `ActivityLogPage`. Prerequisite for lazy loading and easier maintainability as hubs grow.
+~~**Extract remaining pages out of `App.jsx`**~~ ✅ Done — `App.jsx` trimmed from 2330 to 368 lines; all 6 remaining pages extracted to `src/pages/`. Now ready for lazy loading and hub expansion.
