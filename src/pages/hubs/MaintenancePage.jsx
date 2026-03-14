@@ -362,8 +362,10 @@ export function MaintenancePage({ store, userProfile }) {
         completedAt: null,
       }, userId, userName);
       if (photoFiles.length > 0 && docId) {
-        const urls = await uploadPhotos(docId, photoFiles);
-        await updateTicket(docId, { photos: urls });
+        try {
+          const urls = await uploadPhotos(docId, photoFiles);
+          await updateTicket(docId, { photos: urls });
+        } catch (err) { flash('Photo upload failed — ticket saved without photos.'); }
       }
       if (ticketForm.tags.length > 0 && addMaintenanceTags) {
         await addMaintenanceTags(ticketForm.tags);

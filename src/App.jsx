@@ -262,6 +262,7 @@ function SettingsPage({ store, userProfile, subscription }) {
   }
   function handleChangeCode() {
     if (newCode.trim().length < 3) return;
+    if (!window.confirm(`Change the church code to "${newCode.trim().toUpperCase()}"? Anyone using the old code to join will no longer be able to.`)) return;
     updateConfig({ churchCode: newCode.trim().toUpperCase() });
     setEditCodeMode(false);
     setNewCode("");
@@ -417,12 +418,12 @@ function SettingsPage({ store, userProfile, subscription }) {
                 </div>
                 {isAdmin && u.id !== userProfile.id && (
                   <div style={{ display:"flex", gap:8, marginTop:10, flexWrap:"wrap" }}>
-                    <button onClick={()=>updateUser(u.id, {role: u.role==="admin" ? "user" : "admin"})}
+                    <button onClick={()=>{ if(window.confirm(u.role==="admin" ? `Remove admin from ${u.name}? They will become a regular user.` : `Make ${u.name} an admin? They will have full access to all settings and data.`)) updateUser(u.id, {role: u.role==="admin" ? "user" : "admin"}); }}
                       style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color: u.role==="admin" ? B.textMid : "#96750E", borderColor: u.role==="admin" ? B.sand : B.gold }}>
                       {u.role==="admin" ? "Remove Admin" : "Make Admin"}
                     </button>
                     {u.active ? (
-                      <button onClick={()=>updateUser(u.id, {active:false})} style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.red, borderColor:"#FECACA" }}>Deactivate</button>
+                      <button onClick={()=>{ if(window.confirm(`Deactivate ${u.name}? They will lose access to the app immediately.`)) updateUser(u.id, {active:false}); }} style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.red, borderColor:"#FECACA" }}>Deactivate</button>
                     ) : (
                       <button onClick={()=>updateUser(u.id, {active:true})} style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.teal, borderColor:B.tealPale }}>Reactivate</button>
                     )}
@@ -786,7 +787,7 @@ function ItemsPage({ store, userProfile, initialItemId }) {
         const sRef = storageRef(storage, `churches/${userProfile.churchId}/items/${itemForm.itemId.trim()}-${Date.now()}`);
         await uploadBytes(sRef, resized, { contentType: 'image/jpeg' });
         photoUrl = await getDownloadURL(sRef);
-      } catch (err) { console.warn('Photo upload failed:', err.message); }
+      } catch (err) { flash('Photo upload failed — item saved without photo.'); }
     }
     await addItem({
       itemId: itemForm.itemId.trim(),
@@ -821,7 +822,7 @@ function ItemsPage({ store, userProfile, initialItemId }) {
         const sRef = storageRef(storage, `churches/${userProfile.churchId}/items/${itemForm.itemId.trim()}-${Date.now()}`);
         await uploadBytes(sRef, resized, { contentType: 'image/jpeg' });
         photoUrl = await getDownloadURL(sRef);
-      } catch (err) { console.warn('Photo upload failed:', err.message); }
+      } catch (err) { flash('Photo upload failed — item saved without photo.'); }
     }
     await updateItem(showEdit._docId, {
       itemId: itemForm.itemId.trim(),
@@ -843,6 +844,8 @@ function ItemsPage({ store, userProfile, initialItemId }) {
   // ── Check Out ──
   async function handleCheckOut() {
     if (!showCheckOut || !coForm.person.trim()) return;
+    const checkoutDate = coForm.date || today;
+    if (coForm.returnDate && coForm.returnDate < checkoutDate) { flash("Return date cannot be before the check-out date."); return; }
     setSaving(true);
     await checkOutItem(showCheckOut._docId, {
       itemId: showCheckOut.itemId,
@@ -1375,6 +1378,8 @@ function SuppliesPage({ store, userProfile }) {
   // ── Add ──
   async function handleAdd() {
     if (!supForm.supplyId.trim() || !supForm.description.trim()) return;
+    if (Number(supForm.quantity) < 0) { flash("Quantity cannot be negative."); return; }
+    if (Number(supForm.minQuantity) < 0) { flash("Minimum quantity cannot be negative."); return; }
     setSaving(true);
     await addSupply({
       supplyId: supForm.supplyId.trim(),
@@ -1871,6 +1876,7 @@ function ReservationsPage({ store, userProfile }) {
 
   async function handleAdd() {
     if (!form.itemDocId || !form.eventName.trim() || !form.eventDate) return;
+    if (form.returnDate && form.returnDate < form.eventDate) { setConflictErr("Return date cannot be before the event date."); return; }
     setConflictErr("");
     const aStart = form.eventDate;
     const aEnd = form.returnDate || form.eventDate;
