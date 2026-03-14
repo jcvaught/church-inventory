@@ -10,7 +10,17 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
     }
 
-    // Church data — restricted to authenticated users belonging to that church
+    // Church parent doc — any authenticated user can read (churchName/churchCode only, needed for join flow)
+    // Only the church creator or existing members can write (create/update the parent doc)
+    match /churches/{churchId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && (
+        request.auth.uid + '-church' == churchId ||
+        userChurchId() == churchId
+      );
+    }
+
+    // Church subcollections — restricted to authenticated users belonging to that church
     match /churches/{churchId}/{document=**} {
       allow read, write: if request.auth != null && userChurchId() == churchId;
     }

@@ -256,36 +256,26 @@ Findings from a full security + UX audit. Fix in priority order.
 
 ### 🔴 Security — High Priority
 
-**Users Firestore rule leaks cross-church data** (`firestore.rules:21`)
-`allow read: if request.auth != null;` allows any authenticated user to read all user profiles across all churches — exposing names, emails, and roles. Should restrict reads to same-church users only (via `userChurchId() == resource.data.churchId` check or similar).
+~~**Users Firestore rule leaks cross-church data**~~ ✅ Fixed — reads now require `request.auth.uid == userId || userChurchId() == resource.data.churchId`.
 
 **Suggestions UI gate uses wrong email source** (`App.jsx`)
 The owner-only suggestions report is gated in UI by `userProfile?.email` (a Firestore field the user wrote) rather than the verified auth token. Firestore rules correctly use `request.auth.token.email`. Low exploitability but should align: use `user.email` from Firebase Auth object, not the Firestore profile doc.
 
 ### 🟡 Security — Medium Priority
 
-**Church code lookup scans entire `churches` collection** (`useAuth.js`)
-Every registration and church-join does `getDocs(collection(db, 'churches'))` — a full collection read — just to match a church code. Expensive as church count grows and allows brute-forcing valid codes. Fix: store codes in a dedicated lookup doc (e.g., `codes/{code}` → `churchId`) and do a direct `getDoc`.
+~~**Church code lookup scans entire `churches` collection**~~ ✅ Fixed — replaced full collection scans with `query(collection(db, 'churches'), where('churchCode', '==', ...))`. Auth account is now created before the check so the read is authenticated. Firestore rules updated to allow any authenticated user to read church parent docs (name/code only).
 
-### 🔴 UX — Missing Confirmations on Destructive Actions
+### ~~🔴 UX — Missing Confirmations on Destructive Actions~~ ✅ Fixed
 
-No confirmation dialog before:
-- **Deactivating a user** (`SettingsPage`) — one click locks someone out
-- **Making / removing admin** (`SettingsPage`) — one click changes role
-- **Changing the church code** (`SettingsPage`) — invalidates all pending invites and confuses existing members
-
-All three should show a `window.confirm()` or a modal confirm before proceeding.
+~~No confirmation dialog before deactivating users, changing roles, or changing the church code.~~ Added `window.confirm()` for all three.
 
 ### 🟡 UX — Data Integrity Bugs
 
-**Photo upload failure is silent** (`useFirestore.js`)
-Photo upload errors are only `console.warn`'d. Item is saved without the photo and the user has no feedback. Should call `flash()` with an error message on upload failure.
+~~**Photo upload failure is silent**~~ ✅ Fixed — `flash()` now shown when photo upload fails in both ItemsPage and MaintenancePage.
 
-**Return date not validated against checkout date** (`ReservationsPage`, checkout flow)
-User can set a return date earlier than the checkout date with no error. Add a `returnDate >= checkoutDate` check before submit.
+~~**Return date not validated against checkout date**~~ ✅ Fixed — validated in checkout flow and reservation form before submit.
 
-**Supply quantities allow negatives** (`SuppliesPage`)
-HTML `min="0"` on the quantity input is bypassable by typing. Validate on submit: `if (quantity < 0) return`.
+~~**Supply quantities allow negatives**~~ ✅ Fixed — validated on submit before saving.
 
 **Item ID has no minimum length or pattern enforcement** (`ItemsPage`)
 Single-character IDs like "A" are accepted. Consider requiring at least 3 characters or a pattern like `[A-Z0-9]{2,}-[0-9]+`.

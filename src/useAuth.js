@@ -35,6 +35,14 @@ const DEFAULT_TAGS = [
   "office-supplies", "cleaning", "batteries", "worship-supplies"
 ];
 
+// Look up a church by its join code. Returns the churchId string or null.
+async function findChurchByCode(churchCode) {
+  const code = churchCode.toUpperCase();
+  const snap = await getDocs(query(collection(db, 'churches'), where('churchCode', '==', code)));
+  if (!snap.empty) return snap.docs[0].id;
+  return null;
+}
+
 export function useAuth() {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
@@ -70,32 +78,18 @@ export function useAuth() {
   // Create a new church (first-time setup)
   const createChurch = useCallback(async ({ churchName, churchCode, userName, email, password }) => {
     setError(null);
+    let cred = null;
     try {
-      // Check if church code is already taken
-      const snap = await getDocs(collection(db, 'churches'));
-      for (const d of snap.docs) {
-        const data = d.data();
-        if (data.churchCode?.toUpperCase() === churchCode.toUpperCase()) {
-          throw new Error('This church code is already in use. Please choose another.');
-        }
-        const cfg = await getDoc(doc(db, 'churches', d.id, 'config', 'main'));
-        if (cfg.exists() && cfg.data().churchCode?.toUpperCase() === churchCode.toUpperCase()) {
-          throw new Error('This church code is already in use. Please choose another.');
-        }
-      }
-      // Also check via users collection for legacy churches without parent docs
-      const usersSnap = await getDocs(collection(db, 'users'));
-      const legacyChurchIds = [...new Set(usersSnap.docs.map(d => d.data().churchId).filter(Boolean))];
-      for (const cid of legacyChurchIds) {
-        const cfg = await getDoc(doc(db, 'churches', cid, 'config', 'main'));
-        if (cfg.exists() && cfg.data().churchCode?.toUpperCase() === churchCode.toUpperCase()) {
-          throw new Error('This church code is already in use. Please choose another.');
-        }
-      }
-
-      // Create auth account
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      // Create auth account first so Firestore reads are authenticated
+      cred = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: userName });
+
+      // Check if church code is already taken
+      const existing = await findChurchByCode(churchCode);
+      if (existing) {
+        await cred.user.delete();
+        throw new Error('This church code is already in use. Please choose another.');
+      }
 
       // Create church document (parent + config)
       const churchId = cred.user.uid + '-church';
@@ -168,36 +162,8 @@ export function useAuth() {
       cred = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: userName });
 
-      // Now find church by code — check parent doc first, then config subcollection
-      let foundChurchId = null;
-      const snap = await getDocs(collection(db, 'churches'));
-      for (const d of snap.docs) {
-        const data = d.data();
-        if (data.churchCode?.toUpperCase() === churchCode.toUpperCase()) {
-          foundChurchId = d.id;
-          break;
-        }
-        const cfg = await getDoc(doc(db, 'churches', d.id, 'config', 'main'));
-        if (cfg.exists() && cfg.data().churchCode?.toUpperCase() === churchCode.toUpperCase()) {
-          foundChurchId = d.id;
-          await setDoc(doc(db, 'churches', d.id), { churchCode: cfg.data().churchCode, churchName: cfg.data().churchName || '', createdAt: cfg.data().createdAt || new Date().toISOString() }, { merge: true });
-          break;
-        }
-      }
-
-      // If no parent docs exist yet (legacy setup), discover via users collection
-      if (!foundChurchId) {
-        const usersSnap = await getDocs(collection(db, 'users'));
-        const churchIds = [...new Set(usersSnap.docs.map(d => d.data().churchId).filter(Boolean))];
-        for (const cid of churchIds) {
-          const cfg = await getDoc(doc(db, 'churches', cid, 'config', 'main'));
-          if (cfg.exists() && cfg.data().churchCode?.toUpperCase() === churchCode.toUpperCase()) {
-            foundChurchId = cid;
-            await setDoc(doc(db, 'churches', cid), { churchCode: cfg.data().churchCode, churchName: cfg.data().churchName || '', createdAt: cfg.data().createdAt || new Date().toISOString() }, { merge: true });
-            break;
-          }
-        }
-      }
+      // Find church by code
+      const foundChurchId = await findChurchByCode(churchCode);
 
       if (!foundChurchId) {
         // Clean up: delete the auth account since church code was invalid
@@ -280,35 +246,7 @@ export function useAuth() {
     try {
       if (!auth.currentUser) throw new Error('No Google session found.');
 
-      let foundChurchId = null;
-      const snap = await getDocs(collection(db, 'churches'));
-      for (const d of snap.docs) {
-        const data = d.data();
-        if (data.churchCode?.toUpperCase() === churchCode.toUpperCase()) {
-          foundChurchId = d.id;
-          break;
-        }
-        const cfg = await getDoc(doc(db, 'churches', d.id, 'config', 'main'));
-        if (cfg.exists() && cfg.data().churchCode?.toUpperCase() === churchCode.toUpperCase()) {
-          foundChurchId = d.id;
-          await setDoc(doc(db, 'churches', d.id), { churchCode: cfg.data().churchCode, churchName: cfg.data().churchName || '', createdAt: cfg.data().createdAt || new Date().toISOString() }, { merge: true });
-          break;
-        }
-      }
-
-      // Fallback: discover via users collection for legacy data
-      if (!foundChurchId) {
-        const usersSnap = await getDocs(collection(db, 'users'));
-        const churchIds = [...new Set(usersSnap.docs.map(d => d.data().churchId).filter(Boolean))];
-        for (const cid of churchIds) {
-          const cfg = await getDoc(doc(db, 'churches', cid, 'config', 'main'));
-          if (cfg.exists() && cfg.data().churchCode?.toUpperCase() === churchCode.toUpperCase()) {
-            foundChurchId = cid;
-            await setDoc(doc(db, 'churches', cid), { churchCode: cfg.data().churchCode, churchName: cfg.data().churchName || '', createdAt: cfg.data().createdAt || new Date().toISOString() }, { merge: true });
-            break;
-          }
-        }
-      }
+      const foundChurchId = await findChurchByCode(churchCode);
 
       if (!foundChurchId) {
         throw new Error('Invalid church code. Please check with your administrator.');
