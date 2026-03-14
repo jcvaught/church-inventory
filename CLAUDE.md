@@ -159,7 +159,7 @@ Existing churches at launch: 12 months Founder status (unlimited users, all hubs
 - Code restructured into component/page/hook/utils files
 - Subscription infrastructure (useSubscription, UpgradeGate, subscription doc on church creation)
 - Maintenance Hub (rebuilt): kanban + list views, 6-status workflow (Backlog→Complete), multi-assignee, tag autocomplete (`maintenanceTags` via `arrayUnion`), photo uploads (Firebase Storage at `churches/{churchId}/maintenance/{docId}/`), real-time comment threads (subcollection), vendor directory, overdue date highlighting, `maint_viewMode` persisted to localStorage
-- User Suggestions: all users can submit categorized suggestions (Feature Request / Bug Report / Other) from SettingsPage; stored in top-level `suggestions` collection (cross-church); owner-only report panel gated by `userProfile?.email === 'jcvaught@gmail.com'` in UI and by `request.auth.token.email` in Firestore rules
+- User Suggestions: all users can submit categorized suggestions (Feature Request / Bug Report / Other) from SettingsPage; stored in top-level `suggestions` collection (cross-church); owner-only report panel gated by `['jcvaught@gmail.com', 'jvaught@fxcc.org'].includes(email)` in UI and by `request.auth.token.email in [...]` in Firestore rules
 
 ### Phase 4 — Insights Hub
 - Item utilization stats, ministry usage breakdown, seasonal trends
