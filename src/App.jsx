@@ -492,8 +492,8 @@ function AppShell({ authHook }) {
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 
       {/* ═══ HEADER ═══ */}
-      <div style={{ background:`linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 60%, #2C4066 100%)`, padding:isMobile?"14px 16px 14px":"18px 28px 14px", color:B.white, position:"relative", overflow:"hidden" }}>
-        <div style={{ position:"absolute", inset:0, opacity:0.04, backgroundImage:"radial-gradient(circle at 2px 2px, white 1px, transparent 0)", backgroundSize:"24px 24px" }}/>
+      <div style={{ background:`linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 60%, #2C4066 100%)`, padding:isMobile?"14px 16px 14px":"18px 28px 14px", color:B.white, position:"relative" }}>
+        <div style={{ position:"absolute", inset:0, opacity:0.04, backgroundImage:"radial-gradient(circle at 2px 2px, white 1px, transparent 0)", backgroundSize:"24px 24px", overflow:"hidden", pointerEvents:"none" }}/>
         <div style={{ maxWidth:1100, margin:"0 auto", position:"relative" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
             <FullLogo size={36} light={true} />
