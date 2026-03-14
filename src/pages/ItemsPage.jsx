@@ -51,7 +51,7 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
   }, [initialItemId, items]);
 
   // Forms
-  const emptyItem = { itemId:"", description:"", location:"", ministry:"", status:"Available", condition:"Good", notes:"", tags:[] };
+  const emptyItem = { itemId:"", description:"", location:"", ministry:"", status:"Available", condition:"Good", notes:"", tags:[], purchaseDate:"", purchasePrice:"", warrantyExpiry:"", estimatedValue:"" };
   const [itemForm, setItemForm] = useState(emptyItem);
   const [coForm, setCoForm] = useState({ person:"", purpose:"", ministry:"", date:"", returnDate:"" });
   const [retForm, setRetForm] = useState({ condition:"Good", notes:"" });
@@ -61,6 +61,7 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
   const [msg, setMsg] = useState("");
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
+  const [showFinancial, setShowFinancial] = useState(false);
 
   const locations = settings?.locations || [];
   const ministries = settings?.ministries || [];
@@ -109,7 +110,11 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
       photoUrl,
       assignedTo: "",
       checkOutDate: "",
-      expectedReturn: ""
+      expectedReturn: "",
+      purchaseDate: itemForm.purchaseDate || null,
+      purchasePrice: itemForm.purchasePrice !== "" ? Number(itemForm.purchasePrice) : null,
+      warrantyExpiry: itemForm.warrantyExpiry || null,
+      estimatedValue: itemForm.estimatedValue !== "" ? Number(itemForm.estimatedValue) : null,
     }, userId, userName);
     setShowAdd(false);
     setItemForm(emptyItem);
@@ -140,7 +145,11 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
       condition: itemForm.condition,
       notes: itemForm.notes,
       tags: itemForm.tags || [],
-      photoUrl
+      photoUrl,
+      purchaseDate: itemForm.purchaseDate || null,
+      purchasePrice: itemForm.purchasePrice !== "" ? Number(itemForm.purchasePrice) : null,
+      warrantyExpiry: itemForm.warrantyExpiry || null,
+      estimatedValue: itemForm.estimatedValue !== "" ? Number(itemForm.estimatedValue) : null,
     }, userId, userName);
     setShowEdit(null);
     setPhotoFile(null);
@@ -235,8 +244,13 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
       condition: item.condition || "Good",
       notes: item.notes || "",
       tags: item.tags || [],
-      status: item.status
+      status: item.status,
+      purchaseDate: item.purchaseDate || "",
+      purchasePrice: item.purchasePrice ?? "",
+      warrantyExpiry: item.warrantyExpiry || "",
+      estimatedValue: item.estimatedValue ?? "",
     });
+    setShowFinancial(!!(item.purchaseDate || item.purchasePrice != null || item.warrantyExpiry || item.estimatedValue != null));
     setPhotoFile(null);
     setPhotoPreview(item.photoUrl || null);
     setShowEdit(item);
@@ -418,6 +432,22 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
           )}
           {showDetail.notes && <div style={{ marginTop:14 }}><span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", fontFamily:f1 }}>Notes</span><div style={{ fontSize:14, marginTop:2, color:B.textMid }}>{showDetail.notes}</div></div>}
 
+          {/* Financial fields */}
+          {(showDetail.purchaseDate || showDetail.purchasePrice != null || showDetail.warrantyExpiry) && (
+            <div style={{ marginTop:14, paddingTop:14, borderTop:"1px solid "+B.sand }}>
+              <span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", fontFamily:f1, display:"block", marginBottom:8 }}>Financial &amp; Warranty</span>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, fontSize:13 }}>
+                {showDetail.purchaseDate && <div><span style={{ color:B.textLight }}>Purchased:</span> {showDetail.purchaseDate}</div>}
+                {showDetail.purchasePrice != null && <div><span style={{ color:B.textLight }}>Orig. Cost:</span> ${Number(showDetail.purchasePrice).toLocaleString()}</div>}
+                {showDetail.warrantyExpiry && (
+                  <div style={{ color: new Date(showDetail.warrantyExpiry) < new Date() ? B.red : B.teal, fontWeight:600 }}>
+                    Warranty {new Date(showDetail.warrantyExpiry) < new Date() ? "EXPIRED" : "expires"}: {showDetail.warrantyExpiry}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* QR Code */}
           {(() => {
             const itemUrl = window.location.origin + window.location.pathname.replace(/\/+$/, '') + '?item=' + encodeURIComponent(showDetail.itemId);
@@ -511,6 +541,22 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
           </FF>
         )}
         <FF label="Notes"><textarea style={{...inp, minHeight:60, resize:"vertical"}} value={itemForm.notes} onChange={e=>setItemForm({...itemForm, notes:e.target.value})} placeholder="Optional notes..."/></FF>
+        <div style={{ marginBottom:12 }}>
+          <button type="button" onClick={()=>setShowFinancial(v=>!v)} style={{ background:"none", border:"none", cursor:"pointer", color:B.teal, fontWeight:600, fontSize:13, fontFamily:f1, padding:0, display:"flex", alignItems:"center", gap:4 }}>
+            <span>{showFinancial ? "▾" : "▸"}</span> Financial &amp; Warranty (optional)
+          </button>
+          {showFinancial && (
+            <div style={{ marginTop:10, padding:"14px 16px", background:B.warmGray, borderRadius:10 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                <FF label="Purchase Date"><input style={inp} type="date" value={itemForm.purchaseDate} onChange={e=>setItemForm({...itemForm, purchaseDate:e.target.value})}/></FF>
+                <FF label="Purchase Price ($)"><input style={inp} type="number" min="0" step="0.01" value={itemForm.purchasePrice} onChange={e=>setItemForm({...itemForm, purchasePrice:e.target.value})} placeholder="0.00"/></FF>
+                <FF label="Warranty Expiry"><input style={inp} type="date" value={itemForm.warrantyExpiry} onChange={e=>setItemForm({...itemForm, warrantyExpiry:e.target.value})}/></FF>
+                <FF label="Current Value Override ($)"><input style={inp} type="number" min="0" step="0.01" value={itemForm.estimatedValue} onChange={e=>setItemForm({...itemForm, estimatedValue:e.target.value})} placeholder="Auto-calculated"/></FF>
+              </div>
+              <p style={{ margin:"8px 0 0", fontSize:11, color:B.textLight }}>Current value is auto-estimated from purchase price (straight-line, 5-yr). Enter an override to use a specific value.</p>
+            </div>
+          )}
+        </div>
         <FF label="Photo (optional)">
           {photoPreview && (
             <div style={{ marginBottom:8, position:"relative", display:"inline-block" }}>
@@ -557,6 +603,22 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
           </FF>
         )}
         <FF label="Notes"><textarea style={{...inp, minHeight:60, resize:"vertical"}} value={itemForm.notes} onChange={e=>setItemForm({...itemForm, notes:e.target.value})} placeholder="Optional notes..."/></FF>
+        <div style={{ marginBottom:12 }}>
+          <button type="button" onClick={()=>setShowFinancial(v=>!v)} style={{ background:"none", border:"none", cursor:"pointer", color:B.teal, fontWeight:600, fontSize:13, fontFamily:f1, padding:0, display:"flex", alignItems:"center", gap:4 }}>
+            <span>{showFinancial ? "▾" : "▸"}</span> Financial &amp; Warranty (optional)
+          </button>
+          {showFinancial && (
+            <div style={{ marginTop:10, padding:"14px 16px", background:B.warmGray, borderRadius:10 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                <FF label="Purchase Date"><input style={inp} type="date" value={itemForm.purchaseDate} onChange={e=>setItemForm({...itemForm, purchaseDate:e.target.value})}/></FF>
+                <FF label="Purchase Price ($)"><input style={inp} type="number" min="0" step="0.01" value={itemForm.purchasePrice} onChange={e=>setItemForm({...itemForm, purchasePrice:e.target.value})} placeholder="0.00"/></FF>
+                <FF label="Warranty Expiry"><input style={inp} type="date" value={itemForm.warrantyExpiry} onChange={e=>setItemForm({...itemForm, warrantyExpiry:e.target.value})}/></FF>
+                <FF label="Current Value Override ($)"><input style={inp} type="number" min="0" step="0.01" value={itemForm.estimatedValue} onChange={e=>setItemForm({...itemForm, estimatedValue:e.target.value})} placeholder="Auto-calculated"/></FF>
+              </div>
+              <p style={{ margin:"8px 0 0", fontSize:11, color:B.textLight }}>Current value is auto-estimated from purchase price (straight-line, 5-yr). Enter an override to use a specific value.</p>
+            </div>
+          )}
+        </div>
         <FF label="Photo (optional)">
           {photoPreview && (
             <div style={{ marginBottom:8, position:"relative", display:"inline-block" }}>

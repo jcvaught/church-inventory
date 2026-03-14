@@ -9,6 +9,7 @@ import { FF } from './components/primitives/FF.jsx';
 import { Spinner } from './components/primitives/Spinner.jsx';
 import { UpgradeGate } from './components/primitives/UpgradeGate.jsx';
 import { MaintenancePage } from './pages/hubs/MaintenancePage.jsx';
+import { InsightsPage } from './pages/hubs/InsightsPage.jsx';
 import { Dashboard } from './pages/Dashboard.jsx';
 import { ItemsPage } from './pages/ItemsPage.jsx';
 import { SuppliesPage } from './pages/SuppliesPage.jsx';
@@ -261,6 +262,7 @@ function AppShell({ authHook }) {
   const lowStock = (store.supplies || []).filter(c => c.quantity <= c.minQuantity);
   const pendingRes = (store.reservations || []).filter(r => r.status === "Pending");
   const hasMaintenance = hasHub('maintenance');
+  const hasInsights = hasHub('insights');
 
   return (
     <MobileCtx.Provider value={isMobile}>
@@ -298,9 +300,10 @@ function AppShell({ authHook }) {
 
           {/* Tabs — desktop only */}
           {!isMobile && <div style={{ display:"flex", gap:2, marginTop:16, marginBottom:-14, overflowX:"auto" }}>
-            {[["dashboard","Dashboard"],["inventory","All Items"],["supplies","Supplies"],["reservations","Reservations"],["log","Activity Log"],["maintenance","Maintenance"],["settings","Settings"]].map(([k,v]) =>
+            {[["dashboard","Dashboard"],["inventory","All Items"],["supplies","Supplies"],["reservations","Reservations"],["log","Activity Log"],["insights","Insights"],["maintenance","Maintenance"],["settings","Settings"]].map(([k,v]) =>
               <button key={k} onClick={()=>{setTab(k);setMenuOpen(false);}} style={tabBtn(k)}>{v}
                 {k==="maintenance"&&!hasMaintenance&&<span style={{ marginLeft:4, opacity:.7 }}>🔒</span>}
+                {k==="insights"&&!hasInsights&&<span style={{ marginLeft:4, opacity:.7 }}>🔒</span>}
                 {k==="supplies"&&lowStock.length>0&&<span style={{ marginLeft:6, background:B.red, color:"#fff", borderRadius:10, padding:"1px 7px", fontSize:10, fontWeight:700 }}>{lowStock.length}</span>}
                 {k==="reservations"&&pendingRes.length>0&&<span style={{ marginLeft:6, background:B.gold, color:"#fff", borderRadius:10, padding:"1px 7px", fontSize:10, fontWeight:700 }}>{pendingRes.length}</span>}
               </button>
@@ -320,6 +323,17 @@ function AppShell({ authHook }) {
         {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
         {tab === "reservations" && <ReservationsPage store={store} userProfile={userProfile} />}
         {tab === "log" && <ActivityLogPage store={store} />}
+        {tab === "insights" && (
+          <UpgradeGate
+            hubName="insights"
+            hubLabel="Insights Hub"
+            hubPrice="$7"
+            hubDescription="Understand how your inventory is really being used — utilization stats, ministry breakdowns, seasonal trends, and financial tracking."
+            hasHub={hasInsights}
+          >
+            <InsightsPage store={store} userProfile={userProfile} />
+          </UpgradeGate>
+        )}
         {tab === "maintenance" && (
           <UpgradeGate
             hubName="maintenance"
@@ -349,13 +363,14 @@ function AppShell({ authHook }) {
             ["inventory","Items","📦"],
             ["supplies","Stock","🧴"],
             ["reservations","Reserve","📅"],
+            ["insights","Insights","📊"],
             ["maintenance","Maint","🔧"],
             ["settings","Settings","⚙️"],
           ].map(([k,label,icon]) => (
             <button key={k} onClick={()=>{setTab(k);setMenuOpen(false);}}
               style={{ flex:1, padding:"8px 2px 6px", border:"none", background:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:tab===k?B.teal:B.textLight, position:"relative" }}>
               <span style={{ fontSize:20 }}>{icon}</span>
-              <span style={{ fontSize:9, fontWeight:700, fontFamily:f1, letterSpacing:.3 }}>{label}{k==="maintenance"&&!hasMaintenance?" 🔒":""}</span>
+              <span style={{ fontSize:9, fontWeight:700, fontFamily:f1, letterSpacing:.3 }}>{label}{k==="maintenance"&&!hasMaintenance?" 🔒":""}{k==="insights"&&!hasInsights?" 🔒":""}</span>
               {k==="supplies"&&lowStock.length>0&&<span style={{ position:"absolute", top:4, right:"calc(50% - 16px)", background:B.red, color:"#fff", borderRadius:10, padding:"0 4px", fontSize:9, fontWeight:700, minWidth:14, textAlign:"center" }}>{lowStock.length}</span>}
               {k==="reservations"&&pendingRes.length>0&&<span style={{ position:"absolute", top:4, right:"calc(50% - 16px)", background:B.gold, color:"#fff", borderRadius:10, padding:"0 4px", fontSize:9, fontWeight:700, minWidth:14, textAlign:"center" }}>{pendingRes.length}</span>}
             </button>
