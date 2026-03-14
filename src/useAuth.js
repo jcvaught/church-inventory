@@ -7,10 +7,14 @@ import {
   signOut,
   updateProfile,
   sendPasswordResetEmail,
-  sendEmailVerification
+  sendEmailVerification,
+  deleteUser,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
+  EmailAuthProvider
 } from 'firebase/auth';
 import {
-  doc, setDoc, getDoc, getDocs,
+  doc, setDoc, getDoc, getDocs, deleteDoc,
   collection, query, where
 } from 'firebase/firestore';
 import { auth, googleProvider, db } from './firebase.js';
@@ -306,6 +310,35 @@ export function useAuth() {
     if (auth.currentUser) await sendEmailVerification(auth.currentUser).catch(() => {});
   }, []);
 
+  // Delete the current user's account (reauthenticates first; password ignored for Google users)
+  const deleteAccount = useCallback(async (password) => {
+    setError(null);
+    try {
+      const currentUser = auth.currentUser;
+      const isGoogle = currentUser.providerData[0]?.providerId === 'google.com';
+      if (isGoogle) {
+        await reauthenticateWithPopup(currentUser, googleProvider);
+      } else {
+        const credential = EmailAuthProvider.credential(currentUser.email, password);
+        await reauthenticateWithCredential(currentUser, credential);
+      }
+      await deleteDoc(doc(db, 'users', currentUser.uid));
+      await deleteUser(currentUser);
+      setUser(null);
+      setUserProfile(null);
+      return { success: true };
+    } catch (err) {
+      const msg =
+        err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential'
+          ? 'Incorrect password. Please try again.'
+          : err.code === 'auth/popup-closed-by-user'
+          ? 'Sign-in popup was closed. Please try again.'
+          : err.message;
+      setError(msg);
+      return { success: false, error: msg };
+    }
+  }, []);
+
   return {
     user,
     userProfile,
@@ -319,6 +352,7 @@ export function useAuth() {
     registerWithGoogle,
     logout,
     resetPassword,
-    resendVerification
+    resendVerification,
+    deleteAccount
   };
 }

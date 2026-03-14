@@ -396,7 +396,7 @@ export default function App() {
 }
 
 function AppShell({ authHook }) {
-  const { user, userProfile, logout, resendVerification } = authHook;
+  const { user, userProfile, logout, resendVerification, deleteAccount } = authHook;
   const [verifyBannerDismissed, setVerifyBannerDismissed] = useState(false);
   const [resentVerify, setResentVerify] = useState(false);
   const store = useFirestore(userProfile.churchId);
@@ -405,6 +405,8 @@ function AppShell({ authHook }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const isMobile = useWindowWidth() < 768;
   const [initialItemId] = useState(() => new URLSearchParams(window.location.search).get('item'));
+  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     if (initialItemId) {
@@ -420,7 +422,20 @@ function AppShell({ authHook }) {
     return () => clearTimeout(t);
   }, [store.error]);
 
+  // Show onboarding for new admins with no items yet
+  useEffect(() => {
+    if (!store.loading && userProfile.role === 'admin' && !store.config?.onboardingComplete && store.items.length === 0) {
+      setShowOnboarding(true);
+    }
+  }, [store.loading, store.config?.onboardingComplete, store.items.length]);
+
   if (store.loading) return <Spinner />;
+
+  function dismissOnboarding(goToTab) {
+    store.updateConfig({ onboardingComplete: true });
+    setShowOnboarding(false);
+    if (goToTab) setTab(goToTab);
+  }
 
   const tabBtn = (k) => ({
     padding:"10px 18px", borderRadius:10, border:"none", cursor:"pointer",
@@ -532,7 +547,7 @@ function AppShell({ authHook }) {
       {/* Page content */}
       <div style={{ maxWidth:1100, margin:"0 auto", padding:isMobile?"16px 14px 96px":"28px 28px 60px" }} onClick={()=>menuOpen&&setMenuOpen(false)}>
         {tab === "dashboard" && <Dashboard store={store} userProfile={userProfile} />}
-        {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} subscription={subscription} user={user} canAdd={canAdd} />}
+        {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} subscription={subscription} user={user} canAdd={canAdd} deleteAccount={deleteAccount} />}
         {tab === "inventory" && <ItemsPage store={store} userProfile={userProfile} initialItemId={initialItemId} />}
         {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
         {tab === "reservations" && <ReservationsPage store={store} userProfile={userProfile} />}
@@ -624,6 +639,87 @@ function AppShell({ authHook }) {
           ))}
         </div>
       )}
+      {/* Onboarding modal — new admins, no items yet */}
+      {showOnboarding && (() => {
+        const steps = [
+          {
+            title: "Welcome to ChurchOpsHub!",
+            icon: "🎉",
+            body: (
+              <>
+                <p style={{ margin:"0 0 12px" }}>You've set up your church — great first step. This quick walkthrough will help you get your inventory up and running in minutes.</p>
+                <p style={{ margin:0 }}>ChurchOpsHub keeps track of all your equipment, supplies, and who has what — so nothing gets lost and everyone stays on the same page.</p>
+              </>
+            ),
+            primaryLabel: "Let's go →",
+            primaryAction: () => setOnboardingStep(1),
+            skipLabel: "Skip for now",
+          },
+          {
+            title: "Step 1 — Set Up Locations & Ministries",
+            icon: "⚙️",
+            body: (
+              <>
+                <p style={{ margin:"0 0 12px" }}>Before adding items, it helps to have your church's <strong>locations</strong> (e.g. Sanctuary, Youth Room, Sound Booth) and <strong>ministries</strong> (e.g. Worship, Kids, Media) set up so you can organize everything from the start.</p>
+                <p style={{ margin:"0 0 12px" }}>We've added some common defaults — just remove or rename what doesn't apply to you.</p>
+                <div style={{ background:B.tealPale, borderRadius:10, padding:"10px 14px", fontSize:13, color:B.teal, fontFamily:f1, fontWeight:600 }}>
+                  Go to <strong>Settings → Locations</strong> and <strong>Settings → Ministries</strong> to customize your lists.
+                </div>
+              </>
+            ),
+            primaryLabel: "Go to Settings",
+            primaryAction: () => dismissOnboarding("settings"),
+            secondaryLabel: "Next →",
+            secondaryAction: () => setOnboardingStep(2),
+            skipLabel: "Skip for now",
+          },
+          {
+            title: "Step 2 — Add Your First Item",
+            icon: "📦",
+            body: (
+              <>
+                <p style={{ margin:"0 0 12px" }}>Now you're ready to add inventory. Each item gets an ID, a name, a location, and a status. You can also attach photos, financial details, and QR codes for quick lookups.</p>
+                <p style={{ margin:"0 0 12px" }}>Start with your most-used or highest-value equipment first — you can always add more later.</p>
+                <div style={{ background:B.tealPale, borderRadius:10, padding:"10px 14px", fontSize:13, color:B.teal, fontFamily:f1, fontWeight:600 }}>
+                  Click <strong>"+ Add Item"</strong> on the All Items page to get started.
+                </div>
+              </>
+            ),
+            primaryLabel: "Go to All Items",
+            primaryAction: () => dismissOnboarding("inventory"),
+            secondaryLabel: "← Back",
+            secondaryAction: () => setOnboardingStep(1),
+            skipLabel: "Done",
+          },
+        ];
+        const step = steps[onboardingStep];
+        return (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:400, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+            <div style={{ background:B.white, borderRadius:20, maxWidth:480, width:"100%", boxShadow:"0 20px 60px rgba(27,42,74,0.25)", overflow:"hidden" }}>
+              {/* Progress dots */}
+              <div style={{ background:`linear-gradient(135deg, ${B.navy}, ${B.navyLight})`, padding:"20px 24px 16px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <span style={{ fontSize:28 }}>{step.icon}</span>
+                <div style={{ display:"flex", gap:6 }}>
+                  {steps.map((_, i) => (
+                    <div key={i} style={{ width:8, height:8, borderRadius:4, background: i === onboardingStep ? B.white : "rgba(255,255,255,0.3)", transition:"background .2s" }} />
+                  ))}
+                </div>
+              </div>
+              <div style={{ padding:"24px 28px" }}>
+                <h2 style={{ fontFamily:f1, fontWeight:700, fontSize:20, color:B.navy, margin:"0 0 16px" }}>{step.title}</h2>
+                <div style={{ fontSize:14, color:B.textDark, lineHeight:1.65 }}>{step.body}</div>
+              </div>
+              <div style={{ padding:"0 28px 24px", display:"flex", flexDirection:"column", gap:10 }}>
+                <button onClick={step.primaryAction} style={{ ...btnP, width:"100%" }}>{step.primaryLabel}</button>
+                {step.secondaryLabel && (
+                  <button onClick={step.secondaryAction} style={{ ...btnS, width:"100%" }}>{step.secondaryLabel}</button>
+                )}
+                <button onClick={() => dismissOnboarding(null)} style={{ background:"none", border:"none", color:B.textLight, fontSize:13, cursor:"pointer", fontFamily:f1, padding:"4px 0" }}>{step.skipLabel}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
     </MobileCtx.Provider>
   );

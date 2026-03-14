@@ -24,7 +24,7 @@ export function useFirestore(churchId) {
 
   function handleErr(err) {
     console.error('[ChurchOpsHub]', err);
-    handleErr(err);
+    setError(err.message);
     addDoc(collection(db, 'errors'), {
       message: err.message,
       stack: err.stack?.split('\n').slice(0, 4).join('\n') || '',

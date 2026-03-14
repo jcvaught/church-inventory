@@ -242,9 +242,9 @@ The data model is already multi-tenant (`churches/{churchId}/`). The following m
 
 ~~**Item ID minimum length**~~ ✅ Done — `handleAdd` and `handleEdit` in `ItemsPage.jsx` reject IDs shorter than 3 characters with a flash message; Add button disabled until valid.
 
-**Onboarding flow** — After church creation, guide the admin through adding their first location, ministry, and item. Could be a multi-step modal that fires once on first login when `items.length === 0`. Implementation: new `OnboardingModal` component in `App.jsx` or `SettingsPage.jsx`; flag in `config/main` (`onboardingComplete: true`) once dismissed.
+~~**Onboarding flow**~~ ✅ Done — 3-step modal in `AppShell` fires when `userProfile.role === 'admin' && !config?.onboardingComplete && items.length === 0`; steps: Welcome → Settings (locations/ministries) → Add first item; each step has a primary CTA that navigates to the relevant tab; any dismiss/skip/complete writes `onboardingComplete: true` to `config/main`. Progress dots in the modal header.
 
-**Account & data deletion** — GDPR and similar laws require users to be able to delete their account and all associated data. Implementation: "Delete My Account" button in Settings; calls a Firebase Cloud Function that deletes the Auth user + all their Firestore data (or just marks as deleted and a cleanup job runs). If admin, warn that deleting transfers ownership or orphans the church.
+~~**Account & data deletion**~~ ✅ Done (client-side) — "Delete Account" button in Settings > Danger Zone; modal with `type DELETE` confirmation + password field (skipped for Google users who get a popup re-auth instead); reauthenticates via `reauthenticateWithCredential` (email) or `reauthenticateWithPopup` (Google), then deletes Firestore user profile + Firebase Auth account. Admin warning shown explaining church data remains and to contact us for full deletion. Full church subcollection deletion requires a Cloud Function (Phase 8 / Stripe work).
 
 **Landing / marketing page** — Currently the app URL goes straight to the login screen. New visitors need a page explaining what ChurchOpsHub is, with pricing, a CTA, and a sign-up link.
 

@@ -5,7 +5,7 @@ import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
 
-export function SettingsPage({ store, userProfile, subscription, user, canAdd }) {
+export function SettingsPage({ store, userProfile, subscription, user, canAdd, deleteAccount }) {
   const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, loadErrors } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
@@ -31,6 +31,11 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd })
   const [savingAccess, setSavingAccess] = useState(false);
   const [inviteHubs, setInviteHubs] = useState(() => []);
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub' };
   const churchHubs = subscription?.grandfathered || subscription?.plan === 'all_in'
@@ -124,6 +129,20 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd })
     navigator.clipboard.writeText(window.location.origin + '/?' + params.toString());
     setInviteLinkCopied(true);
     setTimeout(() => setInviteLinkCopied(false), 2000);
+  }
+
+  const isGoogle = user?.providerData?.[0]?.providerId === 'google.com';
+
+  async function handleDeleteAccount() {
+    if (deleteConfirmText !== "DELETE") return;
+    setDeleting(true);
+    setDeleteError("");
+    const res = await deleteAccount(deletePassword);
+    if (!res.success) {
+      setDeleteError(res.error || "Something went wrong. Please try again.");
+      setDeleting(false);
+    }
+    // On success, auth state change will redirect to login — no cleanup needed
   }
 
   const isAdmin = userProfile?.role === "admin";
@@ -519,6 +538,59 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd })
           </>
         )}
       </div>
+
+      {/* Danger Zone */}
+      <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid #FECDCA", marginTop:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
+        <h3 style={{ margin:"0 0 4px", fontFamily:f1, fontSize:16, fontWeight:700, color:B.red }}>Danger Zone</h3>
+        <p style={{ margin:"0 0 16px", fontSize:13, color:B.textLight }}>Permanent actions that cannot be undone.</p>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, flexWrap:"wrap" }}>
+          <div>
+            <p style={{ margin:"0 0 2px", fontWeight:600, fontFamily:f1, fontSize:14, color:B.textDark }}>Delete My Account</p>
+            <p style={{ margin:0, fontSize:13, color:B.textLight }}>
+              {isAdmin
+                ? "Removes your account and profile. Your church's inventory data will remain but become unmanaged. Contact us to arrange a full data deletion."
+                : "Permanently removes your account and profile from ChurchOpsHub."}
+            </p>
+          </div>
+          <button onClick={() => { setShowDeleteModal(true); setDeleteError(""); setDeletePassword(""); setDeleteConfirmText(""); }}
+            style={{ ...btnS, borderColor:B.red, color:B.red, flexShrink:0, whiteSpace:"nowrap" }}>
+            Delete Account
+          </button>
+        </div>
+      </div>
+
+      {/* Delete Account Modal */}
+      <Modal open={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Delete Your Account">
+        {isAdmin && (
+          <div style={{ background:"#FFF4F2", border:"1px solid #FECDCA", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
+            <p style={{ margin:"0 0 6px", fontWeight:700, fontFamily:f1, fontSize:13, color:B.red }}>Admin Account Warning</p>
+            <p style={{ margin:0, fontSize:13, color:"#7A2020", lineHeight:1.5 }}>
+              You are the admin for this church. Deleting your account will remove your profile and login access, but your church's inventory, team members, and data will remain in the system unmanaged. If you want all church data permanently deleted, email us at <a href="mailto:jcvaught@gmail.com" style={{ color:B.red }}>jcvaught@gmail.com</a> after deleting your account.
+            </p>
+          </div>
+        )}
+        <p style={{ margin:"0 0 16px", fontSize:14, color:B.textDark, lineHeight:1.5 }}>
+          This will permanently delete your account and remove your profile. This action <strong>cannot be undone</strong>.
+        </p>
+        {!isGoogle && (
+          <FF label="Confirm your password">
+            <input type="password" style={inp} value={deletePassword} onChange={e => setDeletePassword(e.target.value)} placeholder="Enter your password" />
+          </FF>
+        )}
+        <FF label={`Type DELETE to confirm`}>
+          <input style={inp} value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder="DELETE" />
+        </FF>
+        {deleteError && <p style={{ color:B.red, fontSize:13, fontWeight:600, margin:"0 0 12px" }}>{deleteError}</p>}
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+          <button onClick={() => setShowDeleteModal(false)} style={btnS}>Cancel</button>
+          <button
+            onClick={handleDeleteAccount}
+            disabled={deleting || deleteConfirmText !== "DELETE" || (!isGoogle && !deletePassword)}
+            style={{ ...btnS, borderColor:B.red, color:B.red, opacity:(deleting || deleteConfirmText !== "DELETE" || (!isGoogle && !deletePassword)) ? 0.5 : 1 }}>
+            {deleting ? "Deleting…" : "Delete My Account"}
+          </button>
+        </div>
+      </Modal>
 
       {/* List Editor Modal */}
       <Modal open={!!editList} onClose={()=>setEditList(null)} title={"Manage " + (editList?.title || "")}>
