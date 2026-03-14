@@ -225,7 +225,7 @@ function AuthScreen({ authHook }) {
 /* ═══════════════════════════════════════════════ */
 
 function SettingsPage({ store, userProfile, subscription }) {
-  const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, loadUsers, submitSuggestion } = store;
+  const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, loadUsers, submitSuggestion, loadSuggestions } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
   const [newItem, setNewItem] = useState("");
@@ -236,6 +236,11 @@ function SettingsPage({ store, userProfile, subscription }) {
   const [suggestionCategory, setSuggestionCategory] = useState("Feature Request");
   const [suggestionSent, setSuggestionSent] = useState(false);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [allSuggestions, setAllSuggestions] = useState(null);
+  const [suggestionFilter, setSuggestionFilter] = useState("All");
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  const isOwner = userProfile?.email === 'jcvaught@gmail.com';
 
   if (!settings || !config) return <Spinner />;
 
@@ -270,6 +275,13 @@ function SettingsPage({ store, userProfile, subscription }) {
     setSuggestionText("");
     setSuggestionSent(true);
     setTimeout(() => setSuggestionSent(false), 4000);
+  }
+
+  async function handleLoadSuggestions() {
+    setLoadingSuggestions(true);
+    const results = await loadSuggestions();
+    setAllSuggestions(results);
+    setLoadingSuggestions(false);
   }
 
   const isAdmin = userProfile?.role === "admin";
@@ -423,6 +435,55 @@ function SettingsPage({ store, userProfile, subscription }) {
           </div>
         }
       </div>
+
+      {/* Suggestions Report — owner only */}
+      {isOwner && (
+        <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginTop:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+            <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Suggestions Report</h3>
+            <button onClick={handleLoadSuggestions} disabled={loadingSuggestions} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>
+              {loadingSuggestions ? "Loading…" : allSuggestions ? "Refresh" : "Load Suggestions"}
+            </button>
+          </div>
+          {allSuggestions && (
+            <>
+              <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
+                {["All","Feature Request","Bug Report","Other"].map(cat => {
+                  const count = cat === "All" ? allSuggestions.length : allSuggestions.filter(s => s.category === cat).length;
+                  return (
+                    <button key={cat} onClick={() => setSuggestionFilter(cat)}
+                      style={{ padding:"5px 14px", fontSize:12, fontFamily:f1, fontWeight:600, borderRadius:20, border:"1px solid "+(suggestionFilter===cat?B.teal:B.sand), background:suggestionFilter===cat?B.tealPale:B.white, color:suggestionFilter===cat?B.teal:B.textMid, cursor:"pointer" }}>
+                      {cat} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+              {(() => {
+                const filtered = suggestionFilter === "All" ? allSuggestions : allSuggestions.filter(s => s.category === suggestionFilter);
+                if (filtered.length === 0) return <p style={{ color:B.textLight, fontSize:14 }}>No suggestions in this category.</p>;
+                return (
+                  <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:480, overflowY:"auto" }}>
+                    {filtered.map(s => (
+                      <div key={s.id} style={{ padding:"12px 14px", borderRadius:10, background:B.warmGray }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6, flexWrap:"wrap", gap:6 }}>
+                          <span style={{ padding:"2px 10px", borderRadius:20, fontSize:11, fontWeight:600, fontFamily:f1,
+                            background: s.category==="Bug Report"?B.redPale:s.category==="Feature Request"?B.tealPale:B.goldLight,
+                            color: s.category==="Bug Report"?B.red:s.category==="Feature Request"?B.teal:"#96750E" }}>
+                            {s.category}
+                          </span>
+                          <span style={{ fontSize:11, color:B.textLight }}>{s.churchName} · {s.submittedByName} · {s.submittedAt?.split("T")[0]}</span>
+                        </div>
+                        <p style={{ margin:0, fontSize:14, color:B.textDark, fontFamily:f2 }}>{s.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </>
+          )}
+          {!allSuggestions && <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Click "Load Suggestions" to see all submitted feedback.</p>}
+        </div>
+      )}
 
       {/* Suggestions */}
       <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginTop:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>

@@ -350,16 +350,27 @@ export function useFirestore(churchId) {
   // ── Suggestions ──
   const submitSuggestion = useCallback(async (text, category, userId, userName, churchName) => {
     try {
-      await addDoc(collection(db, 'churches', churchId, 'suggestions'), {
+      await addDoc(collection(db, 'suggestions'), {
         text,
         category,
         submittedBy: userId,
         submittedByName: userName,
+        churchId,
         churchName,
         submittedAt: new Date().toISOString()
       });
     } catch (err) { setError(err.message); }
   }, [churchId]);
+
+  const loadSuggestions = useCallback(async () => {
+    try {
+      const snap = await getDocs(query(collection(db, 'suggestions'), orderBy('submittedAt', 'desc')));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (err) {
+      setError(err.message);
+      return [];
+    }
+  }, []);
 
   // ── Vendors ──
   const addVendor = useCallback(async (vendor) => {
@@ -389,6 +400,6 @@ export function useFirestore(churchId) {
     updateUser, removeUser,
     addTicket, updateTicket,
     addVendor, updateVendor,
-    submitSuggestion
+    submitSuggestion, loadSuggestions
   };
 }
