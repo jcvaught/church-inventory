@@ -17,6 +17,7 @@ export function useFirestore(churchId) {
   const [vendors, setVendors] = useState([]);
   const [bundles, setBundles] = useState([]);
   const [notificationConfig, setNotificationConfig] = useState(null);
+  const [audits, setAudits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -25,7 +26,7 @@ export function useFirestore(churchId) {
     if (!churchId) return;
     const unsubs = [];
     let loaded = 0;
-    const totalSubs = 11;
+    const totalSubs = 12;
     const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
     // Config
@@ -95,6 +96,12 @@ export function useFirestore(churchId) {
     // Notification config
     unsubs.push(onSnapshot(doc(db, 'churches', churchId, 'config', 'notifications'), (snap) => {
       setNotificationConfig(snap.exists() ? snap.data() : {});
+      checkDone();
+    }, (err) => { setError(err.message); checkDone(); }));
+
+    // Audits
+    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'audits'), (snap) => {
+      setAudits(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
     }, (err) => { setError(err.message); checkDone(); }));
 
@@ -412,6 +419,24 @@ export function useFirestore(churchId) {
     } catch (err) { setError(err.message); }
   }, [churchId]);
 
+  // ── Audits ──
+  const addAudit = useCallback(async (audit, userId, userName) => {
+    try {
+      await addDoc(collection(db, 'churches', churchId, 'audits'), {
+        ...audit,
+        conductedBy: userId,
+        conductedByName: userName,
+        createdAt: new Date().toISOString(),
+      });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const updateAudit = useCallback(async (docId, updates) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'audits', docId), updates);
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
   // ── Suggestions ──
   const submitSuggestion = useCallback(async (text, category, userId, userName, churchName) => {
     try {
@@ -461,7 +486,7 @@ export function useFirestore(churchId) {
 
   return {
     config, settings, items, supplies, activityLog, reservations, users,
-    maintenanceTickets, vendors, bundles, notificationConfig,
+    maintenanceTickets, vendors, bundles, notificationConfig, audits,
     loading, error,
     updateSettings, updateConfig,
     addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired,
@@ -473,6 +498,7 @@ export function useFirestore(churchId) {
     addVendor, updateVendor, deleteVendor,
     addBundle, updateBundle, deleteBundle,
     updateNotificationConfig,
+    addAudit, updateAudit,
     submitSuggestion, loadSuggestions
   };
 }

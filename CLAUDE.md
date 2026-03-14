@@ -43,9 +43,10 @@ src/
 │   ├── ActivityLogPage.jsx
 │   ├── SettingsPage.jsx       ← Includes Subscription & Billing card for admins
 │   └── hubs/
-│       ├── MaintenancePage.jsx  ← Maintenance Hub (Phase 3)
-│       ├── InsightsPage.jsx     ← Insights Hub (Phase 4): utilization, ministry, seasonal, financial, supply analytics (Recharts)
-│       └── CoordinationPage.jsx ← Coordination Hub (Phase 6): checkout bundles, email notification settings
+│       ├── MaintenancePage.jsx     ← Maintenance Hub (Phase 3)
+│       ├── InsightsPage.jsx        ← Insights Hub (Phase 4): utilization, ministry, seasonal, financial, supply analytics (Recharts)
+│       ├── CoordinationPage.jsx    ← Coordination Hub (Phase 6): checkout bundles, email notification settings
+│       └── AccountabilityPage.jsx  ← Accountability Hub (Phase 7): physical audits, chain of custody, insurance export
 ├── utils/
 │   ├── csv.js                 ← exportItemsCSV, exportSuppliesCSV, exportReservationsCSV
 │   ├── print.js               ← printLabel, printInventory
@@ -56,7 +57,7 @@ src/
 
 ### Data Flow
 
-`App` (in `App.jsx`) → `AppShell` (also in `App.jsx`) → renders one of eight tab pages, each receiving `store`, `userProfile`, and `subscription` as props.
+`App` (in `App.jsx`) → `AppShell` (also in `App.jsx`) → renders one of nine tab pages, each receiving `store`, `userProfile`, and `subscription` as props.
 
 - `useAuth()` handles authentication state and exposes `userProfile` (Firestore user record with `churchId`, `role`, `name`).
 - `useFirestore(churchId)` subscribes in real-time to all Firestore collections for that church and exposes CRUD operations.
@@ -83,6 +84,7 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/config/settings.maintenanceTags` | `string[]` — tag autocomplete for maintenance tickets; new tags added via `arrayUnion` |
 | `churches/{churchId}/bundles` | Coordination Hub: checkout bundles; fields: `name`, `description`, `items[{docId,itemId,description,location}]`, `createdBy`, `createdByName`, `createdAt` |
 | `churches/{churchId}/config/notifications` | Coordination Hub: EmailJS config; fields: `enabled`, `serviceId`, `publicKey`, `templateApproved`, `templateDenied` |
+| `churches/{churchId}/audits` | Accountability Hub: physical audit records; fields: `location`, `conductedBy`, `conductedByName`, `startedAt`, `completedAt`, `status`, `itemsChecked`, `discrepancyCount`, `items[{docId,itemId,description,currentStatus,auditResult,condition,notes}]`, `discrepancies[]`, `createdAt` |
 | `users/{uid}` | User profile with `churchId`, `role` (`admin`/`manager`/`user`), `name`, `email`, `active`, `allowedHubs[]`, `managedMinistries[]` |
 | `suggestions/{docId}` | **Top-level** (not church-scoped) — cross-church user suggestions; fields: `text`, `category`, `submittedBy`, `submittedByName`, `churchId`, `churchName`, `submittedAt` |
 
@@ -100,7 +102,7 @@ All church data is namespaced under `churches/{churchId}/`:
 - Two font families: `f1 = 'Outfit'` (headings/UI), `f2 = 'Source Sans 3'` (body text) — loaded from Google Fonts at runtime.
 - Shared style objects: `inp` (inputs), `btnP` (primary button), `btnS` (secondary), `btnD` (danger) — all from `src/components/brand/tokens.js`.
 - Reusable primitives in `src/components/primitives/`: `Modal`, `FF` (form field wrapper), `Badge` (status pill), `Stat` (dashboard stat card), `Spinner`, `UpgradeGate`.
-- Tab keys: `dashboard`, `inventory`, `supplies`, `reservations`, `log`, `insights`, `maintenance`, `coordination`, `settings`. Hub tabs hidden from users whose `allowedHubs[]` excludes them; shown with 🔒 when church hasn't subscribed (drives discovery).
+- Tab keys: `dashboard`, `inventory`, `supplies`, `reservations`, `log`, `insights`, `maintenance`, `coordination`, `accountability`, `settings`. Hub tabs hidden from users whose `allowedHubs[]` excludes them; shown with 🔒 when church hasn't subscribed (drives discovery).
 - `MobileCtx` React context + `useWindowWidth()` hook in `src/hooks/useMobile.js`. Components read `useContext(MobileCtx)` — no prop drilling needed. Breakpoint is 768px.
 - Mobile: tabs hidden, bottom nav bar fixed at bottom, modals slide up from bottom.
 - **Deep linking:** `?item=ITEM_ID` URL param auto-opens item detail. URL cleaned with `history.replaceState` after read.
@@ -128,7 +130,7 @@ Everything existing stays free. 10 team members per church included.
 | **Insights Hub** | $7/mo | ✅ Done — Phase 4 |
 | **Maintenance Hub** | $7/mo | ✅ Done — Phase 3 |
 | **Coordination Hub** | $7/mo | ✅ Done — Phase 6 |
-| **Accountability Hub** | $5/mo | Planned — Phase 7 |
+| **Accountability Hub** | $5/mo | ✅ Done — Phase 7 |
 | **All-In Bundle** | $29/mo | Planned |
 
 ### Grandfathering
@@ -168,7 +170,7 @@ Hub visibility is controlled at two levels:
 
 ## Roadmap
 
-### ✅ Done — Phases 1–6
+### ✅ Done — Phases 1–7
 
 **Phases 1–3:**
 - Code restructured into component/page/hook/utils files
@@ -195,10 +197,12 @@ Hub visibility is controlled at two levels:
 - `useFirestore`: `bundles` collection subscription + CRUD; `config/notifications` subscription + `updateNotificationConfig`; `totalSubs` 9→11
 - `@emailjs/browser` installed; email sent client-side via dynamic import on approve/deny actions
 
-### Phase 7 — Accountability Hub
-- Physical audit mode (QR scan walk-through)
-- Chain of custody reports
-- Condition photo logging at check-in/check-out
+**Phase 7 — Accountability Hub:**
+- `AccountabilityPage.jsx`: physical audit mode (select location → walk-through items, mark Present/Issue/Missing), audit history list with discrepancy reports, chain of custody timeline (per item, from activityLog), insurance-ready CSV export (all active items + financial fields)
+- `useFirestore`: `audits` collection subscription + `addAudit` + `updateAudit`; `totalSubs` 11→12
+- Feature gated via `hasHub('accountability')` + `UpgradeGate`; `📋 Audit` on mobile nav
+
+### Phase 8 — Stripe Integration
 
 ### Phase 8 — Stripe Integration
 - Cloud Functions: createCheckoutSession, createPortalSession, stripeWebhook
