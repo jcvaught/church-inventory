@@ -225,13 +225,17 @@ function AuthScreen({ authHook }) {
 /* ═══════════════════════════════════════════════ */
 
 function SettingsPage({ store, userProfile, subscription }) {
-  const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, loadUsers } = store;
+  const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, loadUsers, submitSuggestion } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
   const [newItem, setNewItem] = useState("");
   const [showCode, setShowCode] = useState(false);
   const [newCode, setNewCode] = useState("");
   const [editCodeMode, setEditCodeMode] = useState(false);
+  const [suggestionText, setSuggestionText] = useState("");
+  const [suggestionCategory, setSuggestionCategory] = useState("Feature Request");
+  const [suggestionSent, setSuggestionSent] = useState(false);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
 
   if (!settings || !config) return <Spinner />;
 
@@ -256,6 +260,16 @@ function SettingsPage({ store, userProfile, subscription }) {
     updateConfig({ churchCode: newCode.trim().toUpperCase() });
     setEditCodeMode(false);
     setNewCode("");
+  }
+
+  async function handleSubmitSuggestion() {
+    if (!suggestionText.trim()) return;
+    setSuggestionLoading(true);
+    await submitSuggestion(suggestionText.trim(), suggestionCategory, userProfile?.id, userProfile?.name, config?.churchName);
+    setSuggestionLoading(false);
+    setSuggestionText("");
+    setSuggestionSent(true);
+    setTimeout(() => setSuggestionSent(false), 4000);
   }
 
   const isAdmin = userProfile?.role === "admin";
@@ -292,7 +306,7 @@ function SettingsPage({ store, userProfile, subscription }) {
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
           <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Subscription & Billing</h3>
           {isAdmin && (
-            <a href="mailto:hello@churchopshub.com?subject=Upgrade ChurchOpsHub Plan" style={{ ...btnP, padding:"6px 14px", fontSize:12, textDecoration:"none", display:"inline-block" }}>Upgrade</a>
+            <a href="mailto:jcvaught@gmail.com?subject=Upgrade ChurchOpsHub Plan" style={{ ...btnP, padding:"6px 14px", fontSize:12, textDecoration:"none", display:"inline-block" }}>Upgrade</a>
           )}
         </div>
         <div style={{ display:"flex", gap:24, flexWrap:"wrap" }}>
@@ -319,7 +333,7 @@ function SettingsPage({ store, userProfile, subscription }) {
         </div>
         {planLabel === 'Free' && (
           <p style={{ color:B.textLight, fontSize:13, marginTop:12, marginBottom:0 }}>
-            Add hubs like <strong>Maintenance</strong> to unlock advanced features. <a href="mailto:hello@churchopshub.com" style={{ color:B.teal, textDecoration:"none", fontWeight:600 }}>Contact us</a> to start a free 30-day trial.
+            Add hubs like <strong>Maintenance</strong> to unlock advanced features. <a href="mailto:jcvaught@gmail.com" style={{ color:B.teal, textDecoration:"none", fontWeight:600 }}>Contact us</a> to start a free 30-day trial.
           </p>
         )}
       </div>
@@ -408,6 +422,41 @@ function SettingsPage({ store, userProfile, subscription }) {
             ))}
           </div>
         }
+      </div>
+
+      {/* Suggestions */}
+      <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginTop:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
+        <h3 style={{ margin:"0 0 6px", fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Submit a Suggestion</h3>
+        <p style={{ margin:"0 0 14px", fontSize:13, color:B.textLight }}>Have an idea or found a bug? We'd love to hear from you.</p>
+        {suggestionSent ? (
+          <div style={{ background:B.tealPale, border:"1px solid "+B.teal, borderRadius:10, padding:"14px 18px", color:B.teal, fontWeight:600, fontFamily:f1, fontSize:14 }}>
+            Thanks for your feedback! We read every suggestion.
+          </div>
+        ) : (
+          <>
+            <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+              {["Feature Request","Bug Report","Other"].map(cat => (
+                <button key={cat} onClick={() => setSuggestionCategory(cat)}
+                  style={{ padding:"5px 14px", fontSize:12, fontFamily:f1, fontWeight:600, borderRadius:20, border:"1px solid "+(suggestionCategory===cat?B.teal:B.sand), background:suggestionCategory===cat?B.tealPale:B.white, color:suggestionCategory===cat?B.teal:B.textMid, cursor:"pointer" }}>
+                  {cat}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={suggestionText}
+              onChange={e => setSuggestionText(e.target.value)}
+              placeholder="Describe your idea or issue..."
+              rows={4}
+              style={{ ...inp, width:"100%", resize:"vertical", fontFamily:f2, fontSize:14, boxSizing:"border-box" }}
+            />
+            <div style={{ marginTop:10, display:"flex", justifyContent:"flex-end" }}>
+              <button onClick={handleSubmitSuggestion} disabled={!suggestionText.trim() || suggestionLoading}
+                style={{ ...btnP, opacity:(!suggestionText.trim()||suggestionLoading)?0.5:1 }}>
+                {suggestionLoading ? "Sending…" : "Send Suggestion"}
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* List Editor Modal */}

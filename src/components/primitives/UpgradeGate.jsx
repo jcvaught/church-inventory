@@ -13,12 +13,12 @@ export function UpgradeGate({ hubName, hubLabel, hubPrice, hubDescription, hasHu
       <p style={{ color: B.textLight, fontSize: 13, margin: '0 0 28px', fontFamily: f1 }}>Starting at <strong style={{ color: B.navy }}>{hubPrice}</strong>/month</p>
       <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
         <a
-          href={'mailto:hello@churchopshub.com?subject=' + mailSubject}
+          href={'mailto:jcvaught@gmail.com?subject=' + mailSubject}
           style={{ display: 'inline-block', padding: '12px 28px', borderRadius: 10, background: B.teal, color: B.white, textDecoration: 'none', fontSize: 14, fontWeight: 600, fontFamily: f1 }}>
           Start Free Trial
         </a>
         <a
-          href="mailto:hello@churchopshub.com"
+          href="mailto:jcvaught@gmail.com"
           style={{ display: 'inline-block', padding: '12px 28px', borderRadius: 10, border: '1px solid ' + B.sand, color: B.textDark, textDecoration: 'none', fontSize: 14, fontWeight: 600, fontFamily: f1 }}>
           Learn More
         </a>

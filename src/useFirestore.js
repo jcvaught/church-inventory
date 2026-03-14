@@ -347,6 +347,20 @@ export function useFirestore(churchId) {
     } catch (err) { setError(err.message); }
   }, [churchId]);
 
+  // ── Suggestions ──
+  const submitSuggestion = useCallback(async (text, category, userId, userName, churchName) => {
+    try {
+      await addDoc(collection(db, 'churches', churchId, 'suggestions'), {
+        text,
+        category,
+        submittedBy: userId,
+        submittedByName: userName,
+        churchName,
+        submittedAt: new Date().toISOString()
+      });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
   // ── Vendors ──
   const addVendor = useCallback(async (vendor) => {
     try {
@@ -374,6 +388,7 @@ export function useFirestore(churchId) {
     addReservation, updateReservation,
     updateUser, removeUser,
     addTicket, updateTicket,
-    addVendor, updateVendor
+    addVendor, updateVendor,
+    submitSuggestion
   };
 }
