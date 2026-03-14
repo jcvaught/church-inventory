@@ -43,5 +43,11 @@ service cloud.firestore {
       allow create: if request.auth != null;
       allow read: if request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
     }
+
+    // Errors — any authenticated user can write; only app owner can read
+    match /errors/{docId} {
+      allow create: if request.auth != null;
+      allow read: if request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
+    }
   }
 }

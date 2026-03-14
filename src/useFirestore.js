@@ -20,6 +20,18 @@ export function useFirestore(churchId) {
   const [audits, setAudits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const clearError = useCallback(() => setError(null), []);
+
+  function handleErr(err) {
+    console.error('[ChurchOpsHub]', err);
+    handleErr(err);
+    addDoc(collection(db, 'errors'), {
+      message: err.message,
+      stack: err.stack?.split('\n').slice(0, 4).join('\n') || '',
+      churchId: churchId || 'unknown',
+      timestamp: new Date().toISOString()
+    }).catch(() => {});
+  }
 
   // Subscribe to all collections
   useEffect(() => {
@@ -33,25 +45,25 @@ export function useFirestore(churchId) {
     unsubs.push(onSnapshot(doc(db, 'churches', churchId, 'config', 'main'), (snap) => {
       if (snap.exists()) setConfig(snap.data());
       checkDone();
-    }, (err) => { setError(err.message); checkDone(); }));
+    }, (err) => { handleErr(err); checkDone(); }));
 
     // Settings
     unsubs.push(onSnapshot(doc(db, 'churches', churchId, 'config', 'settings'), (snap) => {
       if (snap.exists()) setSettings(snap.data());
       checkDone();
-    }, (err) => { setError(err.message); checkDone(); }));
+    }, (err) => { handleErr(err); checkDone(); }));
 
     // Items
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'items'), (snap) => {
       setItems(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { setError(err.message); checkDone(); }));
+    }, (err) => { handleErr(err); checkDone(); }));
 
     // Supplies
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'supplies'), (snap) => {
       setSupplies(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { setError(err.message); checkDone(); }));
+    }, (err) => { handleErr(err); checkDone(); }));
 
     // Activity Log
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'activityLog'), (snap) => {
@@ -59,13 +71,13 @@ export function useFirestore(churchId) {
       logs.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
       setActivityLog(logs);
       checkDone();
-    }, (err) => { setError(err.message); checkDone(); }));
+    }, (err) => { handleErr(err); checkDone(); }));
 
     // Reservations
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'reservations'), (snap) => {
       setReservations(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { setError(err.message); checkDone(); }));
+    }, (err) => { handleErr(err); checkDone(); }));
 
     // Maintenance Tickets
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'maintenanceTickets'), (snap) => {
@@ -73,37 +85,37 @@ export function useFirestore(churchId) {
       tickets.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
       setMaintenanceTickets(tickets);
       checkDone();
-    }, (err) => { setError(err.message); checkDone(); }));
+    }, (err) => { handleErr(err); checkDone(); }));
 
     // Vendors
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'vendors'), (snap) => {
       setVendors(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { setError(err.message); checkDone(); }));
+    }, (err) => { handleErr(err); checkDone(); }));
 
     // Users — scoped to this church via query (real-time)
     unsubs.push(onSnapshot(query(collection(db, 'users'), where('churchId', '==', churchId)), (snap) => {
       setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { setError(err.message); checkDone(); }));
+    }, (err) => { handleErr(err); checkDone(); }));
 
     // Bundles
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'bundles'), (snap) => {
       setBundles(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { setError(err.message); checkDone(); }));
+    }, (err) => { handleErr(err); checkDone(); }));
 
     // Notification config
     unsubs.push(onSnapshot(doc(db, 'churches', churchId, 'config', 'notifications'), (snap) => {
       setNotificationConfig(snap.exists() ? snap.data() : {});
       checkDone();
-    }, (err) => { setError(err.message); checkDone(); }));
+    }, (err) => { handleErr(err); checkDone(); }));
 
     // Audits
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'audits'), (snap) => {
       setAudits(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { setError(err.message); checkDone(); }));
+    }, (err) => { handleErr(err); checkDone(); }));
 
     return () => unsubs.forEach(u => u());
   }, [churchId]);
@@ -112,13 +124,13 @@ export function useFirestore(churchId) {
   const updateSettings = useCallback(async (updates) => {
     try {
       await setDoc(doc(db, 'churches', churchId, 'config', 'settings'), updates, { merge: true });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const updateConfig = useCallback(async (updates) => {
     try {
       await setDoc(doc(db, 'churches', churchId, 'config', 'main'), updates, { merge: true });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   // ── Items ──
@@ -132,7 +144,7 @@ export function useFirestore(churchId) {
       });
       await logActivity('add_item', item.itemId, userId, userName, { description: item.description });
       return ref.id;
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const updateItem = useCallback(async (docId, updates, userId, userName) => {
@@ -141,7 +153,7 @@ export function useFirestore(churchId) {
         ...updates,
         updatedAt: new Date().toISOString()
       });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const checkOutItem = useCallback(async (docId, data, userId, userName) => {
@@ -159,7 +171,7 @@ export function useFirestore(churchId) {
         ministry: data.ministry,
         expectedReturn: data.returnDate
       });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const returnItem = useCallback(async (docId, data, userId, userName) => {
@@ -176,7 +188,7 @@ export function useFirestore(churchId) {
         condition: data.condition,
         returnedBy: data.person
       });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const retireItem = useCallback(async (docId, data, userId, userName) => {
@@ -194,7 +206,7 @@ export function useFirestore(churchId) {
         reason: data.reason,
         notes: data.notes
       });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const markRepair = useCallback(async (docId, data, userId, userName) => {
@@ -210,7 +222,7 @@ export function useFirestore(churchId) {
         issue: data.issue,
         handler: data.handler
       });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const markRepaired = useCallback(async (docId, data, userId, userName) => {
@@ -223,7 +235,7 @@ export function useFirestore(churchId) {
         updatedAt: new Date().toISOString()
       });
       await logActivity('mark_repaired', data.itemId, userId, userName, {});
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   // ── Supplies ──
@@ -235,7 +247,7 @@ export function useFirestore(churchId) {
         createdAt: new Date().toISOString()
       });
       await logActivity('add_supply', supply.supplyId, userId, userName, { description: supply.description });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const useSupply = useCallback(async (docId, data, userId, userName) => {
@@ -251,7 +263,7 @@ export function useFirestore(churchId) {
         purpose: data.purpose,
         remaining: newQty
       });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const restockSupply = useCallback(async (docId, data, userId, userName) => {
@@ -270,13 +282,13 @@ export function useFirestore(churchId) {
         source: data.source,
         newTotal: newQty
       });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const updateSupply = useCallback(async (docId, updates) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'supplies', docId), updates);
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   // ── Activity Log ──
@@ -303,26 +315,26 @@ export function useFirestore(churchId) {
         status: 'Pending',
         createdAt: new Date().toISOString()
       });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const updateReservation = useCallback(async (docId, updates) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'reservations', docId), updates);
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   // ── User management ──
   const updateUser = useCallback(async (userId, updates) => {
     try {
       await updateDoc(doc(db, 'users', userId), updates);
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, []);
 
   const removeUser = useCallback(async (userId) => {
     try {
       await deleteDoc(doc(db, 'users', userId));
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, []);
 
   // ── Maintenance Tickets ──
@@ -349,7 +361,7 @@ export function useFirestore(churchId) {
       });
       await logActivity('add_ticket', ticket.linkedItemId || ticketNumber, userId, userName, { name: ticket.name, priority: ticket.priority });
       return ref.id;
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const updateTicket = useCallback(async (docId, updates) => {
@@ -359,7 +371,7 @@ export function useFirestore(churchId) {
         data.completedAt = new Date().toISOString();
       }
       await updateDoc(doc(db, 'churches', churchId, 'maintenanceTickets', docId), data);
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const addTicketComment = useCallback(async (ticketId, text, authorId, authorName) => {
@@ -370,13 +382,13 @@ export function useFirestore(churchId) {
         authorName,
         createdAt: new Date().toISOString()
       });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const deleteTicket = useCallback(async (docId) => {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'maintenanceTickets', docId));
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const addMaintenanceTags = useCallback(async (tags) => {
@@ -397,26 +409,26 @@ export function useFirestore(churchId) {
         createdByName: userName,
         createdAt: new Date().toISOString()
       });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const updateBundle = useCallback(async (docId, updates) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'bundles', docId), updates);
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const deleteBundle = useCallback(async (docId) => {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'bundles', docId));
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   // ── Notification config ──
   const updateNotificationConfig = useCallback(async (updates) => {
     try {
       await setDoc(doc(db, 'churches', churchId, 'config', 'notifications'), updates, { merge: true });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   // ── Audits ──
@@ -428,13 +440,13 @@ export function useFirestore(churchId) {
         conductedByName: userName,
         createdAt: new Date().toISOString(),
       });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const updateAudit = useCallback(async (docId, updates) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'audits', docId), updates);
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   // ── Suggestions ──
@@ -449,7 +461,7 @@ export function useFirestore(churchId) {
         churchName,
         submittedAt: new Date().toISOString()
       });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const loadSuggestions = useCallback(async () => {
@@ -457,7 +469,17 @@ export function useFirestore(churchId) {
       const snap = await getDocs(query(collection(db, 'suggestions'), orderBy('submittedAt', 'desc'), limit(100)));
       return snap.docs.map(d => ({ id: d.id, ...d.data() }));
     } catch (err) {
-      setError(err.message);
+      handleErr(err);
+      return [];
+    }
+  }, []);
+
+  const loadErrors = useCallback(async () => {
+    try {
+      const snap = await getDocs(query(collection(db, 'errors'), orderBy('timestamp', 'desc'), limit(200)));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (err) {
+      console.error('[ChurchOpsHub] loadErrors failed', err);
       return [];
     }
   }, []);
@@ -469,19 +491,19 @@ export function useFirestore(churchId) {
         ...vendor,
         createdAt: new Date().toISOString()
       });
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const updateVendor = useCallback(async (docId, updates) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'vendors', docId), updates);
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const deleteVendor = useCallback(async (docId) => {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'vendors', docId));
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   return {
@@ -499,6 +521,7 @@ export function useFirestore(churchId) {
     addBundle, updateBundle, deleteBundle,
     updateNotificationConfig,
     addAudit, updateAudit,
-    submitSuggestion, loadSuggestions
+    submitSuggestion, loadSuggestions, loadErrors,
+    clearError
   };
 }

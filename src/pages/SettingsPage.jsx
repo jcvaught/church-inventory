@@ -6,7 +6,7 @@ import { FF } from '../components/primitives/FF.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
 
 export function SettingsPage({ store, userProfile, subscription, user, canAdd }) {
-  const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions } = store;
+  const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, loadErrors } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
   const [newItem, setNewItem] = useState("");
@@ -21,6 +21,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd })
   const [allSuggestions, setAllSuggestions] = useState(null);
   const [suggestionFilter, setSuggestionFilter] = useState("All");
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [allErrors, setAllErrors] = useState(null);
+  const [loadingErrors, setLoadingErrors] = useState(false);
+  const [ownerTab, setOwnerTab] = useState('suggestions');
   const [editAccessUser, setEditAccessUser] = useState(null);
   const [editRole, setEditRole] = useState('user');
   const [editHubs, setEditHubs] = useState([]);
@@ -99,6 +102,13 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd })
     const results = await loadSuggestions();
     setAllSuggestions(results);
     setLoadingSuggestions(false);
+  }
+
+  async function handleLoadErrors() {
+    setLoadingErrors(true);
+    const results = await loadErrors();
+    setAllErrors(results);
+    setLoadingErrors(false);
   }
 
   // Sync inviteHubs default to churchHubs once subscription loads (runs once when churchHubs becomes non-empty)
@@ -382,52 +392,96 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd })
         )}
       </Modal>
 
-      {/* Suggestions Report — owner only */}
+      {/* Owner Report Panel — suggestions + error log */}
       {isOwner && (
         <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginTop:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-            <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Suggestions Report</h3>
-            <button onClick={handleLoadSuggestions} disabled={loadingSuggestions} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>
-              {loadingSuggestions ? "Loading…" : allSuggestions ? "Refresh" : "Load Suggestions"}
-            </button>
+          {/* Tab bar */}
+          <div style={{ display:"flex", gap:8, marginBottom:18 }}>
+            {[['suggestions','Suggestions'],['errors','Error Log']].map(([key, label]) => (
+              <button key={key} onClick={() => setOwnerTab(key)}
+                style={{ padding:"6px 18px", borderRadius:20, border:"1px solid "+(ownerTab===key?B.teal:B.sand), background:ownerTab===key?B.tealPale:B.white, color:ownerTab===key?B.teal:B.textMid, fontFamily:f1, fontWeight:600, fontSize:13, cursor:"pointer" }}>
+                {label}
+              </button>
+            ))}
           </div>
-          {allSuggestions && (
+
+          {/* Suggestions tab */}
+          {ownerTab === 'suggestions' && (
             <>
-              <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
-                {["All","Feature Request","Bug Report","Other"].map(cat => {
-                  const count = cat === "All" ? allSuggestions.length : allSuggestions.filter(s => s.category === cat).length;
-                  return (
-                    <button key={cat} onClick={() => setSuggestionFilter(cat)}
-                      style={{ padding:"5px 14px", fontSize:12, fontFamily:f1, fontWeight:600, borderRadius:20, border:"1px solid "+(suggestionFilter===cat?B.teal:B.sand), background:suggestionFilter===cat?B.tealPale:B.white, color:suggestionFilter===cat?B.teal:B.textMid, cursor:"pointer" }}>
-                      {cat} ({count})
-                    </button>
-                  );
-                })}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+                <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Suggestions Report</h3>
+                <button onClick={handleLoadSuggestions} disabled={loadingSuggestions} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>
+                  {loadingSuggestions ? "Loading…" : allSuggestions ? "Refresh" : "Load"}
+                </button>
               </div>
-              {(() => {
-                const filtered = suggestionFilter === "All" ? allSuggestions : allSuggestions.filter(s => s.category === suggestionFilter);
-                if (filtered.length === 0) return <p style={{ color:B.textLight, fontSize:14 }}>No suggestions in this category.</p>;
-                return (
-                  <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:480, overflowY:"auto" }}>
-                    {filtered.map(s => (
-                      <div key={s.id} style={{ padding:"12px 14px", borderRadius:10, background:B.warmGray }}>
-                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6, flexWrap:"wrap", gap:6 }}>
-                          <span style={{ padding:"2px 10px", borderRadius:20, fontSize:11, fontWeight:600, fontFamily:f1,
-                            background: s.category==="Bug Report"?B.redPale:s.category==="Feature Request"?B.tealPale:B.goldLight,
-                            color: s.category==="Bug Report"?B.red:s.category==="Feature Request"?B.teal:"#96750E" }}>
-                            {s.category}
-                          </span>
-                          <span style={{ fontSize:11, color:B.textLight }}>{s.churchName} · {s.submittedByName} · {s.submittedAt?.split("T")[0]}</span>
-                        </div>
-                        <p style={{ margin:0, fontSize:14, color:B.textDark, fontFamily:f2 }}>{s.text}</p>
-                      </div>
-                    ))}
+              {allSuggestions && (
+                <>
+                  <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
+                    {["All","Feature Request","Bug Report","Other"].map(cat => {
+                      const count = cat === "All" ? allSuggestions.length : allSuggestions.filter(s => s.category === cat).length;
+                      return (
+                        <button key={cat} onClick={() => setSuggestionFilter(cat)}
+                          style={{ padding:"5px 14px", fontSize:12, fontFamily:f1, fontWeight:600, borderRadius:20, border:"1px solid "+(suggestionFilter===cat?B.teal:B.sand), background:suggestionFilter===cat?B.tealPale:B.white, color:suggestionFilter===cat?B.teal:B.textMid, cursor:"pointer" }}>
+                          {cat} ({count})
+                        </button>
+                      );
+                    })}
                   </div>
-                );
-              })()}
+                  {(() => {
+                    const filtered = suggestionFilter === "All" ? allSuggestions : allSuggestions.filter(s => s.category === suggestionFilter);
+                    if (filtered.length === 0) return <p style={{ color:B.textLight, fontSize:14 }}>No suggestions in this category.</p>;
+                    return (
+                      <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:480, overflowY:"auto" }}>
+                        {filtered.map(s => (
+                          <div key={s.id} style={{ padding:"12px 14px", borderRadius:10, background:B.warmGray }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6, flexWrap:"wrap", gap:6 }}>
+                              <span style={{ padding:"2px 10px", borderRadius:20, fontSize:11, fontWeight:600, fontFamily:f1,
+                                background: s.category==="Bug Report"?B.redPale:s.category==="Feature Request"?B.tealPale:B.goldLight,
+                                color: s.category==="Bug Report"?B.red:s.category==="Feature Request"?B.teal:"#96750E" }}>
+                                {s.category}
+                              </span>
+                              <span style={{ fontSize:11, color:B.textLight }}>{s.churchName} · {s.submittedByName} · {s.submittedAt?.split("T")[0]}</span>
+                            </div>
+                            <p style={{ margin:0, fontSize:14, color:B.textDark, fontFamily:f2 }}>{s.text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+              {!allSuggestions && <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Click "Load" to see all submitted feedback.</p>}
             </>
           )}
-          {!allSuggestions && <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Click "Load Suggestions" to see all submitted feedback.</p>}
+
+          {/* Error Log tab */}
+          {ownerTab === 'errors' && (
+            <>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+                <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Error Log</h3>
+                <button onClick={handleLoadErrors} disabled={loadingErrors} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>
+                  {loadingErrors ? "Loading…" : allErrors ? "Refresh" : "Load"}
+                </button>
+              </div>
+              {allErrors && (
+                allErrors.length === 0
+                  ? <p style={{ color:B.textLight, fontSize:14 }}>No errors logged.</p>
+                  : <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:480, overflowY:"auto" }}>
+                      {allErrors.map(e => (
+                        <div key={e.id} style={{ padding:"12px 14px", borderRadius:10, background:B.warmGray, borderLeft:"3px solid "+B.red }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4, gap:8, flexWrap:"wrap" }}>
+                            <span style={{ fontSize:12, fontWeight:700, fontFamily:f1, color:B.red }}>Error</span>
+                            <span style={{ fontSize:11, color:B.textLight }}>{e.churchId} · {e.timestamp?.split("T")[0]} {e.timestamp?.split("T")[1]?.slice(0,5)}</span>
+                          </div>
+                          <p style={{ margin:"0 0 4px", fontSize:13, fontWeight:600, color:B.textDark, fontFamily:f1 }}>{e.message}</p>
+                          {e.stack && <pre style={{ margin:0, fontSize:11, color:B.textLight, fontFamily:"monospace", whiteSpace:"pre-wrap", wordBreak:"break-all" }}>{e.stack}</pre>}
+                        </div>
+                      ))}
+                    </div>
+              )}
+              {!allErrors && <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Click "Load" to see logged errors across all churches.</p>}
+            </>
+          )}
         </div>
       )}
 
