@@ -1,0 +1,54 @@
+export function exportItemsCSV(items) {
+  const cols = ['itemId','description','location','ministry','status','condition','tags','assignedTo','checkOutDate','expectedReturn','notes'];
+  const header = cols.join(',');
+  const rows = items.map(item => cols.map(c => {
+    const v = item[c];
+    if (Array.isArray(v)) return `"${v.join('; ')}"`;
+    if (v == null || v === '') return '';
+    const s = String(v);
+    return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g,'""')}"` : s;
+  }).join(','));
+  const csv = [header, ...rows].join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
+    download: `inventory-${new Date().toISOString().split('T')[0]}.csv`
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+export function exportSuppliesCSV(supplies) {
+  const cols = ['supplyId','description','location','ministry','quantity','minQuantity','unit'];
+  const header = cols.join(',');
+  const rows = supplies.map(s => cols.map(c => {
+    const v = s[c];
+    if (v == null || v === '') return '';
+    const str = String(v);
+    return (str.includes(',') || str.includes('"') || str.includes('\n')) ? `"${str.replace(/"/g,'""')}"` : str;
+  }).join(','));
+  const csv = [header, ...rows].join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
+    download: `supplies-${new Date().toISOString().split('T')[0]}.csv`
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+export function exportReservationsCSV(reservations) {
+  const cols = ['itemId','itemDesc','eventName','eventDate','returnDate','purpose','ministry','status','requestedByName','approvedByName','notes'];
+  const header = cols.join(',');
+  const rows = reservations.map(r => cols.map(c => {
+    const v = r[c];
+    if (v == null || v === '') return '';
+    const str = String(v);
+    return (str.includes(',') || str.includes('"') || str.includes('\n')) ? `"${str.replace(/"/g,'""')}"` : str;
+  }).join(','));
+  const csv = [header, ...rows].join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
+    download: `reservations-${new Date().toISOString().split('T')[0]}.csv`
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}

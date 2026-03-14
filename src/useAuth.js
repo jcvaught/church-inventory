@@ -119,6 +119,21 @@ export function useAuth() {
         tags: DEFAULT_TAGS
       });
 
+      // Create subscription doc (free plan)
+      await setDoc(doc(db, 'churches', churchId, 'config', 'subscription'), {
+        plan: 'free',
+        hubs: [],
+        maxUsers: 10,
+        status: 'active',
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        currentPeriodEnd: null,
+        trialEnd: null,
+        grandfathered: false,
+        grandfatheredUntil: null,
+        createdAt: new Date().toISOString()
+      });
+
       // Create user profile
       const profile = {
         name: userName,

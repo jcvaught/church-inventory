@@ -20,21 +20,49 @@ This is a single-page React 18 + Vite PWA — **ChurchOpsHub** — a multi-tenan
 
 ```
 src/
-├── App.jsx           ← Entire UI: all page components, modals, primitives (~2200 lines)
-├── useAuth.js        ← Firebase Auth hook (email/password + Google, church setup/join)
-├── useFirestore.js   ← All Firestore read/write operations as a single hook
-├── firebase.js       ← Firebase app init; exports `db`, `auth`, `googleProvider`, `storage`
-├── main.jsx          ← React entry point
+├── App.jsx                    ← Slim shell: auth gate + AppShell
+├── useAuth.js                 ← Firebase Auth hook (email/password + Google, church setup/join)
+├── useFirestore.js            ← All Firestore CRUD as a single hook (incl. maintenance)
+├── firebase.js                ← Firebase app init; exports `db`, `auth`, `googleProvider`, `storage`
+├── main.jsx                   ← React entry point
+├── hooks/
+│   ├── useMobile.js           ← MobileCtx + useWindowWidth (breakpoint 768px)
+│   └── useSubscription.js     ← Subscription state hook: hasHub(), canAddUser(), isTrialing()
+├── components/
+│   ├── brand/
+│   │   ├── tokens.js          ← B, f1, f2, inp, btnP, btnS, btnD
+│   │   └── Logo.jsx           ← Logo, FullLogo
+│   ├── primitives/
+│   │   ├── Modal.jsx, FF.jsx, Badge.jsx, Stat.jsx, Spinner.jsx
+│   │   └── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive
+│   └── layout/
+│       ├── AppShell.jsx       ← Top-level shell with header, tabs, mobile nav
+│       ├── Header.jsx
+│       └── BottomNav.jsx
+├── pages/
+│   ├── Dashboard.jsx
+│   ├── ItemsPage.jsx
+│   ├── SuppliesPage.jsx
+│   ├── ReservationsPage.jsx
+│   ├── ActivityLogPage.jsx
+│   ├── SettingsPage.jsx       ← Includes Subscription & Billing card for admins
+│   └── hubs/
+│       └── MaintenancePage.jsx ← Maintenance Hub (Phase 3)
+├── utils/
+│   ├── csv.js                 ← exportItemsCSV, exportSuppliesCSV, exportReservationsCSV
+│   ├── print.js               ← printLabel, printInventory
+│   └── imageResize.js         ← resizeImageForUpload
 └── data/
-    └── referenceData.js  ← Static reference inventory (not auto-seeded; reference only)
+    └── referenceData.js       ← Static reference inventory (not auto-seeded; reference only)
 ```
 
 ### Data Flow
 
-`App` → `AppShell` → renders one of six tab pages, each receiving `store` and `userProfile` as props.
+`App` → `AppShell` → renders one of seven tab pages, each receiving `store`, `userProfile`, and `subscription` as props.
 
 - `useAuth()` handles authentication state and exposes `userProfile` (Firestore user record with `churchId`, `role`, `name`).
-- `useFirestore(churchId)` subscribes in real-time to all six Firestore collections for that church and exposes CRUD operations.
+- `useFirestore(churchId)` subscribes in real-time to all Firestore collections for that church and exposes CRUD operations.
+- `useSubscription(churchId)` reads `churches/{churchId}/config/subscription` and exposes `hasHub(name)`, `canAddUser(count)`, `isTrialing(name)`.
 - `store` passed to pages is the return value of `useFirestore`.
 
 ### Firestore Data Model (Multi-Tenant)
@@ -46,10 +74,13 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}` | Church name, code, createdAt |
 | `churches/{churchId}/config/main` | Church metadata |
 | `churches/{churchId}/config/settings` | `locations[]`, `ministries[]`, `tags[]` |
+| `churches/{churchId}/config/subscription` | Plan, hubs[], maxUsers, status, Stripe IDs, grandfathered |
 | `churches/{churchId}/items` | Equipment inventory items |
 | `churches/{churchId}/supplies` | Consumable supplies with quantity tracking |
 | `churches/{churchId}/activityLog` | Audit trail (every action logged) |
 | `churches/{churchId}/reservations` | Future item reservation requests |
+| `churches/{churchId}/maintenanceTickets` | Maintenance Hub: repair tickets (MNT-### numbering) |
+| `churches/{churchId}/vendors` | Maintenance Hub: vendor/contractor directory |
 | `users/{uid}` | User profile with `churchId`, `role` (`admin`/`user`), `name`, `email`, `active` |
 
 `churchId` is always `{creatorUid}-church` (set at church creation time).
@@ -62,12 +93,12 @@ All church data is namespaced under `churches/{churchId}/`:
 
 ### UI Conventions
 
-- **No CSS files, no component library, no router.** All styling is inline using a `B` brand token object defined at the top of `App.jsx`.
+- **No CSS files, no component library, no router.** All styling is inline using a `B` brand token object from `src/components/brand/tokens.js`.
 - Two font families: `f1 = 'Outfit'` (headings/UI), `f2 = 'Source Sans 3'` (body text) — loaded from Google Fonts at runtime.
-- Shared style objects: `inp` (inputs), `btnP` (primary button), `btnS` (secondary), `btnD` (danger).
-- Reusable primitives defined in `App.jsx`: `Modal`, `FF` (form field wrapper), `Badge` (status pill), `Stat` (dashboard stat card), `Spinner`.
-- Tab keys: `dashboard`, `settings`, `inventory`, `supplies`, `reservations`, `log`.
-- `MobileCtx` React context + `useWindowWidth()` hook drive mobile layout. Components read `useContext(MobileCtx)` — no prop drilling needed. Breakpoint is 768px.
+- Shared style objects: `inp` (inputs), `btnP` (primary button), `btnS` (secondary), `btnD` (danger) — all from `src/components/brand/tokens.js`.
+- Reusable primitives in `src/components/primitives/`: `Modal`, `FF` (form field wrapper), `Badge` (status pill), `Stat` (dashboard stat card), `Spinner`, `UpgradeGate`.
+- Tab keys: `dashboard`, `settings`, `inventory`, `supplies`, `reservations`, `log`, `maintenance`.
+- `MobileCtx` React context + `useWindowWidth()` hook in `src/hooks/useMobile.js`. Components read `useContext(MobileCtx)` — no prop drilling needed. Breakpoint is 768px.
 - Mobile: tabs hidden, bottom nav bar fixed at bottom, modals slide up from bottom.
 - **Deep linking:** `?item=ITEM_ID` URL param auto-opens item detail. URL cleaned with `history.replaceState` after read.
 - **QR codes:** Generated via `https://api.qrserver.com` (no npm package). Links back to the app with `?item=` param.
@@ -79,27 +110,85 @@ All church data is namespaced under `churches/{churchId}/`:
 
 `Available` | `Checked Out` | `In Use` | `Under Repair` | `Disposed`
 
+## Business Model — Hub-Based Monetization
+
+**"The stuff is free, what you do with the stuff is paid."**
+
+### Inventory Hub (Forever Free) — System of Record
+Everything existing stays free. 10 team members per church included.
+
+### Paid Hubs
+
+| Hub | Price | Status |
+|-----|-------|--------|
+| **Team Hub** | $9/mo (25 users) or $19/mo (unlimited) | Planned — Phase 5 |
+| **Insights Hub** | $7/mo | Planned — Phase 4 |
+| **Maintenance Hub** | $7/mo | ✅ Done — Phase 3 |
+| **Coordination Hub** | $7/mo | Planned — Phase 6 |
+| **Accountability Hub** | $5/mo | Planned — Phase 6 |
+| **All-In Bundle** | $29/mo | Planned |
+
+### Grandfathering
+Existing churches at launch: 12 months Founder status (unlimited users, all hubs).
+
+### Subscription Doc
+`churches/{churchId}/config/subscription`:
+```json
+{
+  "plan": "free|team_25|team_unlimited|all_in",
+  "hubs": ["maintenance", "insights", ...],
+  "maxUsers": 10,
+  "status": "active|trialing|past_due|canceled",
+  "grandfathered": false,
+  "grandfatheredUntil": null
+}
+```
+
+### Feature Gating
+- `useSubscription(churchId)` → `hasHub(name)`, `canAddUser(count)`, `isTrialing(name)`
+- `UpgradeGate` component wraps paid pages
+- Hub tabs always visible (with 🔒 when locked) to drive discovery
+- Payment: Stripe (Cloud Functions — not yet wired up; mailto CTA for now)
+
 ## Roadmap
 
-### Session 6 — Notifications & Awareness
-- Email notifications when a reservation is approved/denied (EmailJS, no backend)
-- Overdue escalation visibility per user
-- Countdown on approved reservations ("3 days away")
+### ✅ Done — Phases 1–3
+- Code restructured into component/page/hook/utils files
+- Subscription infrastructure (useSubscription, UpgradeGate, subscription doc on church creation)
+- Maintenance Hub: tickets (MNT-### numbering), priority/category/status, vendor directory, stats
 
-### Session 7 — Reporting & History ✅ Done
-- Full inventory print view (all active items grouped by location or ministry)
-- Supply usage history drawer (filter activityLog by supplyId)
-- Dashboard activity stats date range filter (7/30/90 days)
+### Phase 4 — Insights Hub
+- Item utilization stats, ministry usage breakdown, seasonal trends
+- Depreciation tracking (purchaseDate/Price → estimated value)
+- Supply burn rate + reorder forecasting
+- Additional `purchaseDate`, `purchasePrice`, `estimatedValue` fields on items
 
-### Session 8 — UX Polish
+### Phase 5 — Team Hub
+- 10-user soft cap with upgrade banner
+- "Manager" role with ministry-scoped permissions
+- `managedMinistries[]` field on user profiles
+
+### Phase 6 — Coordination Hub
+- Email notifications (EmailJS): reservation approved/denied, overdue, low-stock
+- Checkout bundles ("Sunday Morning Setup" = predefined item groups)
+- Recurring reservations
+
+### Phase 7 — Accountability Hub
+- Physical audit mode (QR scan walk-through)
+- Chain of custody reports
+- Condition photo logging at check-in/check-out
+
+### Phase 8 — Stripe Integration
+- Cloud Functions: createCheckoutSession, createPortalSession, stripeWebhook
+- Webhook updates config/subscription on payment events
+- Billing portal in SettingsPage
+
+### UX Polish (Ongoing)
 - Bulk actions (select multiple items to check out, change location, or export)
 - Item duplication ("Duplicate item" to clone similar items)
 - Keyboard shortcuts (N to add item, / to focus search, Esc to close modal)
-
-### Bigger Lift (Later)
-- Public item request form (shareable URL for non-app users)
 - Barcode scanning via device camera
-- Multi-location / campus-aware filtering
+- Public item request form (shareable URL for non-app users)
 
 ## Public Launch Checklist
 
