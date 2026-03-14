@@ -20,7 +20,7 @@ This is a single-page React 18 + Vite PWA — **ChurchOpsHub** — a multi-tenan
 
 ```
 src/
-├── App.jsx                    ← Slim shell: auth gate + AppShell
+├── App.jsx                    ← AuthScreen + AppShell (tabs, mobile nav) + root App (~368 lines)
 ├── useAuth.js                 ← Firebase Auth hook (email/password + Google, church setup/join)
 ├── useFirestore.js            ← All Firestore CRUD as a single hook (incl. maintenance)
 ├── firebase.js                ← Firebase app init; exports `db`, `auth`, `googleProvider`, `storage`
@@ -32,13 +32,9 @@ src/
 │   ├── brand/
 │   │   ├── tokens.js          ← B, f1, f2, inp, btnP, btnS, btnD
 │   │   └── Logo.jsx           ← Logo, FullLogo
-│   ├── primitives/
-│   │   ├── Modal.jsx, FF.jsx, Badge.jsx, Stat.jsx, Spinner.jsx
-│   │   └── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive
-│   └── layout/
-│       ├── AppShell.jsx       ← Top-level shell with header, tabs, mobile nav
-│       ├── Header.jsx
-│       └── BottomNav.jsx
+│   └── primitives/
+│       ├── Modal.jsx, FF.jsx, Badge.jsx, Stat.jsx, Spinner.jsx
+│       └── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive
 ├── pages/
 │   ├── Dashboard.jsx
 │   ├── ItemsPage.jsx
@@ -58,7 +54,7 @@ src/
 
 ### Data Flow
 
-`App` → `AppShell` → renders one of seven tab pages, each receiving `store`, `userProfile`, and `subscription` as props.
+`App` (in `App.jsx`) → `AppShell` (also in `App.jsx`) → renders one of seven tab pages, each receiving `store`, `userProfile`, and `subscription` as props.
 
 - `useAuth()` handles authentication state and exposes `userProfile` (Firestore user record with `churchId`, `role`, `name`).
 - `useFirestore(churchId)` subscribes in real-time to all Firestore collections for that church and exposes CRUD operations.
