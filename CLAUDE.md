@@ -87,6 +87,7 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/audits` | Accountability Hub: physical audit records; fields: `location`, `conductedBy`, `conductedByName`, `startedAt`, `completedAt`, `status`, `itemsChecked`, `discrepancyCount`, `items[{docId,itemId,description,currentStatus,auditResult,condition,notes}]`, `discrepancies[]`, `createdAt` |
 | `users/{uid}` | User profile with `churchId`, `role` (`admin`/`manager`/`user`), `name`, `email`, `active`, `allowedHubs[]`, `managedMinistries[]` |
 | `suggestions/{docId}` | **Top-level** (not church-scoped) — cross-church user suggestions; fields: `text`, `category`, `submittedBy`, `submittedByName`, `churchId`, `churchName`, `submittedAt` |
+| `errors/{docId}` | **Top-level** (not church-scoped) — Firestore error log written by `handleErr()` in `useFirestore`; fields: `message`, `stack` (first 4 lines), `churchId`, `timestamp`; owner-only read in Firestore rules |
 
 `churchId` is always `{creatorUid}-church` (set at church creation time).
 
@@ -176,7 +177,7 @@ Hub visibility is controlled at two levels:
 - Code restructured into component/page/hook/utils files
 - Subscription infrastructure (useSubscription, UpgradeGate, subscription doc on church creation)
 - Maintenance Hub (rebuilt): kanban + list views, 6-status workflow (Backlog→Complete), multi-assignee, tag autocomplete (`maintenanceTags` via `arrayUnion`), photo uploads (Firebase Storage at `churches/{churchId}/maintenance/{docId}/`), real-time comment threads (subcollection), vendor directory, overdue date highlighting, `maint_viewMode` persisted to localStorage
-- User Suggestions: all users can submit categorized suggestions (Feature Request / Bug Report / Other) from SettingsPage; stored in top-level `suggestions` collection (cross-church); owner-only report panel gated by `['jcvaught@gmail.com', 'jvaught@fxcc.org'].includes(email)` in UI and by `request.auth.token.email in [...]` in Firestore rules
+- User Suggestions: all users can submit categorized suggestions (Feature Request / Bug Report / Other) from SettingsPage; stored in top-level `suggestions` collection (cross-church); owner-only report panel (tabbed: Suggestions / Error Log) gated by `['jcvaught@gmail.com', 'jvaught@fxcc.org'].includes(email)` in UI and by `request.auth.token.email in [...]` in Firestore rules; Error Log loads from top-level `errors` collection written by `handleErr()` in `useFirestore`
 
 **Phase 4 — Insights Hub:**
 - `InsightsPage.jsx`: 5 sections — Item Utilization, Ministry Breakdown, Seasonal Trends, Financial & Depreciation, Supply Burn Rate
@@ -287,12 +288,7 @@ Findings from a full security + UX audit. All items resolved.
 
 ~~**Item ID has no minimum length or pattern enforcement**~~ ✅ Fixed — 3-character minimum enforced in `handleAdd`/`handleEdit`; Add button disabled until valid.
 
-**Firestore errors are silent — no user feedback and not logged to Sentry** (`useFirestore.js`, `AppShell`)
-Every CRUD catch block calls `setError(err.message)` but `store.error` is never rendered anywhere, so users see nothing when a write fails. Errors also never reach Sentry (only unhandled exceptions are captured).
-
-Fix has two parts:
-1. **User-facing**: Global error toast in `AppShell` watching `store.error`; auto-dismisses after 5s. Implementation: render a fixed toast when `store.error` is set; pass a `clearError` callback from `useFirestore` to reset it.
-2. **Logging**: Add `console.error(err)` alongside each `setError` call in `useFirestore.js`; add `Sentry.captureConsoleIntegration({ levels: ['error'] })` to `main.jsx` so all `console.error` calls appear in Sentry with full stack traces.
+~~**Firestore errors are silent — no user feedback and not logged to Sentry**~~ ✅ Fixed — `handleErr()` helper in `useFirestore` calls `console.error` + writes to top-level `errors` collection (fire-and-forget) + sets `store.error`; `AppShell` renders a dark toast that auto-dismisses after 5s with an × to close; `clearError` exposed from hook; `Sentry.captureConsoleIntegration({ levels: ['error'] })` added to `main.jsx` so all errors reach Sentry; owner Error Log tab in Settings panel loads from `errors` collection showing message, churchId, timestamp, and stack trace.
 
 ### 🟢 UX — Polish
 
