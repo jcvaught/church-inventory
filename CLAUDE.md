@@ -203,8 +203,6 @@ Hub visibility is controlled at two levels:
 - Feature gated via `hasHub('accountability')` + `UpgradeGate`; `📋 Audit` on mobile nav
 
 ### Phase 8 — Stripe Integration
-
-### Phase 8 — Stripe Integration
 - Cloud Functions: createCheckoutSession, createPortalSession, stripeWebhook
 - Webhook updates config/subscription on payment events
 - Billing portal in SettingsPage
@@ -230,23 +228,25 @@ The data model is already multi-tenant (`churches/{churchId}/`). The following m
 
 ### 🟡 Important — Before Soft Launch
 
-**Email verification** — Add `sendEmailVerification()` after registration to reduce fake/abuse accounts.
+**Email verification** — Add `sendEmailVerification()` after registration to reduce fake/abuse accounts. Show a dismissible banner to unverified users prompting them to check their inbox. Resend button. Skip for Google sign-in (already verified). Implementation: `useAuth.js` (send on register), `App.jsx` (banner in AppShell using `user.emailVerified`).
 
-**Church creation rate limiting** — Nothing prevents one person from creating hundreds of churches. Consider limiting by email or adding a honeypot field.
+**Church creation rate limiting** — Nothing prevents one person from creating hundreds of churches. Simple approach: add a hidden honeypot field to the Create Church form; any submission that fills it is silently rejected. Could also add a 1-church-per-email check in Firestore before creating. Implementation: `AuthScreen` createChurch form + `useAuth.js` `createChurch()`.
 
-**Firebase budget alert** — Set a billing budget in Google Cloud Console to catch unexpected usage spikes (already on Blaze pay-as-you-go).
+**Firebase budget alert** — Set a billing budget in Google Cloud Console to catch unexpected usage spikes. *(Console-only — no code change needed.)*
 
-**Terms of Service & Privacy Policy** — Legally required when handling data for multiple organizations. Must be linked from the registration screen.
+**Terms of Service & Privacy Policy** — Legally required when handling data for multiple organizations. Checkbox on registration ("I agree to the Terms of Service and Privacy Policy") with links to `/terms` and `/privacy` pages. Implementation: add checkbox to all three registration forms in `AuthScreen`; create simple `TermsPage` and `PrivacyPage` components rendered as a tab or modal; draft content needed.
 
 ### 🟢 Polish — For Full Public Launch
 
-**Custom domain** — Replace `church-inventory-9615c.firebaseapp.com` with a real domain (e.g., `churchopshub.com`) for auth and hosting.
+**Item ID minimum length** — Single-character IDs like "A" are accepted. Require at least 3 characters before allowing save. Implementation: validate in `ItemsPage.jsx` Add/Edit item form submit handler.
 
-**Landing / marketing page** — Currently the app URL goes straight to the login screen. New visitors need a page explaining what ChurchOpsHub is.
+**Onboarding flow** — After church creation, guide the admin through adding their first location, ministry, and item. Could be a multi-step modal that fires once on first login when `items.length === 0`. Implementation: new `OnboardingModal` component in `App.jsx` or `SettingsPage.jsx`; flag in `config/main` (`onboardingComplete: true`) once dismissed.
 
-**Onboarding flow** — After church creation, guide the admin through adding their first location, ministry, and item.
+**Account & data deletion** — GDPR and similar laws require users to be able to delete their account and all associated data. Implementation: "Delete My Account" button in Settings; calls a Firebase Cloud Function that deletes the Auth user + all their Firestore data (or just marks as deleted and a cleanup job runs). If admin, warn that deleting transfers ownership or orphans the church.
 
-**Account & data deletion** — GDPR and similar laws require users to be able to delete their account and all associated data.
+**Landing / marketing page** — Currently the app URL goes straight to the login screen. New visitors need a page explaining what ChurchOpsHub is, with pricing, a CTA, and a sign-up link.
+
+**Custom domain** — Replace `church-inventory-9615c.firebaseapp.com` with a real domain (e.g., `churchopshub.com`) for auth and hosting. *(Infrastructure — Vercel + Firebase Console config only.)*
 
 ~~**Error monitoring**~~ ✅ Done — Sentry integrated in `main.jsx` with browser tracing (20% sample rate).
 
