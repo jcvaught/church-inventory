@@ -8,6 +8,7 @@ import { B, f1, f2, inp, btnP, btnS, btnD } from './components/brand/tokens.js';
 import { MobileCtx, useWindowWidth } from './hooks/useMobile.js';
 import { resizeImageForUpload } from './utils/imageResize.js';
 import { printLabel, printInventory } from './utils/print.js';
+import QRCode from 'qrcode';
 import { exportItemsCSV, exportSuppliesCSV, exportReservationsCSV } from './utils/csv.js';
 import { Logo, FullLogo } from './components/brand/Logo.jsx';
 import { Modal } from './components/primitives/Modal.jsx';
@@ -733,6 +734,13 @@ function ItemsPage({ store, userProfile, initialItemId }) {
   const [showRepair, setShowRepair] = useState(null);     // item object
   const [showRetire, setShowRetire] = useState(null);     // item object
   const [showDetail, setShowDetail] = useState(null);     // item object
+  const [detailQrUrl, setDetailQrUrl] = useState('');
+
+  useEffect(() => {
+    if (!showDetail) { setDetailQrUrl(''); return; }
+    const itemUrl = window.location.origin + window.location.pathname.replace(/\/+$/, '') + '?item=' + encodeURIComponent(showDetail.itemId);
+    QRCode.toDataURL(itemUrl, { width: 200, margin: 2 }).then(setDetailQrUrl).catch(() => setDetailQrUrl(''));
+  }, [showDetail?.itemId]);
 
   // Deep-link: open item from ?item= URL param
   const deepLinked = useRef(false);
@@ -1113,20 +1121,21 @@ function ItemsPage({ store, userProfile, initialItemId }) {
           {/* QR Code */}
           {(() => {
             const itemUrl = window.location.origin + window.location.pathname.replace(/\/+$/, '') + '?item=' + encodeURIComponent(showDetail.itemId);
-            const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=8&data=${encodeURIComponent(itemUrl)}`;
             return (
               <div style={{ marginTop:18, paddingTop:16, borderTop:"1px solid "+B.sand }}>
                 <div style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:10 }}>QR Code — Scan to open this item</div>
                 <div style={{ display:"flex", alignItems:"flex-start", gap:16, flexWrap:"wrap" }}>
-                  <img src={qrSrc} alt={`QR for ${showDetail.itemId}`} style={{ width:110, height:110, borderRadius:8, border:"1px solid "+B.sand, flexShrink:0 }} />
+                  {detailQrUrl && <img src={detailQrUrl} alt={`QR for ${showDetail.itemId}`} style={{ width:110, height:110, borderRadius:8, border:"1px solid "+B.sand, flexShrink:0 }} />}
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontSize:12, color:B.textMid, marginBottom:8, wordBreak:"break-all", lineHeight:1.5 }}>{itemUrl}</div>
-                    <a
-                      href={`https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=20&data=${encodeURIComponent(itemUrl)}`}
-                      target="_blank" rel="noreferrer"
-                      style={{ ...btnS, fontSize:11, padding:"5px 12px", textDecoration:"none", display:"inline-block", color:B.textDark }}>
-                      ↓ Download QR
-                    </a>
+                    {detailQrUrl && (
+                      <a
+                        href={detailQrUrl}
+                        download={`qr-${showDetail.itemId}.png`}
+                        style={{ ...btnS, fontSize:11, padding:"5px 12px", textDecoration:"none", display:"inline-block", color:B.textDark }}>
+                        ↓ Download QR
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>

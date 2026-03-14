@@ -104,7 +104,7 @@ All church data is namespaced under `churches/{churchId}/`:
 - `MobileCtx` React context + `useWindowWidth()` hook in `src/hooks/useMobile.js`. Components read `useContext(MobileCtx)` — no prop drilling needed. Breakpoint is 768px.
 - Mobile: tabs hidden, bottom nav bar fixed at bottom, modals slide up from bottom.
 - **Deep linking:** `?item=ITEM_ID` URL param auto-opens item detail. URL cleaned with `history.replaceState` after read.
-- **QR codes:** Generated via `https://api.qrserver.com` (no npm package). Links back to the app with `?item=` param.
+- **QR codes:** Generated locally via the `qrcode` npm package (`QRCode.toDataURL()`). Links back to the app with `?item=` param. In the item detail modal, the QR data URL is stored in `detailQrUrl` state (generated in a `useEffect` when `showDetail` changes). `printLabel` is async (awaits `QRCode.toDataURL()` before opening the print window).
 - **Firebase Storage** (Blaze plan): item photos stored under `churches/{churchId}/items/`. Images are client-side resized to max 1200px / 82% JPEG quality before upload via Canvas API (`resizeImageForUpload`).
 - **Role enforcement:** `isAdmin = userProfile?.role === "admin"`. Only admins can retire items, edit dropdown lists (Locations/Ministries/Tags), and promote/demote other users. Roles: `admin` / `manager` (Phase 5) / `user`. Hub visibility per user controlled by `allowedHubs[]` on user profile (see Per-User Hub Access).
 - **localStorage:** Items page persists `locationFilter` and `ministryFilter` under keys `inv_locationFilter` / `inv_ministryFilter`.
@@ -282,8 +282,7 @@ Single-character IDs like "A" are accepted. Consider requiring at least 3 charac
 
 ### 🟢 UX — Polish
 
-**QR code depends on external API** (`src/utils/print.js`, `App.jsx`)
-QR codes are generated via `https://api.qrserver.com`. If that service is down, label printing breaks entirely. Replace with a local npm package (e.g., `qrcode` or `qrcode.react`).
+~~**QR code depends on external API**~~ ✅ Fixed — replaced `api.qrserver.com` with the `qrcode` npm package. QR codes now generated entirely client-side.
 
 **Activity log capped at 20 entries with no load-more** (`ActivityLogPage`)
 `filtered.slice(0, 20)` is hardcoded. Add a "Load more" button or paginate via Firestore cursor.

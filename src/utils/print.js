@@ -1,6 +1,8 @@
-export function printLabel(item, churchName) {
+import QRCode from 'qrcode';
+
+export async function printLabel(item, churchName) {
   const appUrl = window.location.origin + window.location.pathname.replace(/\/+$/, '') + '?item=' + encodeURIComponent(item.itemId);
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=12&data=${encodeURIComponent(appUrl)}`;
+  const qrSrc = await QRCode.toDataURL(appUrl, { width: 200, margin: 2 });
   const win = window.open('', '_blank');
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html><head><title>${item.itemId}</title><style>
