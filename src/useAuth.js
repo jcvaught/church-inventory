@@ -85,6 +85,13 @@ export function useAuth() {
       cred = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: userName });
 
+      // Check if this email already created a church (1-church-per-email limit)
+      const emailChurchCheck = await getDocs(query(collection(db, 'churches'), where('createdBy', '==', cred.user.uid)));
+      if (!emailChurchCheck.empty) {
+        await cred.user.delete();
+        throw new Error('An account with this email has already created a church. Please sign in instead.');
+      }
+
       // Check if church code is already taken
       const existing = await findChurchByCode(churchCode);
       if (existing) {

@@ -232,11 +232,11 @@ The data model is already multi-tenant (`churches/{churchId}/`). The following m
 
 ~~**Email verification**~~ ✅ Done — `sendEmailVerification()` called after `createChurch` and `register` (skipped for Google sign-in). Dismissible yellow banner in `AppShell` for unverified users with Resend button; `resendVerification()` exposed from `useAuth`.
 
-**Church creation rate limiting** — Nothing prevents one person from creating hundreds of churches. Simple approach: add a hidden honeypot field to the Create Church form; any submission that fills it is silently rejected. Could also add a 1-church-per-email check in Firestore before creating. Implementation: `AuthScreen` createChurch form + `useAuth.js` `createChurch()`.
+~~**Church creation rate limiting**~~ ✅ Done — honeypot hidden input in Create Church form (silently rejected if filled); 1-church-per-email check in `createChurch()` queries `churches` by `createdBy == uid` before proceeding (account deleted and error shown if duplicate found).
 
 **Firebase budget alert** — Set a billing budget in Google Cloud Console to catch unexpected usage spikes. *(Console-only — no code change needed.)*
 
-**Terms of Service & Privacy Policy** — Legally required when handling data for multiple organizations. Checkbox on registration ("I agree to the Terms of Service and Privacy Policy") with links to `/terms` and `/privacy` pages. Implementation: add checkbox to all three registration forms in `AuthScreen`; create simple `TermsPage` and `PrivacyPage` components rendered as a tab or modal; draft content needed.
+~~**Terms of Service & Privacy Policy**~~ ✅ Done — ToS checkbox on all three registration forms (register, googleRegister, createChurch); submit button disabled until checked. Clicking "Terms of Service" or "Privacy Policy" opens a modal overlay within `AuthScreen` with full content; "I Agree" button in modal footer auto-checks the checkbox. Content drafted covering: acceptance, data ownership, storage/isolation, deletion rights, cookies.
 
 ### 🟢 Polish — For Full Public Launch
 

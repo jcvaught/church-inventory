@@ -36,10 +36,25 @@ function AuthScreen({ authHook }) {
   });
   const [mode, setMode] = useState(inviteData ? "register" : "login");
   const [form, setForm] = useState({ name:"", email:"", password:"", churchCode: inviteData?.code || "", churchName:"" });
+  const [honeypot, setHoneypot] = useState("");
   const [busy, setBusy] = useState(false);
   const [googleInfo, setGoogleInfo] = useState(null);
   const [resetSent, setResetSent] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showLegal, setShowLegal] = useState(null); // "terms" | "privacy" | null
   const u = (k,v) => { setForm(f=>({...f,[k]:v})); setError(null); };
+
+  const tosCheckbox = (
+    <div style={{ display:"flex", alignItems:"flex-start", gap:8, margin:"0 0 14px", fontSize:13, color:B.textLight }}>
+      <input type="checkbox" id="tos" checked={agreedToTerms} onChange={e=>setAgreedToTerms(e.target.checked)} style={{ marginTop:2, accentColor:B.teal, cursor:"pointer" }} />
+      <label htmlFor="tos" style={{ cursor:"pointer", lineHeight:1.5 }}>
+        I agree to the{" "}
+        <button type="button" onClick={()=>setShowLegal("terms")} style={{ background:"none", border:"none", color:B.teal, fontWeight:600, cursor:"pointer", fontSize:13, padding:0, fontFamily:f2 }}>Terms of Service</button>
+        {" "}and{" "}
+        <button type="button" onClick={()=>setShowLegal("privacy")} style={{ background:"none", border:"none", color:B.teal, fontWeight:600, cursor:"pointer", fontSize:13, padding:0, fontFamily:f2 }}>Privacy Policy</button>
+      </label>
+    </div>
+  );
 
   async function handleResetPassword(e) {
     e?.preventDefault(); setBusy(true);
@@ -73,7 +88,9 @@ function AuthScreen({ authHook }) {
     setBusy(false);
   }
   async function handleCreateChurch(e) {
-    e?.preventDefault(); setBusy(true);
+    e?.preventDefault();
+    if (honeypot) return; // Bot trap — silently reject
+    setBusy(true);
     await createChurch({ churchName:form.churchName, churchCode:form.churchCode, userName:form.name, email:form.email, password:form.password });
     setBusy(false);
   }
@@ -178,8 +195,9 @@ function AuthScreen({ authHook }) {
           <FF label="Email"><input style={inp} type="email" value={form.email} onChange={e=>u("email",e.target.value)} placeholder="you@email.com"/></FF>
           <FF label="Password"><input style={inp} type="password" value={form.password} onChange={e=>u("password",e.target.value)} placeholder="At least 6 characters"/></FF>
           <FF label="Church Code"><input style={{...inp, fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase"}} value={form.churchCode} onChange={e=>u("churchCode",e.target.value)} placeholder="e.g. FXCC"/></FF>
+          {tosCheckbox}
           {error && <p style={{ color:B.red, fontSize:13, fontWeight:600, margin:"0 0 12px" }}>{error}</p>}
-          <button onClick={handleRegister} disabled={busy||!form.name||!form.email||!form.password||!form.churchCode} style={{ ...btnP, width:"100%", opacity:(busy||!form.name||!form.churchCode)?.5:1 }}>
+          <button onClick={handleRegister} disabled={busy||!form.name||!form.email||!form.password||!form.churchCode||!agreedToTerms} style={{ ...btnP, width:"100%", opacity:(busy||!form.name||!form.churchCode||!agreedToTerms)?.5:1 }}>
             {busy ? "Creating account..." : "Create Account"}
           </button>
           <div style={{ textAlign:"center", marginTop:16 }}>
@@ -198,8 +216,9 @@ function AuthScreen({ authHook }) {
             </p>
           </div>
           <FF label="Church Code"><input style={{...inp, fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase"}} value={form.churchCode} onChange={e=>u("churchCode",e.target.value)} placeholder="e.g. FXCC-2026"/></FF>
+          {tosCheckbox}
           {error && <p style={{ color:B.red, fontSize:13, fontWeight:600, margin:"0 0 12px" }}>{error}</p>}
-          <button onClick={handleGoogleRegister} disabled={busy||!form.churchCode} style={{ ...btnP, width:"100%", opacity:(busy||!form.churchCode)?.5:1 }}>
+          <button onClick={handleGoogleRegister} disabled={busy||!form.churchCode||!agreedToTerms} style={{ ...btnP, width:"100%", opacity:(busy||!form.churchCode||!agreedToTerms)?.5:1 }}>
             {busy ? "Joining..." : "Join Church"}
           </button>
           <div style={{ textAlign:"center", marginTop:16 }}>
@@ -215,18 +234,79 @@ function AuthScreen({ authHook }) {
             <h1 style={{ fontFamily:f1, fontSize:24, fontWeight:700, color:B.navy, margin:"0 0 4px" }}>Set Up Your Church</h1>
             <p style={{ color:B.textLight, margin:0, fontSize:14 }}>You'll be the admin. Share the church code with your team.</p>
           </div>
+          {/* Honeypot — hidden from real users; bots fill it in */}
+          <input type="text" value={honeypot} onChange={e=>setHoneypot(e.target.value)} style={{ display:"none" }} tabIndex={-1} autoComplete="off" aria-hidden="true" />
           <FF label="Church Name"><input style={inp} value={form.churchName} onChange={e=>u("churchName",e.target.value)} placeholder="e.g. Fairfax Church of Christ"/></FF>
           <FF label="Church Code (your team will use this to join)"><input style={{...inp, fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase"}} value={form.churchCode} onChange={e=>u("churchCode",e.target.value)} placeholder="e.g. FXCC-2026"/></FF>
           <div style={{ height:1, background:B.sand, margin:"8px 0 16px" }}/>
           <FF label="Your Name"><input style={inp} value={form.name} onChange={e=>u("name",e.target.value)} placeholder="Full name"/></FF>
           <FF label="Email"><input style={inp} type="email" value={form.email} onChange={e=>u("email",e.target.value)} placeholder="you@church.org"/></FF>
           <FF label="Password"><input style={inp} type="password" value={form.password} onChange={e=>u("password",e.target.value)} placeholder="At least 6 characters"/></FF>
+          {tosCheckbox}
           {error && <p style={{ color:B.red, fontSize:13, fontWeight:600, margin:"0 0 12px" }}>{error}</p>}
-          <button onClick={handleCreateChurch} disabled={busy||!form.churchName||!form.churchCode||!form.name||!form.email||!form.password} style={{ ...btnP, width:"100%", opacity:busy?.5:1 }}>
+          <button onClick={handleCreateChurch} disabled={busy||!form.churchName||!form.churchCode||!form.name||!form.email||!form.password||!agreedToTerms} style={{ ...btnP, width:"100%", opacity:(busy||!agreedToTerms)?.5:1 }}>
             {busy ? "Setting up..." : "Create Church & Account"}
           </button>
           <div style={{ textAlign:"center", marginTop:16 }}>
             <button onClick={()=>{setMode("login");setError(null);}} style={{ background:"none", border:"none", color:B.teal, fontWeight:600, cursor:"pointer", fontSize:13, fontFamily:f1 }}>Back to sign in</button>
+          </div>
+        </div>
+      )}
+
+      {/* Legal modal (Terms of Service / Privacy Policy) */}
+      {showLegal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }} onClick={()=>setShowLegal(null)}>
+          <div style={{ background:B.white, borderRadius:16, maxWidth:560, width:"100%", maxHeight:"80vh", display:"flex", flexDirection:"column", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }} onClick={e=>e.stopPropagation()}>
+            <div style={{ padding:"20px 24px 16px", borderBottom:"1px solid "+B.sand, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <h2 style={{ fontFamily:f1, fontWeight:700, fontSize:18, color:B.navy, margin:0 }}>
+                {showLegal === "terms" ? "Terms of Service" : "Privacy Policy"}
+              </h2>
+              <button onClick={()=>setShowLegal(null)} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", color:B.textLight, lineHeight:1 }}>×</button>
+            </div>
+            <div style={{ padding:"20px 24px", overflowY:"auto", fontSize:13, color:B.textDark, lineHeight:1.7 }}>
+              {showLegal === "terms" ? (
+                <>
+                  <p style={{ color:B.textLight, fontSize:12, marginTop:0 }}>Last updated: January 1, 2026</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy, marginTop:0 }}>1. Acceptance of Terms</h3>
+                  <p>By creating an account and using ChurchOpsHub ("the Service"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy }}>2. Use of the Service</h3>
+                  <p>ChurchOpsHub is intended for use by churches and religious organizations to manage inventory, equipment, and related operations. You agree to use the Service only for lawful purposes and in accordance with these Terms.</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy }}>3. Account Responsibility</h3>
+                  <p>You are responsible for maintaining the security of your account credentials. You are responsible for all activity that occurs under your account. Notify us immediately of any unauthorized use.</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy }}>4. Data Ownership</h3>
+                  <p>You retain ownership of all data you enter into ChurchOpsHub. We do not claim any rights to your inventory data, team information, or church records.</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy }}>5. Service Availability</h3>
+                  <p>We strive to keep the Service available at all times but do not guarantee uninterrupted access. We may perform maintenance or updates that temporarily affect availability.</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy }}>6. Termination</h3>
+                  <p>We reserve the right to suspend or terminate accounts that violate these Terms. You may delete your account at any time by contacting us.</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy }}>7. Limitation of Liability</h3>
+                  <p>ChurchOpsHub is provided "as is." To the fullest extent permitted by law, we disclaim all warranties and are not liable for any indirect, incidental, or consequential damages.</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy }}>8. Contact</h3>
+                  <p>Questions about these Terms? Email us at <a href="mailto:jcvaught@gmail.com" style={{ color:B.teal }}>jcvaught@gmail.com</a>.</p>
+                </>
+              ) : (
+                <>
+                  <p style={{ color:B.textLight, fontSize:12, marginTop:0 }}>Last updated: January 1, 2026</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy, marginTop:0 }}>What We Collect</h3>
+                  <p>We collect information you provide directly: your name, email address, and the inventory and organizational data you enter. We also collect basic usage data (page views, errors) via Sentry to help us improve the Service.</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy }}>How We Use Your Data</h3>
+                  <p>Your data is used solely to provide and improve ChurchOpsHub. We do not sell, rent, or share your personal information with third parties for marketing purposes.</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy }}>Data Storage</h3>
+                  <p>Your data is stored securely in Google Firebase (Firestore) with access scoped to your church. All data is encrypted in transit and at rest.</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy }}>Multi-Tenant Isolation</h3>
+                  <p>Each church's data is strictly isolated. Members of one church cannot access another church's data. Security rules are enforced at the database level.</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy }}>Your Rights</h3>
+                  <p>You may request access to, correction of, or deletion of your personal data at any time by contacting us. Church admins may delete their church account and all associated data upon request.</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy }}>Cookies</h3>
+                  <p>We use Firebase Authentication which stores session tokens in your browser. We do not use third-party tracking cookies.</p>
+                  <h3 style={{ fontFamily:f1, color:B.navy }}>Contact</h3>
+                  <p>Privacy questions? Email us at <a href="mailto:jcvaught@gmail.com" style={{ color:B.teal }}>jcvaught@gmail.com</a>.</p>
+                </>
+              )}
+            </div>
+            <div style={{ padding:"16px 24px", borderTop:"1px solid "+B.sand }}>
+              <button onClick={()=>{setAgreedToTerms(true);setShowLegal(null);}} style={{ ...btnP, width:"100%" }}>I Agree</button>
+            </div>
           </div>
         </div>
       )}
