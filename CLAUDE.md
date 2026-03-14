@@ -247,3 +247,56 @@ The data model is already multi-tenant (`churches/{churchId}/`). The following m
 Deployed via Vercel (auto-detect Vite). Firebase config is hardcoded in `src/firebase.js` (not via env vars).
 
 To deploy Firestore/Storage rules: `./node_modules/.bin/firebase deploy --only firestore:rules,storage` (requires `firebase login` first). `.firebaserc` is configured with project ID `church-inventory-9615c`.
+
+---
+
+## Known Issues & Tech Debt
+
+Findings from a full security + UX audit. Fix in priority order.
+
+### 🔴 Security — High Priority
+
+**Users Firestore rule leaks cross-church data** (`firestore.rules:21`)
+`allow read: if request.auth != null;` allows any authenticated user to read all user profiles across all churches — exposing names, emails, and roles. Should restrict reads to same-church users only (via `userChurchId() == resource.data.churchId` check or similar).
+
+**Suggestions UI gate uses wrong email source** (`App.jsx`)
+The owner-only suggestions report is gated in UI by `userProfile?.email` (a Firestore field the user wrote) rather than the verified auth token. Firestore rules correctly use `request.auth.token.email`. Low exploitability but should align: use `user.email` from Firebase Auth object, not the Firestore profile doc.
+
+### 🟡 Security — Medium Priority
+
+**Church code lookup scans entire `churches` collection** (`useAuth.js`)
+Every registration and church-join does `getDocs(collection(db, 'churches'))` — a full collection read — just to match a church code. Expensive as church count grows and allows brute-forcing valid codes. Fix: store codes in a dedicated lookup doc (e.g., `codes/{code}` → `churchId`) and do a direct `getDoc`.
+
+### 🔴 UX — Missing Confirmations on Destructive Actions
+
+No confirmation dialog before:
+- **Deactivating a user** (`SettingsPage`) — one click locks someone out
+- **Making / removing admin** (`SettingsPage`) — one click changes role
+- **Changing the church code** (`SettingsPage`) — invalidates all pending invites and confuses existing members
+
+All three should show a `window.confirm()` or a modal confirm before proceeding.
+
+### 🟡 UX — Data Integrity Bugs
+
+**Photo upload failure is silent** (`useFirestore.js`)
+Photo upload errors are only `console.warn`'d. Item is saved without the photo and the user has no feedback. Should call `flash()` with an error message on upload failure.
+
+**Return date not validated against checkout date** (`ReservationsPage`, checkout flow)
+User can set a return date earlier than the checkout date with no error. Add a `returnDate >= checkoutDate` check before submit.
+
+**Supply quantities allow negatives** (`SuppliesPage`)
+HTML `min="0"` on the quantity input is bypassable by typing. Validate on submit: `if (quantity < 0) return`.
+
+**Item ID has no minimum length or pattern enforcement** (`ItemsPage`)
+Single-character IDs like "A" are accepted. Consider requiring at least 3 characters or a pattern like `[A-Z0-9]{2,}-[0-9]+`.
+
+### 🟢 UX — Polish
+
+**QR code depends on external API** (`src/utils/print.js`, `App.jsx`)
+QR codes are generated via `https://api.qrserver.com`. If that service is down, label printing breaks entirely. Replace with a local npm package (e.g., `qrcode` or `qrcode.react`).
+
+**Activity log capped at 20 entries with no load-more** (`ActivityLogPage`)
+`filtered.slice(0, 20)` is hardcoded. Add a "Load more" button or paginate via Firestore cursor.
+
+**No copy-to-clipboard on church code** (`SettingsPage`)
+Users must manually select the church code text to copy it. Add a copy icon/button next to the code.
