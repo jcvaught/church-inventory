@@ -240,7 +240,7 @@ function SettingsPage({ store, userProfile, subscription }) {
   const [suggestionFilter, setSuggestionFilter] = useState("All");
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
-  const isOwner = userProfile?.email === 'jcvaught@gmail.com';
+  const isOwner = ['jcvaught@gmail.com', 'jvaught@fxcc.org'].includes(userProfile?.email);
 
   if (!settings || !config) return <Spinner />;
 

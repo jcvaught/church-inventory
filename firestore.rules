@@ -28,7 +28,7 @@ service cloud.firestore {
     // Suggestions — any authenticated user can submit; only app owner can read
     match /suggestions/{docId} {
       allow create: if request.auth != null;
-      allow read: if request.auth != null && request.auth.token.email == 'jcvaught@gmail.com';
+      allow read: if request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
     }
   }
 }
