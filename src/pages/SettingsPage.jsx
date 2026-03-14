@@ -1,4 +1,4 @@
-import { useState, useContext } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { B, f1, f2, inp, btnP, btnS } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { Modal } from '../components/primitives/Modal.jsx';
@@ -118,10 +118,12 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
 
   // Sync inviteHubs default to churchHubs once subscription loads (runs once when churchHubs becomes non-empty)
   const [inviteHubsInitialized, setInviteHubsInitialized] = useState(false);
-  if (!inviteHubsInitialized && churchHubs.length > 0) {
-    setInviteHubsInitialized(true);
-    setInviteHubs([...churchHubs]);
-  }
+  useEffect(() => {
+    if (!inviteHubsInitialized && churchHubs.length > 0) {
+      setInviteHubsInitialized(true);
+      setInviteHubs([...churchHubs]);
+    }
+  }, [churchHubs, inviteHubsInitialized]);
 
   function handleCopyInviteLink() {
     const params = new URLSearchParams({ invite: config.churchCode });

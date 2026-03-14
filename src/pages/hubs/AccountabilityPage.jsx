@@ -92,7 +92,7 @@ export function AccountabilityPage({ store, userProfile }) {
       discrepancyCount: discrepancies.length,
       items: auditItemsData,
       discrepancies,
-    }, userProfile.uid, userProfile.name);
+    }, userProfile.id, userProfile.name);
     setSaving(false);
     showFlash(`Audit complete — ${discrepancies.length} discrepanc${discrepancies.length === 1 ? 'y' : 'ies'} found`);
     setAuditStep('list');
