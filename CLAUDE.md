@@ -252,14 +252,13 @@ To deploy Firestore/Storage rules: `./node_modules/.bin/firebase deploy --only f
 
 ## Known Issues & Tech Debt
 
-Findings from a full security + UX audit. Fix in priority order.
+Findings from a full security + UX audit. All items resolved.
 
 ### 🔴 Security — High Priority
 
 ~~**Users Firestore rule leaks cross-church data**~~ ✅ Fixed — reads now require `request.auth.uid == userId || userChurchId() == resource.data.churchId`.
 
-**Suggestions UI gate uses wrong email source** (`App.jsx`)
-The owner-only suggestions report is gated in UI by `userProfile?.email` (a Firestore field the user wrote) rather than the verified auth token. Firestore rules correctly use `request.auth.token.email`. Low exploitability but should align: use `user.email` from Firebase Auth object, not the Firestore profile doc.
+~~**Suggestions UI gate uses wrong email source**~~ ✅ Fixed — `isOwner` now uses `user?.email` from the Firebase Auth object (verified token) instead of `userProfile?.email` (user-writable Firestore field). `user` prop passed from `AppShell` → `SettingsPage`.
 
 ### 🟡 Security — Medium Priority
 

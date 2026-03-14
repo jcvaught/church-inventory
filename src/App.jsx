@@ -225,7 +225,7 @@ function AuthScreen({ authHook }) {
 /* ═══ SETTINGS PAGE ════════════════════════════ */
 /* ═══════════════════════════════════════════════ */
 
-function SettingsPage({ store, userProfile, subscription }) {
+function SettingsPage({ store, userProfile, subscription, user }) {
   const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, loadUsers, submitSuggestion, loadSuggestions } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
@@ -242,7 +242,7 @@ function SettingsPage({ store, userProfile, subscription }) {
   const [suggestionFilter, setSuggestionFilter] = useState("All");
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
-  const isOwner = ['jcvaught@gmail.com', 'jvaught@fxcc.org'].includes(userProfile?.email);
+  const isOwner = ['jcvaught@gmail.com', 'jvaught@fxcc.org'].includes(user?.email);
 
   if (!settings || !config) return <Spinner />;
 
@@ -2193,7 +2193,7 @@ export default function App() {
 }
 
 function AppShell({ authHook }) {
-  const { userProfile, logout } = authHook;
+  const { user, userProfile, logout } = authHook;
   const store = useFirestore(userProfile.churchId);
   const { subscription, hasHub } = useSubscription(userProfile.churchId);
   const [tab, setTab] = useState("dashboard");
@@ -2275,7 +2275,7 @@ function AppShell({ authHook }) {
       {/* Page content */}
       <div style={{ maxWidth:1100, margin:"0 auto", padding:isMobile?"16px 14px 96px":"28px 28px 60px" }} onClick={()=>menuOpen&&setMenuOpen(false)}>
         {tab === "dashboard" && <Dashboard store={store} userProfile={userProfile} />}
-        {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} subscription={subscription} />}
+        {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} subscription={subscription} user={user} />}
         {tab === "inventory" && <ItemsPage store={store} userProfile={userProfile} initialItemId={initialItemId} />}
         {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
         {tab === "reservations" && <ReservationsPage store={store} userProfile={userProfile} />}
