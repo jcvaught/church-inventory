@@ -502,6 +502,7 @@ function AuthScreen({ authHook }) {
 
 function SettingsPage({ store, userProfile }) {
   const { settings, config, users, updateSettings, updateConfig, updateUser, loadUsers } = store;
+  const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
   const [newItem, setNewItem] = useState("");
   const [showCode, setShowCode] = useState(false);
@@ -610,30 +611,33 @@ function SettingsPage({ store, userProfile }) {
         {users.length === 0 ? <p style={{ color:B.textLight, fontSize:14 }}>No team members yet.</p> :
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
             {users.map(u => (
-              <div key={u.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", borderRadius:10, background:B.warmGray, flexWrap:"wrap", gap:8 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <div style={{ width:34, height:34, borderRadius:10, background:B.teal, display:"flex", alignItems:"center", justifyContent:"center", color:B.white, fontWeight:700, fontSize:14, fontFamily:f1 }}>{(u.name||"?")[0]}</div>
-                  <div>
-                    <div style={{ fontWeight:600, fontSize:14 }}>{u.name}</div>
-                    <div style={{ fontSize:12, color:B.textLight }}>{u.email}</div>
+              <div key={u.id} style={{ padding:"12px 14px", borderRadius:10, background:B.warmGray }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
+                    <div style={{ width:34, height:34, borderRadius:10, background:B.teal, display:"flex", alignItems:"center", justifyContent:"center", color:B.white, fontWeight:700, fontSize:14, fontFamily:f1, flexShrink:0 }}>{(u.name||"?")[0]}</div>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontWeight:600, fontSize:14, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                        {u.name}
+                        <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, fontFamily:f1, background: u.role==="admin"?B.goldLight:B.tealPale, color:u.role==="admin"?"#96750E":B.teal }}>{u.role}</span>
+                        {!u.active && <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background:B.redPale, color:B.red }}>Inactive</span>}
+                      </div>
+                      <div style={{ fontSize:12, color:B.textLight }}>{u.email}</div>
+                    </div>
                   </div>
                 </div>
-                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:600, fontFamily:f1, background: u.role==="admin"?B.goldLight:B.tealPale, color:u.role==="admin"?"#96750E":B.teal }}>{u.role}</span>
-                  {!u.active && <span style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:600, background:B.redPale, color:B.red }}>Inactive</span>}
-                  {isAdmin && u.id !== userProfile.id && (
+                {isAdmin && u.id !== userProfile.id && (
+                  <div style={{ display:"flex", gap:8, marginTop:10, flexWrap:"wrap" }}>
                     <button onClick={()=>updateUser(u.id, {role: u.role==="admin" ? "user" : "admin"})}
-                      style={{ ...btnS, padding:"4px 10px", fontSize:11, color: u.role==="admin" ? B.textMid : "#96750E", borderColor: u.role==="admin" ? B.sand : B.gold }}>
+                      style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color: u.role==="admin" ? B.textMid : "#96750E", borderColor: u.role==="admin" ? B.sand : B.gold }}>
                       {u.role==="admin" ? "Remove Admin" : "Make Admin"}
                     </button>
-                  )}
-                  {isAdmin && u.id !== userProfile.id && u.active && (
-                    <button onClick={()=>updateUser(u.id, {active:false})} style={{ ...btnS, padding:"4px 10px", fontSize:11, color:B.red, borderColor:"#FECACA" }}>Deactivate</button>
-                  )}
-                  {isAdmin && !u.active && (
-                    <button onClick={()=>updateUser(u.id, {active:true})} style={{ ...btnS, padding:"4px 10px", fontSize:11, color:B.teal, borderColor:B.tealPale }}>Reactivate</button>
-                  )}
-                </div>
+                    {u.active ? (
+                      <button onClick={()=>updateUser(u.id, {active:false})} style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.red, borderColor:"#FECACA" }}>Deactivate</button>
+                    ) : (
+                      <button onClick={()=>updateUser(u.id, {active:true})} style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.teal, borderColor:B.tealPale }}>Reactivate</button>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
