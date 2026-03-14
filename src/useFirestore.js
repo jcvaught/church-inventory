@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   doc, setDoc, getDoc, deleteDoc, getDocs,
-  collection, onSnapshot, addDoc, updateDoc, query, orderBy
+  collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion
 } from 'firebase/firestore';
 import { db } from './firebase.js';
 
@@ -319,20 +319,26 @@ export function useFirestore(churchId) {
   // ── Maintenance Tickets ──
   const addTicket = useCallback(async (ticket, userId, userName) => {
     try {
-      // Auto-generate ticket number
-      const ticketCount = (await getDocs(collection(db, 'churches', churchId, 'maintenanceTickets'))).size;
-      const ticketNumber = 'MNT-' + String(ticketCount + 1).padStart(3, '0');
+      // Max-based ticket numbering (avoids gaps from deletions)
+      const snap = await getDocs(collection(db, 'churches', churchId, 'maintenanceTickets'));
+      let maxNum = 0;
+      snap.docs.forEach(d => {
+        const tn = d.data().ticketNumber || '';
+        const match = tn.match(/^MNT-(\d+)$/);
+        if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+      });
+      const ticketNumber = 'MNT-' + String(maxNum + 1).padStart(3, '0');
       const ref = await addDoc(collection(db, 'churches', churchId, 'maintenanceTickets'), {
         ...ticket,
         ticketNumber,
-        reportedBy: userId,
-        reportedByName: userName,
-        status: ticket.status || 'Open',
+        createdBy: userId,
+        createdByName: userName,
+        status: ticket.status || 'Backlog',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        resolvedAt: null
+        completedAt: null
       });
-      await logActivity('add_ticket', ticket.itemId || ticketNumber, userId, userName, { description: ticket.issue, priority: ticket.priority });
+      await logActivity('add_ticket', ticket.linkedItemId || ticketNumber, userId, userName, { name: ticket.name, priority: ticket.priority });
       return ref.id;
     } catch (err) { setError(err.message); }
   }, [churchId]);
@@ -340,11 +346,37 @@ export function useFirestore(churchId) {
   const updateTicket = useCallback(async (docId, updates) => {
     try {
       const data = { ...updates, updatedAt: new Date().toISOString() };
-      if (updates.status === 'Resolved' && !updates.resolvedAt) {
-        data.resolvedAt = new Date().toISOString();
+      if (updates.status === 'Complete' && !updates.completedAt) {
+        data.completedAt = new Date().toISOString();
       }
       await updateDoc(doc(db, 'churches', churchId, 'maintenanceTickets', docId), data);
     } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const addTicketComment = useCallback(async (ticketId, text, authorId, authorName) => {
+    try {
+      await addDoc(collection(db, 'churches', churchId, 'maintenanceTickets', ticketId, 'comments'), {
+        text,
+        authorId,
+        authorName,
+        createdAt: new Date().toISOString()
+      });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const deleteTicket = useCallback(async (docId) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'maintenanceTickets', docId));
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const addMaintenanceTags = useCallback(async (tags) => {
+    if (!tags.length) return;
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'config', 'settings'), {
+        maintenanceTags: arrayUnion(...tags)
+      });
+    } catch (err) { console.error('Error adding maintenance tags:', err); }
   }, [churchId]);
 
   // ── Suggestions ──
@@ -398,7 +430,7 @@ export function useFirestore(churchId) {
     logActivity,
     addReservation, updateReservation,
     updateUser, removeUser,
-    addTicket, updateTicket,
+    addTicket, updateTicket, addTicketComment, deleteTicket, addMaintenanceTags,
     addVendor, updateVendor,
     submitSuggestion, loadSuggestions
   };

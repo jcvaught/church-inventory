@@ -1,129 +1,449 @@
-import { useState, useContext } from 'react';
+import { useState, useEffect, useContext, useRef } from 'react';
+import { collection, onSnapshot, query as fsQuery, orderBy } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../../firebase.js';
 import { MobileCtx } from '../../hooks/useMobile.js';
-import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
+import { B, f1, f2, inp, btnP, btnS } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { Stat } from '../../components/primitives/Stat.jsx';
+import { resizeImageForUpload } from '../../utils/imageResize.js';
 
-const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'];
-const CATEGORIES = ['Electrical', 'Mechanical', 'Cosmetic', 'Safety', 'Other'];
-const STATUSES = ['Open', 'In Progress', 'Resolved', 'Closed'];
+const STATUSES = ['Backlog', 'Planning', 'In Progress', 'On Hold', 'Complete', 'Cancelled'];
+const PRIORITIES = ['High', 'Medium', 'Low'];
 
 const priorityColors = {
-  Low:    { bg: B.warmGray,  tx: B.textMid,   dot: B.textLight },
-  Medium: { bg: B.goldLight, tx: '#96750E',   dot: B.gold },
-  High:   { bg: '#FEE8E8',   tx: B.red,       dot: '#E87171' },
-  Urgent: { bg: B.redPale,   tx: B.red,       dot: B.red },
+  High:   { bg: '#FEE8E8', tx: B.red,      dot: '#E87171' },
+  Medium: { bg: B.goldLight, tx: '#96750E', dot: B.gold },
+  Low:    { bg: B.warmGray,  tx: B.textMid, dot: B.textLight },
 };
 
 const statusColors = {
-  Open:         { bg: B.redPale,   tx: B.red,     dot: B.red },
-  'In Progress':{ bg: '#E8F0FE',   tx: '#1A65C7', dot: '#3B82F6' },
-  Resolved:     { bg: B.tealPale,  tx: B.teal,    dot: B.tealLight },
-  Closed:       { bg: B.warmGray,  tx: B.textMid, dot: B.textLight },
+  'Backlog':     { bg: B.warmGray,  tx: B.textMid,  dot: B.textLight },
+  'Planning':    { bg: B.goldLight, tx: '#96750E',   dot: B.gold },
+  'In Progress': { bg: '#E8F0FE',   tx: '#1A65C7',   dot: '#3B82F6' },
+  'On Hold':     { bg: '#FEF3E8',   tx: '#9A5E10',   dot: '#F59E42' },
+  'Complete':    { bg: B.tealPale,  tx: B.teal,      dot: B.tealLight },
+  'Cancelled':   { bg: B.warmGray,  tx: B.textMid,   dot: B.textLight },
 };
 
 function PriorityBadge({ priority }) {
   const s = priorityColors[priority] || priorityColors.Medium;
-  return <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:20, background:s.bg, color:s.tx, fontSize:11, fontWeight:700, fontFamily:f1 }}>
-    <span style={{ width:6, height:6, borderRadius:'50%', background:s.dot }}/>{priority}
-  </span>;
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:20, background:s.bg, color:s.tx, fontSize:11, fontWeight:700, fontFamily:f1 }}>
+      <span style={{ width:6, height:6, borderRadius:'50%', background:s.dot }}/>{priority}
+    </span>
+  );
 }
 
 function StatusBadge({ status }) {
-  const s = statusColors[status] || statusColors.Open;
-  return <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:20, background:s.bg, color:s.tx, fontSize:11, fontWeight:700, fontFamily:f1 }}>
-    <span style={{ width:6, height:6, borderRadius:'50%', background:s.dot }}/>{status}
-  </span>;
+  const s = statusColors[status] || statusColors['Backlog'];
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:20, background:s.bg, color:s.tx, fontSize:11, fontWeight:700, fontFamily:f1 }}>
+      <span style={{ width:6, height:6, borderRadius:'50%', background:s.dot }}/>{status}
+    </span>
+  );
 }
 
+function TicketCard({ ticket, onClick }) {
+  const sc = statusColors[ticket.status] || statusColors['Backlog'];
+  const isOverdue = ticket.dueDate && new Date(ticket.dueDate) < new Date() && ticket.status !== 'Complete' && ticket.status !== 'Cancelled';
+  return (
+    <div
+      onClick={() => onClick(ticket)}
+      style={{ background:B.white, borderRadius:12, padding:'14px 16px', border:'1px solid '+B.sand, cursor:'pointer', borderLeft:'4px solid '+sc.dot, boxShadow:'0 1px 3px rgba(27,42,74,0.06)', marginBottom:8, transition:'box-shadow 0.15s' }}
+      onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(27,42,74,0.12)'}
+      onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 3px rgba(27,42,74,0.06)'}
+    >
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
+        <span style={{ fontFamily:'monospace', fontSize:11, color:B.textLight }}>{ticket.ticketNumber}</span>
+        <PriorityBadge priority={ticket.priority}/>
+      </div>
+      <div style={{ fontWeight:600, fontSize:14, color:B.navy, marginBottom:4, lineHeight:1.3 }}>{ticket.name}</div>
+      {ticket.description && (
+        <div style={{ fontSize:12, color:B.textMid, lineHeight:1.4, marginBottom:6, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
+          {ticket.description}
+        </div>
+      )}
+      {ticket.tags?.length > 0 && (
+        <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:6 }}>
+          {ticket.tags.slice(0,4).map(tag => (
+            <span key={tag} style={{ padding:'2px 8px', borderRadius:12, background:B.warmGray, color:B.textMid, fontSize:10, fontFamily:f1 }}>{tag}</span>
+          ))}
+        </div>
+      )}
+      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+        {ticket.assignees?.slice(0,4).map((a, i) => (
+          <div key={a.uid || i} style={{ width:22, height:22, borderRadius:'50%', background:B.teal, color:B.white, fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:f1 }}>
+            {(a.name || '?').charAt(0).toUpperCase()}
+          </div>
+        ))}
+        <div style={{ marginLeft:'auto', display:'flex', gap:8, alignItems:'center' }}>
+          {ticket.photos?.length > 0 && <span style={{ fontSize:11, color:B.textLight }}>📷 {ticket.photos.length}</span>}
+          {ticket.dueDate && <span style={{ fontSize:11, color: isOverdue ? B.red : B.textLight }}>📅 {ticket.dueDate}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TagInput({ tags = [], onChange, suggestions = [] }) {
+  const [inputVal, setInputVal] = useState('');
+  const [showDrop, setShowDrop] = useState(false);
+  const filtered = suggestions.filter(s => !tags.includes(s) && s.toLowerCase().includes(inputVal.toLowerCase()));
+
+  function addTag(t) {
+    const tag = t.trim().toLowerCase();
+    if (tag && !tags.includes(tag)) onChange([...tags, tag]);
+    setInputVal('');
+    setShowDrop(false);
+  }
+  function onKey(e) {
+    if ((e.key === 'Enter' || e.key === ',') && inputVal.trim()) { e.preventDefault(); addTag(inputVal); }
+    else if (e.key === 'Backspace' && !inputVal && tags.length) onChange(tags.slice(0, -1));
+  }
+  return (
+    <div style={{ position:'relative' }}>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:6, padding:'7px 10px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, minHeight:42, alignItems:'center' }}>
+        {tags.map(t => (
+          <span key={t} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 8px', borderRadius:12, background:B.tealPale, color:B.teal, fontSize:12, fontFamily:f1 }}>
+            {t}
+            <button onMouseDown={e => { e.preventDefault(); onChange(tags.filter(x => x !== t)); }} style={{ border:'none', background:'none', color:B.teal, cursor:'pointer', padding:'0 0 0 2px', fontSize:14, lineHeight:1 }}>×</button>
+          </span>
+        ))}
+        <input
+          value={inputVal}
+          onChange={e => { setInputVal(e.target.value); setShowDrop(true); }}
+          onKeyDown={onKey}
+          onFocus={() => setShowDrop(true)}
+          onBlur={() => setTimeout(() => setShowDrop(false), 150)}
+          placeholder={tags.length ? '' : 'Type tag, press Enter...'}
+          style={{ border:'none', outline:'none', fontSize:13, flex:1, minWidth:80, fontFamily:f2, color:B.textDark, background:'transparent' }}
+        />
+      </div>
+      {showDrop && filtered.length > 0 && (
+        <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:200, background:B.white, border:'1px solid '+B.sand, borderRadius:10, boxShadow:'0 4px 16px rgba(27,42,74,0.1)', maxHeight:130, overflowY:'auto', marginTop:2 }}>
+          {filtered.map(s => (
+            <div key={s} onMouseDown={() => addTag(s)} style={{ padding:'8px 14px', cursor:'pointer', fontSize:13, fontFamily:f2, color:B.textDark }}
+              onMouseEnter={e => e.currentTarget.style.background=B.warmGray}
+              onMouseLeave={e => e.currentTarget.style.background=''}
+            >{s}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AssigneeSelect({ assignees = [], onChange, users = [], currentUserId, currentUserName }) {
+  const isSelf = assignees.some(a => a.uid === currentUserId);
+  function toggle(user) {
+    const ex = assignees.find(a => a.uid === user.id);
+    if (ex) onChange(assignees.filter(a => a.uid !== user.id));
+    else onChange([...assignees, { uid: user.id, name: user.name }]);
+  }
+  function toggleSelf() {
+    if (isSelf) onChange(assignees.filter(a => a.uid !== currentUserId));
+    else onChange([...assignees, { uid: currentUserId, name: currentUserName }]);
+  }
+  function pill(selected, label, onClick) {
+    return (
+      <button key={label} type="button" onClick={onClick} style={{ padding:'5px 12px', borderRadius:20, border:'1px solid '+(selected ? B.teal : B.sand), background:selected ? B.tealPale : B.white, color:selected ? B.teal : B.textMid, fontSize:12, fontFamily:f1, cursor:'pointer', fontWeight:600 }}>
+        {selected ? '✓ ' : ''}{label}
+      </button>
+    );
+  }
+  return (
+    <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+      {pill(isSelf, 'Me', toggleSelf)}
+      {users.filter(u => u.active !== false && u.id !== currentUserId).map(u =>
+        pill(assignees.some(a => a.uid === u.id), u.name, () => toggle(u))
+      )}
+    </div>
+  );
+}
+
+function PhotoGrid({ photos = [], onAdd, onRemove, uploading }) {
+  const fileRef = useRef();
+  return (
+    <div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(90px, 1fr))', gap:8 }}>
+        {photos.map((url, i) => (
+          <div key={i} style={{ position:'relative', borderRadius:8, overflow:'hidden', aspectRatio:'1', background:B.warmGray }}>
+            <img src={url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+            {onRemove && (
+              <button onClick={() => onRemove(i)} style={{ position:'absolute', top:3, right:3, width:20, height:20, borderRadius:'50%', background:'rgba(0,0,0,0.55)', border:'none', color:B.white, cursor:'pointer', fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}>×</button>
+            )}
+          </div>
+        ))}
+        {onAdd && (
+          <div
+            onClick={() => !uploading && fileRef.current?.click()}
+            style={{ borderRadius:8, border:'2px dashed '+B.sand, aspectRatio:'1', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', cursor:uploading ? 'wait' : 'pointer', background:B.warmGray, color:B.textLight, fontSize:11, gap:2 }}
+          >
+            {uploading ? '⏳' : <><span style={{ fontSize:22, lineHeight:1 }}>+</span>Photo</>}
+          </div>
+        )}
+      </div>
+      {onAdd && <input ref={fileRef} type="file" accept="image/*" multiple style={{ display:'none' }} onChange={e => { if (e.target.files?.length) onAdd(Array.from(e.target.files)); e.target.value = ''; }}/>}
+    </div>
+  );
+}
+
+function CommentThread({ comments, loading, newComment, onChange, onPost, posting }) {
+  const endRef = useRef();
+  useEffect(() => { if (comments.length) endRef.current?.scrollIntoView({ behavior:'smooth' }); }, [comments.length]);
+  return (
+    <div>
+      <div style={{ maxHeight:200, overflowY:'auto', display:'flex', flexDirection:'column', gap:10, marginBottom:10, paddingRight:2 }}>
+        {loading
+          ? <div style={{ color:B.textLight, fontSize:13 }}>Loading...</div>
+          : comments.length === 0
+            ? <div style={{ color:B.textLight, fontSize:13 }}>No comments yet.</div>
+            : comments.map(c => (
+                <div key={c.id} style={{ background:B.warmGray, borderRadius:10, padding:'10px 14px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
+                    <span style={{ fontWeight:700, fontSize:13, color:B.navy, fontFamily:f1 }}>{c.authorName}</span>
+                    <span style={{ fontSize:11, color:B.textLight }}>{c.createdAt?.split('T')[0]}</span>
+                  </div>
+                  <div style={{ fontSize:13, color:B.textDark, lineHeight:1.5 }}>{c.text}</div>
+                </div>
+              ))
+        }
+        <div ref={endRef}/>
+      </div>
+      <div style={{ display:'flex', gap:8 }}>
+        <input
+          style={{ ...inp, flex:1 }}
+          value={newComment}
+          onChange={e => onChange(e.target.value)}
+          placeholder="Add a comment..."
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) { e.preventDefault(); onPost(); } }}
+        />
+        <button onClick={onPost} disabled={posting || !newComment.trim()} style={{ ...btnP, padding:'11px 18px', opacity:(posting || !newComment.trim()) ? .5 : 1 }}>Post</button>
+      </div>
+    </div>
+  );
+}
+
+function KanbanColumn({ status, tickets, onTicketClick, isMobile }) {
+  const sc = statusColors[status] || statusColors['Backlog'];
+  return (
+    <div style={{ minWidth:isMobile ? '100%' : 260, maxWidth:isMobile ? '100%' : 280, flexShrink:0, background:B.warmGray, borderRadius:14, padding:'12px 10px' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10, paddingLeft:4 }}>
+        <span style={{ width:10, height:10, borderRadius:'50%', background:sc.dot, flexShrink:0 }}/>
+        <span style={{ fontWeight:700, fontSize:13, color:B.navy, fontFamily:f1 }}>{status}</span>
+        <span style={{ marginLeft:'auto', background:B.white, borderRadius:20, padding:'2px 8px', fontSize:11, fontWeight:700, color:B.textMid, fontFamily:f1 }}>{tickets.length}</span>
+      </div>
+      <div style={{ overflowY:'auto', maxHeight:isMobile ? 'none' : 'calc(100vh - 380px)', minHeight:80 }}>
+        {tickets.length === 0
+          ? <div style={{ textAlign:'center', color:B.textLight, fontSize:12, padding:'16px 0', fontStyle:'italic' }}>Empty</div>
+          : tickets.map(t => <TicketCard key={t._docId} ticket={t} onClick={onTicketClick}/>)
+        }
+      </div>
+    </div>
+  );
+}
+
+const getEmptyTicket = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', assignees:[], linkedItemDocId:'', vendorId:'', estimatedCost:'', notes:'' });
+const getEmptyVendor = () => ({ name:'', phone:'', email:'', specialty:'', notes:'' });
+
 export function MaintenancePage({ store, userProfile }) {
-  const { items, maintenanceTickets, vendors, addTicket, updateTicket, addVendor, updateVendor } = store;
+  const { items, maintenanceTickets, vendors, users, settings, addTicket, updateTicket, addTicketComment, addMaintenanceTags, addVendor } = store;
   const isMobile = useContext(MobileCtx);
 
-  const [statusFilter, setStatusFilter] = useState('all');
+  const userId = userProfile?.id || userProfile?.uid;
+  const userName = userProfile?.name || 'Unknown';
+  const churchId = userProfile?.churchId;
+
+  const activeItems = items.filter(i => i.status !== 'Disposed');
+  const maintenanceTags = settings?.maintenanceTags || [];
+
+  // ── State ──
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('maint_viewMode') || 'kanban');
   const [showAdd, setShowAdd] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
   const [showAddVendor, setShowAddVendor] = useState(false);
   const [showVendors, setShowVendors] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
+  const [collapsedStatuses, setCollapsedStatuses] = useState(new Set());
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
-  const userId = userProfile?.id || userProfile?.uid;
-  const userName = userProfile?.name || 'Unknown';
-  const isAdmin = userProfile?.role === 'admin';
-
-  const activeItems = items.filter(i => i.status !== 'Disposed');
-
-  const emptyTicket = {
-    itemDocId: '', itemId: '', itemDescription: '',
-    issue: '', priority: 'Medium', category: 'Other',
-    assignedTo: '', estimatedCost: '', vendorId: '', vendorName: '',
-    partsNeeded: '', notes: ''
-  };
-  const [ticketForm, setTicketForm] = useState(emptyTicket);
+  const [ticketForm, setTicketForm] = useState(getEmptyTicket);
+  const [photoFiles, setPhotoFiles] = useState([]);
+  const [photoPreviews, setPhotoPreviews] = useState([]);
   const [detailEdits, setDetailEdits] = useState({});
+  const [vendorForm, setVendorForm] = useState(getEmptyVendor);
 
-  const emptyVendor = { name: '', phone: '', email: '', specialty: '', notes: '' };
-  const [vendorForm, setVendorForm] = useState(emptyVendor);
+  // Comments
+  const [comments, setComments] = useState([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [postingComment, setPostingComment] = useState(false);
 
+  // Comments subscription — fires whenever a ticket detail is opened
+  useEffect(() => {
+    if (!showDetail?._docId || !churchId) { setComments([]); return; }
+    setCommentsLoading(true);
+    setComments([]);
+    const q = fsQuery(
+      collection(db, 'churches', churchId, 'maintenanceTickets', showDetail._docId, 'comments'),
+      orderBy('createdAt', 'asc')
+    );
+    const unsub = onSnapshot(q, snap => {
+      setComments(snap.docs.map(d => ({ id:d.id, ...d.data() })));
+      setCommentsLoading(false);
+    }, () => setCommentsLoading(false));
+    return unsub;
+  }, [showDetail?._docId, churchId]);
+
+  // ── Helpers ──
   function flash(text) { setMsg(text); setTimeout(() => setMsg(''), 3000); }
 
-  const filtered = maintenanceTickets.filter(t => statusFilter === 'all' || t.status === statusFilter);
-
-  // Stats
-  const today = new Date().toISOString().split('T')[0];
-  const thisMonthStart = today.slice(0, 7) + '-01';
-  const openCount = maintenanceTickets.filter(t => t.status === 'Open').length;
-  const inProgressCount = maintenanceTickets.filter(t => t.status === 'In Progress').length;
-  const resolvedThisMonth = maintenanceTickets.filter(t => t.status === 'Resolved' && (t.resolvedAt || '').slice(0, 10) >= thisMonthStart).length;
-
-  function selectItem(docId) {
-    const item = activeItems.find(i => i._docId === docId);
-    if (item) setTicketForm(f => ({ ...f, itemDocId: docId, itemId: item.itemId, itemDescription: item.description }));
-    else setTicketForm(f => ({ ...f, itemDocId: '', itemId: '', itemDescription: '' }));
+  function switchViewMode(mode) {
+    setViewMode(mode);
+    localStorage.setItem('maint_viewMode', mode);
   }
 
-  function selectVendorForTicket(docId) {
-    const vendor = vendors.find(v => v._docId === docId);
-    if (vendor) setTicketForm(f => ({ ...f, vendorId: docId, vendorName: vendor.name }));
-    else setTicketForm(f => ({ ...f, vendorId: '', vendorName: '' }));
+  function openDetail(ticket) {
+    setShowDetail(ticket);
+    setNewComment('');
+    setDetailEdits({
+      name: ticket.name || '',
+      description: ticket.description || '',
+      status: ticket.status || 'Backlog',
+      priority: ticket.priority || 'Medium',
+      tags: ticket.tags || [],
+      dueDate: ticket.dueDate || '',
+      assignees: ticket.assignees || [],
+      linkedItemDocId: ticket.linkedItemDocId || '',
+      vendorId: ticket.vendorId || '',
+      estimatedCost: ticket.estimatedCost != null ? String(ticket.estimatedCost) : '',
+      actualCost: ticket.actualCost != null ? String(ticket.actualCost) : '',
+      notes: ticket.notes || '',
+    });
   }
 
+  async function uploadPhotos(docId, files) {
+    const urls = [];
+    for (const file of files) {
+      const resized = await resizeImageForUpload(file);
+      const storageRef = ref(storage, `churches/${churchId}/maintenance/${docId}/${Date.now()}_${file.name}`);
+      const snap = await uploadBytes(storageRef, resized);
+      urls.push(await getDownloadURL(snap.ref));
+    }
+    return urls;
+  }
+
+  // ── Handlers ──
   async function handleAddTicket() {
-    if (!ticketForm.issue.trim()) return;
+    if (!ticketForm.name.trim()) return;
     setSaving(true);
-    await addTicket({
-      itemDocId: ticketForm.itemDocId,
-      itemId: ticketForm.itemId,
-      itemDescription: ticketForm.itemDescription,
-      issue: ticketForm.issue.trim(),
-      priority: ticketForm.priority,
-      category: ticketForm.category,
-      status: 'Open',
-      assignedTo: ticketForm.assignedTo,
-      estimatedCost: ticketForm.estimatedCost ? Number(ticketForm.estimatedCost) : null,
-      actualCost: null,
-      vendorId: ticketForm.vendorId,
-      vendorName: ticketForm.vendorName,
-      partsNeeded: ticketForm.partsNeeded,
-      resolutionNotes: '',
-      notes: ticketForm.notes,
-    }, userId, userName);
-    setShowAdd(false);
-    setTicketForm(emptyTicket);
-    setSaving(false);
-    flash('Ticket created!');
+    try {
+      const vendorName = ticketForm.vendorId ? (vendors.find(v => v._docId === ticketForm.vendorId)?.name || null) : null;
+      const linkedItem = activeItems.find(i => i._docId === ticketForm.linkedItemDocId);
+      const docId = await addTicket({
+        name: ticketForm.name.trim(),
+        description: ticketForm.description.trim(),
+        priority: ticketForm.priority,
+        status: 'Backlog',
+        tags: ticketForm.tags,
+        dueDate: ticketForm.dueDate || null,
+        assignees: ticketForm.assignees,
+        photos: [],
+        linkedItemDocId: ticketForm.linkedItemDocId || null,
+        linkedItemId: linkedItem?.itemId || null,
+        linkedItemDescription: linkedItem?.description || null,
+        vendorId: ticketForm.vendorId || null,
+        vendorName,
+        estimatedCost: ticketForm.estimatedCost ? Number(ticketForm.estimatedCost) : null,
+        actualCost: null,
+        completedAt: null,
+      }, userId, userName);
+      if (photoFiles.length > 0 && docId) {
+        const urls = await uploadPhotos(docId, photoFiles);
+        await updateTicket(docId, { photos: urls });
+      }
+      if (ticketForm.tags.length > 0 && addMaintenanceTags) {
+        await addMaintenanceTags(ticketForm.tags);
+      }
+      setShowAdd(false);
+      setTicketForm(getEmptyTicket());
+      setPhotoFiles([]);
+      setPhotoPreviews([]);
+      flash('Ticket created!');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleUpdateTicket() {
     if (!showDetail) return;
     setSaving(true);
-    await updateTicket(showDetail._docId, detailEdits);
-    setShowDetail(null);
-    setDetailEdits({});
-    setSaving(false);
-    flash('Ticket updated!');
+    try {
+      const vendorName = detailEdits.vendorId ? (vendors.find(v => v._docId === detailEdits.vendorId)?.name || null) : null;
+      const linkedItem = activeItems.find(i => i._docId === detailEdits.linkedItemDocId);
+      const updates = {
+        ...detailEdits,
+        vendorName,
+        vendorId: detailEdits.vendorId || null,
+        linkedItemDocId: detailEdits.linkedItemDocId || null,
+        linkedItemId: linkedItem?.itemId || null,
+        linkedItemDescription: linkedItem?.description || null,
+        estimatedCost: detailEdits.estimatedCost ? Number(detailEdits.estimatedCost) : null,
+        actualCost: detailEdits.actualCost ? Number(detailEdits.actualCost) : null,
+      };
+      await updateTicket(showDetail._docId, updates);
+      if (detailEdits.tags?.length > 0 && addMaintenanceTags) {
+        await addMaintenanceTags(detailEdits.tags);
+      }
+      setShowDetail(prev => ({ ...prev, ...updates }));
+      flash('Ticket updated!');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handlePostComment() {
+    if (!newComment.trim() || !showDetail?._docId) return;
+    setPostingComment(true);
+    try {
+      await addTicketComment(showDetail._docId, newComment.trim(), userId, userName);
+      setNewComment('');
+    } finally {
+      setPostingComment(false);
+    }
+  }
+
+  async function handleDetailPhotoAdd(files) {
+    if (!showDetail?._docId) return;
+    setUploadingPhotos(true);
+    try {
+      const newUrls = await uploadPhotos(showDetail._docId, files);
+      const updatedPhotos = [...(showDetail.photos || []), ...newUrls];
+      await updateTicket(showDetail._docId, { photos: updatedPhotos });
+      setShowDetail(prev => ({ ...prev, photos: updatedPhotos }));
+    } finally {
+      setUploadingPhotos(false);
+    }
+  }
+
+  async function handleDetailPhotoRemove(index) {
+    if (!showDetail?._docId) return;
+    const updatedPhotos = (showDetail.photos || []).filter((_, i) => i !== index);
+    await updateTicket(showDetail._docId, { photos: updatedPhotos });
+    setShowDetail(prev => ({ ...prev, photos: updatedPhotos }));
+  }
+
+  function handlePhotoSelect(files) {
+    setPhotoFiles(prev => [...prev, ...files]);
+    setPhotoPreviews(prev => [...prev, ...files.map(f => URL.createObjectURL(f))]);
+  }
+
+  function handlePreviewRemove(index) {
+    setPhotoFiles(prev => prev.filter((_, i) => i !== index));
+    setPhotoPreviews(prev => prev.filter((_, i) => i !== index));
   }
 
   async function handleAddVendor() {
@@ -131,23 +451,27 @@ export function MaintenancePage({ store, userProfile }) {
     setSaving(true);
     await addVendor({ ...vendorForm });
     setShowAddVendor(false);
-    setVendorForm(emptyVendor);
+    setVendorForm(getEmptyVendor());
     setSaving(false);
     flash('Vendor added!');
   }
 
-  function openDetail(ticket) {
-    setShowDetail(ticket);
-    setDetailEdits({
-      status: ticket.status,
-      assignedTo: ticket.assignedTo || '',
-      actualCost: ticket.actualCost || '',
-      resolutionNotes: ticket.resolutionNotes || '',
-      notes: ticket.notes || '',
-      priority: ticket.priority,
+  function toggleCollapse(status) {
+    setCollapsedStatuses(prev => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
     });
   }
 
+  // ── Stats ──
+  const thisMonthStart = new Date().toISOString().slice(0, 7) + '-01';
+  const backlogCount = maintenanceTickets.filter(t => t.status === 'Backlog').length;
+  const inProgressCount = maintenanceTickets.filter(t => t.status === 'In Progress').length;
+  const completedThisMonth = maintenanceTickets.filter(t => t.status === 'Complete' && (t.completedAt || '').slice(0, 10) >= thisMonthStart).length;
+
+  // ── Render ──
   return (
     <div>
       {/* Header */}
@@ -157,215 +481,249 @@ export function MaintenancePage({ store, userProfile }) {
           <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Track repair tickets and manage service vendors</p>
         </div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <button onClick={() => setShowVendors(!showVendors)} style={{ ...btnS, fontSize:13, padding:'9px 18px' }}>
+          <button onClick={() => setShowVendors(v => !v)} style={{ ...btnS, fontSize:13, padding:'9px 18px' }}>
             {showVendors ? 'Hide Vendors' : `Vendors (${vendors.length})`}
           </button>
-          <button onClick={() => { setTicketForm(emptyTicket); setShowAdd(true); }} style={btnP}>+ New Ticket</button>
+          <button onClick={() => { setTicketForm(getEmptyTicket()); setPhotoFiles([]); setPhotoPreviews([]); setShowAdd(true); }} style={btnP}>
+            + New Ticket
+          </button>
         </div>
       </div>
 
       {/* Stats */}
       <div style={{ display:'flex', flexWrap:'wrap', gap:14, marginBottom:24 }}>
-        <Stat label="Open" value={openCount} icon="🔴" color={B.red}/>
+        <Stat label="Backlog" value={backlogCount} icon="📋" color={B.textMid}/>
         <Stat label="In Progress" value={inProgressCount} icon="🔵" color="#1A65C7"/>
-        <Stat label="Resolved This Month" value={resolvedThisMonth} icon="✅" color={B.teal}/>
+        <Stat label="Completed This Month" value={completedThisMonth} icon="✅" color={B.teal}/>
         <Stat label="Total Vendors" value={vendors.length} icon="🏢"/>
       </div>
 
-      {msg && <div style={{ background:B.tealPale, border:'1px solid '+B.teal, borderRadius:10, padding:'10px 16px', marginBottom:16, color:B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}>{msg}</div>}
+      {msg && (
+        <div style={{ background:B.tealPale, border:'1px solid '+B.teal, borderRadius:10, padding:'10px 16px', marginBottom:16, color:B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}>{msg}</div>
+      )}
 
       {/* Vendor Directory */}
       {showVendors && (
         <div style={{ background:B.white, borderRadius:14, padding:'20px 24px', border:'1px solid '+B.sand, marginBottom:20, boxShadow:'0 1px 3px rgba(27,42,74,0.06)' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
             <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Vendor Directory</h3>
-            <button onClick={() => { setVendorForm(emptyVendor); setShowAddVendor(true); }} style={{ ...btnP, padding:'6px 14px', fontSize:12 }}>+ Add Vendor</button>
+            <button onClick={() => { setVendorForm(getEmptyVendor()); setShowAddVendor(true); }} style={{ ...btnP, padding:'6px 14px', fontSize:12 }}>+ Add Vendor</button>
           </div>
-          {vendors.length === 0 ? (
-            <p style={{ color:B.textLight, fontSize:14 }}>No vendors yet. Add your service providers and contractors.</p>
-          ) : (
-            <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'repeat(auto-fill, minmax(260px, 1fr))', gap:10 }}>
-              {vendors.map(v => (
-                <div key={v._docId} style={{ padding:'14px 16px', borderRadius:10, background:B.warmGray, border:'1px solid '+B.sand }}>
-                  <div style={{ fontWeight:600, fontSize:14, color:B.navy, marginBottom:4 }}>{v.name}</div>
-                  {v.specialty && <div style={{ fontSize:12, color:B.teal, fontFamily:f1, marginBottom:4 }}>{v.specialty}</div>}
-                  {v.phone && <div style={{ fontSize:12, color:B.textMid }}>📞 {v.phone}</div>}
-                  {v.email && <div style={{ fontSize:12, color:B.textMid }}>✉️ {v.email}</div>}
-                  {v.notes && <div style={{ fontSize:11, color:B.textLight, marginTop:4 }}>{v.notes}</div>}
-                </div>
-              ))}
-            </div>
-          )}
+          {vendors.length === 0
+            ? <p style={{ color:B.textLight, fontSize:14 }}>No vendors yet. Add your service providers and contractors.</p>
+            : (
+              <div style={{ display:'grid', gridTemplateColumns:isMobile ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap:10 }}>
+                {vendors.map(v => (
+                  <div key={v._docId} style={{ padding:'14px 16px', borderRadius:10, background:B.warmGray, border:'1px solid '+B.sand }}>
+                    <div style={{ fontWeight:600, fontSize:14, color:B.navy, marginBottom:4 }}>{v.name}</div>
+                    {v.specialty && <div style={{ fontSize:12, color:B.teal, fontFamily:f1, marginBottom:4 }}>{v.specialty}</div>}
+                    {v.phone && <div style={{ fontSize:12, color:B.textMid }}>📞 {v.phone}</div>}
+                    {v.email && <div style={{ fontSize:12, color:B.textMid }}>✉️ {v.email}</div>}
+                    {v.notes && <div style={{ fontSize:11, color:B.textLight, marginTop:4 }}>{v.notes}</div>}
+                  </div>
+                ))}
+              </div>
+            )
+          }
         </div>
       )}
 
-      {/* Status filter */}
-      <div style={{ display:'flex', gap:6, marginBottom:18, flexWrap:'wrap' }}>
-        {['all', ...STATUSES].map(s => (
-          <button key={s} onClick={() => setStatusFilter(s)}
-            style={{ padding:'7px 16px', borderRadius:20, border:'1px solid '+(statusFilter===s?B.teal:B.sand), background:statusFilter===s?'rgba(42,125,110,0.1)':B.white, color:statusFilter===s?B.teal:B.textMid, fontSize:13, fontWeight:600, fontFamily:f1, cursor:'pointer' }}>
-            {s === 'all' ? 'All' : s}
-            {s !== 'all' && <span style={{ marginLeft:5, fontSize:11, opacity:.7 }}>({maintenanceTickets.filter(t => t.status===s).length})</span>}
-          </button>
-        ))}
+      {/* View Toggle */}
+      <div style={{ display:'flex', gap:8, marginBottom:18, alignItems:'center' }}>
+        <div style={{ display:'flex', background:B.warmGray, borderRadius:10, padding:3 }}>
+          {[['kanban', 'Kanban'], ['list', 'List']].map(([mode, label]) => (
+            <button key={mode} onClick={() => switchViewMode(mode)} style={{ padding:'7px 18px', borderRadius:8, border:'none', background:viewMode===mode ? B.white : 'transparent', color:viewMode===mode ? B.navy : B.textMid, fontWeight:viewMode===mode ? 700 : 500, fontSize:13, fontFamily:f1, cursor:'pointer', boxShadow:viewMode===mode ? '0 1px 3px rgba(27,42,74,0.1)' : 'none', transition:'all 0.15s' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <span style={{ color:B.textLight, fontSize:13, marginLeft:4 }}>
+          {maintenanceTickets.length} ticket{maintenanceTickets.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
-      {/* Ticket list */}
-      {filtered.length === 0 ? (
+      {/* Empty state */}
+      {maintenanceTickets.length === 0 && (
         <div style={{ background:B.white, borderRadius:18, padding:'48px 32px', border:'1px solid '+B.sand, textAlign:'center' }}>
           <div style={{ fontSize:48, marginBottom:16 }}>🔧</div>
-          <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 8px', fontSize:18 }}>
-            {maintenanceTickets.length === 0 ? 'No maintenance tickets yet' : 'No '+statusFilter.toLowerCase()+' tickets'}
-          </h3>
-          <p style={{ color:B.textLight, fontSize:14 }}>
-            {maintenanceTickets.length === 0 ? 'Create a ticket to track repairs and maintenance.' : 'Try a different status filter.'}
-          </p>
+          <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 8px', fontSize:18 }}>No maintenance tickets yet</h3>
+          <p style={{ color:B.textLight, fontSize:14 }}>Create a ticket to track repairs and maintenance tasks.</p>
         </div>
-      ) : (
-        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          {filtered.map(ticket => (
-            <div key={ticket._docId}
-              onClick={() => openDetail(ticket)}
-              style={{ background:B.white, borderRadius:14, padding:'16px 20px', border:'1px solid '+B.sand, cursor:'pointer', boxShadow:'0 1px 3px rgba(27,42,74,0.06)', transition:'box-shadow 0.15s', borderLeft:'4px solid '+(statusColors[ticket.status]?.dot || B.sand) }}
-              onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(27,42,74,0.12)'}
-              onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 3px rgba(27,42,74,0.06)'}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, flexWrap:'wrap' }}>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, flexWrap:'wrap' }}>
-                    <span style={{ fontFamily:'monospace', fontSize:12, color:B.textLight }}>{ticket.ticketNumber}</span>
-                    <StatusBadge status={ticket.status}/>
-                    <PriorityBadge priority={ticket.priority}/>
-                  </div>
-                  <div style={{ fontWeight:600, fontSize:15, color:B.navy, marginBottom:4 }}>{ticket.issue}</div>
-                  <div style={{ fontSize:12, color:B.textLight, display:'flex', gap:12, flexWrap:'wrap' }}>
-                    {ticket.itemDescription && <span>📦 {ticket.itemDescription}</span>}
-                    {ticket.assignedTo && <span>👤 {ticket.assignedTo}</span>}
-                    {ticket.vendorName && <span>🏢 {ticket.vendorName}</span>}
-                    <span>{ticket.category}</span>
-                  </div>
-                </div>
-                <div style={{ textAlign:'right', flexShrink:0 }}>
-                  <div style={{ fontSize:12, color:B.textLight }}>{ticket.createdAt?.split('T')[0]}</div>
-                  {ticket.reportedByName && <div style={{ fontSize:12, color:B.textMid }}>by {ticket.reportedByName}</div>}
-                </div>
-              </div>
-            </div>
+      )}
+
+      {/* Kanban View */}
+      {viewMode === 'kanban' && maintenanceTickets.length > 0 && (
+        <div style={{ display:'flex', gap:12, overflowX:isMobile ? 'hidden' : 'auto', flexDirection:isMobile ? 'column' : 'row', paddingBottom:8, alignItems:'flex-start' }}>
+          {STATUSES.map(status => (
+            <KanbanColumn key={status} status={status} tickets={maintenanceTickets.filter(t => t.status === status)} onTicketClick={openDetail} isMobile={isMobile}/>
           ))}
         </div>
       )}
 
+      {/* List View */}
+      {viewMode === 'list' && maintenanceTickets.length > 0 && (
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {STATUSES.map(status => {
+            const tickets = maintenanceTickets.filter(t => t.status === status);
+            const collapsed = collapsedStatuses.has(status);
+            const sc = statusColors[status];
+            return (
+              <div key={status} style={{ background:B.white, borderRadius:14, border:'1px solid '+B.sand, overflow:'hidden' }}>
+                <div onClick={() => toggleCollapse(status)} style={{ display:'flex', alignItems:'center', gap:10, padding:'13px 20px', cursor:'pointer', background:B.warmGray, userSelect:'none' }}>
+                  <span style={{ width:10, height:10, borderRadius:'50%', background:sc.dot, flexShrink:0 }}/>
+                  <span style={{ fontWeight:700, fontSize:14, color:B.navy, fontFamily:f1 }}>{status}</span>
+                  <span style={{ background:B.white, borderRadius:20, padding:'2px 10px', fontSize:12, fontWeight:700, color:B.textMid, fontFamily:f1 }}>{tickets.length}</span>
+                  <span style={{ marginLeft:'auto', color:B.textLight, fontSize:14, display:'inline-block', transform:collapsed ? 'rotate(-90deg)' : 'none', transition:'transform 0.2s' }}>▼</span>
+                </div>
+                {!collapsed && (
+                  <div style={{ padding:'12px 16px 4px' }}>
+                    {tickets.length === 0
+                      ? <div style={{ color:B.textLight, fontSize:13, textAlign:'center', padding:'12px 0' }}>No tickets in {status}</div>
+                      : tickets.map(t => <TicketCard key={t._docId} ticket={t} onClick={openDetail}/>)
+                    }
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* ═══ ADD TICKET MODAL ═══ */}
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="New Maintenance Ticket" wide>
-        <FF label="Equipment (optional)">
-          <select style={{ ...inp, cursor:'pointer' }} value={ticketForm.itemDocId} onChange={e => selectItem(e.target.value)}>
-            <option value="">— Select item (optional) —</option>
-            {activeItems.map(i => <option key={i._docId} value={i._docId}>{i.description} ({i.itemId})</option>)}
-          </select>
+      <Modal open={showAdd} onClose={() => { setShowAdd(false); setPhotoFiles([]); setPhotoPreviews([]); }} title="New Maintenance Ticket" wide>
+        <FF label="Ticket Name *">
+          <input style={inp} value={ticketForm.name} onChange={e => setTicketForm(f => ({ ...f, name:e.target.value }))} placeholder="Short descriptive name..."/>
         </FF>
-        <FF label="Issue Description *">
-          <textarea style={{ ...inp, minHeight:72, resize:'vertical' }} value={ticketForm.issue} onChange={e => setTicketForm(f => ({ ...f, issue:e.target.value }))} placeholder="Describe the problem or maintenance needed..."/>
+        <FF label="Description">
+          <textarea style={{ ...inp, minHeight:72, resize:'vertical' }} value={ticketForm.description} onChange={e => setTicketForm(f => ({ ...f, description:e.target.value }))} placeholder="Full details of the issue or maintenance needed..."/>
         </FF>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
           <FF label="Priority">
-            <select style={inp} value={ticketForm.priority} onChange={e => setTicketForm(f => ({ ...f, priority:e.target.value }))}>
+            <select style={{ ...inp, cursor:'pointer' }} value={ticketForm.priority} onChange={e => setTicketForm(f => ({ ...f, priority:e.target.value }))}>
               {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </FF>
-          <FF label="Category">
-            <select style={inp} value={ticketForm.category} onChange={e => setTicketForm(f => ({ ...f, category:e.target.value }))}>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+          <FF label="Due Date">
+            <input style={inp} type="date" value={ticketForm.dueDate} onChange={e => setTicketForm(f => ({ ...f, dueDate:e.target.value }))}/>
           </FF>
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-          <FF label="Assigned To">
-            <input style={inp} value={ticketForm.assignedTo} onChange={e => setTicketForm(f => ({ ...f, assignedTo:e.target.value }))} placeholder="Name or team"/>
-          </FF>
+        <FF label="Tags">
+          <TagInput tags={ticketForm.tags} onChange={tags => setTicketForm(f => ({ ...f, tags }))} suggestions={maintenanceTags}/>
+        </FF>
+        <FF label="Assignees">
+          <AssigneeSelect assignees={ticketForm.assignees} onChange={assignees => setTicketForm(f => ({ ...f, assignees }))} users={users} currentUserId={userId} currentUserName={userName}/>
+        </FF>
+        <FF label="Linked Equipment (optional)">
+          <select style={{ ...inp, cursor:'pointer' }} value={ticketForm.linkedItemDocId} onChange={e => setTicketForm(f => ({ ...f, linkedItemDocId:e.target.value }))}>
+            <option value="">— None —</option>
+            {activeItems.map(i => <option key={i._docId} value={i._docId}>{i.description} ({i.itemId})</option>)}
+          </select>
+        </FF>
+        <div style={{ display:'grid', gridTemplateColumns:vendors.length > 0 ? '1fr 1fr' : '1fr', gap:12 }}>
+          {vendors.length > 0 && (
+            <FF label="Vendor">
+              <select style={{ ...inp, cursor:'pointer' }} value={ticketForm.vendorId} onChange={e => setTicketForm(f => ({ ...f, vendorId:e.target.value }))}>
+                <option value="">— None —</option>
+                {vendors.map(v => <option key={v._docId} value={v._docId}>{v.name}{v.specialty ? ' — '+v.specialty : ''}</option>)}
+              </select>
+            </FF>
+          )}
           <FF label="Estimated Cost ($)">
             <input style={inp} type="number" min="0" step="0.01" value={ticketForm.estimatedCost} onChange={e => setTicketForm(f => ({ ...f, estimatedCost:e.target.value }))} placeholder="0.00"/>
           </FF>
         </div>
-        {vendors.length > 0 && (
-          <FF label="Vendor">
-            <select style={{ ...inp, cursor:'pointer' }} value={ticketForm.vendorId} onChange={e => selectVendorForTicket(e.target.value)}>
-              <option value="">— Select vendor (optional) —</option>
-              {vendors.map(v => <option key={v._docId} value={v._docId}>{v.name}{v.specialty ? ' — '+v.specialty : ''}</option>)}
-            </select>
-          </FF>
-        )}
-        <FF label="Parts Needed">
-          <input style={inp} value={ticketForm.partsNeeded} onChange={e => setTicketForm(f => ({ ...f, partsNeeded:e.target.value }))} placeholder="List any parts required..."/>
+        <FF label="Photos">
+          <PhotoGrid photos={photoPreviews} onAdd={handlePhotoSelect} onRemove={handlePreviewRemove} uploading={false}/>
         </FF>
         <FF label="Notes">
-          <textarea style={{ ...inp, minHeight:60, resize:'vertical' }} value={ticketForm.notes} onChange={e => setTicketForm(f => ({ ...f, notes:e.target.value }))} placeholder="Additional notes..."/>
+          <textarea style={{ ...inp, minHeight:52, resize:'vertical' }} value={ticketForm.notes} onChange={e => setTicketForm(f => ({ ...f, notes:e.target.value }))} placeholder="Additional notes..."/>
         </FF>
-        <button onClick={handleAddTicket} disabled={saving || !ticketForm.issue.trim()} style={{ ...btnP, width:'100%', opacity:(saving||!ticketForm.issue.trim())?.5:1, marginTop:4 }}>
+        <button onClick={handleAddTicket} disabled={saving || !ticketForm.name.trim()} style={{ ...btnP, width:'100%', opacity:(saving || !ticketForm.name.trim()) ? .5 : 1, marginTop:4 }}>
           {saving ? 'Creating...' : 'Create Ticket'}
         </button>
       </Modal>
 
       {/* ═══ TICKET DETAIL MODAL ═══ */}
-      <Modal open={!!showDetail} onClose={() => { setShowDetail(null); setDetailEdits({}); }} title={showDetail?.ticketNumber + ' — ' + (showDetail?.issue?.slice(0,40)||'Ticket')} wide>
+      <Modal open={!!showDetail} onClose={() => { setShowDetail(null); setDetailEdits({}); setComments([]); }} title={(showDetail?.ticketNumber || '') + (showDetail?.name ? ' — ' + showDetail.name.slice(0, 40) : '')} wide>
         {showDetail && (
           <div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:20 }}>
-              <div>
-                <div style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:'uppercase', fontFamily:f1 }}>Status</div>
-                <div style={{ marginTop:6 }}>
-                  <select style={{ ...inp, padding:'7px 12px' }} value={detailEdits.status} onChange={e => setDetailEdits(d => ({ ...d, status:e.target.value }))}>
-                    {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:'uppercase', fontFamily:f1 }}>Priority</div>
-                <div style={{ marginTop:6 }}>
-                  <select style={{ ...inp, padding:'7px 12px' }} value={detailEdits.priority} onChange={e => setDetailEdits(d => ({ ...d, priority:e.target.value }))}>
-                    {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </div>
-              </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
+              <FF label="Status">
+                <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.status} onChange={e => setDetailEdits(d => ({ ...d, status:e.target.value }))}>
+                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </FF>
+              <FF label="Priority">
+                <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.priority} onChange={e => setDetailEdits(d => ({ ...d, priority:e.target.value }))}>
+                  {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </FF>
             </div>
-
-            <div style={{ background:B.warmGray, borderRadius:10, padding:'14px 16px', marginBottom:16 }}>
-              <div style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:'uppercase', fontFamily:f1, marginBottom:6 }}>Issue</div>
-              <div style={{ fontSize:14, color:B.textDark, lineHeight:1.5 }}>{showDetail.issue}</div>
-              {showDetail.itemDescription && (
-                <div style={{ fontSize:13, color:B.textMid, marginTop:6 }}>Equipment: <strong>{showDetail.itemDescription}</strong> ({showDetail.itemId})</div>
-              )}
-              <div style={{ display:'flex', gap:10, marginTop:8, flexWrap:'wrap' }}>
-                <span style={{ fontSize:12, color:B.textLight }}>Category: {showDetail.category}</span>
-                {showDetail.vendorName && <span style={{ fontSize:12, color:B.textLight }}>Vendor: {showDetail.vendorName}</span>}
-                {showDetail.partsNeeded && <span style={{ fontSize:12, color:B.textLight }}>Parts: {showDetail.partsNeeded}</span>}
-              </div>
-            </div>
-
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
-              <FF label="Assigned To">
-                <input style={inp} value={detailEdits.assignedTo} onChange={e => setDetailEdits(d => ({ ...d, assignedTo:e.target.value }))} placeholder="Name or team"/>
+            <FF label="Name">
+              <input style={inp} value={detailEdits.name} onChange={e => setDetailEdits(d => ({ ...d, name:e.target.value }))}/>
+            </FF>
+            <FF label="Description">
+              <textarea style={{ ...inp, minHeight:72, resize:'vertical' }} value={detailEdits.description} onChange={e => setDetailEdits(d => ({ ...d, description:e.target.value }))} placeholder="Full details..."/>
+            </FF>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+              <FF label="Due Date">
+                <input style={inp} type="date" value={detailEdits.dueDate} onChange={e => setDetailEdits(d => ({ ...d, dueDate:e.target.value }))}/>
               </FF>
               <FF label="Actual Cost ($)">
                 <input style={inp} type="number" min="0" step="0.01" value={detailEdits.actualCost} onChange={e => setDetailEdits(d => ({ ...d, actualCost:e.target.value }))} placeholder="0.00"/>
               </FF>
             </div>
-
-            <FF label="Resolution Notes">
-              <textarea style={{ ...inp, minHeight:72, resize:'vertical' }} value={detailEdits.resolutionNotes} onChange={e => setDetailEdits(d => ({ ...d, resolutionNotes:e.target.value }))} placeholder="What was done to resolve this?"/>
+            <FF label="Tags">
+              <TagInput tags={detailEdits.tags || []} onChange={tags => setDetailEdits(d => ({ ...d, tags }))} suggestions={maintenanceTags}/>
             </FF>
+            <FF label="Assignees">
+              <AssigneeSelect assignees={detailEdits.assignees || []} onChange={assignees => setDetailEdits(d => ({ ...d, assignees }))} users={users} currentUserId={userId} currentUserName={userName}/>
+            </FF>
+            <FF label="Linked Equipment">
+              <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.linkedItemDocId} onChange={e => setDetailEdits(d => ({ ...d, linkedItemDocId:e.target.value }))}>
+                <option value="">— None —</option>
+                {activeItems.map(i => <option key={i._docId} value={i._docId}>{i.description} ({i.itemId})</option>)}
+              </select>
+            </FF>
+            <div style={{ display:'grid', gridTemplateColumns:vendors.length > 0 ? '1fr 1fr' : '1fr', gap:12 }}>
+              {vendors.length > 0 && (
+                <FF label="Vendor">
+                  <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.vendorId} onChange={e => setDetailEdits(d => ({ ...d, vendorId:e.target.value }))}>
+                    <option value="">— None —</option>
+                    {vendors.map(v => <option key={v._docId} value={v._docId}>{v.name}</option>)}
+                  </select>
+                </FF>
+              )}
+              <FF label="Estimated Cost ($)">
+                <input style={inp} type="number" min="0" step="0.01" value={detailEdits.estimatedCost} onChange={e => setDetailEdits(d => ({ ...d, estimatedCost:e.target.value }))} placeholder="0.00"/>
+              </FF>
+            </div>
             <FF label="Notes">
               <textarea style={{ ...inp, minHeight:52, resize:'vertical' }} value={detailEdits.notes} onChange={e => setDetailEdits(d => ({ ...d, notes:e.target.value }))} placeholder="Additional notes..."/>
             </FF>
-
-            <div style={{ fontSize:12, color:B.textLight, marginBottom:16 }}>
-              Reported by <strong>{showDetail.reportedByName}</strong> on {showDetail.createdAt?.split('T')[0]}
-              {showDetail.resolvedAt && <> · Resolved {showDetail.resolvedAt.split('T')[0]}</>}
+            <div style={{ display:'flex', gap:10, justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', marginBottom:20 }}>
+              <div style={{ fontSize:12, color:B.textLight }}>
+                Created by <strong>{showDetail.createdByName || showDetail.reportedByName}</strong> on {showDetail.createdAt?.split('T')[0]}
+                {showDetail.completedAt && <> · Completed {showDetail.completedAt.split('T')[0]}</>}
+              </div>
+              <div style={{ display:'flex', gap:8 }}>
+                <button onClick={() => { setShowDetail(null); setDetailEdits({}); }} style={btnS}>Cancel</button>
+                <button onClick={handleUpdateTicket} disabled={saving || !detailEdits.name?.trim()} style={{ ...btnP, opacity:(saving || !detailEdits.name?.trim()) ? .5 : 1 }}>
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
 
-            <div style={{ display:'flex', gap:10, justifyContent:'flex-end', flexWrap:'wrap' }}>
-              <button onClick={() => { setShowDetail(null); setDetailEdits({}); }} style={btnS}>Cancel</button>
-              <button onClick={handleUpdateTicket} disabled={saving} style={{ ...btnP, opacity:saving?.5:1 }}>
-                {saving ? 'Saving...' : 'Save Changes'}
-              </button>
+            {/* Photos */}
+            <div style={{ marginBottom:20 }}>
+              <div style={{ fontWeight:700, fontSize:12, color:B.textMid, fontFamily:f1, textTransform:'uppercase', letterSpacing:.5, marginBottom:10 }}>Photos</div>
+              <PhotoGrid photos={showDetail.photos || []} onAdd={handleDetailPhotoAdd} onRemove={handleDetailPhotoRemove} uploading={uploadingPhotos}/>
+            </div>
+
+            {/* Comments */}
+            <div>
+              <div style={{ fontWeight:700, fontSize:12, color:B.textMid, fontFamily:f1, textTransform:'uppercase', letterSpacing:.5, marginBottom:10 }}>Comments</div>
+              <CommentThread comments={comments} loading={commentsLoading} newComment={newComment} onChange={setNewComment} onPost={handlePostComment} posting={postingComment}/>
             </div>
           </div>
         )}
@@ -390,7 +748,7 @@ export function MaintenancePage({ store, userProfile }) {
         <FF label="Notes">
           <textarea style={{ ...inp, minHeight:60, resize:'vertical' }} value={vendorForm.notes} onChange={e => setVendorForm(f => ({ ...f, notes:e.target.value }))} placeholder="Contract details, hours, etc."/>
         </FF>
-        <button onClick={handleAddVendor} disabled={saving || !vendorForm.name.trim()} style={{ ...btnP, width:'100%', opacity:(saving||!vendorForm.name.trim())?.5:1, marginTop:4 }}>
+        <button onClick={handleAddVendor} disabled={saving || !vendorForm.name.trim()} style={{ ...btnP, width:'100%', opacity:(saving || !vendorForm.name.trim()) ? .5 : 1, marginTop:4 }}>
           {saving ? 'Saving...' : 'Add Vendor'}
         </button>
       </Modal>

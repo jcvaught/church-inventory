@@ -79,8 +79,10 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/supplies` | Consumable supplies with quantity tracking |
 | `churches/{churchId}/activityLog` | Audit trail (every action logged) |
 | `churches/{churchId}/reservations` | Future item reservation requests |
-| `churches/{churchId}/maintenanceTickets` | Maintenance Hub: repair tickets (MNT-### numbering) |
+| `churches/{churchId}/maintenanceTickets` | Maintenance Hub: repair tickets (MNT-### numbering, max-based); fields: `ticketNumber`, `name`, `description`, `priority` (High/Medium/Low), `status` (Backlog/Planning/In Progress/On Hold/Complete/Cancelled), `tags[]`, `dueDate`, `assignees[{uid,name}]`, `photos[]`, `linkedItemDocId/Id/Description`, `vendorId/Name`, `estimatedCost`, `actualCost`, `createdBy`, `createdByName`, `createdAt`, `updatedAt`, `completedAt` |
+| `churches/{churchId}/maintenanceTickets/{id}/comments` | Comment subcollection: `text`, `authorId`, `authorName`, `createdAt` |
 | `churches/{churchId}/vendors` | Maintenance Hub: vendor/contractor directory |
+| `churches/{churchId}/config/settings.maintenanceTags` | `string[]` — tag autocomplete for maintenance tickets; new tags added via `arrayUnion` |
 | `users/{uid}` | User profile with `churchId`, `role` (`admin`/`user`), `name`, `email`, `active` |
 | `suggestions/{docId}` | **Top-level** (not church-scoped) — cross-church user suggestions; fields: `text`, `category`, `submittedBy`, `submittedByName`, `churchId`, `churchName`, `submittedAt` |
 
@@ -156,7 +158,7 @@ Existing churches at launch: 12 months Founder status (unlimited users, all hubs
 ### ✅ Done — Phases 1–3
 - Code restructured into component/page/hook/utils files
 - Subscription infrastructure (useSubscription, UpgradeGate, subscription doc on church creation)
-- Maintenance Hub: tickets (MNT-### numbering), priority/category/status, vendor directory, stats
+- Maintenance Hub (rebuilt): kanban + list views, 6-status workflow (Backlog→Complete), multi-assignee, tag autocomplete (`maintenanceTags` via `arrayUnion`), photo uploads (Firebase Storage at `churches/{churchId}/maintenance/{docId}/`), real-time comment threads (subcollection), vendor directory, overdue date highlighting, `maint_viewMode` persisted to localStorage
 - User Suggestions: all users can submit categorized suggestions (Feature Request / Bug Report / Other) from SettingsPage; stored in top-level `suggestions` collection (cross-church); owner-only report panel gated by `userProfile?.email === 'jcvaught@gmail.com'` in UI and by `request.auth.token.email` in Firestore rules
 
 ### Phase 4 — Insights Hub
