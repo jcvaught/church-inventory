@@ -39,6 +39,9 @@ export function AccountabilityPage({ store, userProfile }) {
 
   function showFlash(msg) { setFlash(msg); setTimeout(() => setFlash(''), 3500); }
 
+  const isAdmin = userProfile?.role === 'admin';
+  const isManager = userProfile?.role === 'manager';
+  const canRunAudit = isAdmin || isManager;
   const locations = settings?.locations || [];
   const activeItems = useMemo(() => (items || []).filter(i => i.status !== 'Disposed'), [items]);
 
@@ -260,16 +263,20 @@ export function AccountabilityPage({ store, userProfile }) {
 
       {/* Action buttons */}
       <div style={{ display:'flex', gap:10, marginBottom:28, flexWrap:'wrap' }}>
-        <button onClick={() => setAuditStep('setup')} style={{ ...btnP, display:'flex', alignItems:'center', gap:8 }}>
-          <span>📋</span> Start New Audit
-        </button>
+        {canRunAudit && (
+          <button onClick={() => setAuditStep('setup')} style={{ ...btnP, display:'flex', alignItems:'center', gap:8 }}>
+            <span>📋</span> Start New Audit
+          </button>
+        )}
         <button onClick={() => { setShowChain(true); setChainSearch(''); setChainItem(null); }}
           style={{ ...btnS, display:'flex', alignItems:'center', gap:8 }}>
           <span>🔗</span> Chain of Custody
         </button>
-        <button onClick={exportInsuranceCSV} style={{ ...btnS, display:'flex', alignItems:'center', gap:8 }}>
-          <span>📄</span> Insurance Export
-        </button>
+        {isAdmin && (
+          <button onClick={exportInsuranceCSV} style={{ ...btnS, display:'flex', alignItems:'center', gap:8 }}>
+            <span>📄</span> Insurance Export
+          </button>
+        )}
       </div>
 
       {/* Audit history */}

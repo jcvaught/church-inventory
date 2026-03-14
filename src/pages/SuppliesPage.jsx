@@ -4,6 +4,7 @@ import { MobileCtx } from '../hooks/useMobile.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { exportSuppliesCSV } from '../utils/csv.js';
+import { canManageSupply } from '../utils/roleHelpers.js';
 
 export function SuppliesPage({ store, userProfile }) {
   const { supplies, settings, activityLog, addSupply, updateSupply, useSupply, restockSupply } = store;
@@ -32,6 +33,8 @@ export function SuppliesPage({ store, userProfile }) {
   const ministries = settings?.ministries || [];
   const userId = userProfile?.id || userProfile?.uid;
   const userName = userProfile?.name || "Unknown";
+  const isAdmin = userProfile?.role === "admin";
+  const isManager = userProfile?.role === "manager";
 
   function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }
 
@@ -137,7 +140,7 @@ export function SuppliesPage({ store, userProfile }) {
         <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:0 }}>Supplies & Consumables</h2>
         <div style={{ display:"flex", gap:8 }}>
           {supplies.length > 0 && <button onClick={()=>exportSuppliesCSV(supplies)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
-          <button onClick={()=>{setSupForm(emptySupply);setShowAdd(true);}} style={btnP}>+ Add Supply</button>
+          {(isAdmin || isManager) && <button onClick={()=>{setSupForm(emptySupply);setShowAdd(true);}} style={btnP}>+ Add Supply</button>}
         </div>
       </div>
 
@@ -214,7 +217,7 @@ export function SuppliesPage({ store, userProfile }) {
                   </span>
                   <div style={{ display:"flex", gap:6 }}>
                     <button onClick={()=>setShowHistory(s)} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>History</button>
-                    <button onClick={()=>{setEditSupForm({ supplyId:s.supplyId, description:s.description, location:s.location||"", ministry:s.ministry||"", quantity:s.quantity, minQuantity:s.minQuantity||5, unit:s.unit||"each" });setShowEditSupply(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Edit</button>
+                    {canManageSupply(userProfile, s) && <button onClick={()=>{setEditSupForm({ supplyId:s.supplyId, description:s.description, location:s.location||"", ministry:s.ministry||"", quantity:s.quantity, minQuantity:s.minQuantity||5, unit:s.unit||"each" });setShowEditSupply(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Edit</button>}
                     <button onClick={()=>{setUseForm({ qty:"1", purpose:"" });setShowUse(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Use</button>
                     <button onClick={()=>{setRestockForm({ qty:"", source:"" });setShowRestock(s);}} style={{ ...btnP, padding:"5px 12px", fontSize:11 }}>Restock</button>
                   </div>

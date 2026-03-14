@@ -9,6 +9,7 @@ import { Badge } from '../components/primitives/Badge.jsx';
 import { resizeImageForUpload } from '../utils/imageResize.js';
 import { printLabel, printInventory } from '../utils/print.js';
 import { exportItemsCSV } from '../utils/csv.js';
+import { canManageItem } from '../utils/roleHelpers.js';
 import QRCode from 'qrcode';
 
 export function ItemsPage({ store, userProfile, initialItemId }) {
@@ -69,6 +70,7 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
   const userId = userProfile?.id || userProfile?.uid;
   const userName = userProfile?.name || "Unknown";
   const isAdmin = userProfile?.role === "admin";
+  const isManager = userProfile?.role === "manager";
 
   // Filter logic
   const displayItems = useMemo(() => (showDisposed ? disposedItems : activeItems).filter(item => {
@@ -279,7 +281,7 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
     if (item.status === "Under Repair") {
       acts.push(<button key="fixed" onClick={(e)=>{e.stopPropagation();handleRepaired(item);}} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Mark Repaired</button>);
     }
-    if (item.status !== "Disposed") {
+    if (item.status !== "Disposed" && canManageItem(userProfile, item)) {
       acts.push(<button key="edit" onClick={(e)=>{e.stopPropagation();openEdit(item);}} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>Edit</button>);
     }
     return acts;
@@ -340,7 +342,7 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
           {activeItems.length > 0 && <button onClick={()=>exportItemsCSV(activeItems)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
           {activeItems.length > 0 && <button onClick={()=>printInventory(activeItems, config?.churchName)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>🖨 Print</button>}
-          <button onClick={()=>{setItemForm(emptyItem);setPhotoFile(null);setPhotoPreview(null);setShowAdd(true);}} style={btnP}>+ Add Item</button>
+          {(isAdmin || isManager) && <button onClick={()=>{setItemForm(emptyItem);setPhotoFile(null);setPhotoPreview(null);setShowAdd(true);}} style={btnP}>+ Add Item</button>}
         </div>
       </div>
 
@@ -504,7 +506,7 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
           <div style={{ display:"flex", gap:8, marginTop:20, flexWrap:"wrap" }}>
             {itemActions(showDetail)}
             <button onClick={()=>printLabel(showDetail, config?.churchName)} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>🖨 Print Label</button>
-            {isAdmin && showDetail.status !== "Disposed" && (
+            {canManageItem(userProfile, showDetail) && showDetail.status !== "Disposed" && (
               <button onClick={()=>{setRetireForm({ reason:"Broken", date:today, notes:"", recoveryValue:"" });setShowRetire(showDetail);setShowDetail(null);}} style={{ ...btnD, padding:"6px 14px", fontSize:12 }}>Retire</button>
             )}
           </div>

@@ -148,6 +148,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   }
 
   const isAdmin = userProfile?.role === "admin";
+  const isManager = userProfile?.role === "manager";
+  const managedMinistries = userProfile?.managedMinistries || [];
   const listCard = (key, title, icon) => {
     const items = settings[key] || [];
     return (
@@ -156,7 +158,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>{icon} {title}</h3>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <span style={{ fontSize:13, color:B.textLight }}>{items.length} items</span>
-            {isAdmin && <button onClick={() => openListEditor(key, title)} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Edit</button>}
+            {(isAdmin || isManager) && <button onClick={() => openListEditor(key, title)} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Edit</button>}
           </div>
         </div>
         <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
@@ -175,6 +177,39 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   return (
     <div>
       <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:"0 0 20px" }}>Settings</h2>
+
+      {/* My Profile — visible to all users */}
+      <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
+        <h3 style={{ margin:"0 0 16px", fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>My Profile</h3>
+        <div style={{ display:"flex", gap:24, flexWrap:"wrap", alignItems:"flex-start" }}>
+          <div>
+            <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Name</div>
+            <div style={{ fontSize:15, fontWeight:600 }}>{userProfile?.name}</div>
+          </div>
+          <div>
+            <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Email</div>
+            <div style={{ fontSize:15 }}>{user?.email}</div>
+          </div>
+          <div>
+            <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Role</div>
+            <span style={{ padding:"3px 10px", borderRadius:20, fontSize:13, fontWeight:600, fontFamily:f1,
+              background: isAdmin ? B.goldLight : isManager ? "#EDF2FF" : B.tealPale,
+              color: isAdmin ? "#96750E" : isManager ? "#3730A3" : B.teal }}>
+              {userProfile?.role || "user"}
+            </span>
+          </div>
+          {isManager && managedMinistries.length > 0 && (
+            <div>
+              <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Managed Ministries</div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {managedMinistries.map(m => (
+                  <span key={m} style={{ padding:"2px 10px", borderRadius:20, background:"#EDF2FF", color:"#3730A3", fontSize:12, fontWeight:600, fontFamily:f1 }}>{m}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Subscription & Billing */}
       <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
@@ -258,8 +293,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
         {listCard("tags", "Tags", "🏷️")}
       </div>
 
-      {/* Team Members */}
-      <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
+      {/* Team Members — admin only */}
+      {isAdmin && <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
           <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Team Members</h3>
           <span style={{ fontSize:13, fontWeight:600, color: maxUsers && users.length >= maxUsers ? B.red : B.textLight }}>
@@ -340,7 +375,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             </button>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Edit Access Modal */}
       <Modal open={!!editAccessUser} onClose={() => setEditAccessUser(null)} title={`Edit Access — ${editAccessUser?.name}`}>
@@ -358,7 +393,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                 ))}
               </div>
               {editRole === 'admin' && <p style={{ fontSize:12, color:B.textLight, margin:"8px 0 0" }}>Admins have full access to all settings and church data.</p>}
-              {editRole === 'manager' && <p style={{ fontSize:12, color:B.textLight, margin:"8px 0 0" }}>Managers can approve reservations and manage items in their assigned ministries.</p>}
+              {editRole === 'manager' && <p style={{ fontSize:12, color:B.textLight, margin:"8px 0 0" }}>Managers can edit locations/ministries/tags, approve reservations, add/edit/retire items and supplies in their assigned ministries, create maintenance tickets, manage vendors, run audits, and create bundles.</p>}
             </div>
 
             {/* Hub Access */}

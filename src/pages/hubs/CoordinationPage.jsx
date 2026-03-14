@@ -12,6 +12,8 @@ export function CoordinationPage({ store, userProfile }) {
   } = store;
 
   const isAdmin = userProfile?.role === 'admin';
+  const isManager = userProfile?.role === 'manager';
+  const canManageBundles = isAdmin || isManager;
   const userId = userProfile?.id || userProfile?.uid;
   const userName = userProfile?.name || 'Unknown';
   const activeItems = useMemo(() => items.filter(i => i.status !== 'Disposed'), [items]);
@@ -190,7 +192,7 @@ export function CoordinationPage({ store, userProfile }) {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <h2 style={{ fontFamily: f1, fontSize: 22, fontWeight: 700, color: B.navy, margin: 0 }}>Coordination Hub</h2>
-        {isAdmin && <button onClick={openCreateBundle} style={btnP}>+ New Bundle</button>}
+        {canManageBundles && <button onClick={openCreateBundle} style={btnP}>+ New Bundle</button>}
       </div>
 
       {msg && (
@@ -215,7 +217,7 @@ export function CoordinationPage({ store, userProfile }) {
           <div style={{ background: B.white, borderRadius: 18, padding: '44px 32px', border: '1px solid ' + B.sand, textAlign: 'center' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>📦</div>
             <p style={{ color: B.textLight, margin: '0 0 20px', fontSize: 15 }}>No bundles yet. Create one to speed up common setups like "Sunday Morning AV" or "Youth Room Pack."</p>
-            {isAdmin && <button onClick={openCreateBundle} style={btnP}>+ Create Your First Bundle</button>}
+            {canManageBundles && <button onClick={openCreateBundle} style={btnP}>+ Create Your First Bundle</button>}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(310px,1fr))', gap: 16 }}>
@@ -233,7 +235,7 @@ export function CoordinationPage({ store, userProfile }) {
                       <div style={{ fontFamily: f1, fontWeight: 700, fontSize: 15, color: B.navy, marginBottom: 2 }}>{b.name}</div>
                       {b.description && <div style={{ fontSize: 13, color: B.textMid }}>{b.description}</div>}
                     </div>
-                    {isAdmin && (
+                    {canManageBundles && (
                       <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 8 }}>
                         <button onClick={() => openEditBundle(b)} style={{ ...btnS, padding: '5px 10px', fontSize: 12 }}>Edit</button>
                         <button onClick={() => handleDeleteBundle(b)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.textLight, fontSize: 18, lineHeight: 1, padding: '2px 4px' }} title="Delete">✕</button>

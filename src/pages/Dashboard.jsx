@@ -19,6 +19,8 @@ export function Dashboard({ store, userProfile }) {
 
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
   const myName = userProfile?.name || "";
+  const isAdmin = userProfile?.role === "admin";
+  const isManager = userProfile?.role === "manager";
   const checkedOut = useMemo(() => activeItems.filter(i => i.status === "Checked Out"), [activeItems]);
   const displayedCheckouts = useMemo(() => myCheckouts ? checkedOut.filter(i => i.assignedTo === myName) : checkedOut, [myCheckouts, checkedOut, myName]);
   const overdue = useMemo(() => checkedOut.filter(i => i.expectedReturn && i.expectedReturn < today), [checkedOut, today]);
@@ -79,8 +81,8 @@ export function Dashboard({ store, userProfile }) {
         </div>
       )}
 
-      {/* Pending Reservations */}
-      {pendingRes.length > 0 && (
+      {/* Pending Reservations — admin/manager only */}
+      {(isAdmin || isManager) && pendingRes.length > 0 && (
         <div style={{ background:"#EDE7F6", border:"1px solid #D1C4E9", borderLeft:"4px solid #7C5BA0", borderRadius:14, padding:"18px 22px", marginBottom:20 }}>
           <h3 style={{ margin:"0 0 12px", fontSize:15, fontFamily:f1, fontWeight:700, color:"#7C5BA0" }}>Pending Reservations ({pendingRes.length})</h3>
           {pendingRes.map(r => (

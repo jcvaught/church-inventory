@@ -255,6 +255,9 @@ export function MaintenancePage({ store, userProfile }) {
   const userId = userProfile?.id || userProfile?.uid;
   const userName = userProfile?.name || 'Unknown';
   const churchId = userProfile?.churchId;
+  const isAdmin = userProfile?.role === 'admin';
+  const isManager = userProfile?.role === 'manager';
+  const canOperate = isAdmin || isManager;
 
   const activeItems = items.filter(i => i.status !== 'Disposed');
   const maintenanceTags = settings?.maintenanceTags || [];
@@ -529,12 +532,16 @@ export function MaintenancePage({ store, userProfile }) {
           <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Track repair tickets and manage service vendors</p>
         </div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <button onClick={() => setShowVendors(v => !v)} style={{ ...btnS, fontSize:13, padding:'9px 18px' }}>
-            {showVendors ? 'Hide Vendors' : `Vendors (${vendors.length})`}
-          </button>
-          <button onClick={() => { setTicketForm(getEmptyTicket()); setPhotoFiles([]); setPhotoPreviews([]); setShowAdd(true); }} style={btnP}>
-            + New Ticket
-          </button>
+          {canOperate && (
+            <button onClick={() => setShowVendors(v => !v)} style={{ ...btnS, fontSize:13, padding:'9px 18px' }}>
+              {showVendors ? 'Hide Vendors' : `Vendors (${vendors.length})`}
+            </button>
+          )}
+          {canOperate && (
+            <button onClick={() => { setTicketForm(getEmptyTicket()); setPhotoFiles([]); setPhotoPreviews([]); setShowAdd(true); }} style={btnP}>
+              + New Ticket
+            </button>
+          )}
         </div>
       </div>
 
@@ -555,7 +562,7 @@ export function MaintenancePage({ store, userProfile }) {
         <div style={{ background:B.white, borderRadius:14, padding:'20px 24px', border:'1px solid '+B.sand, marginBottom:20, boxShadow:'0 1px 3px rgba(27,42,74,0.06)' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
             <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Vendor Directory</h3>
-            <button onClick={() => { setVendorForm(getEmptyVendor()); setShowAddVendor(true); }} style={{ ...btnP, padding:'6px 14px', fontSize:12 }}>+ Add Vendor</button>
+            {canOperate && <button onClick={() => { setVendorForm(getEmptyVendor()); setShowAddVendor(true); }} style={{ ...btnP, padding:'6px 14px', fontSize:12 }}>+ Add Vendor</button>}
           </div>
           {vendors.length === 0
             ? <p style={{ color:B.textLight, fontSize:14 }}>No vendors yet. Add your service providers and contractors.</p>
@@ -565,10 +572,10 @@ export function MaintenancePage({ store, userProfile }) {
                   <div key={v._docId} style={{ padding:'14px 16px', borderRadius:10, background:B.warmGray, border:'1px solid '+B.sand }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:4 }}>
                       <div style={{ fontWeight:600, fontSize:14, color:B.navy }}>{v.name}</div>
-                      <div style={{ display:'flex', gap:6, flexShrink:0, marginLeft:8 }}>
+                      {canOperate && <div style={{ display:'flex', gap:6, flexShrink:0, marginLeft:8 }}>
                         <button onClick={() => { setVendorForm({ name:v.name||'', phone:v.phone||'', email:v.email||'', specialty:v.specialty||'', notes:v.notes||'' }); setShowEditVendor(v); }} style={{ border:'none', background:'none', cursor:'pointer', fontSize:13, color:B.textLight, padding:'2px 4px' }} title="Edit">✏️</button>
                         <button onClick={() => handleDeleteVendor(v)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:13, color:B.textLight, padding:'2px 4px' }} title="Delete">🗑️</button>
-                      </div>
+                      </div>}
                     </div>
                     {v.specialty && <div style={{ fontSize:12, color:B.teal, fontFamily:f1, marginBottom:4 }}>{v.specialty}</div>}
                     {v.phone && <div style={{ fontSize:12, color:B.textMid }}>📞 {v.phone}</div>}

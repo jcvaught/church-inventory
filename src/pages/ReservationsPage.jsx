@@ -17,7 +17,15 @@ export function ReservationsPage({ store, userProfile }) {
   const userId = userProfile?.id || userProfile?.uid;
   const userName = userProfile?.name || "Unknown";
   const isAdmin = userProfile?.role === "admin";
+  const isManager = userProfile?.role === "manager";
+  const managedMinistries = userProfile?.managedMinistries || [];
   const ministries = settings?.ministries || [];
+
+  function canApproveReservation(r) {
+    if (isAdmin) return true;
+    if (isManager && r.ministry && managedMinistries.includes(r.ministry)) return true;
+    return false;
+  }
 
   const emptyRes = { itemDocId:"", itemId:"", itemDesc:"", eventName:"", eventDate:"", returnDate:"", purpose:"", ministry:"", notes:"" };
   const [form, setForm] = useState(emptyRes);
@@ -397,11 +405,11 @@ export function ReservationsPage({ store, userProfile }) {
               {r.status === "Pending" && (r.requestedBy === userId || isAdmin) && (
                 <button onClick={()=>handleCancel(r)} disabled={saving} style={{ ...btnS, color:B.red, borderColor:"#FECACA" }}>Cancel Request</button>
               )}
-              {r.status === "Pending" && isAdmin && <>
+              {r.status === "Pending" && canApproveReservation(r) && <>
                 <button onClick={()=>handleDeny(r)} disabled={saving} style={btnD}>Deny</button>
                 <button onClick={()=>handleApprove(r)} disabled={saving} style={btnP}>Approve</button>
               </>}
-              {r.status === "Approved" && isAdmin && (
+              {r.status === "Approved" && canApproveReservation(r) && (
                 <button onClick={()=>handleCheckOutFromRes(r)} disabled={saving} style={{ ...btnP, background:"#1A65C7" }}>Check Out Now</button>
               )}
             </div>
