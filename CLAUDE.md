@@ -58,7 +58,7 @@ All church data is namespaced under `churches/{churchId}/`:
 
 1. **Create church** — admin creates a church with a unique alphanumeric church code; their UID becomes the churchId prefix.
 2. **Join church** — new members register with email/password or Google, entering the church code to be linked to the right `churchId`.
-3. Firestore rules (`firestore.rules`) currently allow any authenticated user to read/write any church's data (Phase 1). Phase 2 rules (restrict by churchId) are noted in comments.
+3. Firestore rules scope all church data to the user's own `churchId` via a `get()` lookup. Admins can update role/active for users in their own church. Storage rules apply the same scoping via `firestore.get()`.
 
 ### UI Conventions
 
@@ -107,20 +107,11 @@ The data model is already multi-tenant (`churches/{churchId}/`). The following m
 
 ### 🔴 Critical — Fix Before Any Public Use
 
-**Firestore security rules** — Currently any authenticated user can read/write any church's data. Must scope rules to the user's own `churchId` using `get()` in `firestore.rules`:
-```
-function userChurchId() {
-  return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.churchId;
-}
-match /churches/{churchId}/{document=**} {
-  allow read, write: if request.auth != null && userChurchId() == churchId;
-}
-```
-Also scope admin-only user writes (role/active changes) so non-admins can't elevate themselves.
+~~**Firestore security rules**~~ ✅ Done — scoped to user's `churchId` via `get()` lookup; admin-only writes for role/active changes.
 
-**Storage security rules** — Same problem as Firestore. Any authenticated user can read/write any church's photos. Apply the same `churchId` check in `storage.rules`.
+~~**Storage security rules**~~ ✅ Done — same `churchId` scoping via `firestore.get()`; IAM role granted.
 
-**Password reset UI** — No "Forgot password?" link exists on the login screen. Firebase Auth supports it natively via `sendPasswordResetEmail()`. Users who forget their password are currently locked out.
+~~**Password reset UI**~~ ✅ Done — "Forgot password?" link on login screen; `sendPasswordResetEmail()` in `useAuth.js`.
 
 ### 🟡 Important — Before Soft Launch
 
@@ -142,8 +133,10 @@ Also scope admin-only user writes (role/active changes) so non-admins can't elev
 
 **Account & data deletion** — GDPR and similar laws require users to be able to delete their account and all associated data.
 
-**Error monitoring** — Integrate Sentry (free tier) or similar so production errors are caught before users report them.
+~~**Error monitoring**~~ ✅ Done — Sentry integrated in `main.jsx` with browser tracing (20% sample rate).
 
 ### Deployment
 
 Deployed via Vercel (auto-detect Vite). Firebase config is hardcoded in `src/firebase.js` (not via env vars).
+
+To deploy Firestore/Storage rules: `./node_modules/.bin/firebase deploy --only firestore:rules,storage` (requires `firebase login` first). `.firebaserc` is configured with project ID `church-inventory-9615c`.
