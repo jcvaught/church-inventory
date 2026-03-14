@@ -233,6 +233,7 @@ function SettingsPage({ store, userProfile, subscription }) {
   const [showCode, setShowCode] = useState(false);
   const [newCode, setNewCode] = useState("");
   const [editCodeMode, setEditCodeMode] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
   const [suggestionText, setSuggestionText] = useState("");
   const [suggestionCategory, setSuggestionCategory] = useState("Feature Request");
   const [suggestionSent, setSuggestionSent] = useState(false);
@@ -376,6 +377,9 @@ function SettingsPage({ store, userProfile, subscription }) {
                   </span>
                   <button onClick={()=>setShowCode(!showCode)} style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:12, fontFamily:f1, fontWeight:600 }}>
                     {showCode ? "Hide" : "Show"}
+                  </button>
+                  <button onClick={()=>{ navigator.clipboard.writeText(config.churchCode||""); setCodeCopied(true); setTimeout(()=>setCodeCopied(false), 2000); }} style={{ background:"none", border:"none", color:codeCopied?B.teal:B.textMid, cursor:"pointer", fontSize:12, fontFamily:f1, fontWeight:600 }}>
+                    {codeCopied ? "Copied!" : "Copy"}
                   </button>
                   {userProfile?.role === "admin" && (
                     <button onClick={()=>{setEditCodeMode(true);setNewCode(config.churchCode||"");}} style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:12, fontFamily:f1, fontWeight:600 }}>Change</button>
@@ -552,6 +556,7 @@ function Dashboard({ store, userProfile }) {
   const { items, supplies, activityLog, reservations } = store;
   const [myCheckouts, setMyCheckouts] = useState(false);
   const [activityRange, setActivityRange] = useState(30);
+  const [activityVisible, setActivityVisible] = useState(20);
   const activeItems = items.filter(i => i.status !== "Disposed");
   const counts = {
     total: activeItems.length,
@@ -664,7 +669,7 @@ function Dashboard({ store, userProfile }) {
           <h3 style={{ margin:0, fontFamily:f1, fontSize:17, fontWeight:700, color:B.navy }}>Recent Activity</h3>
           <div style={{ display:"flex", borderRadius:8, overflow:"hidden", border:"1px solid "+B.sand }}>
             {[7,30,90,"all"].map(r => (
-              <button key={r} onClick={()=>setActivityRange(r)}
+              <button key={r} onClick={()=>{ setActivityRange(r); setActivityVisible(20); }}
                 style={{ padding:"5px 12px", fontSize:12, fontFamily:f1, fontWeight:600, border:"none", borderLeft: r!==7 ? "1px solid "+B.sand : "none", cursor:"pointer", background:activityRange===r?B.teal:B.white, color:activityRange===r?B.white:B.textMid }}>
                 {r === "all" ? "All" : `${r}d`}
               </button>
@@ -678,7 +683,7 @@ function Dashboard({ store, userProfile }) {
           return filtered.length === 0
             ? <p style={{ color:B.textLight, fontSize:14 }}>{activityLog.length === 0 ? "No activity yet. Start by adding items to your inventory!" : `No activity in the last ${activityRange} days.`}</p>
             : <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                {filtered.slice(0, 20).map(l => (
+                {filtered.slice(0, activityVisible).map(l => (
                   <div key={l._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", borderRadius:8, background:B.warmGray }}>
                     <span style={{ fontSize:16 }}>{icons[l.action]||"📋"}</span>
                     <div style={{ flex:1 }}>
@@ -689,6 +694,11 @@ function Dashboard({ store, userProfile }) {
                     <span style={{ fontSize:11, color:B.textLight }}>{l.timestamp?.split("T")[0]}</span>
                   </div>
                 ))}
+                {filtered.length > activityVisible && (
+                  <button onClick={()=>setActivityVisible(v=>v+20)} style={{ alignSelf:"center", marginTop:4, background:"none", border:"1px solid "+B.sand, borderRadius:8, padding:"7px 20px", fontSize:13, fontFamily:f1, fontWeight:600, color:B.teal, cursor:"pointer" }}>
+                    Load more ({filtered.length - activityVisible} remaining)
+                  </button>
+                )}
               </div>;
         })()}
       </div>

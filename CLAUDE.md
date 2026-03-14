@@ -284,8 +284,6 @@ Single-character IDs like "A" are accepted. Consider requiring at least 3 charac
 
 ~~**QR code depends on external API**~~ ✅ Fixed — replaced `api.qrserver.com` with the `qrcode` npm package. QR codes now generated entirely client-side.
 
-**Activity log capped at 20 entries with no load-more** (`ActivityLogPage`)
-`filtered.slice(0, 20)` is hardcoded. Add a "Load more" button or paginate via Firestore cursor.
+~~**Activity log capped at 20 entries with no load-more**~~ ✅ Fixed — `activityVisible` state (starts at 20, increments by 20); "Load more (N remaining)" button shown when more entries exist; resets when range filter changes.
 
-**No copy-to-clipboard on church code** (`SettingsPage`)
-Users must manually select the church code text to copy it. Add a copy icon/button next to the code.
+~~**No copy-to-clipboard on church code**~~ ✅ Fixed — "Copy" button next to the church code uses `navigator.clipboard.writeText()`; shows "Copied!" confirmation for 2 seconds.
