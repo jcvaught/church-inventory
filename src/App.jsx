@@ -236,7 +236,7 @@ export default function App() {
 function AppShell({ authHook }) {
   const { user, userProfile, logout } = authHook;
   const store = useFirestore(userProfile.churchId);
-  const { subscription, hasHub } = useSubscription(userProfile.churchId);
+  const { subscription, hasHub, canAddUser } = useSubscription(userProfile.churchId);
   const [tab, setTab] = useState("dashboard");
   const [menuOpen, setMenuOpen] = useState(false);
   const isMobile = useWindowWidth() < 768;
@@ -264,6 +264,18 @@ function AppShell({ authHook }) {
   const hasMaintenance = hasHub('maintenance');
   const hasInsights = hasHub('insights');
 
+  // Per-user hub visibility: admins see all; others filtered by allowedHubs
+  function userCanSeeHub(hubName) {
+    if (!hasHub(hubName)) return false;
+    if (userProfile?.role === 'admin') return true;
+    const allowed = userProfile?.allowedHubs;
+    if (allowed == null) return true;
+    return allowed.includes(hubName);
+  }
+  const showMaintenanceTab = !hasMaintenance || userCanSeeHub('maintenance');
+  const showInsightsTab = !hasInsights || userCanSeeHub('insights');
+  const canAdd = canAddUser((store.users || []).length);
+
   return (
     <MobileCtx.Provider value={isMobile}>
     <div style={{ fontFamily:f2, background:`linear-gradient(170deg, ${B.cream} 0%, ${B.warmGray} 100%)`, minHeight:"100vh", color:B.textDark }}>
@@ -285,7 +297,7 @@ function AppShell({ authHook }) {
                 {menuOpen && (
                   <div style={{ position:"absolute", top:"100%", right:0, marginTop:6, background:B.white, borderRadius:12, padding:8, minWidth:180, boxShadow:"0 8px 32px rgba(27,42,74,0.2)", zIndex:100 }}>
                     <div style={{ padding:"8px 12px", fontSize:12, color:B.textLight }}>{userProfile.email}</div>
-                    <div style={{ padding:"4px 12px", marginBottom:4 }}><span style={{ padding:"2px 8px", borderRadius:12, fontSize:11, fontWeight:600, fontFamily:f1, background:userProfile.role==="admin"?B.goldLight:B.tealPale, color:userProfile.role==="admin"?"#96750E":B.teal }}>{userProfile.role}</span></div>
+                    <div style={{ padding:"4px 12px", marginBottom:4 }}><span style={{ padding:"2px 8px", borderRadius:12, fontSize:11, fontWeight:600, fontFamily:f1, background:userProfile.role==="admin"?B.goldLight:userProfile.role==="manager"?"#EDF2FF":B.tealPale, color:userProfile.role==="admin"?"#96750E":userProfile.role==="manager"?"#3730A3":B.teal }}>{userProfile.role}</span></div>
                     <div style={{ height:1, background:B.sand, margin:"4px 0" }}/>
                     <button onClick={()=>{logout();setMenuOpen(false);}} style={{ width:"100%", textAlign:"left", padding:"8px 12px", background:"none", border:"none", cursor:"pointer", color:B.red, fontSize:13, fontWeight:600, fontFamily:f1, borderRadius:6 }}
                       onMouseEnter={e=>e.currentTarget.style.background=B.redPale}
@@ -300,7 +312,13 @@ function AppShell({ authHook }) {
 
           {/* Tabs — desktop only */}
           {!isMobile && <div style={{ display:"flex", gap:2, marginTop:16, marginBottom:-14, overflowX:"auto" }}>
-            {[["dashboard","Dashboard"],["inventory","All Items"],["supplies","Supplies"],["reservations","Reservations"],["log","Activity Log"],["insights","Insights"],["maintenance","Maintenance"],["settings","Settings"]].map(([k,v]) =>
+            {[
+              ["dashboard","Dashboard"],["inventory","All Items"],["supplies","Supplies"],
+              ["reservations","Reservations"],["log","Activity Log"],
+              ...(showInsightsTab ? [["insights","Insights"]] : []),
+              ...(showMaintenanceTab ? [["maintenance","Maintenance"]] : []),
+              ["settings","Settings"],
+            ].map(([k,v]) =>
               <button key={k} onClick={()=>{setTab(k);setMenuOpen(false);}} style={tabBtn(k)}>{v}
                 {k==="maintenance"&&!hasMaintenance&&<span style={{ marginLeft:4, opacity:.7 }}>🔒</span>}
                 {k==="insights"&&!hasInsights&&<span style={{ marginLeft:4, opacity:.7 }}>🔒</span>}
@@ -318,7 +336,7 @@ function AppShell({ authHook }) {
       {/* Page content */}
       <div style={{ maxWidth:1100, margin:"0 auto", padding:isMobile?"16px 14px 96px":"28px 28px 60px" }} onClick={()=>menuOpen&&setMenuOpen(false)}>
         {tab === "dashboard" && <Dashboard store={store} userProfile={userProfile} />}
-        {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} subscription={subscription} user={user} />}
+        {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} subscription={subscription} user={user} canAdd={canAdd} />}
         {tab === "inventory" && <ItemsPage store={store} userProfile={userProfile} initialItemId={initialItemId} />}
         {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
         {tab === "reservations" && <ReservationsPage store={store} userProfile={userProfile} />}
@@ -363,8 +381,8 @@ function AppShell({ authHook }) {
             ["inventory","Items","📦"],
             ["supplies","Stock","🧴"],
             ["reservations","Reserve","📅"],
-            ["insights","Insights","📊"],
-            ["maintenance","Maint","🔧"],
+            ...(showInsightsTab ? [["insights","Insights","📊"]] : []),
+            ...(showMaintenanceTab ? [["maintenance","Maint","🔧"]] : []),
             ["settings","Settings","⚙️"],
           ].map(([k,label,icon]) => (
             <button key={k} onClick={()=>{setTab(k);setMenuOpen(false);}}

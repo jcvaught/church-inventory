@@ -5,7 +5,7 @@ import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
 
-export function SettingsPage({ store, userProfile, subscription, user }) {
+export function SettingsPage({ store, userProfile, subscription, user, canAdd }) {
   const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
@@ -21,6 +21,38 @@ export function SettingsPage({ store, userProfile, subscription, user }) {
   const [allSuggestions, setAllSuggestions] = useState(null);
   const [suggestionFilter, setSuggestionFilter] = useState("All");
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [editAccessUser, setEditAccessUser] = useState(null);
+  const [editRole, setEditRole] = useState('user');
+  const [editHubs, setEditHubs] = useState([]);
+  const [editMinistries, setEditMinistries] = useState([]);
+  const [savingAccess, setSavingAccess] = useState(false);
+
+  const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub' };
+  const churchHubs = subscription?.grandfathered || subscription?.plan === 'all_in'
+    ? Object.keys(HUB_LABELS)
+    : (subscription?.hubs || []);
+  const maxUsers = subscription?.grandfathered || subscription?.plan === 'team_unlimited' || subscription?.plan === 'all_in'
+    ? null
+    : subscription?.plan === 'team_25' ? 25 : 10;
+
+  function openEditAccess(u) {
+    setEditAccessUser(u);
+    setEditRole(u.role || 'user');
+    setEditHubs(u.allowedHubs != null ? u.allowedHubs : [...churchHubs]);
+    setEditMinistries(u.managedMinistries || []);
+  }
+  async function handleSaveAccess() {
+    setSavingAccess(true);
+    const allSelected = churchHubs.length === 0 || churchHubs.every(h => editHubs.includes(h));
+    const hubsToSave = allSelected ? null : editHubs;
+    await updateUser(editAccessUser.id, {
+      role: editRole,
+      allowedHubs: hubsToSave,
+      managedMinistries: editRole === 'manager' ? editMinistries : [],
+    });
+    setSavingAccess(false);
+    setEditAccessUser(null);
+  }
 
   const isOwner = ['jcvaught@gmail.com', 'jvaught@fxcc.org'].includes(user?.email);
 
@@ -180,9 +212,21 @@ export function SettingsPage({ store, userProfile, subscription, user }) {
 
       {/* Team Members */}
       <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
           <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Team Members</h3>
+          <span style={{ fontSize:13, fontWeight:600, color: maxUsers && users.length >= maxUsers ? B.red : B.textLight }}>
+            {users.length}{maxUsers ? ` / ${maxUsers}` : ''} member{users.length !== 1 ? 's' : ''}
+          </span>
         </div>
+        {isAdmin && !canAdd && (
+          <div style={{ background:B.goldLight, border:"1px solid "+B.gold, borderRadius:10, padding:"12px 16px", marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+            <div>
+              <div style={{ fontFamily:f1, fontWeight:700, fontSize:14, color:"#7A5800" }}>Team member limit reached</div>
+              <div style={{ fontSize:13, color:"#96750E", marginTop:2 }}>Upgrade to Team Hub to add more members.</div>
+            </div>
+            <a href="mailto:jcvaught@gmail.com?subject=Upgrade to Team Hub" style={{ ...btnP, padding:"7px 16px", fontSize:12, textDecoration:"none", whiteSpace:"nowrap" }}>Upgrade</a>
+          </div>
+        )}
         {users.length === 0 ? <p style={{ color:B.textLight, fontSize:14 }}>No team members yet.</p> :
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
             {users.map(u => (
@@ -193,7 +237,9 @@ export function SettingsPage({ store, userProfile, subscription, user }) {
                     <div style={{ minWidth:0 }}>
                       <div style={{ fontWeight:600, fontSize:14, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                         {u.name}
-                        <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, fontFamily:f1, background: u.role==="admin"?B.goldLight:B.tealPale, color:u.role==="admin"?"#96750E":B.teal }}>{u.role}</span>
+                        <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, fontFamily:f1,
+                          background: u.role==="admin"?B.goldLight:u.role==="manager"?"#EDF2FF":B.tealPale,
+                          color: u.role==="admin"?"#96750E":u.role==="manager"?"#3730A3":B.teal }}>{u.role}</span>
                         {!u.active && <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background:B.redPale, color:B.red }}>Inactive</span>}
                       </div>
                       <div style={{ fontSize:12, color:B.textLight }}>{u.email}</div>
@@ -202,9 +248,9 @@ export function SettingsPage({ store, userProfile, subscription, user }) {
                 </div>
                 {isAdmin && u.id !== userProfile.id && (
                   <div style={{ display:"flex", gap:8, marginTop:10, flexWrap:"wrap" }}>
-                    <button onClick={()=>{ if(window.confirm(u.role==="admin" ? `Remove admin from ${u.name}? They will become a regular user.` : `Make ${u.name} an admin? They will have full access to all settings and data.`)) updateUser(u.id, {role: u.role==="admin" ? "user" : "admin"}); }}
-                      style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color: u.role==="admin" ? B.textMid : "#96750E", borderColor: u.role==="admin" ? B.sand : B.gold }}>
-                      {u.role==="admin" ? "Remove Admin" : "Make Admin"}
+                    <button onClick={() => openEditAccess(u)}
+                      style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12 }}>
+                      Edit Access
                     </button>
                     {u.active ? (
                       <button onClick={()=>{ if(window.confirm(`Deactivate ${u.name}? They will lose access to the app immediately.`)) updateUser(u.id, {active:false}); }} style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.red, borderColor:"#FECACA" }}>Deactivate</button>
@@ -220,6 +266,77 @@ export function SettingsPage({ store, userProfile, subscription, user }) {
           </div>
         }
       </div>
+
+      {/* Edit Access Modal */}
+      <Modal open={!!editAccessUser} onClose={() => setEditAccessUser(null)} title={`Edit Access — ${editAccessUser?.name}`}>
+        {editAccessUser && (
+          <div>
+            {/* Role */}
+            <div style={{ marginBottom:20 }}>
+              <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:8 }}>Role</div>
+              <div style={{ display:"flex", gap:8 }}>
+                {['admin','manager','user'].map(r => (
+                  <button key={r} type="button" onClick={() => setEditRole(r)}
+                    style={{ padding:"8px 16px", borderRadius:8, border:"1px solid "+(editRole===r?B.teal:B.sand), background:editRole===r?B.tealPale:"transparent", color:editRole===r?B.teal:B.textMid, fontFamily:f1, fontWeight:600, fontSize:13, cursor:"pointer" }}>
+                    {r.charAt(0).toUpperCase() + r.slice(1)}
+                  </button>
+                ))}
+              </div>
+              {editRole === 'admin' && <p style={{ fontSize:12, color:B.textLight, margin:"8px 0 0" }}>Admins have full access to all settings and church data.</p>}
+              {editRole === 'manager' && <p style={{ fontSize:12, color:B.textLight, margin:"8px 0 0" }}>Managers can approve reservations and manage items in their assigned ministries.</p>}
+            </div>
+
+            {/* Hub Access */}
+            {churchHubs.length > 0 && (
+              <div style={{ marginBottom:20 }}>
+                <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:8 }}>Hub Access</div>
+                {editRole === 'admin' ? (
+                  <p style={{ fontSize:13, color:B.textLight, margin:0 }}>Admins always have access to all church hubs.</p>
+                ) : (
+                  <>
+                    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                      {churchHubs.map(hub => (
+                        <label key={hub} style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", fontSize:14 }}>
+                          <input type="checkbox" checked={editHubs.includes(hub)}
+                            onChange={e => setEditHubs(prev => e.target.checked ? [...prev, hub] : prev.filter(h => h !== hub))}
+                            style={{ width:16, height:16, accentColor:B.teal }}/>
+                          {HUB_LABELS[hub] || hub}
+                        </label>
+                      ))}
+                    </div>
+                    <p style={{ fontSize:12, color:B.textLight, margin:"8px 0 0" }}>Uncheck hubs to restrict this user's access.</p>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Managed Ministries — manager role only */}
+            {editRole === 'manager' && (settings.ministries || []).length > 0 && (
+              <div style={{ marginBottom:20 }}>
+                <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:8 }}>Managed Ministries</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:200, overflowY:"auto" }}>
+                  {(settings.ministries || []).map(m => (
+                    <label key={m} style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", fontSize:14 }}>
+                      <input type="checkbox" checked={editMinistries.includes(m)}
+                        onChange={e => setEditMinistries(prev => e.target.checked ? [...prev, m] : prev.filter(x => x !== m))}
+                        style={{ width:16, height:16, accentColor:B.teal }}/>
+                      {m}
+                    </label>
+                  ))}
+                </div>
+                <p style={{ fontSize:12, color:B.textLight, margin:"8px 0 0" }}>This manager can manage items and approve reservations in these ministries.</p>
+              </div>
+            )}
+
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:8 }}>
+              <button onClick={() => setEditAccessUser(null)} style={{ ...btnS, padding:"8px 20px" }}>Cancel</button>
+              <button onClick={handleSaveAccess} disabled={savingAccess} style={{ ...btnP, padding:"8px 20px", opacity:savingAccess?0.6:1 }}>
+                {savingAccess ? "Saving…" : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Suggestions Report — owner only */}
       {isOwner && (
