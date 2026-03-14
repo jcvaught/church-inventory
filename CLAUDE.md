@@ -285,8 +285,14 @@ Findings from a full security + UX audit. All items resolved.
 
 ~~**Supply quantities allow negatives**~~ ✅ Fixed — validated on submit before saving.
 
-**Item ID has no minimum length or pattern enforcement** (`ItemsPage`)
-Single-character IDs like "A" are accepted. Consider requiring at least 3 characters or a pattern like `[A-Z0-9]{2,}-[0-9]+`.
+~~**Item ID has no minimum length or pattern enforcement**~~ ✅ Fixed — 3-character minimum enforced in `handleAdd`/`handleEdit`; Add button disabled until valid.
+
+**Firestore errors are silent — no user feedback and not logged to Sentry** (`useFirestore.js`, `AppShell`)
+Every CRUD catch block calls `setError(err.message)` but `store.error` is never rendered anywhere, so users see nothing when a write fails. Errors also never reach Sentry (only unhandled exceptions are captured).
+
+Fix has two parts:
+1. **User-facing**: Global error toast in `AppShell` watching `store.error`; auto-dismisses after 5s. Implementation: render a fixed toast when `store.error` is set; pass a `clearError` callback from `useFirestore` to reset it.
+2. **Logging**: Add `console.error(err)` alongside each `setError` call in `useFirestore.js`; add `Sentry.captureConsoleIntegration({ levels: ['error'] })` to `main.jsx` so all `console.error` calls appear in Sentry with full stack traces.
 
 ### 🟢 UX — Polish
 
