@@ -109,7 +109,13 @@ All church data is namespaced under `churches/{churchId}/`:
 - **Deep linking:** `?item=ITEM_ID` URL param auto-opens item detail. URL cleaned with `history.replaceState` after read.
 - **QR codes:** Generated locally via the `qrcode` npm package (`QRCode.toDataURL()`). Links back to the app with `?item=` param. In the item detail modal, the QR data URL is stored in `detailQrUrl` state (generated in a `useEffect` when `showDetail` changes). `printLabel` is async (awaits `QRCode.toDataURL()` before opening the print window).
 - **Firebase Storage** (Blaze plan): item photos stored under `churches/{churchId}/items/`. Images are client-side resized to max 1200px / 82% JPEG quality before upload via Canvas API (`resizeImageForUpload`).
-- **Role enforcement:** `isAdmin = userProfile?.role === "admin"`. Only admins can retire items, edit dropdown lists (Locations/Ministries/Tags), and promote/demote other users. Roles: `admin` / `manager` (Phase 5) / `user`. Hub visibility per user controlled by `allowedHubs[]` on user profile (see Per-User Hub Access).
+- **Role enforcement:** Three roles — `admin`, `manager`, `user`. UI-only enforcement; Firestore rules unchanged. Shared helpers in `src/utils/roleHelpers.js` (`canManageMinistry`, `canManageItem`, `canManageSupply`).
+  - **admin**: full access — team management, church code, billing, invite links, EmailJS config, plus all manager capabilities.
+  - **manager**: full operational access — edit dropdown lists (Locations/Ministries/Tags); add/edit/retire items + supplies scoped to `managedMinistries[]`; approve/deny/checkout reservations for their ministries; create/manage maintenance tickets and vendors; run audits; create/edit/delete bundles. Cannot manage team members, billing, or EmailJS config.
+  - **user**: day-to-day use — checkout/return items, request reservations (cancel own), log supply usage/restock, view all accessible hubs. Cannot add/edit items or supplies, approve reservations, or start audits.
+  - Items/supplies with no ministry assigned are admin-only (managers cannot edit unscoped items).
+  - Settings page: all users see a Profile card (name, email, role, managed ministries); Team Members section is admin-only; list editors (locations/ministries/tags) are editable by admin and manager.
+  - Hub visibility per user controlled by `allowedHubs[]` on user profile (see Per-User Hub Access).
 - **localStorage:** Items page persists `locationFilter` and `ministryFilter` under keys `inv_locationFilter` / `inv_ministryFilter`.
 
 ### Item Status Values
@@ -187,8 +193,8 @@ Hub visibility is controlled at two levels:
 
 **Phase 5 — Team Hub:**
 - User count display in Team Members header (e.g. "8 / 10 members"); upgrade banner for admins at/over the free plan 10-user cap
-- Three roles: `admin` (full access), `manager` (assigned hubs + managed ministries), `user` (assigned hubs only); distinct badge colors
-- Edit Access modal in Settings > Team Members: role selector (Admin/Manager/User), hub checkboxes (church-active hubs only), managed ministries multi-select (manager only)
+- Three roles: `admin` (full system access), `manager` (full operational access scoped to `managedMinistries[]`), `user` (day-to-day use only); distinct badge colors
+- Edit Access modal in Settings > Team Members: role selector (Admin/Manager/User), hub checkboxes (church-active hubs only), managed ministries multi-select (manager only); full role capabilities documented in UI Conventions above
 - `userCanSeeHub(hubName)` in `App.jsx`: admins see all; manager/user sees intersection of church `hubs[]` and `allowedHubs[]`; `allowedHubs: null` = inherit all (backward compat)
 - Hub tabs hidden (not locked) when user's `allowedHubs` excludes them; Firestore rules unchanged
 
