@@ -1,299 +1,23 @@
-import { useState, useEffect, useRef, createContext, useContext } from 'react';
+import { useState, useEffect, useRef, useContext } from 'react';
 import { useAuth } from './useAuth.js';
 import { useFirestore } from './useFirestore.js';
+import { useSubscription } from './hooks/useSubscription.js';
 import { storage } from './firebase.js';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { B, f1, f2, inp, btnP, btnS, btnD } from './components/brand/tokens.js';
+import { MobileCtx, useWindowWidth } from './hooks/useMobile.js';
+import { resizeImageForUpload } from './utils/imageResize.js';
+import { printLabel, printInventory } from './utils/print.js';
+import { exportItemsCSV, exportSuppliesCSV, exportReservationsCSV } from './utils/csv.js';
+import { Logo, FullLogo } from './components/brand/Logo.jsx';
+import { Modal } from './components/primitives/Modal.jsx';
+import { FF } from './components/primitives/FF.jsx';
+import { Badge } from './components/primitives/Badge.jsx';
+import { Stat } from './components/primitives/Stat.jsx';
+import { Spinner } from './components/primitives/Spinner.jsx';
+import { UpgradeGate } from './components/primitives/UpgradeGate.jsx';
+import { MaintenancePage } from './pages/hubs/MaintenancePage.jsx';
 
-/* ════════════════════════════════════════ */
-/* ═══ BRAND TOKENS ═══════════════════════ */
-/* ════════════════════════════════════════ */
-const B = {
-  navy: "#1B2A4A", navyLight: "#243556",
-  teal: "#2A7D6E", tealLight: "#34957F", tealPale: "#E6F5F1",
-  gold: "#D4A843", goldLight: "#F5ECD4",
-  cream: "#FAFAF7", warmGray: "#F2F0EB", sand: "#E8E4DC",
-  textDark: "#1B2A4A", textMid: "#5A6477", textLight: "#8B93A1",
-  white: "#FFFFFF", red: "#D94F4F", redPale: "#FDF2F2",
-};
-const f1 = "'Outfit',sans-serif";
-const f2 = "'Source Sans 3',sans-serif";
-const inp = { width:"100%", padding:"11px 14px", borderRadius:10, border:"1px solid "+B.sand, fontSize:14, fontFamily:f2, background:B.white, boxSizing:"border-box", outline:"none", color:B.textDark };
-const btnP = { padding:"11px 24px", borderRadius:10, border:"none", background:B.teal, color:B.white, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:f1, letterSpacing:.2 };
-const btnS = { padding:"11px 24px", borderRadius:10, border:"1px solid "+B.sand, background:B.white, color:B.textDark, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:f1 };
-const btnD = { padding:"11px 24px", borderRadius:10, border:"1px solid #FECACA", background:B.redPale, color:B.red, fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:f1 };
-
-/* ═══ MOBILE CONTEXT + HOOK ═══ */
-const MobileCtx = createContext(false);
-function useWindowWidth() {
-  const [w, setW] = useState(window.innerWidth);
-  useEffect(() => {
-    const h = () => setW(window.innerWidth);
-    window.addEventListener('resize', h);
-    return () => window.removeEventListener('resize', h);
-  }, []);
-  return w;
-}
-
-/* ═══ IMAGE RESIZE (client-side, before upload) ═══ */
-// Resizes to max 1200px on longest side, JPEG 82% quality.
-// Reduces a typical 4–8 MB phone photo to ~150–350 KB.
-function resizeImageForUpload(file, maxPx = 1200, quality = 0.82) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-      let { width, height } = img;
-      if (width > maxPx || height > maxPx) {
-        const ratio = Math.min(maxPx / width, maxPx / height);
-        width = Math.round(width * ratio);
-        height = Math.round(height * ratio);
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-      canvas.toBlob(resolve, 'image/jpeg', quality);
-    };
-    img.src = objectUrl;
-  });
-}
-
-/* ═══ PRINT LABEL ═══ */
-function printLabel(item, churchName) {
-  const appUrl = window.location.origin + window.location.pathname.replace(/\/+$/, '') + '?item=' + encodeURIComponent(item.itemId);
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=12&data=${encodeURIComponent(appUrl)}`;
-  const win = window.open('', '_blank');
-  if (!win) return;
-  win.document.write(`<!DOCTYPE html><html><head><title>${item.itemId}</title><style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:Arial,sans-serif;display:flex;justify-content:center;padding:32px;background:#fff}
-    .label{border:2px solid #1B2A4A;border-radius:12px;padding:22px 26px;width:340px;text-align:center}
-    .org{font-size:10px;color:#8B93A1;text-transform:uppercase;letter-spacing:2px;font-weight:600;margin-bottom:14px}
-    .desc{font-size:22px;font-weight:700;color:#1B2A4A;line-height:1.2;margin-bottom:6px}
-    .id{font-family:monospace;font-size:16px;letter-spacing:3px;color:#5A6477;margin-bottom:16px}
-    hr{border:none;border-top:1px solid #E8E4DC;margin:10px 0}
-    .meta{font-size:12px;color:#8B93A1;margin:4px 0}
-    @media print{body{padding:0}}
-  </style></head><body>
-  <div class="label">
-    <div class="org">${churchName||'ChurchOpsHub'} · Inventory</div>
-    <div class="desc">${item.description}</div>
-    <div class="id">${item.itemId}</div>
-    <img src="${qrSrc}" width="180" height="180" style="display:block;margin:0 auto 16px" onload="window.print()">
-    <hr>
-    ${item.location?`<div class="meta">📍 ${item.location}</div>`:''}
-    ${item.ministry?`<div class="meta">⛪ ${item.ministry}</div>`:''}
-    ${item.condition?`<div class="meta">Condition: ${item.condition}</div>`:''}
-  </div>
-  </body></html>`);
-  win.document.close();
-}
-
-/* ═══ EXPORT CSV ═══ */
-function exportItemsCSV(items) {
-  const cols = ['itemId','description','location','ministry','status','condition','tags','assignedTo','checkOutDate','expectedReturn','notes'];
-  const header = cols.join(',');
-  const rows = items.map(item => cols.map(c => {
-    const v = item[c];
-    if (Array.isArray(v)) return `"${v.join('; ')}"`;
-    if (v == null || v === '') return '';
-    const s = String(v);
-    return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g,'""')}"` : s;
-  }).join(','));
-  const csv = [header, ...rows].join('\n');
-  const a = Object.assign(document.createElement('a'), {
-    href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
-    download: `inventory-${new Date().toISOString().split('T')[0]}.csv`
-  });
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(a.href);
-}
-
-/* ═══ PRINT FULL INVENTORY ═══ */
-function printInventory(items, churchName, groupBy = "location") {
-  const activeItems = items.filter(i => i.status !== "Disposed");
-  const groups = {};
-  activeItems.forEach(item => {
-    const key = item[groupBy] || "— Unassigned —";
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(item);
-  });
-  const sortedGroups = Object.keys(groups).sort();
-  const statusColors = { Available:"#2A7D6E", "Checked Out":"#96750E", "In Use":"#1A65C7", "Under Repair":"#D94F4F", Disposed:"#7C5BA0" };
-  const rows = sortedGroups.map(group => `
-    <div class="group">
-      <div class="group-header">${group}</div>
-      <table>
-        <thead><tr><th>ID</th><th>Description</th><th>Status</th><th>Condition</th><th>${groupBy === "location" ? "Ministry" : "Location"}</th><th>Assigned To</th></tr></thead>
-        <tbody>${groups[group].map(i => `
-          <tr>
-            <td class="mono">${i.itemId||""}</td>
-            <td>${i.description||""}</td>
-            <td style="color:${statusColors[i.status]||"#333"};font-weight:600">${i.status||""}</td>
-            <td>${i.condition||""}</td>
-            <td>${groupBy === "location" ? (i.ministry||"") : (i.location||"")}</td>
-            <td>${i.assignedTo||""}</td>
-          </tr>`).join("")}
-        </tbody>
-      </table>
-    </div>`).join("");
-  const win = window.open("", "_blank");
-  if (!win) return;
-  win.document.write(`<!DOCTYPE html><html><head><title>Inventory — ${churchName||"ChurchOpsHub"}</title><style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:Arial,sans-serif;font-size:12px;color:#1B2A4A;padding:32px}
-    h1{font-size:20px;font-weight:700;margin-bottom:4px}
-    .meta{font-size:11px;color:#8B93A1;margin-bottom:24px}
-    .group{margin-bottom:28px;page-break-inside:avoid}
-    .group-header{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#2A7D6E;border-bottom:2px solid #2A7D6E;padding-bottom:4px;margin-bottom:8px}
-    table{width:100%;border-collapse:collapse}
-    th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#8B93A1;padding:6px 8px;border-bottom:1px solid #E8E4DC}
-    td{padding:7px 8px;border-bottom:1px solid #F2F0EB;font-size:12px}
-    tr:last-child td{border-bottom:none}
-    .mono{font-family:monospace;letter-spacing:1px}
-    .summary{display:flex;gap:24px;margin-bottom:20px;padding:14px 18px;background:#F2F0EB;border-radius:8px}
-    .summary-item{text-align:center}
-    .summary-item .num{font-size:22px;font-weight:700}
-    .summary-item .lbl{font-size:10px;color:#8B93A1;text-transform:uppercase;letter-spacing:1px}
-    @media print{body{padding:16px}.no-print{display:none}}
-  </style></head><body>
-  <h1>${churchName||"ChurchOpsHub"} — Inventory Report</h1>
-  <div class="meta">Generated ${new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})} · ${activeItems.length} active items · Grouped by ${groupBy}</div>
-  <div class="summary">
-    <div class="summary-item"><div class="num">${activeItems.length}</div><div class="lbl">Total</div></div>
-    <div class="summary-item"><div class="num" style="color:#2A7D6E">${activeItems.filter(i=>i.status==="Available").length}</div><div class="lbl">Available</div></div>
-    <div class="summary-item"><div class="num" style="color:#96750E">${activeItems.filter(i=>i.status==="Checked Out").length}</div><div class="lbl">Checked Out</div></div>
-    <div class="summary-item"><div class="num" style="color:#1A65C7">${activeItems.filter(i=>i.status==="In Use").length}</div><div class="lbl">In Use</div></div>
-    <div class="summary-item"><div class="num" style="color:#D94F4F">${activeItems.filter(i=>i.status==="Under Repair").length}</div><div class="lbl">Repair</div></div>
-  </div>
-  <div class="no-print" style="margin-bottom:16px;display:flex;gap:8px">
-    <button onclick="window.print()" style="padding:8px 18px;background:#2A7D6E;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">Print</button>
-    <button onclick="window.close()" style="padding:8px 18px;background:#eee;border:none;border-radius:6px;cursor:pointer;font-size:13px">Close</button>
-  </div>
-  ${rows}
-  </body></html>`);
-  win.document.close();
-}
-
-/* ═══ EXPORT SUPPLIES CSV ═══ */
-function exportSuppliesCSV(supplies) {
-  const cols = ['supplyId','description','location','ministry','quantity','minQuantity','unit'];
-  const header = cols.join(',');
-  const rows = supplies.map(s => cols.map(c => {
-    const v = s[c];
-    if (v == null || v === '') return '';
-    const str = String(v);
-    return (str.includes(',') || str.includes('"') || str.includes('\n')) ? `"${str.replace(/"/g,'""')}"` : str;
-  }).join(','));
-  const csv = [header, ...rows].join('\n');
-  const a = Object.assign(document.createElement('a'), {
-    href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
-    download: `supplies-${new Date().toISOString().split('T')[0]}.csv`
-  });
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(a.href);
-}
-
-/* ═══ EXPORT RESERVATIONS CSV ═══ */
-function exportReservationsCSV(reservations) {
-  const cols = ['itemId','itemDesc','eventName','eventDate','returnDate','purpose','ministry','status','requestedByName','approvedByName','notes'];
-  const header = cols.join(',');
-  const rows = reservations.map(r => cols.map(c => {
-    const v = r[c];
-    if (v == null || v === '') return '';
-    const str = String(v);
-    return (str.includes(',') || str.includes('"') || str.includes('\n')) ? `"${str.replace(/"/g,'""')}"` : str;
-  }).join(','));
-  const csv = [header, ...rows].join('\n');
-  const a = Object.assign(document.createElement('a'), {
-    href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
-    download: `reservations-${new Date().toISOString().split('T')[0]}.csv`
-  });
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(a.href);
-}
-
-/* ═══ LOGO (Option C: Arc & Nodes) ═══ */
-function Logo({ size = 40, light = false }) {
-  const c1 = light ? "#fff" : B.teal;
-  const c2 = light ? "rgba(255,255,255,0.6)" : B.gold;
-  return (
-    <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
-      <path d="M36 12a17 17 0 1 0 0 24" stroke={c1} strokeWidth="5" strokeLinecap="round" fill="none"/>
-      <path d="M32 18a10 10 0 1 0 0 12" stroke={c2} strokeWidth="3" strokeLinecap="round" fill="none" opacity="0.7"/>
-      <circle cx="30" cy="24" r="4" fill={c1}/>
-      <circle cx="40" cy="12" r="3" fill={c2}/>
-      <circle cx="40" cy="36" r="3" fill={c2}/>
-      <circle cx="42" cy="24" r="2" fill={c2} opacity="0.6"/>
-    </svg>
-  );
-}
-function FullLogo({ size = 38, light = false }) {
-  const color = light ? "#fff" : B.navy;
-  return (
-    <div style={{ display:"flex", alignItems:"center", gap: size * 0.28 }}>
-      <Logo size={size} light={light} />
-      <div style={{ lineHeight: 1 }}>
-        <div style={{ fontFamily:f1, fontSize:size*0.46, fontWeight:700, color, letterSpacing:-0.5 }}>
-          ChurchOps<span style={{ color: light ? "rgba(255,255,255,0.7)" : B.teal }}>Hub</span>
-        </div>
-        <div style={{ fontFamily:f1, fontSize:size*0.2, fontWeight:400, color: light ? "rgba(255,255,255,0.45)" : B.textLight, letterSpacing:1.5, textTransform:"uppercase", marginTop:1 }}>
-          Inventory Management
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ═══ UI Primitives ═══ */
-function Modal({ open, onClose, title, wide, children }) {
-  const isMobile = useContext(MobileCtx);
-  if (!open) return null;
-  return <div style={{ position:"fixed", inset:0, zIndex:1000, display:"flex", alignItems:isMobile?"flex-end":"center", justifyContent:"center" }} onClick={onClose}>
-    <div style={{ position:"absolute", inset:0, background:"rgba(27,42,74,0.45)", backdropFilter:"blur(6px)" }}/>
-    <div style={{ position:"relative", background:B.cream, borderRadius:isMobile?"18px 18px 0 0":18, padding:isMobile?"22px 18px 28px":"30px 34px", maxWidth:wide?720:520, width:isMobile?"100%":"92%", maxHeight:isMobile?"92vh":"88vh", overflowY:"auto", boxShadow:"0 -8px 40px rgba(27,42,74,0.18)" }} onClick={e=>e.stopPropagation()}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:22 }}>
-        <h3 style={{ margin:0, fontSize:isMobile?17:20, fontFamily:f1, fontWeight:700, color:B.navy }}>{title}</h3>
-        <button onClick={onClose} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", color:B.textLight }}>&times;</button>
-      </div>
-      {children}
-    </div>
-  </div>;
-}
-function FF({ label, children }) {
-  return <div style={{ marginBottom:16 }}>
-    <label style={{ display:"block", fontSize:12, fontWeight:600, color:B.textLight, marginBottom:5, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>{label}</label>
-    {children}
-  </div>;
-}
-function Badge({ status }) {
-  const map = {
-    Available:     { bg:B.tealPale, tx:B.teal, dt:B.tealLight },
-    "In Use":      { bg:"#E8F0FE", tx:"#1A65C7", dt:"#3B82F6" },
-    "Checked Out": { bg:B.goldLight, tx:"#96750E", dt:B.gold },
-    "Under Repair":{ bg:B.redPale, tx:B.red, dt:"#E87171" },
-    Disposed:      { bg:"#F3F0F5", tx:"#7C5BA0", dt:"#9B7FC0" },
-  };
-  const s = map[status] || { bg:"#eee", tx:"#666", dt:"#999" };
-  return <span style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"4px 12px", borderRadius:20, background:s.bg, color:s.tx, fontSize:12, fontWeight:600, fontFamily:f1 }}><span style={{ width:7, height:7, borderRadius:"50%", background:s.dt }}/>{status}</span>;
-}
-function Stat({ label, value, icon, color }) {
-  return <div style={{ background:B.white, borderRadius:14, padding:"20px 22px", flex:"1 1 130px", minWidth:130, boxShadow:"0 1px 3px rgba(27,42,74,0.06)", border:"1px solid "+B.sand }}>
-    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-      <span style={{ fontSize:18 }}>{icon}</span>
-      <span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:1, fontFamily:f1 }}>{label}</span>
-    </div>
-    <div style={{ fontSize:30, fontWeight:700, color:color||B.navy, fontFamily:f1 }}>{value}</div>
-  </div>;
-}
-function Spinner() {
-  return <div style={{ fontFamily:f2, display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:B.cream, color:B.textLight, flexDirection:"column", gap:12 }}>
-    <div style={{ width:40, height:40, border:"3px solid "+B.sand, borderTopColor:B.teal, borderRadius:"50%", animation:"spin 1s linear infinite" }}/>
-    <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-    <span style={{ fontFamily:f1, fontWeight:500 }}>Loading...</span>
-  </div>;
-}
 
 /* ═══════════════════════════════════════════════ */
 /* ═══ AUTH SCREENS ═════════════════════════════ */
@@ -500,8 +224,8 @@ function AuthScreen({ authHook }) {
 /* ═══ SETTINGS PAGE ════════════════════════════ */
 /* ═══════════════════════════════════════════════ */
 
-function SettingsPage({ store, userProfile }) {
-  const { settings, config, users, updateSettings, updateConfig, updateUser, loadUsers } = store;
+function SettingsPage({ store, userProfile, subscription }) {
+  const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, loadUsers } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
   const [newItem, setNewItem] = useState("");
@@ -556,9 +280,49 @@ function SettingsPage({ store, userProfile }) {
     );
   };
 
+  const planLabel = !subscription ? 'Free' : subscription.plan === 'free' ? 'Free' : subscription.plan === 'all_in' ? 'All-In' : subscription.plan === 'team_unlimited' ? 'Team Unlimited' : subscription.plan;
+  const activeHubs = subscription?.grandfathered ? ['All hubs (grandfathered)'] : (subscription?.hubs || []);
+
   return (
     <div>
       <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:"0 0 20px" }}>Settings</h2>
+
+      {/* Subscription & Billing */}
+      <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+          <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Subscription & Billing</h3>
+          {isAdmin && (
+            <a href="mailto:hello@churchopshub.com?subject=Upgrade ChurchOpsHub Plan" style={{ ...btnP, padding:"6px 14px", fontSize:12, textDecoration:"none", display:"inline-block" }}>Upgrade</a>
+          )}
+        </div>
+        <div style={{ display:"flex", gap:24, flexWrap:"wrap" }}>
+          <div>
+            <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Current Plan</div>
+            <div style={{ fontSize:15, fontWeight:700, color:B.navy }}>{planLabel}</div>
+          </div>
+          <div>
+            <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Status</div>
+            <div style={{ fontSize:15, fontWeight:600, color: subscription?.status === 'active' || subscription?.status === 'trialing' ? B.teal : B.red }}>
+              {subscription?.status || 'active'}
+            </div>
+          </div>
+          {activeHubs.length > 0 && (
+            <div>
+              <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Active Hubs</div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {activeHubs.map(h => (
+                  <span key={h} style={{ padding:"2px 10px", borderRadius:20, background:B.tealPale, color:B.teal, fontSize:12, fontWeight:600, fontFamily:f1 }}>{h}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        {planLabel === 'Free' && (
+          <p style={{ color:B.textLight, fontSize:13, marginTop:12, marginBottom:0 }}>
+            Add hubs like <strong>Maintenance</strong> to unlock advanced features. <a href="mailto:hello@churchopshub.com" style={{ color:B.teal, textDecoration:"none", fontWeight:600 }}>Contact us</a> to start a free 30-day trial.
+          </p>
+        )}
+      </div>
 
       {/* Church Info */}
       <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
@@ -636,6 +400,8 @@ function SettingsPage({ store, userProfile }) {
                     ) : (
                       <button onClick={()=>updateUser(u.id, {active:true})} style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.teal, borderColor:B.tealPale }}>Reactivate</button>
                     )}
+                    <button onClick={()=>{ if(window.confirm(`Remove ${u.name} from your church? They will no longer have access.`)) removeUser(u.id); }}
+                      style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.red, borderColor:"#FECACA" }}>Remove</button>
                   </div>
                 )}
               </div>
@@ -2294,6 +2060,7 @@ export default function App() {
 function AppShell({ authHook }) {
   const { userProfile, logout } = authHook;
   const store = useFirestore(userProfile.churchId);
+  const { subscription, hasHub } = useSubscription(userProfile.churchId);
   const [tab, setTab] = useState("dashboard");
   const [menuOpen, setMenuOpen] = useState(false);
   const isMobile = useWindowWidth() < 768;
@@ -2318,6 +2085,7 @@ function AppShell({ authHook }) {
 
   const lowStock = (store.supplies || []).filter(c => c.quantity <= c.minQuantity);
   const pendingRes = (store.reservations || []).filter(r => r.status === "Pending");
+  const hasMaintenance = hasHub('maintenance');
 
   return (
     <MobileCtx.Provider value={isMobile}>
@@ -2355,8 +2123,9 @@ function AppShell({ authHook }) {
 
           {/* Tabs — desktop only */}
           {!isMobile && <div style={{ display:"flex", gap:2, marginTop:16, marginBottom:-14, overflowX:"auto" }}>
-            {[["dashboard","Dashboard"],["inventory","All Items"],["supplies","Supplies"],["reservations","Reservations"],["log","Activity Log"],["settings","Settings"]].map(([k,v]) =>
+            {[["dashboard","Dashboard"],["inventory","All Items"],["supplies","Supplies"],["reservations","Reservations"],["log","Activity Log"],["maintenance","Maintenance"],["settings","Settings"]].map(([k,v]) =>
               <button key={k} onClick={()=>{setTab(k);setMenuOpen(false);}} style={tabBtn(k)}>{v}
+                {k==="maintenance"&&!hasMaintenance&&<span style={{ marginLeft:4, opacity:.7 }}>🔒</span>}
                 {k==="supplies"&&lowStock.length>0&&<span style={{ marginLeft:6, background:B.red, color:"#fff", borderRadius:10, padding:"1px 7px", fontSize:10, fontWeight:700 }}>{lowStock.length}</span>}
                 {k==="reservations"&&pendingRes.length>0&&<span style={{ marginLeft:6, background:B.gold, color:"#fff", borderRadius:10, padding:"1px 7px", fontSize:10, fontWeight:700 }}>{pendingRes.length}</span>}
               </button>
@@ -2371,11 +2140,22 @@ function AppShell({ authHook }) {
       {/* Page content */}
       <div style={{ maxWidth:1100, margin:"0 auto", padding:isMobile?"16px 14px 96px":"28px 28px 60px" }} onClick={()=>menuOpen&&setMenuOpen(false)}>
         {tab === "dashboard" && <Dashboard store={store} userProfile={userProfile} />}
-        {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} />}
+        {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} subscription={subscription} />}
         {tab === "inventory" && <ItemsPage store={store} userProfile={userProfile} initialItemId={initialItemId} />}
         {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
         {tab === "reservations" && <ReservationsPage store={store} userProfile={userProfile} />}
         {tab === "log" && <ActivityLogPage store={store} />}
+        {tab === "maintenance" && (
+          <UpgradeGate
+            hubName="maintenance"
+            hubLabel="Maintenance Hub"
+            hubPrice="$19"
+            hubDescription="Track repair tickets, manage vendors, and keep your equipment in top shape."
+            hasHub={hasMaintenance}
+          >
+            <MaintenancePage store={store} userProfile={userProfile} />
+          </UpgradeGate>
+        )}
       </div>
 
       {/* Footer — desktop only */}
@@ -2394,13 +2174,13 @@ function AppShell({ authHook }) {
             ["inventory","Items","📦"],
             ["supplies","Stock","🧴"],
             ["reservations","Reserve","📅"],
-            ["log","Log","📋"],
+            ["maintenance","Maint","🔧"],
             ["settings","Settings","⚙️"],
           ].map(([k,label,icon]) => (
             <button key={k} onClick={()=>{setTab(k);setMenuOpen(false);}}
               style={{ flex:1, padding:"8px 2px 6px", border:"none", background:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:tab===k?B.teal:B.textLight, position:"relative" }}>
               <span style={{ fontSize:20 }}>{icon}</span>
-              <span style={{ fontSize:9, fontWeight:700, fontFamily:f1, letterSpacing:.3 }}>{label}</span>
+              <span style={{ fontSize:9, fontWeight:700, fontFamily:f1, letterSpacing:.3 }}>{label}{k==="maintenance"&&!hasMaintenance?" 🔒":""}</span>
               {k==="supplies"&&lowStock.length>0&&<span style={{ position:"absolute", top:4, right:"calc(50% - 16px)", background:B.red, color:"#fff", borderRadius:10, padding:"0 4px", fontSize:9, fontWeight:700, minWidth:14, textAlign:"center" }}>{lowStock.length}</span>}
               {k==="reservations"&&pendingRes.length>0&&<span style={{ position:"absolute", top:4, right:"calc(50% - 16px)", background:B.gold, color:"#fff", borderRadius:10, padding:"0 4px", fontSize:9, fontWeight:700, minWidth:14, textAlign:"center" }}>{pendingRes.length}</span>}
             </button>

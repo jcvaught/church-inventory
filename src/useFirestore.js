@@ -13,6 +13,8 @@ export function useFirestore(churchId) {
   const [activityLog, setActivityLog] = useState([]);
   const [reservations, setReservations] = useState([]);
   const [users, setUsers] = useState([]);
+  const [maintenanceTickets, setMaintenanceTickets] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -21,7 +23,7 @@ export function useFirestore(churchId) {
     if (!churchId) return;
     const unsubs = [];
     let loaded = 0;
-    const totalSubs = 6;
+    const totalSubs = 8;
     const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
     // Config
@@ -59,6 +61,20 @@ export function useFirestore(churchId) {
     // Reservations
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'reservations'), (snap) => {
       setReservations(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
+      checkDone();
+    }, (err) => { setError(err.message); checkDone(); }));
+
+    // Maintenance Tickets
+    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'maintenanceTickets'), (snap) => {
+      const tickets = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+      tickets.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      setMaintenanceTickets(tickets);
+      checkDone();
+    }, (err) => { setError(err.message); checkDone(); }));
+
+    // Vendors
+    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'vendors'), (snap) => {
+      setVendors(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
     }, (err) => { setError(err.message); checkDone(); }));
 
@@ -293,14 +309,71 @@ export function useFirestore(churchId) {
     } catch (err) { setError(err.message); }
   }, [loadUsers]);
 
+  const removeUser = useCallback(async (userId) => {
+    try {
+      await deleteDoc(doc(db, 'users', userId));
+      await loadUsers();
+    } catch (err) { setError(err.message); }
+  }, [loadUsers]);
+
+  // ── Maintenance Tickets ──
+  const addTicket = useCallback(async (ticket, userId, userName) => {
+    try {
+      // Auto-generate ticket number
+      const ticketCount = (await getDocs(collection(db, 'churches', churchId, 'maintenanceTickets'))).size;
+      const ticketNumber = 'MNT-' + String(ticketCount + 1).padStart(3, '0');
+      const ref = await addDoc(collection(db, 'churches', churchId, 'maintenanceTickets'), {
+        ...ticket,
+        ticketNumber,
+        reportedBy: userId,
+        reportedByName: userName,
+        status: ticket.status || 'Open',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        resolvedAt: null
+      });
+      await logActivity('add_ticket', ticket.itemId || ticketNumber, userId, userName, { description: ticket.issue, priority: ticket.priority });
+      return ref.id;
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const updateTicket = useCallback(async (docId, updates) => {
+    try {
+      const data = { ...updates, updatedAt: new Date().toISOString() };
+      if (updates.status === 'Resolved' && !updates.resolvedAt) {
+        data.resolvedAt = new Date().toISOString();
+      }
+      await updateDoc(doc(db, 'churches', churchId, 'maintenanceTickets', docId), data);
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  // ── Vendors ──
+  const addVendor = useCallback(async (vendor) => {
+    try {
+      await addDoc(collection(db, 'churches', churchId, 'vendors'), {
+        ...vendor,
+        createdAt: new Date().toISOString()
+      });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const updateVendor = useCallback(async (docId, updates) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'vendors', docId), updates);
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
   return {
     config, settings, items, supplies, activityLog, reservations, users,
+    maintenanceTickets, vendors,
     loading, error,
     updateSettings, updateConfig, loadUsers,
     addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired,
     addSupply, updateSupply, useSupply, restockSupply,
     logActivity,
     addReservation, updateReservation,
-    updateUser
+    updateUser, removeUser,
+    addTicket, updateTicket,
+    addVendor, updateVendor
   };
 }
