@@ -86,6 +86,7 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
   // ── Add Item ──
   async function handleAdd() {
     if (!itemForm.itemId.trim() || !itemForm.description.trim()) return;
+    if (itemForm.itemId.trim().length < 3) { flash("Item ID must be at least 3 characters."); return; }
     const duplicate = items.find(i => i.itemId === itemForm.itemId.trim());
     if (duplicate) { flash(`Item ID "${itemForm.itemId.trim()}" already exists. Use a unique ID.`); return; }
     setSaving(true);
@@ -127,6 +128,7 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
   // ── Edit Item ──
   async function handleEdit() {
     if (!showEdit) return;
+    if (itemForm.itemId.trim().length < 3) { flash("Item ID must be at least 3 characters."); return; }
     setSaving(true);
     let photoUrl = showEdit.photoUrl || "";
     if (photoFile) {
@@ -566,7 +568,7 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
           )}
           <div><input type="file" accept="image/*" id="photo-add" style={{ display:"none" }} onChange={e=>{const f=e.target.files[0];if(f){setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));}}}/><label htmlFor="photo-add" style={{ ...btnS, display:"inline-block", cursor:"pointer", padding:"7px 16px", fontSize:13 }}>{photoPreview?"📷 Change Photo":"📷 Add Photo"}</label></div>
         </FF>
-        <button onClick={handleAdd} disabled={saving||!itemForm.itemId.trim()||!itemForm.description.trim()} style={{ ...btnP, width:"100%", opacity:(saving||!itemForm.itemId.trim()||!itemForm.description.trim())?.5:1, marginTop:4 }}>
+        <button onClick={handleAdd} disabled={saving||itemForm.itemId.trim().length<3||!itemForm.description.trim()} style={{ ...btnP, width:"100%", opacity:(saving||itemForm.itemId.trim().length<3||!itemForm.description.trim())?.5:1, marginTop:4 }}>
           {saving ? "Saving..." : "Add Item"}
         </button>
       </Modal>

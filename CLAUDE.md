@@ -208,6 +208,7 @@ Hub visibility is controlled at two levels:
 - Billing portal in SettingsPage
 
 ### UX Polish (Ongoing)
+- ~~Scoped invite links~~ ✅ Done — Settings > Team Members: admin generates `?invite=CODE&hubs=maintenance,...` link; `AuthScreen` detects param, auto-opens register tab with church code pre-filled and hub banner; `register`/`registerWithGoogle` accept `allowedHubs` and save to user profile.
 - Bulk actions (select multiple items to check out, change location, or export)
 - Item duplication ("Duplicate item" to clone similar items)
 - Keyboard shortcuts (N to add item, / to focus search, Esc to close modal)
@@ -228,7 +229,7 @@ The data model is already multi-tenant (`churches/{churchId}/`). The following m
 
 ### 🟡 Important — Before Soft Launch
 
-**Email verification** — Add `sendEmailVerification()` after registration to reduce fake/abuse accounts. Show a dismissible banner to unverified users prompting them to check their inbox. Resend button. Skip for Google sign-in (already verified). Implementation: `useAuth.js` (send on register), `App.jsx` (banner in AppShell using `user.emailVerified`).
+~~**Email verification**~~ ✅ Done — `sendEmailVerification()` called after `createChurch` and `register` (skipped for Google sign-in). Dismissible yellow banner in `AppShell` for unverified users with Resend button; `resendVerification()` exposed from `useAuth`.
 
 **Church creation rate limiting** — Nothing prevents one person from creating hundreds of churches. Simple approach: add a hidden honeypot field to the Create Church form; any submission that fills it is silently rejected. Could also add a 1-church-per-email check in Firestore before creating. Implementation: `AuthScreen` createChurch form + `useAuth.js` `createChurch()`.
 
@@ -238,7 +239,7 @@ The data model is already multi-tenant (`churches/{churchId}/`). The following m
 
 ### 🟢 Polish — For Full Public Launch
 
-**Item ID minimum length** — Single-character IDs like "A" are accepted. Require at least 3 characters before allowing save. Implementation: validate in `ItemsPage.jsx` Add/Edit item form submit handler.
+~~**Item ID minimum length**~~ ✅ Done — `handleAdd` and `handleEdit` in `ItemsPage.jsx` reject IDs shorter than 3 characters with a flash message; Add button disabled until valid.
 
 **Onboarding flow** — After church creation, guide the admin through adding their first location, ministry, and item. Could be a multi-step modal that fires once on first login when `items.length === 0`. Implementation: new `OnboardingModal` component in `App.jsx` or `SettingsPage.jsx`; flag in `config/main` (`onboardingComplete: true`) once dismissed.
 

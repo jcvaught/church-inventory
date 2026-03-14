@@ -6,7 +6,8 @@ import {
   signInWithPopup,
   signOut,
   updateProfile,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  sendEmailVerification
 } from 'firebase/auth';
 import {
   doc, setDoc, getDoc, getDocs,
@@ -140,6 +141,7 @@ export function useAuth() {
       };
       await setDoc(doc(db, 'users', cred.user.uid), profile);
       setUserProfile({ id: cred.user.uid, ...profile });
+      await sendEmailVerification(cred.user).catch(() => {});
 
       return { success: true };
     } catch (err) {
@@ -154,7 +156,7 @@ export function useAuth() {
   }, []);
 
   // Register with church code
-  const register = useCallback(async ({ userName, email, password, churchCode }) => {
+  const register = useCallback(async ({ userName, email, password, churchCode, allowedHubs }) => {
     setError(null);
     let cred = null;
     try {
@@ -175,14 +177,16 @@ export function useAuth() {
       const profile = {
         name: userName,
         email,
-        role: 'member',
+        role: 'user',
         churchId: foundChurchId,
         active: true,
+        ...(allowedHubs != null ? { allowedHubs } : {}),
         createdAt: new Date().toISOString(),
         lastLogin: new Date().toISOString()
       };
       await setDoc(doc(db, 'users', cred.user.uid), profile);
       setUserProfile({ id: cred.user.uid, ...profile });
+      await sendEmailVerification(cred.user).catch(() => {});
 
       return { success: true };
     } catch (err) {
@@ -241,7 +245,7 @@ export function useAuth() {
   }, []);
 
   // Register via Google (after Google sign-in if no profile exists)
-  const registerWithGoogle = useCallback(async ({ churchCode }) => {
+  const registerWithGoogle = useCallback(async ({ churchCode, allowedHubs }) => {
     setError(null);
     try {
       if (!auth.currentUser) throw new Error('No Google session found.');
@@ -255,9 +259,10 @@ export function useAuth() {
       const profile = {
         name: auth.currentUser.displayName || auth.currentUser.email,
         email: auth.currentUser.email,
-        role: 'member',
+        role: 'user',
         churchId: foundChurchId,
         active: true,
+        ...(allowedHubs != null ? { allowedHubs } : {}),
         createdAt: new Date().toISOString(),
         lastLogin: new Date().toISOString()
       };
@@ -290,6 +295,10 @@ export function useAuth() {
     }
   }, []);
 
+  const resendVerification = useCallback(async () => {
+    if (auth.currentUser) await sendEmailVerification(auth.currentUser).catch(() => {});
+  }, []);
+
   return {
     user,
     userProfile,
@@ -302,6 +311,7 @@ export function useAuth() {
     loginWithGoogle,
     registerWithGoogle,
     logout,
-    resetPassword
+    resetPassword,
+    resendVerification
   };
 }

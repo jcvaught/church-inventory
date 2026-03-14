@@ -26,6 +26,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd })
   const [editHubs, setEditHubs] = useState([]);
   const [editMinistries, setEditMinistries] = useState([]);
   const [savingAccess, setSavingAccess] = useState(false);
+  const [inviteHubs, setInviteHubs] = useState(() => []);
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
 
   const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub' };
   const churchHubs = subscription?.grandfathered || subscription?.plan === 'all_in'
@@ -97,6 +99,21 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd })
     const results = await loadSuggestions();
     setAllSuggestions(results);
     setLoadingSuggestions(false);
+  }
+
+  // Sync inviteHubs default to churchHubs once subscription loads (runs once when churchHubs becomes non-empty)
+  const [inviteHubsInitialized, setInviteHubsInitialized] = useState(false);
+  if (!inviteHubsInitialized && churchHubs.length > 0) {
+    setInviteHubsInitialized(true);
+    setInviteHubs([...churchHubs]);
+  }
+
+  function handleCopyInviteLink() {
+    const params = new URLSearchParams({ invite: config.churchCode });
+    if (inviteHubs.length > 0) params.set('hubs', inviteHubs.join(','));
+    navigator.clipboard.writeText(window.location.origin + '/?' + params.toString());
+    setInviteLinkCopied(true);
+    setTimeout(() => setInviteLinkCopied(false), 2000);
   }
 
   const isAdmin = userProfile?.role === "admin";
@@ -265,6 +282,33 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd })
             ))}
           </div>
         }
+
+        {/* Invite Link Generator — admin only */}
+        {isAdmin && (
+          <div style={{ marginTop:20, paddingTop:18, borderTop:"1px solid "+B.sand }}>
+            <div style={{ fontSize:14, fontWeight:700, fontFamily:f1, color:B.navy, marginBottom:4 }}>Invite Link</div>
+            <p style={{ fontSize:13, color:B.textLight, margin:"0 0 12px" }}>Generate a link that pre-fills the church code and hub access for new team members.</p>
+            {churchHubs.length > 0 && (
+              <div style={{ marginBottom:12 }}>
+                <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:8 }}>Include hub access</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
+                  {churchHubs.map(hub => (
+                    <label key={hub} style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", fontSize:13 }}>
+                      <input type="checkbox" checked={inviteHubs.includes(hub)}
+                        onChange={e => setInviteHubs(prev => e.target.checked ? [...prev, hub] : prev.filter(h => h !== hub))}
+                        style={{ width:15, height:15, accentColor:B.teal }}/>
+                      {HUB_LABELS[hub] || hub}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button onClick={handleCopyInviteLink}
+              style={{ ...btnS, padding:"8px 16px", fontSize:13, color:inviteLinkCopied?B.teal:undefined, borderColor:inviteLinkCopied?B.tealPale:undefined }}>
+              {inviteLinkCopied ? "Link Copied!" : "Copy Invite Link"}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Edit Access Modal */}
