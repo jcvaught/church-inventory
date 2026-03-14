@@ -12,6 +12,7 @@ import { MaintenancePage } from './pages/hubs/MaintenancePage.jsx';
 import { InsightsPage } from './pages/hubs/InsightsPage.jsx';
 import { CoordinationPage } from './pages/hubs/CoordinationPage.jsx';
 import { AccountabilityPage } from './pages/hubs/AccountabilityPage.jsx';
+import { LandingPage } from './pages/LandingPage.jsx';
 import { Dashboard } from './pages/Dashboard.jsx';
 import { ItemsPage } from './pages/ItemsPage.jsx';
 import { SuppliesPage } from './pages/SuppliesPage.jsx';
@@ -24,7 +25,7 @@ import { SettingsPage } from './pages/SettingsPage.jsx';
 /* ═══ AUTH SCREENS ═════════════════════════════ */
 /* ═══════════════════════════════════════════════ */
 
-function AuthScreen({ authHook }) {
+function AuthScreen({ authHook, initialMode = 'login', onBack }) {
   const { login, loginWithGoogle, register, registerWithGoogle, createChurch, resetPassword, error, setError } = authHook;
   const [inviteData] = useState(() => {
     const p = new URLSearchParams(window.location.search);
@@ -34,7 +35,7 @@ function AuthScreen({ authHook }) {
     window.history.replaceState({}, '', window.location.pathname);
     return { code: code.toUpperCase(), hubs: hubs != null ? hubs.split(',').filter(Boolean) : null };
   });
-  const [mode, setMode] = useState(inviteData ? "register" : "login");
+  const [mode, setMode] = useState(inviteData ? "register" : initialMode);
   const [form, setForm] = useState({ name:"", email:"", password:"", churchCode: inviteData?.code || "", churchName:"" });
   const [honeypot, setHoneypot] = useState("");
   const [busy, setBusy] = useState(false);
@@ -98,8 +99,13 @@ function AuthScreen({ authHook }) {
   const cardStyle = { background:B.white, borderRadius:20, padding:"44px 40px", maxWidth:420, width:"92%", boxShadow:"0 8px 40px rgba(27,42,74,0.1)" };
 
   return (
-    <div style={{ fontFamily:f2, minHeight:"100vh", background:`linear-gradient(170deg, ${B.cream} 0%, ${B.warmGray} 100%)`, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+    <div style={{ fontFamily:f2, minHeight:"100vh", background:`linear-gradient(170deg, ${B.cream} 0%, ${B.warmGray} 100%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:20 }}>
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+      {onBack && (
+        <button onClick={onBack} style={{ position:"fixed", top:20, left:20, background:"none", border:"none", cursor:"pointer", color:B.textMid, fontFamily:f1, fontSize:14, fontWeight:600, display:"flex", alignItems:"center", gap:6, padding:"6px 10px", borderRadius:8 }}>
+          ← Back
+        </button>
+      )}
 
       {mode === "login" && (
         <div style={cardStyle}>
@@ -388,9 +394,23 @@ function AuthScreen({ authHook }) {
 export default function App() {
   const authHook = useAuth();
   const { user, userProfile, loading: authLoading } = authHook;
+  const [showAuth, setShowAuth] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    return p.get('signup') !== null || p.get('invite') !== null;
+  });
+  const [authInitialMode, setAuthInitialMode] = useState('login');
+
+  const handleGetStarted = (mode = 'register') => {
+    setAuthInitialMode(mode);
+    setShowAuth(true);
+  };
 
   if (authLoading) return <Spinner />;
-  if (!user || !userProfile) return <AuthScreen authHook={authHook} />;
+
+  if (!user || !userProfile) {
+    if (!showAuth) return <LandingPage onGetStarted={handleGetStarted} />;
+    return <AuthScreen authHook={authHook} initialMode={authInitialMode} onBack={() => setShowAuth(false)} />;
+  }
 
   return <AppShell authHook={authHook} />;
 }
