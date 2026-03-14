@@ -43,7 +43,8 @@ src/
 │   ├── ActivityLogPage.jsx
 │   ├── SettingsPage.jsx       ← Includes Subscription & Billing card for admins
 │   └── hubs/
-│       └── MaintenancePage.jsx ← Maintenance Hub (Phase 3)
+│       ├── MaintenancePage.jsx ← Maintenance Hub (Phase 3)
+│       └── InsightsPage.jsx    ← Insights Hub (Phase 4): utilization, ministry, seasonal, financial, supply analytics (Recharts)
 ├── utils/
 │   ├── csv.js                 ← exportItemsCSV, exportSuppliesCSV, exportReservationsCSV
 │   ├── print.js               ← printLabel, printInventory
@@ -96,7 +97,7 @@ All church data is namespaced under `churches/{churchId}/`:
 - Two font families: `f1 = 'Outfit'` (headings/UI), `f2 = 'Source Sans 3'` (body text) — loaded from Google Fonts at runtime.
 - Shared style objects: `inp` (inputs), `btnP` (primary button), `btnS` (secondary), `btnD` (danger) — all from `src/components/brand/tokens.js`.
 - Reusable primitives in `src/components/primitives/`: `Modal`, `FF` (form field wrapper), `Badge` (status pill), `Stat` (dashboard stat card), `Spinner`, `UpgradeGate`.
-- Tab keys: `dashboard`, `settings`, `inventory`, `supplies`, `reservations`, `log`, `maintenance`.
+- Tab keys: `dashboard`, `inventory`, `supplies`, `reservations`, `log`, `insights`, `maintenance`, `settings`. Hub tabs (`insights`, `maintenance`) hidden from users whose `allowedHubs[]` excludes them; shown with 🔒 when church hasn't subscribed.
 - `MobileCtx` React context + `useWindowWidth()` hook in `src/hooks/useMobile.js`. Components read `useContext(MobileCtx)` — no prop drilling needed. Breakpoint is 768px.
 - Mobile: tabs hidden, bottom nav bar fixed at bottom, modals slide up from bottom.
 - **Deep linking:** `?item=ITEM_ID` URL param auto-opens item detail. URL cleaned with `history.replaceState` after read.
@@ -120,8 +121,8 @@ Everything existing stays free. 10 team members per church included.
 
 | Hub | Price | Status |
 |-----|-------|--------|
-| **Team Hub** | $9/mo (25 users) or $19/mo (unlimited) | Planned — Phase 5 |
-| **Insights Hub** | $7/mo | Planned — Phase 4 |
+| **Team Hub** | $9/mo (25 users) or $19/mo (unlimited) | ✅ Done — Phase 5 |
+| **Insights Hub** | $7/mo | ✅ Done — Phase 4 |
 | **Maintenance Hub** | $7/mo | ✅ Done — Phase 3 |
 | **Coordination Hub** | $7/mo | Planned — Phase 6 |
 | **Accountability Hub** | $5/mo | Planned — Phase 6 |
@@ -146,7 +147,8 @@ Existing churches at launch: 12 months Founder status (unlimited users, all hubs
 ### Feature Gating
 - `useSubscription(churchId)` → `hasHub(name)`, `canAddUser(count)`, `isTrialing(name)`
 - `UpgradeGate` component wraps paid pages
-- Hub tabs always visible (with 🔒 when locked) to drive discovery
+- Hub tabs: shown with 🔒 when church hasn't subscribed (drives discovery); hidden entirely when user's `allowedHubs[]` excludes them
+- `userCanSeeHub(hubName)` in `App.jsx` combines church-level `hasHub()` + user-level `allowedHubs` check
 - Payment: Stripe (Cloud Functions — not yet wired up; mailto CTA for now)
 
 ### Per-User Hub Access (Phase 5)
@@ -163,24 +165,26 @@ Hub visibility is controlled at two levels:
 
 ## Roadmap
 
-### ✅ Done — Phases 1–3
+### ✅ Done — Phases 1–5
+
+**Phases 1–3:**
 - Code restructured into component/page/hook/utils files
 - Subscription infrastructure (useSubscription, UpgradeGate, subscription doc on church creation)
 - Maintenance Hub (rebuilt): kanban + list views, 6-status workflow (Backlog→Complete), multi-assignee, tag autocomplete (`maintenanceTags` via `arrayUnion`), photo uploads (Firebase Storage at `churches/{churchId}/maintenance/{docId}/`), real-time comment threads (subcollection), vendor directory, overdue date highlighting, `maint_viewMode` persisted to localStorage
 - User Suggestions: all users can submit categorized suggestions (Feature Request / Bug Report / Other) from SettingsPage; stored in top-level `suggestions` collection (cross-church); owner-only report panel gated by `['jcvaught@gmail.com', 'jvaught@fxcc.org'].includes(email)` in UI and by `request.auth.token.email in [...]` in Firestore rules
 
-### Phase 4 — Insights Hub
-- Item utilization stats, ministry usage breakdown, seasonal trends
-- Depreciation tracking (purchaseDate/Price → estimated value)
-- Supply burn rate + reorder forecasting
-- Additional `purchaseDate`, `purchasePrice`, `estimatedValue` fields on items
+**Phase 4 — Insights Hub:**
+- `InsightsPage.jsx`: 5 sections — Item Utilization, Ministry Breakdown, Seasonal Trends, Financial & Depreciation, Supply Burn Rate
+- Recharts (BarChart, AreaChart, PieChart) for all visualizations
+- Financial fields on items: `purchaseDate`, `purchasePrice`, `warrantyExpiry`, `estimatedValue` (collapsible in Add/Edit modals; shown in Detail modal)
+- Straight-line depreciation over 5 years; manual override option; warranty expiry alerts (90-day window)
 
-### Phase 5 — Team Hub
-- 10-user soft cap with upgrade banner
-- Three roles: `admin` (full access), `manager` (assigned hubs + managed ministries), `user` (assigned hubs only)
-- `managedMinistries[]` field on user profiles — managers scoped to their ministries
-- `allowedHubs[]` field on user profiles — per-user hub visibility (null = all church hubs)
-- Admin UI in Settings > Team Members to assign hubs and ministries per user
+**Phase 5 — Team Hub:**
+- User count display in Team Members header (e.g. "8 / 10 members"); upgrade banner for admins at/over the free plan 10-user cap
+- Three roles: `admin` (full access), `manager` (assigned hubs + managed ministries), `user` (assigned hubs only); distinct badge colors
+- Edit Access modal in Settings > Team Members: role selector (Admin/Manager/User), hub checkboxes (church-active hubs only), managed ministries multi-select (manager only)
+- `userCanSeeHub(hubName)` in `App.jsx`: admins see all; manager/user sees intersection of church `hubs[]` and `allowedHubs[]`; `allowedHubs: null` = inherit all (backward compat)
+- Hub tabs hidden (not locked) when user's `allowedHubs` excludes them; Firestore rules unchanged
 
 ### Phase 6 — Coordination Hub
 - Email notifications (EmailJS): reservation approved/denied, overdue, low-stock
