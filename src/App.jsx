@@ -407,7 +407,7 @@ function AppShell({ authHook }) {
 
       {/* Mobile Bottom Nav */}
       {isMobile && (
-        <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:200, background:B.white, borderTop:"1px solid "+B.sand, display:"flex", paddingBottom:"env(safe-area-inset-bottom, 0px)" }}>
+        <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:200, background:B.white, borderTop:"1px solid "+B.sand, display:"flex", overflowX:"auto", scrollbarWidth:"none", paddingBottom:"env(safe-area-inset-bottom, 0px)" }}>
           {[
             ["dashboard","Home","🏠"],
             ["inventory","Items","📦"],
@@ -420,7 +420,7 @@ function AppShell({ authHook }) {
             ["settings","Settings","⚙️"],
           ].map(([k,label,icon]) => (
             <button key={k} onClick={()=>{setTab(k);setMenuOpen(false);}}
-              style={{ flex:1, padding:"8px 2px 6px", border:"none", background:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:tab===k?B.teal:B.textLight, position:"relative" }}>
+              style={{ flex:"0 0 64px", padding:"8px 2px 6px", border:"none", background:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:tab===k?B.teal:B.textLight, position:"relative" }}>
               <span style={{ fontSize:20 }}>{icon}</span>
               <span style={{ fontSize:9, fontWeight:700, fontFamily:f1, letterSpacing:.3 }}>{label}{k==="maintenance"&&!hasMaintenance?" 🔒":""}{k==="insights"&&!hasInsights?" 🔒":""}{k==="coordination"&&!hasCoordination?" 🔒":""}{k==="accountability"&&!hasAccountability?" 🔒":""}</span>
               {k==="supplies"&&lowStock.length>0&&<span style={{ position:"absolute", top:4, right:"calc(50% - 16px)", background:B.red, color:"#fff", borderRadius:10, padding:"0 4px", fontSize:9, fontWeight:700, minWidth:14, textAlign:"center" }}>{lowStock.length}</span>}
