@@ -6,7 +6,7 @@ import { Stat } from '../components/primitives/Stat.jsx';
 import { exportReservationsCSV } from '../utils/csv.js';
 
 export function ReservationsPage({ store, userProfile }) {
-  const { items, settings, reservations, addReservation, updateReservation, checkOutItem, logActivity } = store;
+  const { items, settings, reservations, users, notificationConfig, config, addReservation, updateReservation, checkOutItem, logActivity } = store;
   const activeItems = items.filter(i => i.status !== "Disposed");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
@@ -22,6 +22,9 @@ export function ReservationsPage({ store, userProfile }) {
   const emptyRes = { itemDocId:"", itemId:"", itemDesc:"", eventName:"", eventDate:"", returnDate:"", purpose:"", ministry:"", notes:"" };
   const [form, setForm] = useState(emptyRes);
   const [conflictErr, setConflictErr] = useState("");
+  const [recurring, setRecurring] = useState(false);
+  const [recurrenceFreq, setRecurrenceFreq] = useState("weekly");
+  const [recurrenceEnd, setRecurrenceEnd] = useState("");
 
   function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }
 
@@ -42,6 +45,37 @@ export function ReservationsPage({ store, userProfile }) {
   const filtered = reservations.filter(r => statusFilter === "all" || r.status === statusFilter)
     .sort((a,b) => (b.createdAt||"").localeCompare(a.createdAt||""));
 
+  async function sendNotificationEmail(templateId, requesterEmail, requesterName, params) {
+    const nc = notificationConfig || {};
+    if (!nc.enabled || !nc.serviceId || !nc.publicKey || !templateId || !requesterEmail) return;
+    try {
+      const emailjs = await import('@emailjs/browser');
+      await emailjs.send(nc.serviceId, templateId, {
+        to_email: requesterEmail,
+        to_name: requesterName,
+        church_name: config?.churchName || '',
+        ...params,
+      }, { publicKey: nc.publicKey });
+    } catch(e) { console.error('EmailJS:', e); }
+  }
+
+  function generateRecurrenceDates(startDate, returnDate, freq, endDate) {
+    const dates = [];
+    const current = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T00:00:00');
+    const retOffset = returnDate ? (new Date(returnDate + 'T00:00:00') - new Date(startDate + 'T00:00:00')) : 0;
+    while (true) {
+      if (freq === 'weekly') current.setDate(current.getDate() + 7);
+      else if (freq === 'biweekly') current.setDate(current.getDate() + 14);
+      else if (freq === 'monthly') current.setMonth(current.getMonth() + 1);
+      if (current > end) break;
+      const ev = current.toISOString().split('T')[0];
+      const ret = returnDate ? new Date(current.getTime() + retOffset).toISOString().split('T')[0] : '';
+      dates.push({ eventDate: ev, returnDate: ret });
+    }
+    return dates;
+  }
+
   async function handleAdd() {
     if (!form.itemDocId || !form.eventName.trim() || !form.eventDate) return;
     if (form.returnDate && form.returnDate < form.eventDate) { setConflictErr("Return date cannot be before the event date."); return; }
@@ -61,7 +95,7 @@ export function ReservationsPage({ store, userProfile }) {
     }
     setSaving(true);
     try {
-      await addReservation({
+      const baseRes = {
         itemDocId: form.itemDocId,
         itemId: form.itemId,
         itemDesc: form.itemDesc,
@@ -71,9 +105,22 @@ export function ReservationsPage({ store, userProfile }) {
         purpose: form.purpose,
         ministry: form.ministry,
         notes: form.notes,
-      }, userId, userName);
-      flash("Reservation requested!");
+      };
+      if (recurring && recurrenceEnd && recurrenceEnd > form.eventDate) {
+        const groupId = crypto.randomUUID();
+        const extraDates = generateRecurrenceDates(form.eventDate, form.returnDate, recurrenceFreq, recurrenceEnd);
+        await addReservation({ ...baseRes, recurrenceGroupId: groupId, recurrenceFreq }, userId, userName);
+        for (const d of extraDates) {
+          await addReservation({ ...baseRes, eventDate: d.eventDate, returnDate: d.returnDate, recurrenceGroupId: groupId, recurrenceFreq }, userId, userName);
+        }
+        flash(`Reservation series created (${1 + extraDates.length} occurrences)!`);
+      } else {
+        await addReservation(baseRes, userId, userName);
+        flash("Reservation requested!");
+      }
       setForm(emptyRes);
+      setRecurring(false);
+      setRecurrenceEnd("");
       setShowAdd(false);
     } catch(e) { flash("Error: "+e.message); }
     setSaving(false);
@@ -83,6 +130,11 @@ export function ReservationsPage({ store, userProfile }) {
     setSaving(true);
     await updateReservation(res._docId, { status:"Approved", approvedBy:userId, approvedByName:userName, approvedAt:new Date().toISOString() });
     await logActivity("reservation_approved", res.itemId, userId, userName, { eventName:res.eventName, requestedBy:res.requestedByName });
+    const requester = (users||[]).find(u => u.id === res.requestedBy);
+    sendNotificationEmail(notificationConfig?.templateApproved, requester?.email, res.requestedByName, {
+      event_name: res.eventName, item_desc: res.itemDesc,
+      event_date: formatDate(res.eventDate), action_by: userName, status: 'approved',
+    });
     flash("Reservation approved!");
     setShowDetail(null);
     setSaving(false);
@@ -92,6 +144,11 @@ export function ReservationsPage({ store, userProfile }) {
     setSaving(true);
     await updateReservation(res._docId, { status:"Denied", deniedBy:userId, deniedByName:userName, deniedAt:new Date().toISOString() });
     await logActivity("reservation_denied", res.itemId, userId, userName, { eventName:res.eventName, requestedBy:res.requestedByName });
+    const requester = (users||[]).find(u => u.id === res.requestedBy);
+    sendNotificationEmail(notificationConfig?.templateDenied, requester?.email, res.requestedByName, {
+      event_name: res.eventName, item_desc: res.itemDesc,
+      event_date: formatDate(res.eventDate), action_by: userName, status: 'denied',
+    });
     flash("Reservation denied.");
     setShowDetail(null);
     setSaving(false);
@@ -142,7 +199,7 @@ export function ReservationsPage({ store, userProfile }) {
         <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:0 }}>Reservations</h2>
         <div style={{ display:"flex", gap:8 }}>
           {reservations.length > 0 && <button onClick={()=>exportReservationsCSV(reservations)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
-          <button onClick={()=>{setForm(emptyRes);setShowAdd(true);}} style={btnP}>+ New Reservation</button>
+          <button onClick={()=>{setForm(emptyRes);setRecurring(false);setRecurrenceEnd("");setShowAdd(true);}} style={btnP}>+ New Reservation</button>
         </div>
       </div>
 
@@ -184,9 +241,10 @@ export function ReservationsPage({ store, userProfile }) {
                 onMouseLeave={e=>e.currentTarget.style.boxShadow="0 1px 3px rgba(27,42,74,0.06)"}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:8 }}>
                   <div>
-                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6, flexWrap:"wrap" }}>
                       <span style={{ fontWeight:700, fontSize:16, fontFamily:f1, color:B.navy }}>{r.eventName}</span>
                       <ResBadge status={r.status}/>
+                      {r.recurrenceGroupId && <span style={{ fontSize:11, color:B.textLight, fontWeight:600, background:B.warmGray, padding:"2px 8px", borderRadius:20 }}>🔁 recurring</span>}
                     </div>
                     <div style={{ fontSize:14, color:B.textMid }}>
                       <span style={{ fontWeight:600 }}>{r.itemDesc}</span>
@@ -230,6 +288,33 @@ export function ReservationsPage({ store, userProfile }) {
           <div style={{ flex:1 }}><FF label="Event Date *"><input type="date" style={inp} value={form.eventDate} onChange={e=>setForm(f=>({...f, eventDate:e.target.value}))}/></FF></div>
           <div style={{ flex:1 }}><FF label="Expected Return"><input type="date" style={inp} value={form.returnDate} onChange={e=>setForm(f=>({...f, returnDate:e.target.value}))}/></FF></div>
         </div>
+        {/* Recurring */}
+        <div style={{ marginBottom:16 }}>
+          <label style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", marginBottom:recurring?12:0 }}>
+            <input type="checkbox" checked={recurring} onChange={e=>{setRecurring(e.target.checked);if(!e.target.checked)setRecurrenceEnd("");}} style={{ width:16, height:16, cursor:"pointer" }}/>
+            <span style={{ fontSize:14, color:B.textDark, fontWeight:500 }}>Repeat this reservation</span>
+          </label>
+          {recurring && (
+            <div style={{ display:"flex", gap:14, paddingLeft:26 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:12, fontWeight:600, color:B.textMid, marginBottom:6, fontFamily:f1 }}>Frequency</div>
+                <select style={{...inp, cursor:"pointer"}} value={recurrenceFreq} onChange={e=>setRecurrenceFreq(e.target.value)}>
+                  <option value="weekly">Weekly</option>
+                  <option value="biweekly">Every 2 weeks</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:12, fontWeight:600, color:B.textMid, marginBottom:6, fontFamily:f1 }}>Repeat until *</div>
+                <input type="date" style={inp} value={recurrenceEnd} min={form.eventDate||undefined} onChange={e=>setRecurrenceEnd(e.target.value)}/>
+              </div>
+            </div>
+          )}
+          {recurring && recurrenceEnd && recurrenceEnd > form.eventDate && (() => {
+            const count = generateRecurrenceDates(form.eventDate, form.returnDate, recurrenceFreq, recurrenceEnd).length + 1;
+            return <div style={{ marginTop:8, paddingLeft:26, fontSize:13, color:B.teal, fontWeight:600 }}>→ {count} reservation{count!==1?"s":""} will be created</div>;
+          })()}
+        </div>
         <FF label="Additional Notes">
           <textarea style={{...inp, minHeight:60, resize:"vertical"}} value={form.notes} onChange={e=>setForm(f=>({...f, notes:e.target.value}))} placeholder="Any special requirements..."/>
         </FF>
@@ -239,7 +324,7 @@ export function ReservationsPage({ store, userProfile }) {
           </div>
         )}
         <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:8 }}>
-          <button onClick={()=>{setShowAdd(false);setConflictErr("");}} style={btnS}>Cancel</button>
+          <button onClick={()=>{setShowAdd(false);setConflictErr("");setRecurring(false);setRecurrenceEnd("");}} style={btnS}>Cancel</button>
           <button onClick={handleAdd} disabled={saving||!form.itemDocId||!form.eventName.trim()||!form.eventDate} style={{ ...btnP, opacity:(!form.itemDocId||!form.eventName.trim()||!form.eventDate||saving)?.5:1 }}>
             {saving?"Submitting...":"Submit Request"}
           </button>

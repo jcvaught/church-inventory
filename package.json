@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
     "@sentry/react": "^10.43.0",
     "firebase": "^10.8.0",
     "qrcode": "^1.5.4",

@@ -15,6 +15,8 @@ export function useFirestore(churchId) {
   const [users, setUsers] = useState([]);
   const [maintenanceTickets, setMaintenanceTickets] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [bundles, setBundles] = useState([]);
+  const [notificationConfig, setNotificationConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -23,7 +25,7 @@ export function useFirestore(churchId) {
     if (!churchId) return;
     const unsubs = [];
     let loaded = 0;
-    const totalSubs = 9;
+    const totalSubs = 11;
     const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
     // Config
@@ -81,6 +83,18 @@ export function useFirestore(churchId) {
     // Users — scoped to this church via query (real-time)
     unsubs.push(onSnapshot(query(collection(db, 'users'), where('churchId', '==', churchId)), (snap) => {
       setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      checkDone();
+    }, (err) => { setError(err.message); checkDone(); }));
+
+    // Bundles
+    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'bundles'), (snap) => {
+      setBundles(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
+      checkDone();
+    }, (err) => { setError(err.message); checkDone(); }));
+
+    // Notification config
+    unsubs.push(onSnapshot(doc(db, 'churches', churchId, 'config', 'notifications'), (snap) => {
+      setNotificationConfig(snap.exists() ? snap.data() : {});
       checkDone();
     }, (err) => { setError(err.message); checkDone(); }));
 
@@ -367,6 +381,37 @@ export function useFirestore(churchId) {
     } catch (err) { console.error('Error adding maintenance tags:', err); }
   }, [churchId]);
 
+  // ── Bundles ──
+  const addBundle = useCallback(async (bundle, userId, userName) => {
+    try {
+      await addDoc(collection(db, 'churches', churchId, 'bundles'), {
+        ...bundle,
+        createdBy: userId,
+        createdByName: userName,
+        createdAt: new Date().toISOString()
+      });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const updateBundle = useCallback(async (docId, updates) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'bundles', docId), updates);
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  const deleteBundle = useCallback(async (docId) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'bundles', docId));
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
+  // ── Notification config ──
+  const updateNotificationConfig = useCallback(async (updates) => {
+    try {
+      await setDoc(doc(db, 'churches', churchId, 'config', 'notifications'), updates, { merge: true });
+    } catch (err) { setError(err.message); }
+  }, [churchId]);
+
   // ── Suggestions ──
   const submitSuggestion = useCallback(async (text, category, userId, userName, churchName) => {
     try {
@@ -416,7 +461,7 @@ export function useFirestore(churchId) {
 
   return {
     config, settings, items, supplies, activityLog, reservations, users,
-    maintenanceTickets, vendors,
+    maintenanceTickets, vendors, bundles, notificationConfig,
     loading, error,
     updateSettings, updateConfig,
     addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired,
@@ -426,6 +471,8 @@ export function useFirestore(churchId) {
     updateUser, removeUser,
     addTicket, updateTicket, addTicketComment, deleteTicket, addMaintenanceTags,
     addVendor, updateVendor, deleteVendor,
+    addBundle, updateBundle, deleteBundle,
+    updateNotificationConfig,
     submitSuggestion, loadSuggestions
   };
 }
