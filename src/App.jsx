@@ -266,6 +266,13 @@ function AppShell({ authHook }) {
     }
   }, []);
 
+  // Auto-clear store errors after 5 seconds
+  useEffect(() => {
+    if (!store.error) return;
+    const t = setTimeout(() => store.clearError(), 5000);
+    return () => clearTimeout(t);
+  }, [store.error]);
+
   if (store.loading) return <Spinner />;
 
   const tabBtn = (k) => ({
@@ -275,13 +282,6 @@ function AppShell({ authHook }) {
     background: tab===k ? "rgba(42,125,110,0.18)" : "transparent",
     color: tab===k ? B.white : "rgba(255,255,255,0.45)",
   });
-
-  // Auto-clear store errors after 5 seconds
-  useEffect(() => {
-    if (!store.error) return;
-    const t = setTimeout(() => store.clearError(), 5000);
-    return () => clearTimeout(t);
-  }, [store.error]);
 
   const lowStock = (store.supplies || []).filter(c => c.quantity <= c.minQuantity);
   const pendingRes = (store.reservations || []).filter(r => r.status === "Pending");
