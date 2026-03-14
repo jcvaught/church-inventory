@@ -5,7 +5,8 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
-  updateProfile
+  updateProfile,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import {
   doc, setDoc, getDoc, getDocs,
@@ -322,6 +323,20 @@ export function useAuth() {
     setUserProfile(null);
   }, []);
 
+  const resetPassword = useCallback(async (email) => {
+    setError(null);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      return { success: true };
+    } catch (err) {
+      const msg = err.code === 'auth/user-not-found'
+        ? 'No account found with that email.'
+        : 'Failed to send reset email. Please try again.';
+      setError(msg);
+      return { success: false, error: msg };
+    }
+  }, []);
+
   return {
     user,
     userProfile,
@@ -333,6 +348,7 @@ export function useAuth() {
     login,
     loginWithGoogle,
     registerWithGoogle,
-    logout
+    logout,
+    resetPassword
   };
 }

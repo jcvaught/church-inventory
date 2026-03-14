@@ -300,12 +300,20 @@ function Spinner() {
 /* ═══════════════════════════════════════════════ */
 
 function AuthScreen({ authHook }) {
-  const { login, loginWithGoogle, register, registerWithGoogle, createChurch, error, setError } = authHook;
-  const [mode, setMode] = useState("login"); // login, register, createChurch, googleRegister
+  const { login, loginWithGoogle, register, registerWithGoogle, createChurch, resetPassword, error, setError } = authHook;
+  const [mode, setMode] = useState("login"); // login, register, createChurch, googleRegister, forgotPassword
   const [form, setForm] = useState({ name:"", email:"", password:"", churchCode:"", churchName:"" });
   const [busy, setBusy] = useState(false);
   const [googleInfo, setGoogleInfo] = useState(null);
+  const [resetSent, setResetSent] = useState(false);
   const u = (k,v) => { setForm(f=>({...f,[k]:v})); setError(null); };
+
+  async function handleResetPassword(e) {
+    e?.preventDefault(); setBusy(true);
+    const res = await resetPassword(form.email);
+    setBusy(false);
+    if (res?.success) setResetSent(true);
+  }
 
   async function handleLogin(e) {
     e?.preventDefault(); setBusy(true);
@@ -363,6 +371,10 @@ function AuthScreen({ authHook }) {
           <FF label="Email"><input style={inp} type="email" value={form.email} onChange={e=>u("email",e.target.value)} placeholder="you@church.org"/></FF>
           <FF label="Password"><input style={inp} type="password" value={form.password} onChange={e=>u("password",e.target.value)} placeholder="Your password" onKeyDown={e=>e.key==="Enter"&&handleLogin()}/></FF>
 
+          <div style={{ textAlign:"right", marginTop:-8, marginBottom:12 }}>
+            <button onClick={()=>{setMode("forgotPassword");setError(null);setResetSent(false);}} style={{ background:"none", border:"none", color:B.teal, fontWeight:500, cursor:"pointer", fontSize:12, fontFamily:f1 }}>Forgot password?</button>
+          </div>
+
           {error && <p style={{ color:B.red, fontSize:13, fontWeight:600, margin:"0 0 12px" }}>{error}</p>}
 
           <button onClick={handleLogin} disabled={busy} style={{ ...btnP, width:"100%", marginTop:4, opacity:busy?.6:1 }}>
@@ -374,6 +386,35 @@ function AuthScreen({ authHook }) {
             <button onClick={()=>{setMode("register");setError(null);}} style={{ background:"none", border:"none", color:B.teal, fontWeight:600, cursor:"pointer", fontSize:13, fontFamily:f1 }}>Join your church</button>
             <span style={{ fontSize:13, color:B.textLight }}> or </span>
             <button onClick={()=>{setMode("createChurch");setError(null);}} style={{ background:"none", border:"none", color:B.teal, fontWeight:600, cursor:"pointer", fontSize:13, fontFamily:f1 }}>set up a new church</button>
+          </div>
+        </div>
+      )}
+
+      {mode === "forgotPassword" && (
+        <div style={cardStyle}>
+          <div style={{ textAlign:"center", marginBottom:28 }}>
+            <div style={{ display:"flex", justifyContent:"center", marginBottom:16 }}><Logo size={52} /></div>
+            <h1 style={{ fontFamily:f1, fontSize:24, fontWeight:700, color:B.navy, margin:"0 0 4px" }}>Reset password</h1>
+            <p style={{ color:B.textLight, margin:0, fontSize:14 }}>We'll send a reset link to your email</p>
+          </div>
+
+          {resetSent ? (
+            <div style={{ background:B.cream, borderRadius:12, padding:"16px 20px", textAlign:"center", marginBottom:16 }}>
+              <p style={{ color:B.teal, fontWeight:600, margin:"0 0 4px", fontFamily:f1 }}>Email sent!</p>
+              <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Check your inbox for a password reset link.</p>
+            </div>
+          ) : (
+            <>
+              <FF label="Email"><input style={inp} type="email" value={form.email} onChange={e=>u("email",e.target.value)} placeholder="you@church.org" onKeyDown={e=>e.key==="Enter"&&handleResetPassword()}/></FF>
+              {error && <p style={{ color:B.red, fontSize:13, fontWeight:600, margin:"0 0 12px" }}>{error}</p>}
+              <button onClick={handleResetPassword} disabled={busy||!form.email} style={{ ...btnP, width:"100%", opacity:(busy||!form.email)?.5:1 }}>
+                {busy ? "Sending..." : "Send Reset Link"}
+              </button>
+            </>
+          )}
+
+          <div style={{ textAlign:"center", marginTop:20 }}>
+            <button onClick={()=>{setMode("login");setError(null);setResetSent(false);}} style={{ background:"none", border:"none", color:B.teal, fontWeight:600, cursor:"pointer", fontSize:13, fontFamily:f1 }}>Back to sign in</button>
           </div>
         </div>
       )}
