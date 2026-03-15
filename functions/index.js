@@ -7,6 +7,7 @@ initializeApp();
 
 const STRIPE_SECRET_KEY     = defineSecret('STRIPE_SECRET_KEY');
 const STRIPE_WEBHOOK_SECRET = defineSecret('STRIPE_WEBHOOK_SECRET');
+const ANTHROPIC_API_KEY     = defineSecret('ANTHROPIC_API_KEY');
 
 // ── Fill these in after creating products in the Stripe dashboard ──────────
 // Run: firebase functions:config:set is no longer used in v2.
@@ -36,6 +37,43 @@ function getPriceConfig(priceId) {
   };
   return map[priceId] || null;
 }
+
+// ── identifyItem ──────────────────────────────────────────────────────────
+// Called from the frontend with { imageBase64, mediaType }.
+// Returns { description } — a concise inventory-ready item description.
+exports.identifyItem = onCall(
+  { secrets: [ANTHROPIC_API_KEY], cors: true },
+  async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+
+    const { imageBase64, mediaType } = req.data;
+    if (!imageBase64) throw new HttpsError('invalid-argument', 'imageBase64 is required.');
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
+
+    const message = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 100,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: { type: 'base64', media_type: mediaType || 'image/jpeg', data: imageBase64 },
+          },
+          {
+            type: 'text',
+            text: 'You are helping a church identify inventory items from photos. Look at this image and provide a brief, accurate description suitable for an inventory system. Include brand and model number if clearly visible. Be concise (under 80 characters). Return ONLY the description, nothing else.',
+          },
+        ],
+      }],
+    });
+
+    const description = message.content[0]?.text?.trim() || '';
+    return { description };
+  }
+);
 
 // ── createCheckoutSession ─────────────────────────────────────────────────
 // Called from the frontend with { item: 'maintenance'|'insights'|...|'all_in' }

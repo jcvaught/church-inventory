@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useContext, useMemo } from 'react';
-import { storage } from '../firebase.js';
+import { storage, app } from '../firebase.js';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
@@ -72,6 +73,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [showFinancial, setShowFinancial] = useState(false);
+  const [identifying, setIdentifying] = useState(false);
 
   // Bulk selection
   const [bulkMode, setBulkMode] = useState(false);
@@ -107,6 +109,30 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   // Helpers
   function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }
   const today = new Date().toISOString().split("T")[0];
+
+  // ── AI Item Identification ──
+  async function handleIdentify() {
+    if (!photoFile) return;
+    setIdentifying(true);
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(photoFile);
+      });
+      const identify = httpsCallable(getFunctions(app), 'identifyItem');
+      const result = await identify({ imageBase64: base64, mediaType: photoFile.type || 'image/jpeg' });
+      if (result.data?.description) {
+        setItemForm(f => ({ ...f, description: result.data.description }));
+      } else {
+        flash('Could not identify item — try again or enter manually.');
+      }
+    } catch {
+      flash('Could not identify item — try again or enter manually.');
+    }
+    setIdentifying(false);
+  }
 
   function exitBulkMode() { setBulkMode(false); setSelectedIds(new Set()); }
   function toggleSelect(docId) {
@@ -686,7 +712,15 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
               <button type="button" onClick={()=>{setPhotoFile(null);setPhotoPreview(null);}} style={{ position:"absolute", top:-6, right:-6, width:20, height:20, borderRadius:"50%", background:B.red, color:"#fff", border:"none", cursor:"pointer", fontSize:13, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
             </div>
           )}
-          <div><input type="file" accept="image/*" id="photo-add" style={{ display:"none" }} onChange={e=>{const f=e.target.files[0];if(f){setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));}}}/><label htmlFor="photo-add" style={{ ...btnS, display:"inline-block", cursor:"pointer", padding:"7px 16px", fontSize:13 }}>{photoPreview?"📷 Change Photo":"📷 Add Photo"}</label></div>
+          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+            <input type="file" accept="image/*" id="photo-add" style={{ display:"none" }} onChange={e=>{const f=e.target.files[0];if(f){setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));setIdentifying(false);}}}/>
+            <label htmlFor="photo-add" style={{ ...btnS, display:"inline-block", cursor:"pointer", padding:"7px 16px", fontSize:13 }}>{photoPreview?"📷 Change Photo":"📷 Add Photo"}</label>
+            {photoFile && (
+              <button type="button" onClick={handleIdentify} disabled={identifying} style={{ ...btnS, fontSize:13, padding:"7px 16px", opacity:identifying?.6:1 }}>
+                {identifying ? "Identifying…" : "✨ Identify Item"}
+              </button>
+            )}
+          </div>
         </FF>
         <button onClick={handleAdd} disabled={saving||itemForm.itemId.trim().length<3||!itemForm.description.trim()} style={{ ...btnP, width:"100%", opacity:(saving||itemForm.itemId.trim().length<3||!itemForm.description.trim())?.5:1, marginTop:4 }}>
           {saving ? "Saving..." : "Add Item"}
