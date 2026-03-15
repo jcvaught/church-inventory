@@ -12,7 +12,7 @@ import { exportItemsCSV } from '../utils/csv.js';
 import { canManageItem } from '../utils/roleHelpers.js';
 import QRCode from 'qrcode';
 
-export function ItemsPage({ store, userProfile, initialItemId }) {
+export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, onScannedItemConsumed }) {
   const { items, settings, config, activityLog, addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired } = store;
   const isMobile = useContext(MobileCtx);
   const activeItems = useMemo(() => items.filter(i => i.status !== "Disposed"), [items]);
@@ -51,6 +51,15 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
     if (found) { setShowDetail(found); deepLinked.current = true; }
   }, [initialItemId, items]);
 
+  // Scanner: open item from camera scan
+  useEffect(() => {
+    if (!scannedItemId || !items.length) return;
+    const found = items.find(i => i.itemId === scannedItemId);
+    if (found) { setShowDetail(found); }
+    else { flash(`No item found with ID "${scannedItemId}"`); }
+    onScannedItemConsumed?.();
+  }, [scannedItemId, items]);
+
   // Forms
   const emptyItem = { itemId:"", description:"", location:"", ministry:"", status:"Available", condition:"Good", notes:"", tags:[], purchaseDate:"", purchasePrice:"", warrantyExpiry:"", estimatedValue:"" };
   const [itemForm, setItemForm] = useState(emptyItem);
@@ -63,6 +72,20 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [showFinancial, setShowFinancial] = useState(false);
+
+  // Bulk selection
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [showBulkCoWarn, setShowBulkCoWarn] = useState(false);
+  const [showBulkCo, setShowBulkCo] = useState(false);
+  const [showBulkRetWarn, setShowBulkRetWarn] = useState(false);
+  const [showBulkRet, setShowBulkRet] = useState(false);
+  const [showBulkLoc, setShowBulkLoc] = useState(false);
+  const [bulkCoItems, setBulkCoItems] = useState([]);
+  const [bulkRetItems, setBulkRetItems] = useState([]);
+  const [bulkSkipped, setBulkSkipped] = useState(0);
+  const [bulkRetCondition, setBulkRetCondition] = useState('Good');
+  const [bulkNewLoc, setBulkNewLoc] = useState('');
 
   const locations = settings?.locations || [];
   const ministries = settings?.ministries || [];
@@ -84,6 +107,72 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
   // Helpers
   function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }
   const today = new Date().toISOString().split("T")[0];
+
+  function exitBulkMode() { setBulkMode(false); setSelectedIds(new Set()); }
+  function toggleSelect(docId) {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(docId) ? n.delete(docId) : n.add(docId); return n; });
+  }
+
+  // ── Bulk Checkout ──
+  function startBulkCheckout() {
+    const sel = displayItems.filter(i => selectedIds.has(i._docId));
+    const coable = sel.filter(i => i.status === 'Available');
+    setBulkCoItems(coable);
+    setBulkSkipped(sel.length - coable.length);
+    setCoForm({ person:"", purpose:"", ministry:"", date:today, returnDate:"" });
+    if (sel.length - coable.length > 0) setShowBulkCoWarn(true);
+    else setShowBulkCo(true);
+  }
+  async function handleBulkCheckout() {
+    if (!coForm.person.trim()) { flash('Please enter who is checking out the items.'); return; }
+    if (coForm.returnDate && coForm.date && coForm.returnDate < coForm.date) { flash('Return date cannot be before checkout date.'); return; }
+    setSaving(true);
+    for (const item of bulkCoItems) {
+      await checkOutItem(item._docId, { itemId:item.itemId, person:coForm.person.trim(), purpose:coForm.purpose.trim(), ministry:coForm.ministry, date:coForm.date, returnDate:coForm.returnDate }, userId, userName);
+    }
+    setSaving(false);
+    setShowBulkCo(false);
+    exitBulkMode();
+    flash(`${bulkCoItems.length} item${bulkCoItems.length !== 1 ? 's' : ''} checked out.`);
+  }
+
+  // ── Bulk Return ──
+  function startBulkReturn() {
+    const sel = displayItems.filter(i => selectedIds.has(i._docId));
+    const retable = sel.filter(i => i.status === 'Checked Out' || i.status === 'In Use');
+    setBulkRetItems(retable);
+    setBulkSkipped(sel.length - retable.length);
+    setBulkRetCondition('Good');
+    if (sel.length - retable.length > 0) setShowBulkRetWarn(true);
+    else setShowBulkRet(true);
+  }
+  async function handleBulkReturn() {
+    setSaving(true);
+    for (const item of bulkRetItems) {
+      await returnItem(item._docId, { itemId:item.itemId, condition:bulkRetCondition, person:item.assignedTo||'' }, userId, userName);
+    }
+    setSaving(false);
+    setShowBulkRet(false);
+    exitBulkMode();
+    flash(`${bulkRetItems.length} item${bulkRetItems.length !== 1 ? 's' : ''} returned.`);
+  }
+
+  // ── Bulk Location ──
+  async function handleBulkLocation() {
+    if (!bulkNewLoc) { flash('Please select a location.'); return; }
+    setSaving(true);
+    const sel = displayItems.filter(i => selectedIds.has(i._docId));
+    for (const item of sel) {
+      await updateItem(item._docId, { ...item, location:bulkNewLoc }, userId, userName);
+    }
+    setSaving(false);
+    setShowBulkLoc(false);
+    exitBulkMode();
+    flash(`${sel.length} item${sel.length !== 1 ? 's' : ''} moved to ${bulkNewLoc}.`);
+  }
+
+  // ── Bulk Export ──
+  function handleBulkExport() { exportItemsCSV(items.filter(i => selectedIds.has(i._docId))); }
 
   // ── Add Item ──
   async function handleAdd() {
@@ -293,17 +382,20 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
     const overdue = item.status === "Checked Out" && item.expectedReturn && item.expectedReturn < today;
     return (
       <div
-        onClick={()=>setShowDetail(showDetail?._docId === item._docId ? null : item)}
+        onClick={()=>{ if(bulkMode) toggleSelect(item._docId); else setShowDetail(showDetail?._docId === item._docId ? null : item); }}
         style={{
           display:"flex", alignItems:"center", justifyContent:"space-between",
           padding:isMob?"12px 14px":"14px 18px", borderRadius:12, cursor:"pointer",
-          background: overdue ? B.redPale : B.white,
-          border: overdue ? "1px solid #FECACA" : "1px solid "+B.sand,
+          background: selectedIds.has(item._docId) ? B.tealPale : overdue ? B.redPale : B.white,
+          border: selectedIds.has(item._docId) ? "1.5px solid "+B.teal : overdue ? "1px solid #FECACA" : "1px solid "+B.sand,
           transition:"all 0.15s", flexWrap:"wrap", gap:10
         }}
-        onMouseEnter={e=>{ if(!overdue) e.currentTarget.style.borderColor=B.teal; e.currentTarget.style.boxShadow="0 2px 8px rgba(42,125,110,0.08)"; }}
-        onMouseLeave={e=>{ e.currentTarget.style.borderColor=overdue?"#FECACA":B.sand; e.currentTarget.style.boxShadow="none"; }}
+        onMouseEnter={e=>{ if(!overdue && !selectedIds.has(item._docId)) e.currentTarget.style.borderColor=B.teal; e.currentTarget.style.boxShadow="0 2px 8px rgba(42,125,110,0.08)"; }}
+        onMouseLeave={e=>{ e.currentTarget.style.borderColor=selectedIds.has(item._docId)?B.teal:overdue?"#FECACA":B.sand; e.currentTarget.style.boxShadow="none"; }}
       >
+        {bulkMode && (
+          <input type="checkbox" checked={selectedIds.has(item._docId)} onChange={()=>toggleSelect(item._docId)} onClick={e=>e.stopPropagation()} style={{ width:16, height:16, cursor:"pointer", flexShrink:0, accentColor:B.teal }} />
+        )}
         <div style={{ display:"flex", alignItems:"center", gap:12, flex:1, minWidth:0 }}>
           <div style={{ width:38, height:38, borderRadius:10, background:B.tealPale, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>📋</div>
           <div style={{ minWidth:0 }}>
@@ -340,9 +432,10 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:0 }}>All Items</h2>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-          {activeItems.length > 0 && <button onClick={()=>exportItemsCSV(activeItems)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
-          {activeItems.length > 0 && <button onClick={()=>printInventory(activeItems, config?.churchName)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>🖨 Print</button>}
-          {(isAdmin || isManager) && <button onClick={()=>{setItemForm(emptyItem);setPhotoFile(null);setPhotoPreview(null);setShowAdd(true);}} style={btnP}>+ Add Item</button>}
+          {activeItems.length > 0 && !bulkMode && <button onClick={()=>exportItemsCSV(activeItems)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
+          {activeItems.length > 0 && !bulkMode && <button onClick={()=>printInventory(activeItems, config?.churchName)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>🖨 Print</button>}
+          {activeItems.length > 0 && !bulkMode && <button onClick={()=>{setBulkMode(true);setSelectedIds(new Set());}} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>☑ Select</button>}
+          {!bulkMode && (isAdmin || isManager) && <button onClick={()=>{setItemForm(emptyItem);setPhotoFile(null);setPhotoPreview(null);setShowAdd(true);}} style={btnP}>+ Add Item</button>}
         </div>
       </div>
 
@@ -381,6 +474,31 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
           )}
         </div>
       </div>
+
+      {/* Bulk action bar */}
+      {bulkMode && (
+        <div style={{ background:B.navy, borderRadius:12, padding:"12px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+          <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer" }}>
+            <input
+              type="checkbox"
+              checked={displayItems.length > 0 && displayItems.every(i => selectedIds.has(i._docId))}
+              onChange={e => setSelectedIds(e.target.checked ? new Set(displayItems.map(i => i._docId)) : new Set())}
+              style={{ width:15, height:15, accentColor:B.teal, cursor:"pointer" }}
+            />
+            <span style={{ color:"rgba(255,255,255,0.75)", fontFamily:f1, fontSize:12 }}>All</span>
+          </label>
+          <span style={{ color:"#fff", fontFamily:f1, fontWeight:600, fontSize:13, flex:1 }}>
+            {selectedIds.size > 0 ? `${selectedIds.size} item${selectedIds.size !== 1 ? "s" : ""} selected` : "Select items below"}
+          </span>
+          {selectedIds.size > 0 && <>
+            <button onClick={startBulkCheckout} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>Check Out</button>
+            <button onClick={startBulkReturn} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>↩ Return</button>
+            {locations.length > 0 && <button onClick={()=>{setBulkNewLoc("");setShowBulkLoc(true);}} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>📍 Location</button>}
+            <button onClick={handleBulkExport} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>⬇ Export</button>
+          </>}
+          <button onClick={exitBulkMode} style={{ background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", borderRadius:8, color:"#fff", cursor:"pointer", fontSize:12, padding:"6px 12px", fontFamily:f1, fontWeight:600 }}>Cancel</button>
+        </div>
+      )}
 
       {/* Item List */}
       <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -702,6 +820,81 @@ export function ItemsPage({ store, userProfile, initialItemId }) {
         <FF label="Notes"><textarea style={{...inp, minHeight:60, resize:"vertical"}} value={retireForm.notes} onChange={e=>setRetireForm({...retireForm, notes:e.target.value})} placeholder="Optional details..."/></FF>
         <button onClick={handleRetire} disabled={saving} style={{ ...btnD, width:"100%", opacity:saving?.5:1, marginTop:4 }}>
           {saving ? "Processing..." : "Retire Item"}
+        </button>
+      </Modal>
+
+      {/* ═══ BULK CHECKOUT WARNING ═══ */}
+      <Modal open={showBulkCoWarn} onClose={()=>setShowBulkCoWarn(false)} title="Some items will be skipped">
+        <div style={{ background:B.goldLight, borderRadius:10, padding:"12px 16px", marginBottom:16, fontSize:13, color:"#96750E", fontWeight:500 }}>
+          {bulkSkipped} item{bulkSkipped !== 1 ? "s" : ""} cannot be checked out (not Available) and will be skipped. Continue with {bulkCoItems.length} item{bulkCoItems.length !== 1 ? "s" : ""}?
+        </div>
+        {bulkCoItems.length === 0
+          ? <p style={{ color:B.textLight, fontSize:13, textAlign:"center" }}>No Available items in your selection.</p>
+          : <div style={{ display:"flex", gap:10, marginTop:4 }}>
+              <button onClick={()=>{setShowBulkCoWarn(false);setShowBulkCo(true);}} style={{ ...btnP, flex:1 }}>Continue ({bulkCoItems.length})</button>
+              <button onClick={()=>setShowBulkCoWarn(false)} style={{ ...btnS, flex:1 }}>Cancel</button>
+            </div>
+        }
+      </Modal>
+
+      {/* ═══ BULK CHECKOUT FORM ═══ */}
+      <Modal open={showBulkCo} onClose={()=>setShowBulkCo(false)} title={`Check Out ${bulkCoItems.length} Item${bulkCoItems.length !== 1 ? "s" : ""}`}>
+        <div style={{ background:B.tealPale, borderRadius:10, padding:"10px 14px", marginBottom:14, fontSize:12, color:B.teal, fontFamily:f1 }}>
+          These details apply to all selected items.
+        </div>
+        <FF label="Who's taking them?"><input style={inp} value={coForm.person} onChange={e=>setCoForm({...coForm, person:e.target.value})} placeholder="Person's name"/></FF>
+        <FF label="Purpose"><input style={inp} value={coForm.purpose} onChange={e=>setCoForm({...coForm, purpose:e.target.value})} placeholder="e.g. Sunday worship"/></FF>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+          <FF label="Ministry"><select style={inp} value={coForm.ministry} onChange={e=>setCoForm({...coForm, ministry:e.target.value})}>
+            <option value="">— Select —</option>
+            {ministries.map(m => <option key={m} value={m}>{m}</option>)}
+          </select></FF>
+          <FF label="Check-out Date"><input style={inp} type="date" value={coForm.date} onChange={e=>setCoForm({...coForm, date:e.target.value})}/></FF>
+        </div>
+        <FF label="Expected Return"><input style={inp} type="date" value={coForm.returnDate} onChange={e=>setCoForm({...coForm, returnDate:e.target.value})}/></FF>
+        <button onClick={handleBulkCheckout} disabled={saving||!coForm.person.trim()} style={{ ...btnP, width:"100%", opacity:(saving||!coForm.person.trim())?.5:1, marginTop:4 }}>
+          {saving ? "Processing..." : `Check Out ${bulkCoItems.length} Item${bulkCoItems.length !== 1 ? "s" : ""}`}
+        </button>
+      </Modal>
+
+      {/* ═══ BULK RETURN WARNING ═══ */}
+      <Modal open={showBulkRetWarn} onClose={()=>setShowBulkRetWarn(false)} title="Some items will be skipped">
+        <div style={{ background:B.goldLight, borderRadius:10, padding:"12px 16px", marginBottom:16, fontSize:13, color:"#96750E", fontWeight:500 }}>
+          {bulkSkipped} item{bulkSkipped !== 1 ? "s" : ""} cannot be returned (not Checked Out or In Use) and will be skipped. Continue with {bulkRetItems.length} item{bulkRetItems.length !== 1 ? "s" : ""}?
+        </div>
+        {bulkRetItems.length === 0
+          ? <p style={{ color:B.textLight, fontSize:13, textAlign:"center" }}>No returnable items in your selection.</p>
+          : <div style={{ display:"flex", gap:10, marginTop:4 }}>
+              <button onClick={()=>{setShowBulkRetWarn(false);setShowBulkRet(true);}} style={{ ...btnP, flex:1 }}>Continue ({bulkRetItems.length})</button>
+              <button onClick={()=>setShowBulkRetWarn(false)} style={{ ...btnS, flex:1 }}>Cancel</button>
+            </div>
+        }
+      </Modal>
+
+      {/* ═══ BULK RETURN FORM ═══ */}
+      <Modal open={showBulkRet} onClose={()=>setShowBulkRet(false)} title={`Return ${bulkRetItems.length} Item${bulkRetItems.length !== 1 ? "s" : ""}`}>
+        <div style={{ background:B.tealPale, borderRadius:10, padding:"10px 14px", marginBottom:14, fontSize:12, color:B.teal, fontFamily:f1 }}>
+          This condition applies to all items being returned.
+        </div>
+        <FF label="Condition on Return"><select style={inp} value={bulkRetCondition} onChange={e=>setBulkRetCondition(e.target.value)}>
+          <option value="Good">Good — No issues</option>
+          <option value="Fair">Fair — Minor wear</option>
+          <option value="Poor">Poor — Needs attention</option>
+          <option value="Damaged">Damaged — Needs repair</option>
+        </select></FF>
+        <button onClick={handleBulkReturn} disabled={saving} style={{ ...btnP, width:"100%", opacity:saving?.5:1, marginTop:4 }}>
+          {saving ? "Processing..." : `Return ${bulkRetItems.length} Item${bulkRetItems.length !== 1 ? "s" : ""}`}
+        </button>
+      </Modal>
+
+      {/* ═══ BULK LOCATION MODAL ═══ */}
+      <Modal open={showBulkLoc} onClose={()=>setShowBulkLoc(false)} title={`Change Location (${selectedIds.size} item${selectedIds.size !== 1 ? "s" : ""})`}>
+        <FF label="Move to Location"><select style={inp} value={bulkNewLoc} onChange={e=>setBulkNewLoc(e.target.value)}>
+          <option value="">— Select location —</option>
+          {locations.map(l => <option key={l} value={l}>{l}</option>)}
+        </select></FF>
+        <button onClick={handleBulkLocation} disabled={saving||!bulkNewLoc} style={{ ...btnP, width:"100%", opacity:(saving||!bulkNewLoc)?.5:1, marginTop:4 }}>
+          {saving ? "Moving..." : `Move ${selectedIds.size} Item${selectedIds.size !== 1 ? "s" : ""}`}
         </button>
       </Modal>
     </div>

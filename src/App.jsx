@@ -19,6 +19,7 @@ import { SuppliesPage } from './pages/SuppliesPage.jsx';
 import { ReservationsPage } from './pages/ReservationsPage.jsx';
 import { ActivityLogPage } from './pages/ActivityLogPage.jsx';
 import { SettingsPage } from './pages/SettingsPage.jsx';
+import { BarcodeScanner } from './components/primitives/BarcodeScanner.jsx';
 
 
 /* ═══════════════════════════════════════════════ */
@@ -427,6 +428,8 @@ function AppShell({ authHook }) {
   const [initialItemId] = useState(() => new URLSearchParams(window.location.search).get('item'));
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannedItemId, setScannedItemId] = useState(null);
 
   useEffect(() => {
     if (initialItemId) {
@@ -455,6 +458,14 @@ function AppShell({ authHook }) {
     store.updateConfig({ onboardingComplete: true });
     setShowOnboarding(false);
     if (goToTab) setTab(goToTab);
+  }
+
+  function handleScan(text) {
+    let itemId = text.trim();
+    try { const u = new URL(text); const p = u.searchParams.get('item'); if (p) itemId = p; } catch {}
+    setScannedItemId(itemId);
+    setShowScanner(false);
+    setTab('inventory');
   }
 
   const tabBtn = (k) => ({
@@ -498,6 +509,9 @@ function AppShell({ authHook }) {
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
             <FullLogo size={36} light={true} />
             <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+              <button onClick={() => setShowScanner(true)} style={{ display:"flex", alignItems:"center", gap:6, background:"rgba(255,255,255,0.08)", borderRadius:10, padding:"7px 12px", border:"1px solid rgba(255,255,255,0.1)", cursor:"pointer", color:B.white, fontFamily:f1, fontSize:13, fontWeight:600 }}>
+                📷 Scan
+              </button>
               <div style={{ position:"relative" }}>
                 <button onClick={()=>setMenuOpen(!menuOpen)} style={{ display:"flex", alignItems:"center", gap:8, background:"rgba(255,255,255,0.08)", borderRadius:10, padding:"7px 14px", border:"1px solid rgba(255,255,255,0.1)", cursor:"pointer", color:B.white }}>
                   <div style={{ width:30, height:30, borderRadius:8, background:B.teal, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:700, fontFamily:f1 }}>{(userProfile.name||"?")[0]}</div>
@@ -568,7 +582,7 @@ function AppShell({ authHook }) {
       <div style={{ maxWidth:1100, margin:"0 auto", padding:isMobile?"16px 14px 96px":"28px 28px 60px" }} onClick={()=>menuOpen&&setMenuOpen(false)}>
         {tab === "dashboard" && <Dashboard store={store} userProfile={userProfile} />}
         {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} subscription={subscription} user={user} canAdd={canAdd} deleteAccount={deleteAccount} />}
-        {tab === "inventory" && <ItemsPage store={store} userProfile={userProfile} initialItemId={initialItemId} />}
+        {tab === "inventory" && <ItemsPage store={store} userProfile={userProfile} initialItemId={initialItemId} scannedItemId={scannedItemId} onScannedItemConsumed={() => setScannedItemId(null)} />}
         {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
         {tab === "reservations" && <ReservationsPage store={store} userProfile={userProfile} />}
         {tab === "log" && <ActivityLogPage store={store} />}
@@ -660,6 +674,8 @@ function AppShell({ authHook }) {
         </div>
       )}
       {/* Onboarding modal — new admins, no items yet */}
+      {showScanner && <BarcodeScanner onScan={handleScan} onClose={() => setShowScanner(false)} />}
+
       {showOnboarding && (() => {
         const steps = [
           {
