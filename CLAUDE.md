@@ -143,7 +143,7 @@ Everything existing stays free. 10 team members per church included.
 | **Maintenance Hub** | $7/mo | ✅ Done — Phase 3 |
 | **Coordination Hub** | $7/mo | ✅ Done — Phase 6 |
 | **Accountability Hub** | $5/mo | ✅ Done — Phase 7 |
-| **All-In Bundle** | $29/mo | Planned |
+| **All-In Bundle** | $29/mo | ✅ Done — Phase 8 |
 
 ### Grandfathering
 Existing churches at launch: 12 months Founder status (unlimited users, all hubs).
