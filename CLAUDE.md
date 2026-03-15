@@ -233,6 +233,7 @@ Hub visibility is controlled at two levels:
 - Item duplication ("Duplicate item" to clone similar items)
 - Keyboard shortcuts (N to add item, / to focus search, Esc to close modal)
 - ~~Barcode scanning via device camera~~ ✅ Done — "📷 Scan" button in top nav (all tabs); `@zxing/browser` dynamically imported; parses QR URL `?item=` param or raw barcode text; navigates to Items tab and opens item detail
+- ~~AI item identification from photo~~ ✅ Done — "✨ Identify Item" button in Add Item modal after photo selected; calls `identifyItem` Cloud Function (Claude Haiku vision); pre-fills description field; requires `ANTHROPIC_API_KEY` secret in Google Secret Manager
 - Public item request form (shareable URL for non-app users)
 
 ## Public Launch Checklist
