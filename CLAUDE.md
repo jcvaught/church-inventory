@@ -267,7 +267,7 @@ The data model is already multi-tenant (`churches/{churchId}/`). The following m
 
 ~~**Landing / marketing page**~~ ✅ Done — `LandingPage.jsx` shown to unauthenticated visitors; sections: hero, free features grid, hubs teaser, pricing (free vs. All-In), individual hub pricing toggle, how-it-works steps, CTA banner, footer.
 
-**Custom domain** — Replace `church-inventory-9615c.firebaseapp.com` with a real domain (e.g., `churchopshub.com`) for auth and hosting. *(Infrastructure — Vercel + Firebase Console config only.)*
+~~**Custom domain**~~ ✅ Done — `churchopshub.com` configured in Vercel (Valid Configuration); added to Firebase Authentication authorized domains; `authDomain` updated in `src/firebase.js`.
 
 ~~**Error monitoring**~~ ✅ Done — Sentry integrated in `main.jsx` with browser tracing (20% sample rate).
 
