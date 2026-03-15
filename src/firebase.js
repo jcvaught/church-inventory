@@ -11,7 +11,7 @@ import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey:            "AIzaSyBH6VE_mROLAkdWXZ1A7TXEdBSijV5bf9Y",
-  authDomain:        "church-inventory-9615c.firebaseapp.com",
+  authDomain:        "churchopshub.com",
   projectId:         "church-inventory-9615c",
   storageBucket:     "church-inventory-9615c.firebasestorage.app",
   messagingSenderId: "178475375356",
