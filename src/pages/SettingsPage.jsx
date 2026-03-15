@@ -4,6 +4,8 @@ import { MobileCtx } from '../hooks/useMobile.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { app } from '../firebase.js';
 
 export function SettingsPage({ store, userProfile, subscription, user, canAdd, deleteAccount }) {
   const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, loadErrors } = store;
@@ -36,6 +38,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingError, setBillingError] = useState("");
 
   const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub' };
   const churchHubs = subscription?.grandfathered || subscription?.plan === 'all_in'
@@ -173,6 +178,39 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
 
   const planLabel = !subscription ? 'Free' : subscription.plan === 'free' ? 'Free' : subscription.plan === 'all_in' ? 'All-In' : subscription.plan === 'team_unlimited' ? 'Team Unlimited' : subscription.plan;
   const activeHubs = subscription?.grandfathered ? ['All hubs (grandfathered)'] : (subscription?.hubs || []);
+  const hasStripeCustomer = !!subscription?.stripeCustomerId;
+
+  async function handleCheckout(item) {
+    setBillingError("");
+    setBillingLoading(true);
+    try {
+      const fns = getFunctions(app);
+      const createSession = httpsCallable(fns, 'createCheckoutSession');
+      const { data } = await createSession({
+        item,
+        successUrl: window.location.href,
+        cancelUrl: window.location.href,
+      });
+      window.location.href = data.url;
+    } catch (err) {
+      setBillingError(err.message || 'Failed to start checkout. Please try again.');
+      setBillingLoading(false);
+    }
+  }
+
+  async function handleManageBilling() {
+    setBillingError("");
+    setBillingLoading(true);
+    try {
+      const fns = getFunctions(app);
+      const createPortal = httpsCallable(fns, 'createPortalSession');
+      const { data } = await createPortal({ returnUrl: window.location.href });
+      window.location.href = data.url;
+    } catch (err) {
+      setBillingError(err.message || 'Failed to open billing portal. Please try again.');
+      setBillingLoading(false);
+    }
+  }
 
   return (
     <div>
@@ -216,7 +254,18 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
           <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Subscription & Billing</h3>
           {isAdmin && (
-            <a href="mailto:jcvaught@gmail.com?subject=Upgrade ChurchOpsHub Plan" style={{ ...btnP, padding:"6px 14px", fontSize:12, textDecoration:"none", display:"inline-block" }}>Upgrade</a>
+            <div style={{ display:"flex", gap:8 }}>
+              {hasStripeCustomer && (
+                <button onClick={handleManageBilling} disabled={billingLoading} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>
+                  {billingLoading ? "..." : "Manage Billing"}
+                </button>
+              )}
+              {!subscription?.grandfathered && subscription?.plan !== 'all_in' && (
+                <button onClick={() => setShowUpgradeModal(true)} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>
+                  Upgrade
+                </button>
+              )}
+            </div>
           )}
         </div>
         <div style={{ display:"flex", gap:24, flexWrap:"wrap" }}>
@@ -241,9 +290,11 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             </div>
           )}
         </div>
+        {billingError && <p style={{ color:B.red, fontSize:13, marginTop:10, marginBottom:0 }}>{billingError}</p>}
         {planLabel === 'Free' && (
           <p style={{ color:B.textLight, fontSize:13, marginTop:12, marginBottom:0 }}>
-            Add hubs like <strong>Maintenance</strong> to unlock advanced features. <a href="mailto:jcvaught@gmail.com" style={{ color:B.teal, textDecoration:"none", fontWeight:600 }}>Contact us</a> to start a free 30-day trial.
+            Add hubs like <strong>Maintenance</strong> to unlock advanced features.{' '}
+            {isAdmin && <button onClick={() => setShowUpgradeModal(true)} style={{ background:"none", border:"none", padding:0, color:B.teal, fontWeight:600, fontSize:13, cursor:"pointer" }}>View plans →</button>}
           </p>
         )}
       </div>
@@ -307,7 +358,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
               <div style={{ fontFamily:f1, fontWeight:700, fontSize:14, color:"#7A5800" }}>Team member limit reached</div>
               <div style={{ fontSize:13, color:"#96750E", marginTop:2 }}>Upgrade to Team Hub to add more members.</div>
             </div>
-            <a href="mailto:jcvaught@gmail.com?subject=Upgrade to Team Hub" style={{ ...btnP, padding:"7px 16px", fontSize:12, textDecoration:"none", whiteSpace:"nowrap" }}>Upgrade</a>
+            <button onClick={() => setShowUpgradeModal(true)} style={{ ...btnP, padding:"7px 16px", fontSize:12, whiteSpace:"nowrap" }}>Upgrade</button>
           </div>
         )}
         {users.length === 0 ? <p style={{ color:B.textLight, fontSize:14 }}>No team members yet.</p> :
@@ -595,6 +646,75 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           </button>
         </div>
       </div>
+
+      {/* Upgrade Modal */}
+      <Modal open={showUpgradeModal} onClose={() => { setShowUpgradeModal(false); setBillingError(""); }} title="Upgrade ChurchOpsHub">
+        {billingLoading ? (
+          <div style={{ textAlign:"center", padding:"32px 0" }}><Spinner /></div>
+        ) : (
+          <>
+            {billingError && <p style={{ color:B.red, fontSize:13, marginBottom:12 }}>{billingError}</p>}
+
+            {/* All-In Bundle */}
+            <div style={{ background:B.navy, borderRadius:14, padding:"20px 22px", marginBottom:16 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+                <div style={{ fontFamily:f1, fontWeight:700, fontSize:15, color:"#fff" }}>All-In Bundle</div>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ background:B.gold, color:B.navy, fontFamily:f1, fontWeight:800, fontSize:10, padding:"3px 10px", borderRadius:100, letterSpacing:1 }}>BEST VALUE</span>
+                  <span style={{ fontFamily:f1, fontWeight:700, fontSize:15, color:B.tealLight }}>$29/mo</span>
+                </div>
+              </div>
+              <p style={{ color:"rgba(255,255,255,0.65)", fontSize:13, margin:"0 0 14px", lineHeight:1.5 }}>
+                All 5 hubs + unlimited team members. Save $16/mo vs. buying separately.
+              </p>
+              <button onClick={() => handleCheckout('all_in')} style={{ ...btnP, width:"100%", background:B.teal, fontSize:13 }}>
+                Subscribe — $29/mo
+              </button>
+            </div>
+
+            {/* Individual hubs */}
+            <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:10 }}>Individual Hubs</div>
+            {[
+              { key:'maintenance',    label:'Maintenance Hub',    price:'$7/mo',  desc:'Repair tickets, vendor directory, photo docs.' },
+              { key:'insights',       label:'Insights Hub',       price:'$7/mo',  desc:'Utilization charts, ministry & financial analytics.' },
+              { key:'coordination',   label:'Coordination Hub',   price:'$7/mo',  desc:'Checkout bundles & email notifications.' },
+              { key:'accountability', label:'Accountability Hub', price:'$5/mo',  desc:'Physical audits, chain of custody, insurance export.' },
+            ].filter(h => !(subscription?.hubs || []).includes(h.key) && subscription?.plan !== 'all_in' && !subscription?.grandfathered)
+             .map(h => (
+              <div key={h.key} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px", borderRadius:10, border:"1px solid "+B.sand, marginBottom:8, gap:12, flexWrap:"wrap" }}>
+                <div>
+                  <div style={{ fontFamily:f1, fontWeight:700, fontSize:14, color:B.navy }}>{h.label} <span style={{ color:B.teal, fontWeight:700 }}>{h.price}</span></div>
+                  <div style={{ fontSize:12, color:B.textMid, marginTop:2 }}>{h.desc}</div>
+                </div>
+                <button onClick={() => handleCheckout(h.key)} style={{ ...btnP, padding:"7px 16px", fontSize:12, whiteSpace:"nowrap" }}>Subscribe</button>
+              </div>
+            ))}
+
+            {/* Team plans */}
+            {subscription?.plan !== 'team_unlimited' && subscription?.plan !== 'all_in' && !subscription?.grandfathered && (
+              <>
+                <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, margin:"14px 0 10px" }}>Team Plans</div>
+                {subscription?.plan !== 'team_25' && (
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px", borderRadius:10, border:"1px solid "+B.sand, marginBottom:8, gap:12, flexWrap:"wrap" }}>
+                    <div>
+                      <div style={{ fontFamily:f1, fontWeight:700, fontSize:14, color:B.navy }}>Team Hub (25 users) <span style={{ color:B.teal, fontWeight:700 }}>$9/mo</span></div>
+                      <div style={{ fontSize:12, color:B.textMid, marginTop:2 }}>Expand beyond 10 members with role-based hub access.</div>
+                    </div>
+                    <button onClick={() => handleCheckout('team_25')} style={{ ...btnP, padding:"7px 16px", fontSize:12, whiteSpace:"nowrap" }}>Subscribe</button>
+                  </div>
+                )}
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px", borderRadius:10, border:"1px solid "+B.sand, marginBottom:8, gap:12, flexWrap:"wrap" }}>
+                  <div>
+                    <div style={{ fontFamily:f1, fontWeight:700, fontSize:14, color:B.navy }}>Team Hub (unlimited) <span style={{ color:B.teal, fontWeight:700 }}>$19/mo</span></div>
+                    <div style={{ fontSize:12, color:B.textMid, marginTop:2 }}>Unlimited team members, full role-based access control.</div>
+                  </div>
+                  <button onClick={() => handleCheckout('team_unlimited')} style={{ ...btnP, padding:"7px 16px", fontSize:12, whiteSpace:"nowrap" }}>Subscribe</button>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </Modal>
 
       {/* Delete Account Modal */}
       <Modal open={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Delete Your Account">

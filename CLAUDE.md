@@ -36,6 +36,7 @@ src/
 │       ├── Modal.jsx, FF.jsx, Badge.jsx, Stat.jsx, Spinner.jsx
 │       └── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive
 ├── pages/
+│   ├── LandingPage.jsx        ← Marketing landing page (shown to unauthenticated visitors)
 │   ├── Dashboard.jsx
 │   ├── ItemsPage.jsx
 │   ├── SuppliesPage.jsx
@@ -50,9 +51,13 @@ src/
 ├── utils/
 │   ├── csv.js                 ← exportItemsCSV, exportSuppliesCSV, exportReservationsCSV
 │   ├── print.js               ← printLabel, printInventory
-│   └── imageResize.js         ← resizeImageForUpload
+│   ├── imageResize.js         ← resizeImageForUpload
+│   └── roleHelpers.js         ← canManageMinistry, canManageItem, canManageSupply
 └── data/
     └── referenceData.js       ← Static reference inventory (not auto-seeded; reference only)
+functions/
+├── index.js                   ← Cloud Functions: createCheckoutSession, createPortalSession, stripeWebhook
+└── package.json               ← Node 18, firebase-functions v4, firebase-admin v12, stripe v14
 ```
 
 ### Data Flow
@@ -209,10 +214,21 @@ Hub visibility is controlled at two levels:
 - `useFirestore`: `audits` collection subscription + `addAudit` + `updateAudit`; `totalSubs` 11→12
 - Feature gated via `hasHub('accountability')` + `UpgradeGate`; `📋 Audit` on mobile nav
 
-### Phase 8 — Stripe Integration
-- Cloud Functions: createCheckoutSession, createPortalSession, stripeWebhook
-- Webhook updates config/subscription on payment events
-- Billing portal in SettingsPage
+### Phase 8 — Stripe Integration ✅ Code Done — Needs Stripe Setup
+
+- `functions/index.js`: three Cloud Functions — `createCheckoutSession`, `createPortalSession`, `stripeWebhook`
+- `functions/package.json`: Node 18, firebase-functions v4, firebase-admin v12, stripe v14
+- `firebase.json` updated with `functions` source config
+- `firebase.js` exports `app` for `getFunctions(app)` calls
+- `SettingsPage.jsx`: Upgrade modal with All-In bundle, individual hubs, and team plans; "Manage Billing" button opens Stripe portal; team member cap banner upgraded to open Stripe checkout
+- Webhook handles: `checkout.session.completed` (unlock hub/plan), `customer.subscription.updated` (sync status), `customer.subscription.deleted` (downgrade)
+
+**To activate:**
+1. Create Stripe account → create 7 products (see pricing table) → copy price IDs into `functions/index.js` `PRICE_IDS`
+2. `firebase functions:secrets:set STRIPE_SECRET_KEY` (from Stripe dashboard → Developers → API keys)
+3. `cd functions && npm install` then `firebase deploy --only functions`
+4. Register webhook URL in Stripe dashboard → get signing secret → `firebase functions:secrets:set STRIPE_WEBHOOK_SECRET`
+5. Configure Stripe billing portal at dashboard.stripe.com/settings/billing/portal
 
 ### UX Polish (Ongoing)
 - ~~Scoped invite links~~ ✅ Done — Settings > Team Members: admin generates `?invite=CODE&hubs=maintenance,...` link; `AuthScreen` detects param, auto-opens register tab with church code pre-filled and hub banner; `register`/`registerWithGoogle` accept `allowedHubs` and save to user profile.
@@ -252,7 +268,7 @@ The data model is already multi-tenant (`churches/{churchId}/`). The following m
 
 ~~**Account & data deletion**~~ ✅ Done (client-side) — "Delete Account" button in Settings > Danger Zone; modal with `type DELETE` confirmation + password field (skipped for Google users who get a popup re-auth instead); reauthenticates via `reauthenticateWithCredential` (email) or `reauthenticateWithPopup` (Google), then deletes Firestore user profile + Firebase Auth account. Admin warning shown explaining church data remains and to contact us for full deletion. Full church subcollection deletion requires a Cloud Function (Phase 8 / Stripe work).
 
-**Landing / marketing page** — Currently the app URL goes straight to the login screen. New visitors need a page explaining what ChurchOpsHub is, with pricing, a CTA, and a sign-up link.
+~~**Landing / marketing page**~~ ✅ Done — `LandingPage.jsx` shown to unauthenticated visitors; sections: hero, free features grid, hubs teaser, pricing (free vs. All-In), individual hub pricing toggle, how-it-works steps, CTA banner, footer.
 
 **Custom domain** — Replace `church-inventory-9615c.firebaseapp.com` with a real domain (e.g., `churchopshub.com`) for auth and hosting. *(Infrastructure — Vercel + Firebase Console config only.)*
 
