@@ -182,7 +182,7 @@ Hub visibility is controlled at two levels:
 
 ## Roadmap
 
-### ✅ Done — Phases 1–7
+### ✅ Done — Phases 1–8
 
 **Phases 1–3:**
 - Code restructured into component/page/hook/utils files
@@ -214,21 +214,18 @@ Hub visibility is controlled at two levels:
 - `useFirestore`: `audits` collection subscription + `addAudit` + `updateAudit`; `totalSubs` 11→12
 - Feature gated via `hasHub('accountability')` + `UpgradeGate`; `📋 Audit` on mobile nav
 
-### Phase 8 — Stripe Integration ✅ Code Done — Needs Stripe Setup
+### ✅ Done — Phase 8 — Stripe Integration
 
 - `functions/index.js`: three Cloud Functions — `createCheckoutSession`, `createPortalSession`, `stripeWebhook`
-- `functions/package.json`: Node 18, firebase-functions v4, firebase-admin v12, stripe v14
-- `firebase.json` updated with `functions` source config
+- `functions/package.json`: Node 22, firebase-functions v4, firebase-admin v12, stripe v14
+- `firebase.json` updated with `functions` source config (`nodejs22`)
 - `firebase.js` exports `app` for `getFunctions(app)` calls
-- `SettingsPage.jsx`: Upgrade modal with All-In bundle, individual hubs, and team plans; "Manage Billing" button opens Stripe portal; team member cap banner upgraded to open Stripe checkout
+- `SettingsPage.jsx`: Upgrade modal with All-In bundle, individual hubs, and team plans; "Manage Billing" button opens Stripe portal; team member cap banner opens Stripe checkout
 - Webhook handles: `checkout.session.completed` (unlock hub/plan), `customer.subscription.updated` (sync status), `customer.subscription.deleted` (downgrade)
-
-**To activate:**
-1. Create Stripe account → create 7 products (see pricing table) → copy price IDs into `functions/index.js` `PRICE_IDS`
-2. `firebase functions:secrets:set STRIPE_SECRET_KEY` (from Stripe dashboard → Developers → API keys)
-3. `cd functions && npm install` then `firebase deploy --only functions`
-4. Register webhook URL in Stripe dashboard → get signing secret → `firebase functions:secrets:set STRIPE_WEBHOOK_SECRET`
-5. Configure Stripe billing portal at dashboard.stripe.com/settings/billing/portal
+- Secrets stored in Google Secret Manager: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
+- Price IDs hardcoded in `functions/index.js` `PRICE_IDS` (live Stripe prices)
+- Webhook endpoint registered in Stripe: `https://stripewebhook-zzlqdukuqq-uc.a.run.app`
+- Stripe billing portal configured at dashboard.stripe.com/settings/billing/portal
 
 ### UX Polish (Ongoing)
 - ~~Scoped invite links~~ ✅ Done — Settings > Team Members: admin generates `?invite=CODE&hubs=maintenance,...` link; `AuthScreen` detects param, auto-opens register tab with church code pre-filled and hub banner; `register`/`registerWithGoogle` accept `allowedHubs` and save to user profile.
