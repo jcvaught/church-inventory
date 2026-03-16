@@ -34,7 +34,8 @@ src/
 │   │   └── Logo.jsx           ← Logo, FullLogo
 │   └── primitives/
 │       ├── Modal.jsx, FF.jsx, Badge.jsx, Stat.jsx, Spinner.jsx
-│       └── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive
+│       ├── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive
+│       └── (RichTextarea is a local component inside MaintenancePage.jsx, not a shared primitive)
 ├── pages/
 │   ├── LandingPage.jsx        ← Marketing landing page (shown to unauthenticated visitors)
 │   ├── HelpPage.jsx           ← User-facing help center (no auth required); shown when ?help param present; 12 sections, accordion UI, responsive sidebar
@@ -246,6 +247,9 @@ Hub visibility is controlled at two levels:
 - **Kanban drag-and-drop**: Cards draggable between columns (admin/manager only); native HTML5 drag-and-drop, no library; drop target highlights teal on hover; updates ticket `status` in Firestore on drop; correctly sets/clears `completedAt` when moving to/from Complete
 - **Stat bar compact layout**: Summary stats replaced with compact inline strip (smaller padding, `fontSize:20` vs `fontSize:30`); "Backlog" renamed to "Open" and now counts all non-Complete/non-Cancelled tickets so Planning and On Hold are included
 - **Modal close on save**: Ticket detail modal now closes after Save Changes (was staying open)
+- **Ticket card redesign**: Removed ticket number from card header; assignee initials (teal circles, 2-char) now shown at top-left of each card; "Unassigned" shown in gray when no assignees; photo/due-date row kept at bottom
+- **"My tickets" empty state**: When filter is active but user has no assigned tickets, shows a helpful card explaining how to self-assign with a "Show all tickets" button to clear the filter
+- **RichTextarea component**: Toolbar with `• List` and `1. List` buttons added above Description, Notes, and Comments fields; toggles bullet/numbered prefixes on selected lines; stores plain text with `• ` / `1. ` prefixes; comment display uses `white-space: pre-wrap`; comment input changed from single-line `<input>` to `<textarea>` (Enter posts, Shift+Enter = newline)
 
 ### ✅ Done — Phase 10 — UX Polish: Duplication, Shortcuts, Public Requests (2026-03-15)
 
@@ -311,6 +315,32 @@ The data model is already multi-tenant (`churches/{churchId}/`). The following m
 Deployed via Vercel (auto-detect Vite). Firebase config is hardcoded in `src/firebase.js` (not via env vars).
 
 To deploy Firestore/Storage rules: `./node_modules/.bin/firebase deploy --only firestore:rules,storage` (requires `firebase login` first). `.firebaserc` is configured with project ID `church-inventory-9615c`.
+
+---
+
+## Known Pitfalls
+
+### 🔴 Import name shadowing → TDZ crash in production
+Never re-declare an imported name as a local `const`/`let` inside a function body in the same file. esbuild's minifier assigns the same short name to both, creating a Temporal Dead Zone error ("Cannot access 'X' before initialization") that crashes the app in production but is invisible in development.
+
+```js
+// ❌ WRONG — shadows the `ref` import from firebase/storage
+import { ref } from 'firebase/storage';
+function MyComponent() {
+  const ref = useRef(); // TDZ bug after minification
+}
+
+// ✅ CORRECT — use a distinct name
+function MyComponent() {
+  const inputRef = useRef();
+}
+
+// ✅ ALSO CORRECT — alias the import (see ItemsPage.jsx)
+import { ref as storageRef } from 'firebase/storage';
+```
+
+### 🟡 Bare `>` in JSX text content
+esbuild's strict JSX parser rejects bare `>` characters in JSX text (e.g. `<P>Settings > Team Members</P>`). Use `→` for navigation paths or `{'>'`} to escape. Running `npm run build` will surface these immediately.
 
 ---
 
