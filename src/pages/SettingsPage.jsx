@@ -694,6 +694,17 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
         )}
       </div>
 
+      {/* Help Center */}
+      <div style={{ background:B.white, borderRadius:14, padding:"18px 24px", border:"1px solid "+B.sand, marginTop:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)", display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, flexWrap:"wrap" }}>
+        <div>
+          <h3 style={{ margin:"0 0 2px", fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Help Center</h3>
+          <p style={{ margin:0, fontSize:13, color:B.textLight }}>Guides for every feature, hub docs, and FAQ.</p>
+        </div>
+        <a href="?help" style={{ display:"inline-block", padding:"8px 18px", borderRadius:10, border:"1px solid "+B.sand, background:B.white, color:B.teal, fontSize:13, fontWeight:600, fontFamily:f1, textDecoration:"none", flexShrink:0 }}>
+          Open Help Center →
+        </a>
+      </div>
+
       {/* Danger Zone */}
       <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid #FECDCA", marginTop:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
         <h3 style={{ margin:"0 0 4px", fontFamily:f1, fontSize:16, fontWeight:700, color:B.red }}>Danger Zone</h3>
