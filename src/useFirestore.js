@@ -484,6 +484,16 @@ export function useFirestore(churchId) {
     }
   }, []);
 
+  const loadChurches = useCallback(async () => {
+    try {
+      const snap = await getDocs(query(collection(db, 'churches'), orderBy('createdAt', 'desc')));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (err) {
+      handleErr(err);
+      return [];
+    }
+  }, []);
+
   // ── Vendors ──
   const addVendor = useCallback(async (vendor) => {
     try {
@@ -521,7 +531,7 @@ export function useFirestore(churchId) {
     addBundle, updateBundle, deleteBundle,
     updateNotificationConfig,
     addAudit, updateAudit,
-    submitSuggestion, loadSuggestions, loadErrors,
+    submitSuggestion, loadSuggestions, loadErrors, loadChurches,
     clearError
   };
 }

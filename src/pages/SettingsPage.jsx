@@ -8,7 +8,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from '../firebase.js';
 
 export function SettingsPage({ store, userProfile, subscription, user, canAdd, deleteAccount }) {
-  const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, loadErrors } = store;
+  const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, loadErrors, loadChurches } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
   const [newItem, setNewItem] = useState("");
@@ -25,6 +25,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [allErrors, setAllErrors] = useState(null);
   const [loadingErrors, setLoadingErrors] = useState(false);
+  const [allChurches, setAllChurches] = useState(null);
+  const [loadingChurches, setLoadingChurches] = useState(false);
   const [ownerTab, setOwnerTab] = useState('suggestions');
   const [editAccessUser, setEditAccessUser] = useState(null);
   const [editRole, setEditRole] = useState('user');
@@ -119,6 +121,13 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     const results = await loadErrors();
     setAllErrors(results);
     setLoadingErrors(false);
+  }
+
+  async function handleLoadChurches() {
+    setLoadingChurches(true);
+    const results = await loadChurches();
+    setAllChurches(results);
+    setLoadingChurches(false);
   }
 
   // Sync inviteHubs default to churchHubs once subscription loads (runs once when churchHubs becomes non-empty)
@@ -504,7 +513,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
         <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginTop:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
           {/* Tab bar */}
           <div style={{ display:"flex", gap:8, marginBottom:18 }}>
-            {[['suggestions','Suggestions'],['errors','Error Log']].map(([key, label]) => (
+            {[['suggestions','Suggestions'],['errors','Error Log'],['churches','Churches']].map(([key, label]) => (
               <button key={key} onClick={() => setOwnerTab(key)}
                 style={{ padding:"6px 18px", borderRadius:20, border:"1px solid "+(ownerTab===key?B.teal:B.sand), background:ownerTab===key?B.tealPale:B.white, color:ownerTab===key?B.teal:B.textMid, fontFamily:f1, fontWeight:600, fontSize:13, cursor:"pointer" }}>
                 {label}
@@ -587,6 +596,40 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                     </div>
               )}
               {!allErrors && <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Click "Load" to see logged errors across all churches.</p>}
+            </>
+          )}
+
+          {/* Churches tab */}
+          {ownerTab === 'churches' && (
+            <>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+                <div>
+                  <h3 style={{ margin:"0 0 2px", fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Registered Churches</h3>
+                  {allChurches && <p style={{ margin:0, fontSize:12, color:B.textLight }}>{allChurches.length} total</p>}
+                </div>
+                <button onClick={handleLoadChurches} disabled={loadingChurches} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>
+                  {loadingChurches ? "Loading…" : allChurches ? "Refresh" : "Load"}
+                </button>
+              </div>
+              {allChurches && (
+                allChurches.length === 0
+                  ? <p style={{ color:B.textLight, fontSize:14 }}>No churches registered yet.</p>
+                  : <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:480, overflowY:"auto" }}>
+                      {allChurches.map(c => {
+                        const date = c.createdAt?.toDate?.()?.toISOString?.()?.split('T')[0] || c.createdAt?.split?.('T')[0] || '—';
+                        return (
+                          <div key={c.id} style={{ padding:"12px 14px", borderRadius:10, background:B.warmGray, display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+                            <div>
+                              <div style={{ fontWeight:600, fontSize:14, color:B.navy, fontFamily:f1 }}>{c.churchName || '—'}</div>
+                              <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>Code: <span style={{ fontFamily:"monospace" }}>{c.churchCode || '—'}</span> · ID: <span style={{ fontFamily:"monospace", fontSize:11 }}>{c.id}</span></div>
+                            </div>
+                            <span style={{ fontSize:12, color:B.textLight, flexShrink:0 }}>{date}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+              )}
+              {!allChurches && <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Click "Load" to see all registered churches.</p>}
             </>
           )}
         </div>
