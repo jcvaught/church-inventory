@@ -284,7 +284,7 @@ The data model is already multi-tenant (`churches/{churchId}/`). The following m
 
 ~~**Landing / marketing page**~~ ✅ Done — `LandingPage.jsx` shown to unauthenticated visitors; sections: hero, free features grid, hubs teaser, pricing (free vs. All-In), individual hub pricing toggle, how-it-works steps, CTA banner, footer.
 
-~~**Custom domain**~~ ✅ Done — `churchopshub.com` configured in Vercel (Valid Configuration); added to Firebase Authentication authorized domains; `authDomain` updated in `src/firebase.js`.
+~~**Custom domain**~~ ✅ Done — `churchopshub.com` configured in Vercel (Valid Configuration); added to Firebase Authentication authorized domains; `authDomain` updated in `src/firebase.js`. `vercel.json` added to proxy `/__/auth/*` to `church-inventory-9615c.firebaseapp.com` (required for Firebase Auth OAuth handler on non-Firebase hosting). Google Cloud Console OAuth client must have `https://churchopshub.com` in Authorized JavaScript Origins and `https://churchopshub.com/__/auth/handler` in Authorized Redirect URIs — these are console-only settings, not in code.
 
 ~~**Error monitoring**~~ ✅ Done — Sentry integrated in `main.jsx` with browser tracing (20% sample rate).
 
@@ -299,6 +299,10 @@ To deploy Firestore/Storage rules: `./node_modules/.bin/firebase deploy --only f
 ## Known Issues & Tech Debt
 
 Findings from a full security + UX audit. All items resolved.
+
+### 🟢 UX — Post-Launch Fixes
+
+~~**Maintenance ticket detail modal stays open after Save**~~ ✅ Fixed — `handleUpdateTicket` now calls `setShowDetail(null)` + `setDetailEdits({})` on success instead of updating local state in-place. All other modal save handlers were audited and close correctly.
 
 ### 🔴 Security — High Priority
 
