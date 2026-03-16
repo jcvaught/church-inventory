@@ -78,7 +78,7 @@ function TicketCard({ ticket, onClick, onDragStart }) {
       </div>
       <div style={{ fontWeight:600, fontSize:14, color:B.navy, marginBottom:4, lineHeight:1.3 }}>{ticket.name}</div>
       {ticket.description && (
-        <div style={{ fontSize:12, color:B.textMid, lineHeight:1.4, marginBottom:6, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
+        <div style={{ fontSize:12, color:B.textMid, lineHeight:1.4, marginBottom:6, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', whiteSpace:'pre-wrap' }}>
           {ticket.description}
         </div>
       )}
@@ -202,6 +202,61 @@ function PhotoGrid({ photos = [], onAdd, onRemove, uploading }) {
   );
 }
 
+function RichTextarea({ value, onChange, style, placeholder, onKeyDown }) {
+  const ref = useRef();
+
+  function getLineRange(selStart, selEnd) {
+    const lines = value.split('\n');
+    let pos = 0, startLine = 0, endLine = lines.length - 1, foundStart = false;
+    for (let i = 0; i < lines.length; i++) {
+      const end = pos + lines[i].length;
+      if (!foundStart && selStart <= end) { startLine = i; foundStart = true; }
+      if (foundStart && selEnd <= end) { endLine = i; break; }
+      pos = end + 1;
+    }
+    return { lines, startLine, endLine };
+  }
+
+  function toggleBullet() {
+    const el = ref.current;
+    const { lines, startLine, endLine } = getLineRange(el.selectionStart, el.selectionEnd);
+    const slice = lines.slice(startLine, endLine + 1);
+    const allHave = slice.every(l => l.startsWith('• '));
+    onChange(lines.map((l, i) => {
+      if (i < startLine || i > endLine) return l;
+      const stripped = l.replace(/^\d+\.\s/, '').replace(/^• /, '');
+      return allHave ? stripped : '• ' + stripped;
+    }).join('\n'));
+    setTimeout(() => el.focus(), 0);
+  }
+
+  function toggleNumbered() {
+    const el = ref.current;
+    const { lines, startLine, endLine } = getLineRange(el.selectionStart, el.selectionEnd);
+    const slice = lines.slice(startLine, endLine + 1);
+    const allHave = slice.every(l => /^\d+\.\s/.test(l));
+    let n = 1;
+    onChange(lines.map((l, i) => {
+      if (i < startLine || i > endLine) return l;
+      const stripped = l.replace(/^\d+\.\s/, '').replace(/^• /, '');
+      return allHave ? stripped : (n++) + '. ' + stripped;
+    }).join('\n'));
+    setTimeout(() => el.focus(), 0);
+  }
+
+  const tb = { padding:'3px 9px', borderRadius:6, border:'1px solid '+B.sand, background:B.warmGray, color:B.textMid, fontSize:12, fontFamily:f1, cursor:'pointer', fontWeight:600 };
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:4, marginBottom:4 }}>
+        <button type="button" onMouseDown={e => { e.preventDefault(); toggleBullet(); }} style={tb}>• List</button>
+        <button type="button" onMouseDown={e => { e.preventDefault(); toggleNumbered(); }} style={tb}>1. List</button>
+      </div>
+      <textarea ref={ref} value={value} onChange={e => onChange(e.target.value)} style={style} placeholder={placeholder} onKeyDown={onKeyDown}/>
+    </div>
+  );
+}
+
 function CommentThread({ comments, loading, newComment, onChange, onPost, posting }) {
   const endRef = useRef();
   useEffect(() => { if (comments.length) endRef.current?.scrollIntoView({ behavior:'smooth' }); }, [comments.length]);
@@ -218,21 +273,23 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
                     <span style={{ fontWeight:700, fontSize:13, color:B.navy, fontFamily:f1 }}>{c.authorName}</span>
                     <span style={{ fontSize:11, color:B.textLight }}>{c.createdAt ? (c.createdAt.slice(0,10) === new Date().toISOString().slice(0,10) ? new Date(c.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : c.createdAt.slice(0,10)) : ''}</span>
                   </div>
-                  <div style={{ fontSize:13, color:B.textDark, lineHeight:1.5 }}>{c.text}</div>
+                  <div style={{ fontSize:13, color:B.textDark, lineHeight:1.5, whiteSpace:'pre-wrap' }}>{c.text}</div>
                 </div>
               ))
         }
         <div ref={endRef}/>
       </div>
-      <div style={{ display:'flex', gap:8 }}>
-        <input
-          style={{ ...inp, flex:1 }}
-          value={newComment}
-          onChange={e => onChange(e.target.value)}
-          placeholder="Add a comment..."
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) { e.preventDefault(); onPost(); } }}
-        />
-        <button onClick={onPost} disabled={posting || !newComment.trim()} style={{ ...btnP, padding:'11px 18px', opacity:(posting || !newComment.trim()) ? .5 : 1 }}>Post</button>
+      <div style={{ display:'flex', gap:8, alignItems:'flex-start' }}>
+        <div style={{ flex:1 }}>
+          <RichTextarea
+            value={newComment}
+            onChange={onChange}
+            style={{ ...inp, minHeight:38, resize:'vertical', width:'100%', boxSizing:'border-box' }}
+            placeholder="Add a comment... (Shift+Enter for new line, Enter to post)"
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) { e.preventDefault(); onPost(); } }}
+          />
+        </div>
+        <button onClick={onPost} disabled={posting || !newComment.trim()} style={{ ...btnP, padding:'11px 18px', opacity:(posting || !newComment.trim()) ? .5 : 1, flexShrink:0 }}>Post</button>
       </div>
     </div>
   );
@@ -730,7 +787,7 @@ export function MaintenancePage({ store, userProfile }) {
           <input style={inp} value={ticketForm.name} onChange={e => setTicketForm(f => ({ ...f, name:e.target.value }))} placeholder="Short descriptive name..."/>
         </FF>
         <FF label="Description">
-          <textarea style={{ ...inp, minHeight:72, resize:'vertical' }} value={ticketForm.description} onChange={e => setTicketForm(f => ({ ...f, description:e.target.value }))} placeholder="Full details of the issue or maintenance needed..."/>
+          <RichTextarea style={{ ...inp, minHeight:72, resize:'vertical' }} value={ticketForm.description} onChange={v => setTicketForm(f => ({ ...f, description:v }))} placeholder="Full details of the issue or maintenance needed..."/>
         </FF>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
           <FF label="Priority">
@@ -771,7 +828,7 @@ export function MaintenancePage({ store, userProfile }) {
           <PhotoGrid photos={photoPreviews} onAdd={handlePhotoSelect} onRemove={handlePreviewRemove} uploading={false}/>
         </FF>
         <FF label="Notes">
-          <textarea style={{ ...inp, minHeight:52, resize:'vertical' }} value={ticketForm.notes} onChange={e => setTicketForm(f => ({ ...f, notes:e.target.value }))} placeholder="Additional notes..."/>
+          <RichTextarea style={{ ...inp, minHeight:52, resize:'vertical' }} value={ticketForm.notes} onChange={v => setTicketForm(f => ({ ...f, notes:v }))} placeholder="Additional notes..."/>
         </FF>
         <button onClick={handleAddTicket} disabled={saving || !ticketForm.name.trim()} style={{ ...btnP, width:'100%', opacity:(saving || !ticketForm.name.trim()) ? .5 : 1, marginTop:4 }}>
           {saving ? 'Creating...' : 'Create Ticket'}
@@ -798,7 +855,7 @@ export function MaintenancePage({ store, userProfile }) {
               <input style={inp} value={detailEdits.name} onChange={e => setDetailEdits(d => ({ ...d, name:e.target.value }))}/>
             </FF>
             <FF label="Description">
-              <textarea style={{ ...inp, minHeight:72, resize:'vertical' }} value={detailEdits.description} onChange={e => setDetailEdits(d => ({ ...d, description:e.target.value }))} placeholder="Full details..."/>
+              <RichTextarea style={{ ...inp, minHeight:72, resize:'vertical' }} value={detailEdits.description} onChange={v => setDetailEdits(d => ({ ...d, description:v }))} placeholder="Full details..."/>
             </FF>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <FF label="Due Date">
@@ -834,7 +891,7 @@ export function MaintenancePage({ store, userProfile }) {
               </FF>
             </div>
             <FF label="Notes">
-              <textarea style={{ ...inp, minHeight:52, resize:'vertical' }} value={detailEdits.notes} onChange={e => setDetailEdits(d => ({ ...d, notes:e.target.value }))} placeholder="Additional notes..."/>
+              <RichTextarea style={{ ...inp, minHeight:52, resize:'vertical' }} value={detailEdits.notes} onChange={v => setDetailEdits(d => ({ ...d, notes:v }))} placeholder="Additional notes..."/>
             </FF>
             <div style={{ display:'flex', gap:10, justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', marginBottom:20 }}>
               <div style={{ fontSize:12, color:B.textLight }}>
