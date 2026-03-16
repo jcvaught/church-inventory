@@ -366,7 +366,7 @@ export function LandingPage({ onGetStarted }) {
           <FullLogo size={28} light />
           <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'center' }}>
             <a
-              href="mailto:jcvaught@gmail.com"
+              href="mailto:churchopshub@gmail.com"
               style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14, textDecoration: 'none', fontFamily: f1 }}
             >
               Contact

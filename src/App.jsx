@@ -293,10 +293,10 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
                   <p>You must be at least 18 years old and capable of entering a binding contract to use the Service. The Service is intended for use by churches, religious nonprofits, and their authorized staff. By registering, you confirm that you meet these requirements.</p>
 
                   <h3 style={{ fontFamily:f1, color:B.navy }}>4. Account Registration & Security</h3>
-                  <p>You agree to provide accurate, current, and complete information during registration. Each church organization may create one account. You are responsible for maintaining the confidentiality of your login credentials and for all activity under your account. Notify us immediately at <a href="mailto:jcvaught@gmail.com" style={{ color:B.teal }}>jcvaught@gmail.com</a> if you suspect unauthorized access. We are not liable for losses resulting from unauthorized use of your account.</p>
+                  <p>You agree to provide accurate, current, and complete information during registration. Each church organization may create one account. You are responsible for maintaining the confidentiality of your login credentials and for all activity under your account. Notify us immediately at <a href="mailto:churchopshub@gmail.com" style={{ color:B.teal }}>churchopshub@gmail.com</a> if you suspect unauthorized access. We are not liable for losses resulting from unauthorized use of your account.</p>
 
                   <h3 style={{ fontFamily:f1, color:B.navy }}>5. Subscriptions & Payment</h3>
-                  <p>The Service offers a free base tier and optional paid hubs billed on a monthly subscription basis. Paid subscriptions are processed through Stripe. By subscribing, you authorize us to charge your payment method on a recurring basis. Subscriptions renew automatically unless cancelled before the renewal date. We reserve the right to change pricing with at least 30 days' notice to active subscribers. Refunds are not provided for partial billing periods, but we will work with you in good faith if exceptional circumstances arise. Contact us at <a href="mailto:jcvaught@gmail.com" style={{ color:B.teal }}>jcvaught@gmail.com</a> with billing questions.</p>
+                  <p>The Service offers a free base tier and optional paid hubs billed on a monthly subscription basis. Paid subscriptions are processed through Stripe. By subscribing, you authorize us to charge your payment method on a recurring basis. Subscriptions renew automatically unless cancelled before the renewal date. We reserve the right to change pricing with at least 30 days' notice to active subscribers. Refunds are not provided for partial billing periods, but we will work with you in good faith if exceptional circumstances arise. Contact us at <a href="mailto:churchopshub@gmail.com" style={{ color:B.teal }}>churchopshub@gmail.com</a> with billing questions.</p>
 
                   <h3 style={{ fontFamily:f1, color:B.navy }}>6. Your Data & License</h3>
                   <p>You retain full ownership of all data, content, and information you submit to the Service ("Your Data"). By using the Service, you grant us a limited, non-exclusive license to store, process, and display Your Data solely to provide the Service to you. We do not claim any other rights to Your Data. We do not sell, rent, or use Your Data for advertising or marketing purposes.</p>
@@ -329,7 +329,7 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
                   <p>These Terms are governed by the laws of the Commonwealth of Virginia, without regard to conflict of law principles. Any dispute arising from these Terms or your use of the Service shall first be addressed through good-faith negotiation. If unresolved, disputes shall be submitted to binding arbitration under the rules of the American Arbitration Association, conducted in Fairfax County, Virginia. Notwithstanding the foregoing, either party may seek injunctive or equitable relief in a court of competent jurisdiction. YOU WAIVE ANY RIGHT TO A JURY TRIAL OR CLASS ACTION PROCEEDING.</p>
 
                   <h3 style={{ fontFamily:f1, color:B.navy }}>16. Contact</h3>
-                  <p>Questions about these Terms? Contact us at <a href="mailto:jcvaught@gmail.com" style={{ color:B.teal }}>jcvaught@gmail.com</a>.</p>
+                  <p>Questions about these Terms? Contact us at <a href="mailto:churchopshub@gmail.com" style={{ color:B.teal }}>churchopshub@gmail.com</a>.</p>
                 </>
               ) : (
                 <>
@@ -367,10 +367,10 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
                   <p>We retain your data for as long as your account is active. If you cancel your account, we retain your data for 30 days to allow for export, after which it is permanently deleted. Error logs are retained for up to 90 days. Stripe retains payment records as required by financial regulations (typically 7 years).</p>
 
                   <h3 style={{ fontFamily:f1, color:B.navy }}>8. Your Rights & Choices</h3>
-                  <p>You have the right to: access the personal information we hold about you; correct inaccurate information (editable in-app or by contacting us); request deletion of your account and associated data; export your inventory and organizational data (available via CSV export in the app); and opt out of non-essential communications. To exercise these rights, contact us at <a href="mailto:jcvaught@gmail.com" style={{ color:B.teal }}>jcvaught@gmail.com</a>. We will respond within 30 days.</p>
+                  <p>You have the right to: access the personal information we hold about you; correct inaccurate information (editable in-app or by contacting us); request deletion of your account and associated data; export your inventory and organizational data (available via CSV export in the app); and opt out of non-essential communications. To exercise these rights, contact us at <a href="mailto:churchopshub@gmail.com" style={{ color:B.teal }}>churchopshub@gmail.com</a>. We will respond within 30 days.</p>
 
                   <h3 style={{ fontFamily:f1, color:B.navy }}>9. California Residents (CCPA)</h3>
-                  <p>If you are a California resident, you have additional rights under the California Consumer Privacy Act: the right to know what personal information we collect and how it is used; the right to delete your personal information; the right to opt out of the sale of personal information (we do not sell personal information); and the right to non-discrimination for exercising your privacy rights. To submit a request, contact us at <a href="mailto:jcvaught@gmail.com" style={{ color:B.teal }}>jcvaught@gmail.com</a> with the subject line "CCPA Request."</p>
+                  <p>If you are a California resident, you have additional rights under the California Consumer Privacy Act: the right to know what personal information we collect and how it is used; the right to delete your personal information; the right to opt out of the sale of personal information (we do not sell personal information); and the right to non-discrimination for exercising your privacy rights. To submit a request, contact us at <a href="mailto:churchopshub@gmail.com" style={{ color:B.teal }}>churchopshub@gmail.com</a> with the subject line "CCPA Request."</p>
 
                   <h3 style={{ fontFamily:f1, color:B.navy }}>10. Children's Privacy</h3>
                   <p>The Service is not directed to children under 13. We do not knowingly collect personal information from children under 13. If you believe a child has provided us with personal information, contact us and we will delete it promptly.</p>
@@ -382,7 +382,7 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
                   <p>We may update this Privacy Policy from time to time. We will notify you of material changes via email or a prominent notice in the app before the change takes effect. The date at the top of this page indicates when the policy was last revised. Continued use of the Service after the effective date constitutes acceptance of the revised policy.</p>
 
                   <h3 style={{ fontFamily:f1, color:B.navy }}>13. Contact</h3>
-                  <p>Privacy questions or data requests? Contact us at <a href="mailto:jcvaught@gmail.com" style={{ color:B.teal }}>jcvaught@gmail.com</a>. We aim to respond within 30 days.</p>
+                  <p>Privacy questions or data requests? Contact us at <a href="mailto:churchopshub@gmail.com" style={{ color:B.teal }}>churchopshub@gmail.com</a>. We aim to respond within 30 days.</p>
                 </>
               )}
             </div>

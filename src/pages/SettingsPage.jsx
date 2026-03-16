@@ -800,7 +800,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           <div style={{ background:"#FFF4F2", border:"1px solid #FECDCA", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
             <p style={{ margin:"0 0 6px", fontWeight:700, fontFamily:f1, fontSize:13, color:B.red }}>Admin Account Warning</p>
             <p style={{ margin:0, fontSize:13, color:"#7A2020", lineHeight:1.5 }}>
-              You are the admin for this church. Deleting your account will remove your profile and login access, but your church's inventory, team members, and data will remain in the system unmanaged. If you want all church data permanently deleted, email us at <a href="mailto:jcvaught@gmail.com" style={{ color:B.red }}>jcvaught@gmail.com</a> after deleting your account.
+              You are the admin for this church. Deleting your account will remove your profile and login access, but your church's inventory, team members, and data will remain in the system unmanaged. If you want all church data permanently deleted, email us at <a href="mailto:churchopshub@gmail.com" style={{ color:B.red }}>churchopshub@gmail.com</a> after deleting your account.
             </p>
           </div>
         )}
