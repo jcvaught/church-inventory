@@ -346,6 +346,12 @@ Findings from a full efficiency audit. Fix in priority order before hub expansio
 
 ~~**`useWindowWidth` fires on every pixel during resize**~~ ✅ Fixed — added 100ms debounce to the resize handler in `useMobile.js`.
 
+~~**Bulk location change writes `_docId` to Firestore**~~ ✅ Fixed — `handleBulkLocation` was spreading `{ ...item, location }` which included the internal `_docId` field; now passes only `{ location: bulkNewLoc }`.
+
+~~**Bulk operations are sequential**~~ ✅ Fixed — `handleBulkCheckout`, `handleBulkReturn`, and `handleBulkLocation` now use `Promise.all` instead of sequential `for...of` + `await`.
+
+~~**`loadChurches` dead code in `useFirestore`**~~ ✅ Removed — `SettingsPage` calls the `getChurchStats` Cloud Function directly; client-side `loadChurches` was unused and removed from hook + store return.
+
 ### 🟢 Longer Term (pre-hub expansion)
 
 ~~**Extract remaining pages out of `App.jsx`**~~ ✅ Done — `App.jsx` trimmed from 2330 to 368 lines; all 6 remaining pages extracted to `src/pages/`. Now ready for lazy loading and hub expansion.
