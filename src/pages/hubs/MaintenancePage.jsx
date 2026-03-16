@@ -507,7 +507,7 @@ export function MaintenancePage({ store, userProfile }) {
   // ── Stats ──
   const thisMonthStart = new Date().toISOString().slice(0, 7) + '-01';
   const today = new Date();
-  const backlogCount = maintenanceTickets.filter(t => t.status === 'Backlog').length;
+  const openCount = maintenanceTickets.filter(t => t.status !== 'Complete' && t.status !== 'Cancelled').length;
   const inProgressCount = maintenanceTickets.filter(t => t.status === 'In Progress').length;
   const completedThisMonth = maintenanceTickets.filter(t => t.status === 'Complete' && (t.completedAt || '').slice(0, 10) >= thisMonthStart).length;
   const overdueCount = maintenanceTickets.filter(t => t.dueDate && new Date(t.dueDate) < today && t.status !== 'Complete' && t.status !== 'Cancelled').length;
@@ -547,11 +547,19 @@ export function MaintenancePage({ store, userProfile }) {
       </div>
 
       {/* Stats */}
-      <div style={{ display:'flex', flexWrap:'wrap', gap:14, marginBottom:24 }}>
-        <Stat label="Backlog" value={backlogCount} icon="📋" color={B.textMid}/>
-        <Stat label="In Progress" value={inProgressCount} icon="🔵" color="#1A65C7"/>
-        <Stat label="Completed This Month" value={completedThisMonth} icon="✅" color={B.teal}/>
-        <Stat label="Overdue" value={overdueCount} icon="⚠️" color={overdueCount > 0 ? B.red : B.textMid}/>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:10, marginBottom:20 }}>
+        {[
+          { label:'Open', value:openCount, icon:'📋', color:B.textMid },
+          { label:'In Progress', value:inProgressCount, icon:'🔵', color:'#1A65C7' },
+          { label:'Completed This Month', value:completedThisMonth, icon:'✅', color:B.teal },
+          { label:'Overdue', value:overdueCount, icon:'⚠️', color:overdueCount > 0 ? B.red : B.textMid },
+        ].map(s => (
+          <div key={s.label} style={{ background:B.white, borderRadius:10, padding:'10px 16px', border:'1px solid '+B.sand, display:'flex', alignItems:'center', gap:10 }}>
+            <span style={{ fontSize:15 }}>{s.icon}</span>
+            <span style={{ fontSize:20, fontWeight:700, color:s.color, fontFamily:f1 }}>{s.value}</span>
+            <span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:0.8, fontFamily:f1 }}>{s.label}</span>
+          </div>
+        ))}
       </div>
 
       {msg && (
