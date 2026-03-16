@@ -63,8 +63,17 @@ function TicketCard({ ticket, onClick, onDragStart }) {
       onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(27,42,74,0.12)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 3px rgba(27,42,74,0.06)'}
     >
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
-        <span style={{ fontFamily:'monospace', fontSize:11, color:B.textLight }}>{ticket.ticketNumber}</span>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+        <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+          {ticket.assignees?.length > 0
+            ? ticket.assignees.slice(0,3).map((a, i) => (
+                <div key={a.uid || i} title={a.name} style={{ width:22, height:22, borderRadius:'50%', background:B.teal, color:B.white, fontSize:9, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:f1 }}>
+                  {initials(a.name)}
+                </div>
+              ))
+            : <span style={{ fontSize:11, color:B.textLight, fontFamily:f1 }}>Unassigned</span>
+          }
+        </div>
         <PriorityBadge priority={ticket.priority}/>
       </div>
       <div style={{ fontWeight:600, fontSize:14, color:B.navy, marginBottom:4, lineHeight:1.3 }}>{ticket.name}</div>
@@ -80,17 +89,12 @@ function TicketCard({ ticket, onClick, onDragStart }) {
           ))}
         </div>
       )}
-      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-        {ticket.assignees?.slice(0,4).map((a, i) => (
-          <div key={a.uid || i} title={a.name} style={{ width:26, height:26, borderRadius:'50%', background:B.teal, color:B.white, fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:f1 }}>
-            {initials(a.name)}
-          </div>
-        ))}
-        <div style={{ marginLeft:'auto', display:'flex', gap:8, alignItems:'center' }}>
+      {(ticket.photos?.length > 0 || ticket.dueDate) && (
+        <div style={{ display:'flex', justifyContent:'flex-end', gap:8, alignItems:'center' }}>
           {ticket.photos?.length > 0 && <span style={{ fontSize:11, color:B.textLight }}>📷 {ticket.photos.length}</span>}
           {ticket.dueDate && <span style={{ fontSize:11, color: isOverdue ? B.red : B.textLight }}>📅 {ticket.dueDate}</span>}
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -661,12 +665,24 @@ export function MaintenancePage({ store, userProfile }) {
         </span>
       </div>
 
-      {/* Empty state */}
+      {/* Empty state — no tickets at all */}
       {maintenanceTickets.length === 0 && (
         <div style={{ background:B.white, borderRadius:18, padding:'48px 32px', border:'1px solid '+B.sand, textAlign:'center' }}>
           <div style={{ fontSize:48, marginBottom:16 }}>🔧</div>
           <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 8px', fontSize:18 }}>No maintenance tickets yet</h3>
           <p style={{ color:B.textLight, fontSize:14 }}>Create a ticket to track repairs and maintenance tasks.</p>
+        </div>
+      )}
+
+      {/* Empty state — My Tickets filter active but no assigned tickets */}
+      {filterMyTickets && filteredTickets.length === 0 && maintenanceTickets.length > 0 && (
+        <div style={{ background:B.white, borderRadius:14, padding:'32px 24px', border:'1px solid '+B.sand, textAlign:'center', marginBottom:16 }}>
+          <div style={{ fontSize:36, marginBottom:12 }}>👤</div>
+          <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 6px', fontSize:16 }}>No tickets assigned to you</h3>
+          <p style={{ color:B.textLight, fontSize:13, margin:'0 0 12px' }}>Open any ticket and click <strong>Me</strong> in the Assignees field, then save to assign yourself.</p>
+          <button type="button" onClick={() => setFilterMyTickets(false)} style={{ padding:'8px 18px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.teal, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:600 }}>
+            Show all tickets
+          </button>
         </div>
       )}
 
