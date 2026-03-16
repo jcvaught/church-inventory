@@ -616,7 +616,7 @@ export function HelpPage({ onBack }) {
             <p style={{ fontFamily: f1, fontWeight: 700, color: B.textLight, fontSize: 13, marginBottom: 6 }}>ChurchOpsHub</p>
             <p style={{ fontFamily: f2, fontSize: 13, color: B.textLight, margin: 0 }}>
               Questions? Email us at{' '}
-              <a href="mailto:support@churchopshub.com" style={{ color: B.teal }}>support@churchopshub.com</a>
+              <a href="mailto:churchopshub@gmail.com" style={{ color: B.teal }}>churchopshub@gmail.com</a>
             </p>
           </div>
 
