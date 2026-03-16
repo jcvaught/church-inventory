@@ -243,9 +243,9 @@ export function HelpPage({ onBack }) {
               <P>There are two ways to bring people in:</P>
               <UL items={[
                 'Share your church code — team members go to the app, click Register, and enter the code.',
-                'Send an invite link — go to Settings > Team Members > Copy Invite Link. The link pre-fills the church code and can restrict which hubs the new user can see.',
+                'Send an invite link — go to Settings → Team Members → Copy Invite Link. The link pre-fills the church code and can restrict which hubs the new user can see.',
               ]} />
-              <P>New members default to the <strong>User</strong> role. Promote them in Settings > Team Members.</P>
+              <P>New members default to the <strong>User</strong> role. Promote them in Settings → Team Members.</P>
             </Accordion>
 
             <Accordion title="Understanding roles">
@@ -268,8 +268,8 @@ export function HelpPage({ onBack }) {
 
             <Accordion title="Onboarding checklist">
               <UL items={[
-                'Add your locations (e.g. Sanctuary, Sound Booth) in Settings > Locations',
-                'Add your ministries (e.g. Worship, Youth) in Settings > Ministries',
+                'Add your locations (e.g. Sanctuary, Sound Booth) in Settings → Locations',
+                'Add your ministries (e.g. Worship, Youth) in Settings → Ministries',
                 'Add your first inventory item in the Inventory tab',
                 'Invite your team members',
                 'Print QR labels for high-traffic gear',
@@ -337,7 +337,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Public item request form">
-              <P>Admins can generate a public link (Settings > Team Members > Copy Request Form Link) that anyone — no account required — can use to request items from your church.</P>
+              <P>Admins can generate a public link (Settings → Team Members → Copy Request Form Link) that anyone — no account required — can use to request items from your church.</P>
               <P>Submissions appear in a panel at the top of the Inventory tab for admins to review and dismiss.</P>
             </Accordion>
           </Section>
@@ -480,7 +480,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Email notifications">
-              <P>Connect EmailJS to send automatic emails when reservations are approved or denied. Go to Coordination Hub > Notification Settings and enter your:</P>
+              <P>Connect EmailJS to send automatic emails when reservations are approved or denied. Go to Coordination Hub → Notification Settings and enter your:</P>
               <UL items={[
                 'EmailJS Service ID',
                 'Public Key',
@@ -532,7 +532,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Per-user hub access">
-              <P>In Settings > Team Members, click a user's <strong>Edit Access</strong> button to set:</P>
+              <P>In Settings → Team Members, click a user's <strong>Edit Access</strong> button to set:</P>
               <UL items={[
                 'Role (Admin / Manager / User)',
                 'Which hubs they can see (only hubs your church has subscribed to are shown)',
@@ -542,7 +542,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Invite links with hub restrictions">
-              <P>When generating an invite link (Settings > Team Members > Copy Invite Link), you can uncheck specific hubs. New users who register via that link will only see the hubs you selected.</P>
+              <P>When generating an invite link (Settings → Team Members → Copy Invite Link), you can uncheck specific hubs. New users who register via that link will only see the hubs you selected.</P>
             </Accordion>
           </Section>
 
@@ -556,7 +556,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Church code">
-              <P>Your church code is shown in Settings > Church Info. Use the copy button to share it. Admins can change it (requires confirmation) — existing members are unaffected since their profiles already store the church ID.</P>
+              <P>Your church code is shown in Settings → Church Info. Use the copy button to share it. Admins can change it (requires confirmation) — existing members are unaffected since their profiles already store the church ID.</P>
             </Accordion>
 
             <Accordion title="Subscription and billing">
@@ -569,7 +569,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Deleting your account">
-              <P>Go to Settings > Danger Zone > Delete Account. You'll need to type DELETE and re-enter your password (or re-authenticate with Google). This removes your login and profile. Church inventory data remains — contact us to fully delete your church's data.</P>
+              <P>Go to Settings → Danger Zone → Delete Account. You'll need to type DELETE and re-enter your password (or re-authenticate with Google). This removes your login and profile. Church inventory data remains — contact us to fully delete your church's data.</P>
             </Accordion>
           </Section>
 
