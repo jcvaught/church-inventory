@@ -10,7 +10,7 @@ npm run build     # Production build → dist/
 npm run preview   # Preview production build locally
 ```
 
-There are no tests and no linter configured.
+There are no tests and no linter configured. **Run `npm run build` and fix any errors before pushing.**
 
 ## Architecture
 
