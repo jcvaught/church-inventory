@@ -189,7 +189,7 @@ Hub visibility is controlled at two levels:
 **Phases 1–3:**
 - Code restructured into component/page/hook/utils files
 - Subscription infrastructure (useSubscription, UpgradeGate, subscription doc on church creation)
-- Maintenance Hub (rebuilt): kanban + list views, 6-status workflow (Backlog→Complete), multi-assignee, tag autocomplete (`maintenanceTags` via `arrayUnion`), photo uploads (Firebase Storage at `churches/{churchId}/maintenance/{docId}/`), real-time comment threads (subcollection), vendor directory, overdue date highlighting, `maint_viewMode` persisted to localStorage
+- Maintenance Hub (rebuilt): kanban + list views, 6-status workflow (Backlog→Complete), drag-and-drop between kanban columns (admin/manager, native HTML5), multi-assignee, tag autocomplete (`maintenanceTags` via `arrayUnion`), photo uploads (Firebase Storage at `churches/{churchId}/maintenance/{docId}/`), real-time comment threads (subcollection), vendor directory, overdue date highlighting, `maint_viewMode` persisted to localStorage
 - User Suggestions: all users can submit categorized suggestions (Feature Request / Bug Report / Other) from SettingsPage; stored in top-level `suggestions` collection (cross-church); owner-only report panel (tabbed: Suggestions / Error Log) gated by `['jcvaught@gmail.com', 'jvaught@fxcc.org'].includes(email)` in UI and by `request.auth.token.email in [...]` in Firestore rules; Error Log loads from top-level `errors` collection written by `handleErr()` in `useFirestore`
 
 **Phase 4 — Insights Hub:**
@@ -228,6 +228,12 @@ Hub visibility is controlled at two levels:
 - Price IDs hardcoded in `functions/index.js` `PRICE_IDS` (live Stripe prices)
 - Webhook endpoint registered in Stripe: `https://stripewebhook-zzlqdukuqq-uc.a.run.app`
 - Stripe billing portal configured at dashboard.stripe.com/settings/billing/portal
+
+### ✅ Done — Phase 11 — Maintenance UX Improvements (2026-03-16)
+
+- **Kanban drag-and-drop**: Cards draggable between columns (admin/manager only); native HTML5 drag-and-drop, no library; drop target highlights teal on hover; updates ticket `status` in Firestore on drop; correctly sets/clears `completedAt` when moving to/from Complete
+- **Stat bar compact layout**: Summary stats replaced with compact inline strip (smaller padding, `fontSize:20` vs `fontSize:30`); "Backlog" renamed to "Open" and now counts all non-Complete/non-Cancelled tickets so Planning and On Hold are included
+- **Modal close on save**: Ticket detail modal now closes after Save Changes (was staying open)
 
 ### ✅ Done — Phase 10 — UX Polish: Duplication, Shortcuts, Public Requests (2026-03-15)
 
