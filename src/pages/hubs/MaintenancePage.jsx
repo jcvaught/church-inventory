@@ -45,13 +45,15 @@ function StatusBadge({ status }) {
   );
 }
 
-function TicketCard({ ticket, onClick }) {
+function TicketCard({ ticket, onClick, onDragStart }) {
   const sc = statusColors[ticket.status] || statusColors['Backlog'];
   const isOverdue = ticket.dueDate && new Date(ticket.dueDate) < new Date() && ticket.status !== 'Complete' && ticket.status !== 'Cancelled';
   return (
     <div
+      draggable={!!onDragStart}
+      onDragStart={onDragStart ? e => { e.dataTransfer.setData('ticketDocId', ticket._docId); e.dataTransfer.effectAllowed = 'move'; } : undefined}
       onClick={() => onClick(ticket)}
-      style={{ background:B.white, borderRadius:12, padding:'14px 16px', border:'1px solid '+B.sand, cursor:'pointer', borderLeft:'4px solid '+sc.dot, boxShadow:'0 1px 3px rgba(27,42,74,0.06)', marginBottom:8, transition:'box-shadow 0.15s' }}
+      style={{ background:B.white, borderRadius:12, padding:'14px 16px', border:'1px solid '+B.sand, cursor:onDragStart ? 'grab' : 'pointer', borderLeft:'4px solid '+sc.dot, boxShadow:'0 1px 3px rgba(27,42,74,0.06)', marginBottom:8, transition:'box-shadow 0.15s' }}
       onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(27,42,74,0.12)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 3px rgba(27,42,74,0.06)'}
     >
@@ -226,10 +228,16 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
   );
 }
 
-function KanbanColumn({ status, tickets, onTicketClick, isMobile }) {
+function KanbanColumn({ status, tickets, onTicketClick, onDrop, isMobile }) {
   const sc = statusColors[status] || statusColors['Backlog'];
+  const [dragOver, setDragOver] = useState(false);
   return (
-    <div style={{ minWidth:isMobile ? '100%' : 260, maxWidth:isMobile ? '100%' : 280, flexShrink:0, background:B.warmGray, borderRadius:14, padding:'12px 10px' }}>
+    <div
+      onDragOver={onDrop ? e => { e.preventDefault(); setDragOver(true); } : undefined}
+      onDragLeave={onDrop ? () => setDragOver(false) : undefined}
+      onDrop={onDrop ? e => { e.preventDefault(); setDragOver(false); const docId = e.dataTransfer.getData('ticketDocId'); if (docId) onDrop(docId); } : undefined}
+      style={{ minWidth:isMobile ? '100%' : 260, maxWidth:isMobile ? '100%' : 280, flexShrink:0, background:dragOver ? B.tealPale : B.warmGray, borderRadius:14, padding:'12px 10px', border:'2px solid '+(dragOver ? B.teal : 'transparent'), transition:'background 0.15s, border-color 0.15s' }}
+    >
       <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10, paddingLeft:4 }}>
         <span style={{ width:10, height:10, borderRadius:'50%', background:sc.dot, flexShrink:0 }}/>
         <span style={{ fontWeight:700, fontSize:13, color:B.navy, fontFamily:f1 }}>{status}</span>
@@ -238,7 +246,7 @@ function KanbanColumn({ status, tickets, onTicketClick, isMobile }) {
       <div style={{ overflowY:'auto', maxHeight:isMobile ? 'none' : 'calc(100vh - 380px)', minHeight:80 }}>
         {tickets.length === 0
           ? <div style={{ textAlign:'center', color:B.textLight, fontSize:12, padding:'16px 0', fontStyle:'italic' }}>Empty</div>
-          : tickets.map(t => <TicketCard key={t._docId} ticket={t} onClick={onTicketClick}/>)
+          : tickets.map(t => <TicketCard key={t._docId} ticket={t} onClick={onTicketClick} onDragStart={onDrop ? true : undefined}/>)
         }
       </div>
     </div>
@@ -486,6 +494,17 @@ export function MaintenancePage({ store, userProfile }) {
     flash('Vendor deleted.');
   }
 
+  async function handleDrop(docId, newStatus) {
+    const ticket = maintenanceTickets.find(t => t._docId === docId);
+    if (!ticket || ticket.status === newStatus) return;
+    const wasComplete = ticket.status === 'Complete';
+    const isNowComplete = newStatus === 'Complete';
+    await updateTicket(docId, {
+      status: newStatus,
+      completedAt: isNowComplete && !wasComplete ? new Date().toISOString() : (isNowComplete ? ticket.completedAt : null),
+    });
+  }
+
   async function handleDeleteTicket() {
     if (!showDetail?._docId) return;
     if (!window.confirm(`Delete "${showDetail.name}"? This cannot be undone.`)) return;
@@ -649,7 +668,7 @@ export function MaintenancePage({ store, userProfile }) {
       {viewMode === 'kanban' && maintenanceTickets.length > 0 && (
         <div style={{ display:'flex', gap:12, overflowX:isMobile ? 'hidden' : 'auto', flexDirection:isMobile ? 'column' : 'row', paddingBottom:8, alignItems:'flex-start' }}>
           {STATUSES.map(status => (
-            <KanbanColumn key={status} status={status} tickets={filteredTickets.filter(t => t.status === status)} onTicketClick={openDetail} isMobile={isMobile}/>
+            <KanbanColumn key={status} status={status} tickets={filteredTickets.filter(t => t.status === status)} onTicketClick={openDetail} onDrop={canOperate ? docId => handleDrop(docId, status) : undefined} isMobile={isMobile}/>
           ))}
         </div>
       )}
