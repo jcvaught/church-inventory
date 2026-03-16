@@ -37,6 +37,7 @@ src/
 │       └── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive
 ├── pages/
 │   ├── LandingPage.jsx        ← Marketing landing page (shown to unauthenticated visitors)
+│   ├── PublicRequestPage.jsx  ← Public item request form (no auth required); shown when ?request=CHURCH_ID param present
 │   ├── Dashboard.jsx
 │   ├── ItemsPage.jsx
 │   ├── SuppliesPage.jsx
@@ -90,6 +91,7 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/bundles` | Coordination Hub: checkout bundles; fields: `name`, `description`, `items[{docId,itemId,description,location}]`, `createdBy`, `createdByName`, `createdAt` |
 | `churches/{churchId}/config/notifications` | Coordination Hub: EmailJS config; fields: `enabled`, `serviceId`, `publicKey`, `templateApproved`, `templateDenied` |
 | `churches/{churchId}/audits` | Accountability Hub: physical audit records; fields: `location`, `conductedBy`, `conductedByName`, `startedAt`, `completedAt`, `status`, `itemsChecked`, `discrepancyCount`, `items[{docId,itemId,description,currentStatus,auditResult,condition,notes}]`, `discrepancies[]`, `createdAt` |
+| `churches/{churchId}/publicRequests` | Public item requests submitted via `PublicRequestPage`; **unauthenticated creates allowed** (Firestore rule); fields: `name`, `email`, `phone`, `itemDescription`, `quantity`, `dateNeeded`, `urgency` (Low/Medium/High), `notes`, `status` (`pending`/`dismissed`), `submittedAt`; admins see pending requests in ItemsPage panel; dismissed via `dismissPublicRequest()` |
 | `users/{uid}` | User profile with `churchId`, `role` (`admin`/`manager`/`user`), `name`, `email`, `active`, `allowedHubs[]`, `managedMinistries[]` |
 | `suggestions/{docId}` | **Top-level** (not church-scoped) — cross-church user suggestions; fields: `text`, `category`, `submittedBy`, `submittedByName`, `churchId`, `churchName`, `submittedAt` |
 | `errors/{docId}` | **Top-level** (not church-scoped) — Firestore error log written by `handleErr()` in `useFirestore`; fields: `message`, `stack` (first 4 lines), `churchId`, `timestamp`; owner-only read in Firestore rules |
@@ -227,6 +229,12 @@ Hub visibility is controlled at two levels:
 - Webhook endpoint registered in Stripe: `https://stripewebhook-zzlqdukuqq-uc.a.run.app`
 - Stripe billing portal configured at dashboard.stripe.com/settings/billing/portal
 
+### ✅ Done — Phase 10 — UX Polish: Duplication, Shortcuts, Public Requests (2026-03-15)
+
+- **Item duplication**: `⊕ Duplicate` button in detail modal and desktop item rows (admin/manager); opens Add Item pre-filled with all fields, ID cleared for new unique assignment
+- **Keyboard shortcuts**: `N` = new item, `/` = focus search, `Esc` = close modal; global `keydown` listener on `document`; suppressed in input/textarea/select; `N` only fires when no modal is open and user is admin/manager
+- **Public item request form**: `PublicRequestPage.jsx` — no-auth public form shown when `?request=CHURCH_ID&cn=Church+Name` URL params present; fields: name, email, phone, item description, quantity, date needed, urgency, notes; honeypot spam protection (`website` hidden input); writes to `churches/{churchId}/publicRequests`; Firestore rule allows unauthenticated creates; admins see pending requests panel in ItemsPage with Dismiss button; "📥 Copy Request Form Link" in Settings > Team Members; `totalSubs` 12→13
+
 ### ✅ Done — Phase 9 — UX Polish & AI Features (2026-03-15)
 
 - **All-In Bundle** ($29/mo) confirmed complete: price ID wired in `PRICE_IDS`, webhook handles `all_in` type (unlocks all hubs + unlimited users), upgrade modal in SettingsPage, plan label shows "All-In"
@@ -237,12 +245,12 @@ Hub visibility is controlled at two levels:
 ### UX Polish (Ongoing)
 - ~~Scoped invite links~~ ✅ Done — Settings > Team Members: admin generates `?invite=CODE&hubs=maintenance,...` link; `AuthScreen` detects param, auto-opens register tab with church code pre-filled and hub banner; `register`/`registerWithGoogle` accept `allowedHubs` and save to user profile.
 - ~~Bulk actions~~ ✅ Done — "☑ Select" mode in ItemsPage: select-all, bulk checkout (warn on skip), bulk return (condition prompt), bulk location change, bulk CSV export
-- Item duplication ("Duplicate item" to clone similar items)
-- Keyboard shortcuts (N to add item, / to focus search, Esc to close modal)
+- ~~Item duplication~~ ✅ Done — `⊕ Duplicate` button in detail modal + desktop row (admin/manager); opens Add Item pre-filled with all fields copied, Item ID cleared
+- ~~Keyboard shortcuts~~ ✅ Done — `N` = open Add Item (no modal open + admin/manager), `/` = focus search input, `Esc` = close topmost modal; suppressed when typing in inputs; `useEffect` on `document` with full modal-state deps
 - ~~Barcode scanning via device camera~~ ✅ Done — "📷 Scan" button in top nav (all tabs); `@zxing/browser` dynamically imported; parses QR URL `?item=` param or raw barcode text; navigates to Items tab and opens item detail
 - ~~AI item identification from photo~~ ✅ Done — "✨ Identify Item" button in Add Item modal after photo selected; calls `identifyItem` Cloud Function (Claude Haiku vision); pre-fills description field; requires `ANTHROPIC_API_KEY` secret in Google Secret Manager
 - ~~Churches report~~ ✅ Done — owner-only "Churches" tab in Settings panel; `getChurchStats` Cloud Function (Admin SDK, owner email-gated) returns all churches with item + user counts via `count()` aggregation queries; shows church name, code, item count, user count, registration date
-- Public item request form (shareable URL for non-app users)
+- ~~Public item request form~~ ✅ Done — `PublicRequestPage.jsx` shown when `?request=CHURCH_ID&cn=Name` param present (no auth); honeypot spam protection; writes to `churches/{churchId}/publicRequests`; Firestore rule allows unauthenticated creates; admins see pending requests panel in ItemsPage; "📥 Copy Request Form Link" button in Settings > Team Members; `useFirestore` `totalSubs` 12→13
 
 ## Public Launch Checklist
 
