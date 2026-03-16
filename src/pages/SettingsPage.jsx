@@ -125,8 +125,13 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
 
   async function handleLoadChurches() {
     setLoadingChurches(true);
-    const results = await loadChurches();
-    setAllChurches(results);
+    try {
+      const fn = httpsCallable(getFunctions(app), 'getChurchStats');
+      const result = await fn({});
+      setAllChurches(result.data.churches);
+    } catch {
+      setAllChurches([]);
+    }
     setLoadingChurches(false);
   }
 
@@ -621,9 +626,13 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                           <div key={c.id} style={{ padding:"12px 14px", borderRadius:10, background:B.warmGray, display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
                             <div>
                               <div style={{ fontWeight:600, fontSize:14, color:B.navy, fontFamily:f1 }}>{c.churchName || '—'}</div>
-                              <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>Code: <span style={{ fontFamily:"monospace" }}>{c.churchCode || '—'}</span> · ID: <span style={{ fontFamily:"monospace", fontSize:11 }}>{c.id}</span></div>
+                              <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>Code: <span style={{ fontFamily:"monospace" }}>{c.churchCode || '—'}</span></div>
                             </div>
-                            <span style={{ fontSize:12, color:B.textLight, flexShrink:0 }}>{date}</span>
+                            <div style={{ display:"flex", gap:16, alignItems:"center", flexShrink:0 }}>
+                              <span style={{ fontSize:12, color:B.textMid }}><strong>{c.itemCount ?? '—'}</strong> items</span>
+                              <span style={{ fontSize:12, color:B.textMid }}><strong>{c.userCount ?? '—'}</strong> users</span>
+                              <span style={{ fontSize:12, color:B.textLight }}>{date}</span>
+                            </div>
                           </div>
                         );
                       })}

@@ -2,6 +2,7 @@ const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
 const { defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getAuth } = require('firebase-admin/auth');
 
 initializeApp();
 
@@ -72,6 +73,44 @@ exports.identifyItem = onCall(
 
     const description = message.content[0]?.text?.trim() || '';
     return { description };
+  }
+);
+
+// ── getChurchStats ────────────────────────────────────────────────────────
+// Owner-only. Returns all churches with item + user counts.
+const OWNER_EMAILS = ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
+
+exports.getChurchStats = onCall(
+  { cors: true },
+  async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+
+    const userRecord = await getAuth().getUser(req.auth.uid);
+    if (!OWNER_EMAILS.includes(userRecord.email)) {
+      throw new HttpsError('permission-denied', 'Not authorized.');
+    }
+
+    const db = getFirestore();
+    const churchesSnap = await db.collection('churches').orderBy('createdAt', 'desc').get();
+
+    const churches = await Promise.all(churchesSnap.docs.map(async (doc) => {
+      const data = doc.data();
+      const churchId = doc.id;
+      const [itemsSnap, usersSnap] = await Promise.all([
+        db.collection('churches').doc(churchId).collection('items').count().get(),
+        db.collection('users').where('churchId', '==', churchId).count().get(),
+      ]);
+      return {
+        id: churchId,
+        churchName: data.churchName || '—',
+        churchCode: data.churchCode || '—',
+        createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || null,
+        itemCount: itemsSnap.data().count,
+        userCount: usersSnap.data().count,
+      };
+    }));
+
+    return { churches };
   }
 );
 
