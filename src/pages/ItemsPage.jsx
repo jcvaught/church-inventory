@@ -189,7 +189,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     setSaving(true);
     const sel = displayItems.filter(i => selectedIds.has(i._docId));
     for (const item of sel) {
-      await updateItem(item._docId, { ...item, location:bulkNewLoc }, userId, userName);
+      await updateItem(item._docId, { location:bulkNewLoc }, userId, userName);
     }
     setSaving(false);
     setShowBulkLoc(false);
