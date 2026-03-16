@@ -55,6 +55,11 @@ export function LandingPage({ onGetStarted }) {
       }}>
         <FullLogo size={30} light />
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {!mob && (
+            <a href="?help" style={{ color: 'rgba(255,255,255,0.6)', fontFamily: f1, fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>
+              Help
+            </a>
+          )}
           <button
             onClick={() => onGetStarted('login')}
             style={{ ...btnS, padding: '8px 16px', fontSize: 13, background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.8)' }}

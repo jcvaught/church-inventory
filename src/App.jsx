@@ -21,6 +21,7 @@ import { ReservationsPage } from './pages/ReservationsPage.jsx';
 import { ActivityLogPage } from './pages/ActivityLogPage.jsx';
 import { SettingsPage } from './pages/SettingsPage.jsx';
 import { BarcodeScanner } from './components/primitives/BarcodeScanner.jsx';
+import { HelpPage } from './pages/HelpPage.jsx';
 
 
 /* ═══════════════════════════════════════════════ */
@@ -408,6 +409,7 @@ export default function App() {
     const cn = p.get('cn');
     return churchId ? { churchId, churchName: cn ? decodeURIComponent(cn) : '' } : null;
   });
+  const [showHelp] = useState(() => new URLSearchParams(window.location.search).get('help') !== null);
   const [showAuth, setShowAuth] = useState(() => {
     const p = new URLSearchParams(window.location.search);
     return p.get('signup') !== null || p.get('invite') !== null;
@@ -420,6 +422,8 @@ export default function App() {
   };
 
   if (publicRequest) return <PublicRequestPage churchId={publicRequest.churchId} churchName={publicRequest.churchName} />;
+
+  if (showHelp) return <HelpPage onBack={() => window.history.back()} />;
 
   if (authLoading) return <Spinner />;
 
@@ -661,6 +665,7 @@ function AppShell({ authHook }) {
         <div style={{ background:B.navy, padding:"24px 28px", textAlign:"center" }}>
           <FullLogo size={26} light={true} />
           <p style={{ color:"rgba(255,255,255,0.25)", fontSize:11, fontFamily:f1, marginTop:10 }}>churchopshub.com</p>
+          <a href="?help" style={{ color:"rgba(255,255,255,0.35)", fontSize:11, fontFamily:f1, textDecoration:"none" }}>Help Center</a>
         </div>
       )}
 
