@@ -153,9 +153,9 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     if (!coForm.person.trim()) { flash('Please enter who is checking out the items.'); return; }
     if (coForm.returnDate && coForm.date && coForm.returnDate < coForm.date) { flash('Return date cannot be before checkout date.'); return; }
     setSaving(true);
-    for (const item of bulkCoItems) {
-      await checkOutItem(item._docId, { itemId:item.itemId, person:coForm.person.trim(), purpose:coForm.purpose.trim(), ministry:coForm.ministry, date:coForm.date, returnDate:coForm.returnDate }, userId, userName);
-    }
+    await Promise.all(bulkCoItems.map(item =>
+      checkOutItem(item._docId, { itemId:item.itemId, person:coForm.person.trim(), purpose:coForm.purpose.trim(), ministry:coForm.ministry, date:coForm.date, returnDate:coForm.returnDate }, userId, userName)
+    ));
     setSaving(false);
     setShowBulkCo(false);
     exitBulkMode();
@@ -174,9 +174,9 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   }
   async function handleBulkReturn() {
     setSaving(true);
-    for (const item of bulkRetItems) {
-      await returnItem(item._docId, { itemId:item.itemId, condition:bulkRetCondition, person:item.assignedTo||'' }, userId, userName);
-    }
+    await Promise.all(bulkRetItems.map(item =>
+      returnItem(item._docId, { itemId:item.itemId, condition:bulkRetCondition, person:item.assignedTo||'' }, userId, userName)
+    ));
     setSaving(false);
     setShowBulkRet(false);
     exitBulkMode();
@@ -188,9 +188,9 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     if (!bulkNewLoc) { flash('Please select a location.'); return; }
     setSaving(true);
     const sel = displayItems.filter(i => selectedIds.has(i._docId));
-    for (const item of sel) {
-      await updateItem(item._docId, { location:bulkNewLoc }, userId, userName);
-    }
+    await Promise.all(sel.map(item =>
+      updateItem(item._docId, { location:bulkNewLoc }, userId, userName)
+    ));
     setSaving(false);
     setShowBulkLoc(false);
     exitBulkMode();

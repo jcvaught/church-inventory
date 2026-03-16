@@ -8,7 +8,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from '../firebase.js';
 
 export function SettingsPage({ store, userProfile, subscription, user, canAdd, deleteAccount }) {
-  const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, loadErrors, loadChurches } = store;
+  const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, loadErrors } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
   const [newItem, setNewItem] = useState("");
