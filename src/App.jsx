@@ -13,6 +13,7 @@ import { InsightsPage } from './pages/hubs/InsightsPage.jsx';
 import { CoordinationPage } from './pages/hubs/CoordinationPage.jsx';
 import { AccountabilityPage } from './pages/hubs/AccountabilityPage.jsx';
 import { LandingPage } from './pages/LandingPage.jsx';
+import { PublicRequestPage } from './pages/PublicRequestPage.jsx';
 import { Dashboard } from './pages/Dashboard.jsx';
 import { ItemsPage } from './pages/ItemsPage.jsx';
 import { SuppliesPage } from './pages/SuppliesPage.jsx';
@@ -395,6 +396,12 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
 export default function App() {
   const authHook = useAuth();
   const { user, userProfile, loading: authLoading } = authHook;
+  const [publicRequest] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    const churchId = p.get('request');
+    const cn = p.get('cn');
+    return churchId ? { churchId, churchName: cn ? decodeURIComponent(cn) : '' } : null;
+  });
   const [showAuth, setShowAuth] = useState(() => {
     const p = new URLSearchParams(window.location.search);
     return p.get('signup') !== null || p.get('invite') !== null;
@@ -405,6 +412,8 @@ export default function App() {
     setAuthInitialMode(mode);
     setShowAuth(true);
   };
+
+  if (publicRequest) return <PublicRequestPage churchId={publicRequest.churchId} churchName={publicRequest.churchName} />;
 
   if (authLoading) return <Spinner />;
 

@@ -14,7 +14,7 @@ import { canManageItem } from '../utils/roleHelpers.js';
 import QRCode from 'qrcode';
 
 export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, onScannedItemConsumed }) {
-  const { items, settings, config, activityLog, addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired } = store;
+  const { items, settings, config, activityLog, addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, publicRequests, dismissPublicRequest } = store;
   const isMobile = useContext(MobileCtx);
   const activeItems = useMemo(() => items.filter(i => i.status !== "Disposed"), [items]);
   const disposedItems = useMemo(() => items.filter(i => i.status === "Disposed"), [items]);
@@ -61,6 +61,40 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     onScannedItemConsumed?.();
   }, [scannedItemId, items]);
 
+  // Keyboard shortcuts: N = new item, / = focus search, Esc = close modal
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key === 'Escape') {
+        if (showBulkLoc) { setShowBulkLoc(false); return; }
+        if (showBulkRet) { setShowBulkRet(false); return; }
+        if (showBulkRetWarn) { setShowBulkRetWarn(false); return; }
+        if (showBulkCo) { setShowBulkCo(false); return; }
+        if (showBulkCoWarn) { setShowBulkCoWarn(false); return; }
+        if (showRetire) { setShowRetire(null); return; }
+        if (showRepair) { setShowRepair(null); return; }
+        if (showReturn) { setShowReturn(null); return; }
+        if (showCheckOut) { setShowCheckOut(null); return; }
+        if (showEdit) { setShowEdit(null); return; }
+        if (showAdd) { setShowAdd(false); return; }
+        if (showDetail) { setShowDetail(null); return; }
+        return;
+      }
+      const tag = e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (!showAdd && !showEdit && !showDetail && !showCheckOut && !showReturn && !showRepair && !showRetire && (isAdmin || isManager)) {
+          setItemForm(emptyItem); setPhotoFile(null); setPhotoPreview(null); setShowAdd(true);
+        }
+      }
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [showAdd, showEdit, showDetail, showCheckOut, showReturn, showRepair, showRetire, showBulkCoWarn, showBulkCo, showBulkRetWarn, showBulkRet, showBulkLoc, isAdmin, isManager]);
+
   // Forms
   const emptyItem = { itemId:"", description:"", location:"", ministry:"", status:"Available", condition:"Good", notes:"", tags:[], purchaseDate:"", purchasePrice:"", warrantyExpiry:"", estimatedValue:"" };
   const [itemForm, setItemForm] = useState(emptyItem);
@@ -74,6 +108,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   const [photoPreview, setPhotoPreview] = useState(null);
   const [showFinancial, setShowFinancial] = useState(false);
   const [identifying, setIdentifying] = useState(false);
+  const searchRef = useRef(null);
 
   // Bulk selection
   const [bulkMode, setBulkMode] = useState(false);
@@ -375,6 +410,29 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     setShowEdit(item);
   }
 
+  // Duplicate item — opens Add modal pre-filled (ID cleared)
+  function openDuplicate(item) {
+    setItemForm({
+      itemId: "",
+      description: item.description || "",
+      location: item.location || "",
+      ministry: item.ministry || "",
+      condition: item.condition || "Good",
+      notes: item.notes || "",
+      tags: item.tags || [],
+      status: "Available",
+      purchaseDate: "",
+      purchasePrice: "",
+      warrantyExpiry: "",
+      estimatedValue: "",
+    });
+    setShowFinancial(!!(item.purchaseDate || item.purchasePrice != null || item.warrantyExpiry || item.estimatedValue != null));
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setShowDetail(null);
+    setShowAdd(true);
+  }
+
   // Tag toggle
   function toggleTag(tag) {
     setItemForm(prev => ({
@@ -397,6 +455,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       acts.push(<button key="fixed" onClick={(e)=>{e.stopPropagation();handleRepaired(item);}} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Mark Repaired</button>);
     }
     if (item.status !== "Disposed" && canManageItem(userProfile, item)) {
+      acts.push(<button key="dup" onClick={(e)=>{e.stopPropagation();openDuplicate(item);}} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>⊕ Dup</button>);
       acts.push(<button key="edit" onClick={(e)=>{e.stopPropagation();openEdit(item);}} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>Edit</button>);
     }
     return acts;
@@ -468,13 +527,44 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       {/* Success message */}
       {msg && <div style={{ background:B.tealPale, border:"1px solid "+B.teal, borderRadius:10, padding:"10px 16px", marginBottom:16, color:B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}>{msg}</div>}
 
+      {/* Public Requests Panel — admin only */}
+      {isAdmin && publicRequests?.length > 0 && (
+        <div style={{ background:"#FFFBEB", border:"1px solid #FDE68A", borderRadius:14, padding:"16px 20px", marginBottom:16 }}>
+          <div style={{ fontFamily:f1, fontSize:15, fontWeight:700, color:"#92400E", marginBottom:12 }}>
+            📥 Item Requests ({publicRequests.length})
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {publicRequests.map(req => (
+              <div key={req._docId} style={{ background:B.white, borderRadius:10, padding:"12px 16px", border:"1px solid #FDE68A", display:"flex", alignItems:"flex-start", gap:12, flexWrap:"wrap" }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:600, fontSize:14, color:B.navy }}>{req.itemDescription}</div>
+                  <div style={{ fontSize:12, color:B.textMid, marginTop:4 }}>
+                    From: <strong>{req.name}</strong>
+                    {req.email && <> · {req.email}</>}
+                    {req.phone && <> · {req.phone}</>}
+                    {req.dateNeeded && <> · Needed by: {req.dateNeeded}</>}
+                    {req.urgency && req.urgency !== 'Low' && (
+                      <span style={{ marginLeft:6, padding:"1px 8px", borderRadius:20, background:req.urgency==='High'?B.redPale:"#FEF3C7", color:req.urgency==='High'?B.red:"#92400E", fontWeight:600, fontSize:11 }}>{req.urgency}</span>
+                    )}
+                  </div>
+                  {req.notes && <div style={{ fontSize:12, color:B.textLight, marginTop:4 }}>{req.notes}</div>}
+                  {req.submittedAt && <div style={{ fontSize:11, color:B.textLight, marginTop:4 }}>{req.submittedAt.split("T")[0]}</div>}
+                </div>
+                <button onClick={()=>dismissPublicRequest(req._docId)} style={{ ...btnS, fontSize:12, padding:"5px 12px", flexShrink:0 }}>Dismiss</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Search & Filters */}
       <div style={{ background:B.white, borderRadius:14, padding:"16px 20px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
         <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
           <div style={{ flex:"1 1 220px", position:"relative" }}>
             <input
+              ref={searchRef}
               style={{...inp, paddingLeft:36}}
-              placeholder="Search by name or ID..."
+              placeholder="Search by name or ID... (/ to focus)"
               value={search} onChange={e=>setSearch(e.target.value)}
             />
             <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:14, color:B.textLight }}>🔍</span>
@@ -650,6 +740,9 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
           <div style={{ display:"flex", gap:8, marginTop:20, flexWrap:"wrap" }}>
             {itemActions(showDetail)}
             <button onClick={()=>printLabel(showDetail, config?.churchName)} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>🖨 Print Label</button>
+            {canManageItem(userProfile, showDetail) && showDetail.status !== "Disposed" && (
+              <button onClick={()=>openDuplicate(showDetail)} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>⊕ Duplicate</button>
+            )}
             {canManageItem(userProfile, showDetail) && showDetail.status !== "Disposed" && (
               <button onClick={()=>{setRetireForm({ reason:"Broken", date:today, notes:"", recoveryValue:"" });setShowRetire(showDetail);setShowDetail(null);}} style={{ ...btnD, padding:"6px 14px", fontSize:12 }}>Retire</button>
             )}

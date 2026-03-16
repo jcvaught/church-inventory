@@ -18,6 +18,7 @@ export function useFirestore(churchId) {
   const [bundles, setBundles] = useState([]);
   const [notificationConfig, setNotificationConfig] = useState(null);
   const [audits, setAudits] = useState([]);
+  const [publicRequests, setPublicRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const clearError = useCallback(() => setError(null), []);
@@ -38,7 +39,7 @@ export function useFirestore(churchId) {
     if (!churchId) return;
     const unsubs = [];
     let loaded = 0;
-    const totalSubs = 12;
+    const totalSubs = 13;
     const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
     // Config
@@ -114,6 +115,14 @@ export function useFirestore(churchId) {
     // Audits
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'audits'), (snap) => {
       setAudits(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
+      checkDone();
+    }, (err) => { handleErr(err); checkDone(); }));
+
+    // Public Requests
+    unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'publicRequests'), where('status', '==', 'pending')), (snap) => {
+      const reqs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+      reqs.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
+      setPublicRequests(reqs);
       checkDone();
     }, (err) => { handleErr(err); checkDone(); }));
 
@@ -506,6 +515,12 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
+  const dismissPublicRequest = useCallback(async (docId) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'publicRequests', docId), { status: 'dismissed' });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
   return {
     config, settings, items, supplies, activityLog, reservations, users,
     maintenanceTickets, vendors, bundles, notificationConfig, audits,
@@ -522,6 +537,7 @@ export function useFirestore(churchId) {
     updateNotificationConfig,
     addAudit, updateAudit,
     submitSuggestion, loadSuggestions, loadErrors,
+    publicRequests, dismissPublicRequest,
     clearError
   };
 }

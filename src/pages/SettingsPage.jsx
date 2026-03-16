@@ -35,6 +35,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [savingAccess, setSavingAccess] = useState(false);
   const [inviteHubs, setInviteHubs] = useState(() => []);
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
+  const [requestLinkCopied, setRequestLinkCopied] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -150,6 +151,13 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     navigator.clipboard.writeText(window.location.origin + '/?' + params.toString());
     setInviteLinkCopied(true);
     setTimeout(() => setInviteLinkCopied(false), 2000);
+  }
+
+  function handleCopyRequestLink() {
+    const params = new URLSearchParams({ request: userProfile.churchId, cn: config?.churchName || '' });
+    navigator.clipboard.writeText(window.location.origin + '/?' + params.toString());
+    setRequestLinkCopied(true);
+    setTimeout(() => setRequestLinkCopied(false), 2000);
   }
 
   const isGoogle = user?.providerData?.[0]?.providerId === 'google.com';
@@ -438,6 +446,13 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
               style={{ ...btnS, padding:"8px 16px", fontSize:13, color:inviteLinkCopied?B.teal:undefined, borderColor:inviteLinkCopied?B.tealPale:undefined }}>
               {inviteLinkCopied ? "Link Copied!" : "Copy Invite Link"}
             </button>
+            <div style={{ marginTop:16, paddingTop:16, borderTop:"1px solid "+B.sand }}>
+              <div style={{ fontSize:12, color:B.textLight, marginBottom:8 }}>Share this link so anyone outside your org can submit item requests:</div>
+              <button onClick={handleCopyRequestLink}
+                style={{ ...btnS, padding:"8px 16px", fontSize:13, color:requestLinkCopied?B.teal:undefined, borderColor:requestLinkCopied?B.tealPale:undefined }}>
+                {requestLinkCopied ? "Link Copied!" : "📥 Copy Request Form Link"}
+              </button>
+            </div>
           </div>
         )}
       </div>}
