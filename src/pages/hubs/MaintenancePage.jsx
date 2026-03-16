@@ -203,7 +203,7 @@ function PhotoGrid({ photos = [], onAdd, onRemove, uploading }) {
 }
 
 function RichTextarea({ value, onChange, style, placeholder, onKeyDown }) {
-  const ref = useRef();
+  const taRef = useRef();
 
   function getLineRange(selStart, selEnd) {
     const lines = value.split('\n');
@@ -218,7 +218,7 @@ function RichTextarea({ value, onChange, style, placeholder, onKeyDown }) {
   }
 
   function toggleBullet() {
-    const el = ref.current;
+    const el = taRef.current;
     const { lines, startLine, endLine } = getLineRange(el.selectionStart, el.selectionEnd);
     const slice = lines.slice(startLine, endLine + 1);
     const allHave = slice.every(l => l.startsWith('• '));
@@ -231,7 +231,7 @@ function RichTextarea({ value, onChange, style, placeholder, onKeyDown }) {
   }
 
   function toggleNumbered() {
-    const el = ref.current;
+    const el = taRef.current;
     const { lines, startLine, endLine } = getLineRange(el.selectionStart, el.selectionEnd);
     const slice = lines.slice(startLine, endLine + 1);
     const allHave = slice.every(l => /^\d+\.\s/.test(l));
@@ -252,7 +252,7 @@ function RichTextarea({ value, onChange, style, placeholder, onKeyDown }) {
         <button type="button" onMouseDown={e => { e.preventDefault(); toggleBullet(); }} style={tb}>• List</button>
         <button type="button" onMouseDown={e => { e.preventDefault(); toggleNumbered(); }} style={tb}>1. List</button>
       </div>
-      <textarea ref={ref} value={value} onChange={e => onChange(e.target.value)} style={style} placeholder={placeholder} onKeyDown={onKeyDown}/>
+      <textarea ref={taRef} value={value} onChange={e => onChange(e.target.value)} style={style} placeholder={placeholder} onKeyDown={onKeyDown}/>
     </div>
   );
 }
