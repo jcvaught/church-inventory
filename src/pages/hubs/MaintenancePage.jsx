@@ -410,7 +410,8 @@ export function MaintenancePage({ store, userProfile }) {
       if (detailEdits.tags?.length > 0 && addMaintenanceTags) {
         await addMaintenanceTags(detailEdits.tags);
       }
-      setShowDetail(prev => ({ ...prev, ...updates }));
+      setShowDetail(null);
+      setDetailEdits({});
       flash('Ticket updated!');
     } finally {
       setSaving(false);
