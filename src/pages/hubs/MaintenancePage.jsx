@@ -10,6 +10,12 @@ import { Stat } from '../../components/primitives/Stat.jsx';
 import { resizeImageForUpload } from '../../utils/imageResize.js';
 
 const STATUSES = ['Backlog', 'Planning', 'In Progress', 'On Hold', 'Complete', 'Cancelled'];
+
+function initials(name) {
+  const parts = (name || '?').trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
 const PRIORITIES = ['High', 'Medium', 'Low'];
 
 const priorityColors = {
@@ -76,8 +82,8 @@ function TicketCard({ ticket, onClick, onDragStart }) {
       )}
       <div style={{ display:'flex', alignItems:'center', gap:6 }}>
         {ticket.assignees?.slice(0,4).map((a, i) => (
-          <div key={a.uid || i} style={{ width:22, height:22, borderRadius:'50%', background:B.teal, color:B.white, fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:f1 }}>
-            {(a.name || '?').charAt(0).toUpperCase()}
+          <div key={a.uid || i} title={a.name} style={{ width:26, height:26, borderRadius:'50%', background:B.teal, color:B.white, fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:f1 }}>
+            {initials(a.name)}
           </div>
         ))}
         <div style={{ marginLeft:'auto', display:'flex', gap:8, alignItems:'center' }}>

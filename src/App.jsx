@@ -38,7 +38,7 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
     return { code: code.toUpperCase(), hubs: hubs != null ? hubs.split(',').filter(Boolean) : null };
   });
   const [mode, setMode] = useState(inviteData ? "register" : initialMode);
-  const [form, setForm] = useState({ name:"", email:"", password:"", churchCode: inviteData?.code || "", churchName:"" });
+  const [form, setForm] = useState({ firstName:"", lastName:"", email:"", password:"", churchCode: inviteData?.code || "", churchName:"" });
   const [honeypot, setHoneypot] = useState("");
   const [busy, setBusy] = useState(false);
   const [googleInfo, setGoogleInfo] = useState(null);
@@ -82,7 +82,7 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
   }
   async function handleRegister(e) {
     e?.preventDefault(); setBusy(true);
-    await register({ userName:form.name, email:form.email, password:form.password, churchCode:form.churchCode, allowedHubs: inviteData?.hubs ?? null });
+    await register({ firstName:form.firstName, lastName:form.lastName, email:form.email, password:form.password, churchCode:form.churchCode, allowedHubs: inviteData?.hubs ?? null });
     setBusy(false);
   }
   async function handleGoogleRegister(e) {
@@ -94,7 +94,7 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
     e?.preventDefault();
     if (honeypot) return; // Bot trap — silently reject
     setBusy(true);
-    await createChurch({ churchName:form.churchName, churchCode:form.churchCode, userName:form.name, email:form.email, password:form.password });
+    await createChurch({ churchName:form.churchName, churchCode:form.churchCode, firstName:form.firstName, lastName:form.lastName, email:form.email, password:form.password });
     setBusy(false);
   }
 
@@ -199,13 +199,16 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
             <div style={{ flex:1, height:1, background:B.sand }}/><span style={{ fontSize:12, color:B.textLight, fontFamily:f1 }}>OR</span><div style={{ flex:1, height:1, background:B.sand }}/>
           </div>
 
-          <FF label="Your Name"><input style={inp} value={form.name} onChange={e=>u("name",e.target.value)} placeholder="Full name"/></FF>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+            <FF label="First Name"><input style={inp} value={form.firstName} onChange={e=>u("firstName",e.target.value)} placeholder="John"/></FF>
+            <FF label="Last Name"><input style={inp} value={form.lastName} onChange={e=>u("lastName",e.target.value)} placeholder="Smith"/></FF>
+          </div>
           <FF label="Email"><input style={inp} type="email" value={form.email} onChange={e=>u("email",e.target.value)} placeholder="you@email.com"/></FF>
           <FF label="Password"><input style={inp} type="password" value={form.password} onChange={e=>u("password",e.target.value)} placeholder="At least 6 characters"/></FF>
           <FF label="Church Code"><input style={{...inp, fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase"}} value={form.churchCode} onChange={e=>u("churchCode",e.target.value)} placeholder="e.g. FXCC"/></FF>
           {tosCheckbox}
           {error && <p style={{ color:B.red, fontSize:13, fontWeight:600, margin:"0 0 12px" }}>{error}</p>}
-          <button onClick={handleRegister} disabled={busy||!form.name||!form.email||!form.password||!form.churchCode||!agreedToTerms} style={{ ...btnP, width:"100%", opacity:(busy||!form.name||!form.churchCode||!agreedToTerms)?.5:1 }}>
+          <button onClick={handleRegister} disabled={busy||!form.firstName||!form.lastName||!form.email||!form.password||!form.churchCode||!agreedToTerms} style={{ ...btnP, width:"100%", opacity:(busy||!form.firstName||!form.lastName||!form.churchCode||!agreedToTerms)?.5:1 }}>
             {busy ? "Creating account..." : "Create Account"}
           </button>
           <div style={{ textAlign:"center", marginTop:16 }}>
@@ -247,12 +250,15 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
           <FF label="Church Name"><input style={inp} value={form.churchName} onChange={e=>u("churchName",e.target.value)} placeholder="e.g. Fairfax Church of Christ"/></FF>
           <FF label="Church Code (your team will use this to join)"><input style={{...inp, fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase"}} value={form.churchCode} onChange={e=>u("churchCode",e.target.value)} placeholder="e.g. FXCC-2026"/></FF>
           <div style={{ height:1, background:B.sand, margin:"8px 0 16px" }}/>
-          <FF label="Your Name"><input style={inp} value={form.name} onChange={e=>u("name",e.target.value)} placeholder="Full name"/></FF>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+            <FF label="First Name"><input style={inp} value={form.firstName} onChange={e=>u("firstName",e.target.value)} placeholder="John"/></FF>
+            <FF label="Last Name"><input style={inp} value={form.lastName} onChange={e=>u("lastName",e.target.value)} placeholder="Smith"/></FF>
+          </div>
           <FF label="Email"><input style={inp} type="email" value={form.email} onChange={e=>u("email",e.target.value)} placeholder="you@church.org"/></FF>
           <FF label="Password"><input style={inp} type="password" value={form.password} onChange={e=>u("password",e.target.value)} placeholder="At least 6 characters"/></FF>
           {tosCheckbox}
           {error && <p style={{ color:B.red, fontSize:13, fontWeight:600, margin:"0 0 12px" }}>{error}</p>}
-          <button onClick={handleCreateChurch} disabled={busy||!form.churchName||!form.churchCode||!form.name||!form.email||!form.password||!agreedToTerms} style={{ ...btnP, width:"100%", opacity:(busy||!agreedToTerms)?.5:1 }}>
+          <button onClick={handleCreateChurch} disabled={busy||!form.churchName||!form.churchCode||!form.firstName||!form.lastName||!form.email||!form.password||!agreedToTerms} style={{ ...btnP, width:"100%", opacity:(busy||!agreedToTerms)?.5:1 }}>
             {busy ? "Setting up..." : "Create Church & Account"}
           </button>
           <div style={{ textAlign:"center", marginTop:16 }}>

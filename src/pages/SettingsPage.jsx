@@ -389,7 +389,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
               <div key={u.id} style={{ padding:"12px 14px", borderRadius:10, background:B.warmGray }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
                   <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
-                    <div style={{ width:34, height:34, borderRadius:10, background:B.teal, display:"flex", alignItems:"center", justifyContent:"center", color:B.white, fontWeight:700, fontSize:14, fontFamily:f1, flexShrink:0 }}>{(u.name||"?")[0]}</div>
+                    <div style={{ width:34, height:34, borderRadius:10, background:B.teal, display:"flex", alignItems:"center", justifyContent:"center", color:B.white, fontWeight:700, fontSize:13, fontFamily:f1, flexShrink:0 }}>{(name => { const p = (name||'?').trim().split(/\s+/); return p.length > 1 ? (p[0][0]+p[p.length-1][0]).toUpperCase() : p[0][0].toUpperCase(); })(u.name)}</div>
                     <div style={{ minWidth:0 }}>
                       <div style={{ fontWeight:600, fontSize:14, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                         {u.name}

@@ -81,7 +81,8 @@ export function useAuth() {
   }, []);
 
   // Create a new church (first-time setup)
-  const createChurch = useCallback(async ({ churchName, churchCode, userName, email, password }) => {
+  const createChurch = useCallback(async ({ churchName, churchCode, firstName, lastName, email, password }) => {
+    const userName = (firstName + ' ' + lastName).trim();
     setError(null);
     let cred = null;
     try {
@@ -143,6 +144,8 @@ export function useAuth() {
       // Create user profile
       const profile = {
         name: userName,
+        firstName,
+        lastName,
         email,
         role: 'admin',
         churchId,
@@ -167,7 +170,8 @@ export function useAuth() {
   }, []);
 
   // Register with church code
-  const register = useCallback(async ({ userName, email, password, churchCode, allowedHubs }) => {
+  const register = useCallback(async ({ firstName, lastName, email, password, churchCode, allowedHubs }) => {
+    const userName = (firstName + ' ' + lastName).trim();
     setError(null);
     let cred = null;
     try {
@@ -187,6 +191,8 @@ export function useAuth() {
       // Create user profile
       const profile = {
         name: userName,
+        firstName,
+        lastName,
         email,
         role: 'user',
         churchId: foundChurchId,
@@ -267,8 +273,14 @@ export function useAuth() {
         throw new Error('Invalid church code. Please check with your administrator.');
       }
 
+      const displayName = auth.currentUser.displayName || '';
+      const spaceIdx = displayName.indexOf(' ');
+      const firstName = spaceIdx >= 0 ? displayName.slice(0, spaceIdx) : displayName;
+      const lastName = spaceIdx >= 0 ? displayName.slice(spaceIdx + 1) : '';
       const profile = {
-        name: auth.currentUser.displayName || auth.currentUser.email,
+        name: displayName || auth.currentUser.email,
+        firstName,
+        lastName,
         email: auth.currentUser.email,
         role: 'user',
         churchId: foundChurchId,
