@@ -410,29 +410,44 @@ export function HelpPage({ onBack }) {
               <UL items={[
                 'Name and description',
                 'Priority — High, Medium, or Low',
-                'Status — Backlog, Planning, In Progress, On Hold, Complete, Cancelled',
-                'Assignees — one or more team members',
                 'Due date',
+                'Recurrence — set a ticket to repeat (Weekly, Every 2 weeks, Monthly, Quarterly, Annually)',
+                'Assignees — one or more team members',
                 'Tags — searchable labels',
                 'Linked item — attach a ticket to a specific inventory item',
                 'Vendor — assign to a contractor from your vendor directory',
-                'Estimated and actual cost',
+                'Estimated cost',
                 'Photos — upload multiple images',
               ]} />
-              <P>Tickets are auto-numbered (MNT-001, MNT-002, …).</P>
+              <P>Tickets are auto-numbered (MNT-001, MNT-002, …). Status starts at Backlog and can be moved through: Backlog → Planning → In Progress → On Hold → Complete → Cancelled.</P>
             </Accordion>
 
-            <Accordion title="Kanban view">
-              <P>Switch to <strong>Kanban</strong> for a column-per-status view. Admins and managers can drag cards between columns. Dropping a card updates the status in real time.</P>
-              <P>The stat bar at the top shows counts: Open (all non-Complete, non-Cancelled), In Progress, Overdue, and Complete.</P>
+            <Accordion title="Recurring tickets">
+              <P>Set a recurrence on any ticket (Weekly, Every 2 weeks, Monthly, Quarterly, Annually). When you mark a recurring ticket <strong>Complete</strong>, the app automatically creates the next ticket with all the same fields and the next due date calculated from the previous one.</P>
+              <Tip>Use recurring tickets for preventive maintenance — HVAC filters, fire extinguisher checks, generator tests, etc.</Tip>
+            </Accordion>
+
+            <Accordion title="Checklist sub-tasks">
+              <P>Open a ticket and scroll to <strong>Checklist</strong>. Type an item and press Enter (or click Add) to add it. Check items off as you work. The card shows your progress (e.g. ✓ 3/5) at a glance.</P>
+              <P>Checklist items are saved when you click <strong>Save Changes</strong>. When a recurring ticket auto-creates, all checklist items carry over with their done state reset.</P>
+            </Accordion>
+
+            <Accordion title="Kanban and list views">
+              <P>Switch between <strong>Kanban</strong> (column per status) and <strong>List</strong> (grouped by status, collapsible) using the toggle. Admins and managers can drag cards between kanban columns to update status in real time.</P>
+              <P>Use the <strong>Sort</strong> dropdown to order tickets by Newest, Oldest, Priority (High→Low), or Due date (Earliest). Sorting applies within each column or group.</P>
+              <P>The stat bar shows counts: Open (all non-Complete, non-Cancelled), In Progress, Completed This Month, and Overdue.</P>
+            </Accordion>
+
+            <Accordion title="My tickets filter">
+              <P>Click <strong>My tickets</strong> in the filter bar to see only tickets assigned to you. To assign yourself, open a ticket and click <strong>Me</strong> in the Assignees field, then save.</P>
             </Accordion>
 
             <Accordion title="Comments and photos">
-              <P>Open a ticket to add comments (real-time thread) and photos. Photos are stored in Firebase Storage and linked to the ticket.</P>
+              <P>Open a ticket to add comments (real-time thread) and photos. The description, notes, and comment fields support bullet lists and numbered lists using the toolbar above each field.</P>
             </Accordion>
 
             <Accordion title="Vendor directory">
-              <P>Go to the <strong>Vendors</strong> tab to add contractors and service companies. Each vendor has a name, contact, phone, email, and notes. Assign vendors to tickets for tracking.</P>
+              <P>Click <strong>Vendors</strong> to add contractors and service companies. Each vendor has a name, specialty, phone, email, and notes. Assign vendors to tickets for tracking.</P>
             </Accordion>
           </Section>
 
@@ -480,14 +495,16 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Email notifications">
-              <P>Connect EmailJS to send automatic emails when reservations are approved or denied. Go to Coordination Hub → Notification Settings and enter your:</P>
+              <P>Connect EmailJS to send automatic emails for reservation decisions and maintenance assignments. Go to Coordination Hub → Notification Settings and enter your:</P>
               <UL items={[
                 'EmailJS Service ID',
                 'Public Key',
-                'Approved template ID',
-                'Denied template ID',
+                'Approved template ID — sent when a reservation is approved',
+                'Denied template ID — sent when a reservation is denied',
+                'Ticket Assigned template ID — sent when someone is assigned to a maintenance ticket (optional)',
               ]} />
               <P>Use the <strong>Send Test</strong> button to verify the connection before going live.</P>
+              <Tip>The Ticket Assigned template receives these variables: to_email, to_name, ticket_name, ticket_number, priority, due_date, assigned_by.</Tip>
               <Note>EmailJS is a free third-party service. You'll need a free account at emailjs.com to get these credentials.</Note>
             </Accordion>
           </Section>
