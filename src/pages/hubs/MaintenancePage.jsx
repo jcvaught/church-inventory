@@ -24,8 +24,17 @@ function calculateNextDue(dueDate, recurrence) {
   const base = dueDate ? new Date(dueDate + 'T12:00:00') : new Date();
   if (recurrence === 'weekly') base.setDate(base.getDate() + 7);
   else if (recurrence === 'biweekly') base.setDate(base.getDate() + 14);
-  else if (recurrence === 'monthly') base.setMonth(base.getMonth() + 1);
-  else if (recurrence === 'quarterly') base.setMonth(base.getMonth() + 3);
+  else if (recurrence === 'monthly') {
+    const day = base.getDate();
+    base.setMonth(base.getMonth() + 1);
+    const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+    if (base.getDate() !== day) base.setDate(lastDay);
+  } else if (recurrence === 'quarterly') {
+    const day = base.getDate();
+    base.setMonth(base.getMonth() + 3);
+    const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+    if (base.getDate() !== day) base.setDate(lastDay);
+  }
   else if (recurrence === 'annually') base.setFullYear(base.getFullYear() + 1);
   return base.toISOString().slice(0, 10);
 }
@@ -379,8 +388,9 @@ export function MaintenancePage({ store, userProfile }) {
   const [photoPreviews, setPhotoPreviews] = useState([]);
   const [detailEdits, setDetailEdits] = useState({});
   const [vendorForm, setVendorForm] = useState(getEmptyVendor);
-  const [sortBy, setSortBy] = useState('createdDesc');
+  const [sortBy, setSortBy] = useState(() => localStorage.getItem('maint_sortBy') || 'createdDesc');
   const [detailChecklistInput, setDetailChecklistInput] = useState('');
+  const checklistInputRef = useRef();
 
   // Comments
   const [comments, setComments] = useState([]);
@@ -535,7 +545,7 @@ export function MaintenancePage({ store, userProfile }) {
               assigned_by: userName,
             }, notificationConfig.publicKey);
           }
-        } catch (emailErr) { console.error('Assignment email failed:', emailErr); }
+        } catch (emailErr) { flash('Ticket saved, but assignment notification email failed — please notify manually.'); }
       }
 
       // Auto-create next recurring ticket on completion
@@ -551,6 +561,7 @@ export function MaintenancePage({ store, userProfile }) {
           recurrence: detailEdits.recurrence,
           assignees: detailEdits.assignees || [],
           checklist: (detailEdits.checklist || []).map(c => ({ ...c, done: false })),
+          notes: detailEdits.notes || null,
           photos: [],
           linkedItemDocId: detailEdits.linkedItemDocId || null,
           linkedItemId: linkedItem2?.itemId || null,
@@ -648,6 +659,31 @@ export function MaintenancePage({ store, userProfile }) {
       status: newStatus,
       completedAt: isNowComplete && !wasComplete ? new Date().toISOString() : (isNowComplete ? ticket.completedAt : null),
     });
+    if (isNowComplete && !wasComplete && ticket.recurrence) {
+      const nextDue = calculateNextDue(ticket.dueDate, ticket.recurrence);
+      const linkedItem = activeItems.find(i => i._docId === ticket.linkedItemDocId);
+      const dropVendorName = ticket.vendorId ? (vendors.find(v => v._docId === ticket.vendorId)?.name || null) : null;
+      await addTicket({
+        name: ticket.name,
+        description: ticket.description,
+        priority: ticket.priority,
+        tags: ticket.tags || [],
+        dueDate: nextDue,
+        recurrence: ticket.recurrence,
+        assignees: ticket.assignees || [],
+        checklist: (ticket.checklist || []).map(c => ({ ...c, done: false })),
+        notes: ticket.notes || null,
+        photos: [],
+        linkedItemDocId: ticket.linkedItemDocId || null,
+        linkedItemId: linkedItem?.itemId || null,
+        linkedItemDescription: linkedItem?.description || null,
+        vendorId: ticket.vendorId || null,
+        vendorName: dropVendorName,
+        estimatedCost: ticket.estimatedCost || null,
+        actualCost: null,
+      }, userId, userName);
+      flash('Ticket completed — next recurring ticket created!');
+    }
   }
 
   async function handleDeleteTicket() {
@@ -816,7 +852,7 @@ export function MaintenancePage({ store, userProfile }) {
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:6, marginLeft:4 }}>
           <span style={{ fontSize:12, color:B.textLight, fontFamily:f1, fontWeight:600, textTransform:'uppercase', letterSpacing:.6, whiteSpace:'nowrap' }}>Sort:</span>
-          <select style={{ ...inp, width:'auto', cursor:'pointer', fontSize:13, padding:'7px 12px' }} value={sortBy} onChange={e => setSortBy(e.target.value)}>
+          <select style={{ ...inp, width:'auto', cursor:'pointer', fontSize:13, padding:'7px 12px' }} value={sortBy} onChange={e => { setSortBy(e.target.value); localStorage.setItem('maint_sortBy', e.target.value); }}>
             <option value="createdDesc">Newest first</option>
             <option value="createdAsc">Oldest first</option>
             <option value="priority">Priority</option>
@@ -949,7 +985,7 @@ export function MaintenancePage({ store, userProfile }) {
       </Modal>
 
       {/* ═══ TICKET DETAIL MODAL ═══ */}
-      <Modal open={!!showDetail} onClose={() => { setShowDetail(null); setDetailEdits({}); setComments([]); setDetailChecklistInput(''); }} title={(showDetail?.ticketNumber || '') + (showDetail?.name ? ' — ' + showDetail.name.slice(0, 40) : '')} wide>
+      <Modal open={!!showDetail} onClose={() => { setShowDetail(null); setDetailEdits({}); setComments([]); setNewComment(''); setDetailChecklistInput(''); }} title={(showDetail?.ticketNumber || '') + (showDetail?.name ? ' — ' + showDetail.name.slice(0, 40) : '')} wide>
         {showDetail && (
           <div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
@@ -1002,7 +1038,7 @@ export function MaintenancePage({ store, userProfile }) {
                 <FF label="Vendor">
                   <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.vendorId} onChange={e => setDetailEdits(d => ({ ...d, vendorId:e.target.value }))}>
                     <option value="">— None —</option>
-                    {vendors.map(v => <option key={v._docId} value={v._docId}>{v.name}</option>)}
+                    {vendors.map(v => <option key={v._docId} value={v._docId}>{v.name}{v.specialty ? ' — '+v.specialty : ''}</option>)}
                   </select>
                 </FF>
               )}
@@ -1033,6 +1069,7 @@ export function MaintenancePage({ store, userProfile }) {
                 ))}
                 <div style={{ display:'flex', gap:6, marginTop:8 }}>
                   <input
+                    ref={checklistInputRef}
                     style={{ ...inp, flex:1 }}
                     placeholder="Add checklist item... (Enter to add)"
                     value={detailChecklistInput}
@@ -1042,6 +1079,7 @@ export function MaintenancePage({ store, userProfile }) {
                         e.preventDefault();
                         setDetailEdits(d => ({ ...d, checklist:[...(d.checklist||[]), {id:Date.now().toString(), text:detailChecklistInput.trim(), done:false}] }));
                         setDetailChecklistInput('');
+                        checklistInputRef.current?.focus();
                       }
                     }}
                   />
@@ -1049,6 +1087,7 @@ export function MaintenancePage({ store, userProfile }) {
                     if (!detailChecklistInput.trim()) return;
                     setDetailEdits(d => ({ ...d, checklist:[...(d.checklist||[]), {id:Date.now().toString(), text:detailChecklistInput.trim(), done:false}] }));
                     setDetailChecklistInput('');
+                    checklistInputRef.current?.focus();
                   }} style={{ ...btnS, padding:'9px 14px', fontSize:13, flexShrink:0 }}>Add</button>
                 </div>
               </div>
@@ -1060,7 +1099,7 @@ export function MaintenancePage({ store, userProfile }) {
               </div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                 <button onClick={handleDeleteTicket} style={{ ...btnD, fontSize:13, padding:'9px 14px' }}>Delete</button>
-                <button onClick={() => { setShowDetail(null); setDetailEdits({}); }} style={btnS}>Cancel</button>
+                <button onClick={() => { setShowDetail(null); setDetailEdits({}); setComments([]); setNewComment(''); setDetailChecklistInput(''); }} style={btnS}>Cancel</button>
                 <button onClick={handleUpdateTicket} disabled={saving || !detailEdits.name?.trim()} style={{ ...btnP, opacity:(saving || !detailEdits.name?.trim()) ? .5 : 1 }}>
                   {saving ? 'Saving...' : 'Save Changes'}
                 </button>
@@ -1107,7 +1146,7 @@ export function MaintenancePage({ store, userProfile }) {
       </Modal>
 
       {/* ═══ ADD VENDOR MODAL ═══ */}
-      <Modal open={showAddVendor} onClose={() => setShowAddVendor(false)} title="Add Vendor">
+      <Modal open={showAddVendor} onClose={() => { setShowAddVendor(false); setVendorForm(getEmptyVendor()); }} title="Add Vendor">
         <FF label="Vendor / Company Name *">
           <input style={inp} value={vendorForm.name} onChange={e => setVendorForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. Smith's HVAC"/>
         </FF>
