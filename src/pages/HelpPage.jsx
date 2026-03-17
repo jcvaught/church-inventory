@@ -337,6 +337,13 @@ export function HelpPage({ onBack }) {
               <Note>Checkout, Return, and Location actions each show a confirmation dialog before executing.</Note>
             </Accordion>
 
+            <Accordion title="Retiring vs. deleting items">
+              <P><strong>Retire</strong> marks an item as Disposed and moves it to the retired list — it stays in your records for history and reporting. Use this for equipment that is broken, lost, or decommissioned.</P>
+              <P><strong>Delete</strong> permanently removes the item from Firestore. Use this only to remove items that were added by mistake. Activity history is preserved in the Activity Log.</P>
+              <P><RoleTag role="admin" /> The <strong>Delete</strong> button is in the item detail panel, admin only. A confirmation dialog shows before anything is removed.</P>
+              <Note>Both Retire and Delete are in the item detail panel footer. Retire is available to admins and managers; Delete is admin only.</Note>
+            </Accordion>
+
             <Accordion title="Public item request form">
               <P>Admins can generate a public link (Settings → Team Members → Copy Request Form Link) that anyone — no account required — can use to request items from your church.</P>
               <P>Submissions appear in a panel at the top of the Inventory tab for admins to review and dismiss.</P>
@@ -351,16 +358,28 @@ export function HelpPage({ onBack }) {
 
             <Accordion title="Adding and tracking supplies" defaultOpen>
               <UL items={[
-                'Name, category, location, ministry',
+                'Supply ID — unique identifier (3+ characters)',
+                'Description, location, ministry',
                 'Current quantity + unit (e.g. "48 rolls")',
                 'Low-stock threshold — highlighted when quantity falls at or below this number',
-                'Notes',
+                'Tags — for filtering (uses the same tags list as inventory items)',
               ]} />
               <P>Use <strong>Log Usage</strong> to reduce quantity and <strong>Restock</strong> to increase it. Every change is logged.</P>
             </Accordion>
 
+            <Accordion title="Editing a supply">
+              <P>Click <strong>Edit</strong> on any supply card to update its description, location, ministry, minimum quantity, unit, and tags.</P>
+              <P><RoleTag role="admin" /> Admins also see a <strong>Current Quantity</strong> field in the edit modal to correct a counting mistake without creating a misleading use or restock entry.</P>
+            </Accordion>
+
             <Accordion title="Low-stock alerts">
               <P>Supplies at or below their threshold are shown with a red badge. The Dashboard also surfaces a low-stock count for quick visibility.</P>
+              <Tip>Use the tag filter pills in the search bar to quickly view all supplies of a certain type (e.g. "Cleaning", "Office").</Tip>
+            </Accordion>
+
+            <Accordion title="Deleting a supply">
+              <P><RoleTag role="admin" /> Admins can permanently delete a supply using the <strong>Delete</strong> button on its card. A confirmation dialog shows the supply name and ID before anything is removed.</P>
+              <Note>Deleting a supply is permanent and cannot be undone. Activity history (usage and restock logs) is preserved in the Activity Log.</Note>
             </Accordion>
           </Section>
 

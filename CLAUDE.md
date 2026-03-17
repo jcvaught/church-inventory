@@ -243,6 +243,14 @@ Hub visibility is controlled at two levels:
 - **Registration UX**: Split "Your Name" field into separate First Name + Last Name fields on all registration forms (register, createChurch); `useAuth` stores `firstName`, `lastName`, and `name` on user profiles; `registerWithGoogle` splits `displayName` on first space; backward-compatible (`name` field still used everywhere for display)
 - **Two-character initials**: `initials(name)` helper in MaintenancePage derives two-char initials (e.g. "JS" for John Smith); assignee avatar circle size increased 22→26px with `title` tooltip; SettingsPage team member avatars updated with same logic
 
+### ✅ Done — Phase 20 — Delete Actions & Supply Tags (2026-03-17)
+
+- **Item delete**: `deleteItem(docId, itemId, userId, userName)` added to `useFirestore`; permanently removes item from Firestore and logs `delete_item` to activity log; **Delete** button (dark red, admin only) in item detail modal footer alongside Retire; `window.confirm` dialog before executing
+- **Supply delete**: `deleteSupply(docId, supplyId, userId, userName)` added to `useFirestore`; permanently removes supply and logs `delete_supply`; **Delete** button (admin only) on each supply card; `window.confirm` dialog before executing
+- **Tags on supplies**: `tags[]` field added to supply data model; tag selection (pill-toggle UI, same as items) in Add and Edit Supply modals; tag filter pills in the search bar (toggle single-tag filter); tag pills displayed on supply cards; all sourced from `settings.tags` — hidden if no tags configured
+- **Quantity correction in Edit Supply**: admin-only **Current Quantity** field in the Edit Supply modal allows correcting a counting mistake without creating a misleading use/restock log entry; validates non-negative; saved via existing `updateSupply` call
+- **HelpPage updated**: Inventory section — new "Retiring vs. deleting items" accordion; Supplies section — updated field list to include tags, new "Editing a supply" accordion (mentions admin quantity correction), "Deleting a supply" accordion, tip about tag filter
+
 ### ✅ Done — Phase 19 — Production Crash: Full Investigation & Fix (2026-03-17)
 
 The All Items tab crashed on every production load with a blank screen. This was the most complex bug in the project — four separate issues stacked on top of each other, each one only visible after the previous was fixed.
