@@ -1,7 +1,7 @@
 import { useState, useContext, useMemo } from 'react';
 import { app } from '../firebase.js';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { B, f1, f2, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
+import { B, f1, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
@@ -34,7 +34,7 @@ export function SuppliesPage({ store, userProfile }) {
   const [restockForm, setRestockForm] = useState({ qty:"", source:"" });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
-  const [photoFile, setPhotoFile] = useState(null);
+  const [_photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [identifying, setIdentifying] = useState(false);
 
@@ -68,7 +68,7 @@ export function SuppliesPage({ store, userProfile }) {
       } else {
         flash('Could not identify item — try again or enter manually.');
       }
-    } catch (err) {
+    } catch {
       flash('Identification failed — try again or enter manually.');
     } finally {
       setIdentifying(false);
@@ -139,6 +139,7 @@ export function SuppliesPage({ store, userProfile }) {
     if (!showUse || !useForm.qty || Number(useForm.qty) <= 0) return;
     if (Number(useForm.qty) > (showUse.quantity || 0)) { flash("Cannot exceed current stock."); return; }
     setSaving(true);
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     await useSupply(showUse._docId, {
       qty: useForm.qty,
       purpose: useForm.purpose

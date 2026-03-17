@@ -8,9 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev       # Start dev server (Vite, typically http://localhost:5173)
 npm run build     # Production build → dist/
 npm run preview   # Preview production build locally
+npm run lint      # ESLint — catch bugs and hook violations (0 errors baseline)
+npm run lint:fix  # ESLint with auto-fix
+npm run analyze   # Build + open bundle size visualizer in browser (dist/bundle-stats.html)
 ```
 
-There are no tests and no linter configured. **Run `npm run build` and fix any errors before pushing.**
+**Run `npm run build` and fix any errors before pushing.** Run `npm run lint` regularly — the baseline is 0 errors, 47 intentional `exhaustive-deps` warnings. Any new errors should be fixed before committing.
 
 ## Architecture
 

@@ -1,5 +1,5 @@
 import { useState, useMemo, useContext } from 'react';
-import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
+import { B, f1, inp, btnP, btnS } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { Stat } from '../../components/primitives/Stat.jsx';

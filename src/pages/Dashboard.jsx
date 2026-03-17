@@ -1,5 +1,5 @@
 import { useState, useMemo, useContext } from 'react';
-import { B, f1, f2 } from '../components/brand/tokens.js';
+import { B, f1 } from '../components/brand/tokens.js';
 import { ITEM_STATUS, RES_STATUS } from '../utils/constants.js';
 import { Badge } from '../components/primitives/Badge.jsx';
 import { Stat } from '../components/primitives/Stat.jsx';
@@ -31,6 +31,7 @@ export function Dashboard({ store, userProfile }) {
   const pendingRes = useMemo(() => reservations.filter(r => r.status === RES_STATUS.PENDING), [reservations]);
 
   const activityFiltered = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity
     const cutoff = activityRange === "all" ? null : new Date(Date.now() - activityRange * 86400000).toISOString();
     return cutoff ? activityLog.filter(l => l.timestamp >= cutoff) : activityLog;
   }, [activityRange, activityLog]);

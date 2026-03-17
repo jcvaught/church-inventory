@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { B, f1, f2, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
+import { B, f1, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { Stat } from '../components/primitives/Stat.jsx';
@@ -69,7 +69,7 @@ export function ReservationsPage({ store, userProfile }) {
         church_name: config?.churchName || '',
         ...params,
       }, { publicKey: nc.publicKey });
-    } catch(e) { flash('Action saved, but notification email failed — please notify manually.'); }
+    } catch { flash('Action saved, but notification email failed — please notify manually.'); }
   }
 
   function generateRecurrenceDates(startDate, returnDate, freq, endDate) {

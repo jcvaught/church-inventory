@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { B, f1, f2, btnP, btnS } from '../components/brand/tokens.js';
+import { B, f1, f2, btnS } from '../components/brand/tokens.js';
 import { FullLogo } from '../components/brand/Logo.jsx';
 
 /* ─── Section data ─────────────────────────────────────── */

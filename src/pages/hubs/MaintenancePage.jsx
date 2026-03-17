@@ -6,7 +6,6 @@ import { MobileCtx } from '../../hooks/useMobile.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
-import { Stat } from '../../components/primitives/Stat.jsx';
 import { resizeImageForUpload } from '../../utils/imageResize.js';
 
 const STATUSES = ['Backlog', 'Planning', 'In Progress', 'On Hold', 'Complete', 'Cancelled'];
@@ -63,7 +62,7 @@ function PriorityBadge({ priority }) {
   );
 }
 
-function StatusBadge({ status }) {
+function _StatusBadge({ status }) {
   const s = statusColors[status] || statusColors['Backlog'];
   return (
     <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:20, background:s.bg, color:s.tx, fontSize:11, fontWeight:700, fontFamily:f1 }}>
@@ -486,7 +485,7 @@ export function MaintenancePage({ store, userProfile }) {
         try {
           const urls = await uploadPhotos(docId, photoFiles);
           await updateTicket(docId, { photos: urls });
-        } catch (err) { flash('Photo upload failed — ticket saved without photos.'); }
+        } catch { flash('Photo upload failed — ticket saved without photos.'); }
       }
       if (ticketForm.tags.length > 0 && addMaintenanceTags) {
         await addMaintenanceTags(ticketForm.tags);
@@ -545,7 +544,7 @@ export function MaintenancePage({ store, userProfile }) {
               assigned_by: userName,
             }, notificationConfig.publicKey);
           }
-        } catch (emailErr) { flash('Ticket saved, but assignment notification email failed — please notify manually.'); }
+        } catch { flash('Ticket saved, but assignment notification email failed — please notify manually.'); }
       }
 
       // Auto-create next recurring ticket on completion
@@ -636,7 +635,7 @@ export function MaintenancePage({ store, userProfile }) {
   async function handleUpdateVendor() {
     if (!showEditVendor || !vendorForm.name.trim()) return;
     setSaving(true);
-    const { _docId, createdAt, ...rest } = showEditVendor;
+    const { _docId, createdAt: _createdAt, ...rest } = showEditVendor;
     await updateVendor(_docId, { ...rest, ...vendorForm });
     setShowEditVendor(null);
     setVendorForm(getEmptyVendor());

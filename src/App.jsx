@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, Component } from 'react';
+import { useState, useEffect, Component } from 'react';
 import { useAuth } from './useAuth.js';
 import { useFirestore } from './useFirestore.js';
 import { useSubscription } from './hooks/useSubscription.js';
@@ -87,7 +87,7 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
 
   async function handleLogin(e) {
     e?.preventDefault(); setBusy(true);
-    const res = await login(form.email, form.password);
+    await login(form.email, form.password);
     setBusy(false);
   }
   async function handleGoogle() {
@@ -459,7 +459,7 @@ function AppShell({ authHook }) {
   const [resentVerify, setResentVerify] = useState(false);
   const store = useFirestore(userProfile.churchId);
   const { subscription, hasHub, canAddUser } = useSubscription(userProfile.churchId);
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('item') ? 'inventory' : 'dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
   const isMobile = useWindowWidth() < 768;
   const [initialItemId] = useState(() => new URLSearchParams(window.location.search).get('item'));
@@ -471,7 +471,6 @@ function AppShell({ authHook }) {
   useEffect(() => {
     if (initialItemId) {
       window.history.replaceState({}, '', window.location.pathname);
-      setTab('inventory');
     }
   }, []);
 
@@ -485,6 +484,7 @@ function AppShell({ authHook }) {
   // Show onboarding for new admins with no items yet
   useEffect(() => {
     if (!store.loading && userProfile.role === 'admin' && !store.config?.onboardingComplete && store.items.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowOnboarding(true);
     }
   }, [store.loading, store.config?.onboardingComplete, store.items.length]);
@@ -499,7 +499,7 @@ function AppShell({ authHook }) {
 
   function handleScan(text) {
     let itemId = text.trim();
-    try { const u = new URL(text); const p = u.searchParams.get('item'); if (p) itemId = p; } catch {}
+    try { const u = new URL(text); const p = u.searchParams.get('item'); if (p) itemId = p; } catch { /* URL parse failed — use raw text as itemId */ }
     setScannedItemId(itemId);
     setShowScanner(false);
     setTab('inventory');

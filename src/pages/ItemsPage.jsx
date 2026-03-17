@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useContext, useMemo } from 'react';
 import { storage, app } from '../firebase.js';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { B, f1, f2, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
+import { B, f1, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
@@ -16,7 +16,7 @@ import QRCode from 'qrcode';
 
 export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, onScannedItemConsumed }) {
   const { items, settings, config, activityLog, addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem, publicRequests, dismissPublicRequest } = store;
-  const isMobile = useContext(MobileCtx);
+  const _isMobile = useContext(MobileCtx);
   const activeItems = useMemo(() => items.filter(i => i.status !== ITEM_STATUS.DISPOSED), [items]);
   const disposedItems = useMemo(() => items.filter(i => i.status === ITEM_STATUS.DISPOSED), [items]);
 
@@ -241,7 +241,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
         const sRef = storageRef(storage, `churches/${userProfile.churchId}/items/${itemForm.itemId.trim()}-${Date.now()}`);
         await uploadBytes(sRef, resized, { contentType: 'image/jpeg' });
         photoUrl = await getDownloadURL(sRef);
-      } catch (err) { flash('Photo upload failed — item saved without photo.'); }
+      } catch { flash('Photo upload failed — item saved without photo.'); }
     }
     await addItem({
       itemId: itemForm.itemId.trim(),
@@ -283,7 +283,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
         const sRef = storageRef(storage, `churches/${userProfile.churchId}/items/${itemForm.itemId.trim()}-${Date.now()}`);
         await uploadBytes(sRef, resized, { contentType: 'image/jpeg' });
         photoUrl = await getDownloadURL(sRef);
-      } catch (err) { flash('Photo upload failed — item saved without photo.'); }
+      } catch { flash('Photo upload failed — item saved without photo.'); }
     }
     await updateItem(showEdit._docId, {
       itemId: itemForm.itemId.trim(),

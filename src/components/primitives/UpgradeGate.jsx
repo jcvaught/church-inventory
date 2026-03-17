@@ -1,6 +1,6 @@
 import { B, f1, f2 } from '../brand/tokens.js';
 
-export function UpgradeGate({ hubName, hubLabel, hubPrice, hubDescription, hasHub, children }) {
+export function UpgradeGate({ hubName: _hubName, hubLabel, hubPrice, hubDescription, hasHub, children }) {
   if (hasHub) return children;
 
   const mailSubject = encodeURIComponent('Upgrade to ' + hubLabel);

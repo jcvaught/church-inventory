@@ -47,6 +47,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingError, setBillingError] = useState("");
+  const [inviteHubsInitialized, setInviteHubsInitialized] = useState(false);
 
   const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub' };
   const churchHubs = subscription?.grandfathered || subscription?.plan === 'all_in'
@@ -74,6 +75,15 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     setSavingAccess(false);
     setEditAccessUser(null);
   }
+
+  // Sync inviteHubs default to churchHubs once subscription loads (runs once when churchHubs becomes non-empty)
+  useEffect(() => {
+    if (!inviteHubsInitialized && churchHubs.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setInviteHubsInitialized(true);
+      setInviteHubs([...churchHubs]);
+    }
+  }, [churchHubs, inviteHubsInitialized]);
 
   // NOTE: owner emails also defined in functions/index.js (OWNER_EMAILS) and firestore.rules. Keep in sync.
   const isOwner = ['jcvaught@gmail.com', 'jvaught@fxcc.org'].includes(user?.email);
@@ -155,15 +165,6 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     }
     setLoadingChurches(false);
   }
-
-  // Sync inviteHubs default to churchHubs once subscription loads (runs once when churchHubs becomes non-empty)
-  const [inviteHubsInitialized, setInviteHubsInitialized] = useState(false);
-  useEffect(() => {
-    if (!inviteHubsInitialized && churchHubs.length > 0) {
-      setInviteHubsInitialized(true);
-      setInviteHubs([...churchHubs]);
-    }
-  }, [churchHubs, inviteHubsInitialized]);
 
   function handleCopyInviteLink() {
     const params = new URLSearchParams({ invite: config.churchCode });

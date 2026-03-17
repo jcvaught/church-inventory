@@ -21,7 +21,7 @@ const ACTION_LABELS = {
 };
 
 export function AccountabilityPage({ store, userProfile }) {
-  const isMobile = useContext(MobileCtx);
+  const _isMobile = useContext(MobileCtx);
   const { items, activityLog, audits, addAudit, settings } = store;
 
   // Audit flow

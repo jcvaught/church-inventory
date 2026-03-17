@@ -4,7 +4,7 @@ import {
   PieChart, Pie, Cell,
   AreaChart, Area,
 } from 'recharts';
-import { B, f1, f2, btnP, btnS } from '../../components/brand/tokens.js';
+import { B, f1, f2, btnS } from '../../components/brand/tokens.js';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { Stat } from '../../components/primitives/Stat.jsx';
 
@@ -155,7 +155,7 @@ function UtilizationSection({ items, activityLog, isMobile }) {
         headers={['Item', 'ID', 'Checkouts', 'Avg Duration']}
         rows={itemsByUse.slice(0, 20).map(i => [
           i.description,
-          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{i.itemId}</span>,
+          <span key={i.itemId} style={{ fontFamily: 'monospace', fontSize: 12 }}>{i.itemId}</span>,
           i.checkouts,
           i.avgDays != null ? i.avgDays + ' days' : '—',
         ])}
@@ -287,7 +287,7 @@ function SeasonalSection({ activityLog, isMobile }) {
 
 /* ─── Financial & Depreciation Section ───────────────────── */
 
-function FinancialSection({ items, isMobile }) {
+function FinancialSection({ items, isMobile: _isMobile }) {
   const today = new Date();
 
   const financialItems = useMemo(() =>
@@ -368,6 +368,7 @@ function FinancialSection({ items, isMobile }) {
 
 function SuppliesSection({ supplies, activityLog, isMobile }) {
   const burnData = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity
     const cutoff90 = new Date(Date.now() - 90 * 86400000).toISOString();
     const usage = {};
     activityLog
@@ -382,6 +383,7 @@ function SuppliesSection({ supplies, activityLog, isMobile }) {
         const dailyRate = used90 / 90;
         const daysLeft = dailyRate > 0 ? Math.floor(s.quantity / dailyRate) : null;
         const reorderDate = daysLeft != null
+          // eslint-disable-next-line react-hooks/purity
           ? new Date(Date.now() + daysLeft * 86400000).toISOString().split('T')[0]
           : null;
         return { ...s, used90, dailyRate: Math.round(dailyRate * 10) / 10, daysLeft, reorderDate };
@@ -508,7 +510,7 @@ const SECTIONS = [
   { key: 'supplies',    label: 'Supply Burn Rate', icon: '🧴' },
 ];
 
-export function InsightsPage({ store, userProfile }) {
+export function InsightsPage({ store, userProfile: _userProfile }) {
   const { items, supplies, activityLog, config } = store;
   const isMobile = useContext(MobileCtx);
   const [section, setSection] = useState(() => localStorage.getItem('insights_section') || 'utilization');

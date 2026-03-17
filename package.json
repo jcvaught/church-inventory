@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "analyze": "ANALYZE=true vite build"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
@@ -19,9 +22,16 @@
     "recharts": "^3.8.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
     "firebase-tools": "^15.10.0",
+    "globals": "^17.4.0",
+    "rollup-plugin-visualizer": "^7.0.1",
     "terser": "^5.46.1",
+    "typescript": "^5.9.3",
     "vite": "^5.1.0"
   }
 }
