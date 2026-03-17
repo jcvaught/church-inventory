@@ -69,7 +69,7 @@ export function ReservationsPage({ store, userProfile }) {
         church_name: config?.churchName || '',
         ...params,
       }, { publicKey: nc.publicKey });
-    } catch(e) { console.error('EmailJS:', e); }
+    } catch(e) { flash('Action saved, but notification email failed — please notify manually.'); }
   }
 
   function generateRecurrenceDates(startDate, returnDate, freq, endDate) {
@@ -80,7 +80,12 @@ export function ReservationsPage({ store, userProfile }) {
     while (true) {
       if (freq === 'weekly') current.setDate(current.getDate() + 7);
       else if (freq === 'biweekly') current.setDate(current.getDate() + 14);
-      else if (freq === 'monthly') current.setMonth(current.getMonth() + 1);
+      else if (freq === 'monthly') {
+      const day = current.getDate();
+      current.setMonth(current.getMonth() + 1);
+      const lastDay = new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate();
+      if (current.getDate() !== day) current.setDate(lastDay);
+    }
       if (current > end) break;
       const ev = current.toISOString().split('T')[0];
       const ret = returnDate ? new Date(current.getTime() + retOffset).toISOString().split('T')[0] : '';
@@ -120,8 +125,26 @@ export function ReservationsPage({ store, userProfile }) {
         notes: form.notes,
       };
       if (recurring && recurrenceEnd && recurrenceEnd > form.eventDate) {
-        const groupId = crypto.randomUUID();
         const extraDates = generateRecurrenceDates(form.eventDate, form.returnDate, recurrenceFreq, recurrenceEnd);
+        // Check conflicts for all dates in the series
+        const allDates = [{ eventDate: form.eventDate, returnDate: form.returnDate }, ...extraDates];
+        for (const d of allDates) {
+          const dStart = d.eventDate;
+          const dEnd = d.returnDate || d.eventDate;
+          const conflict = reservations.find(r => {
+            if (r.itemDocId !== form.itemDocId) return false;
+            if (r.status !== RES_STATUS.PENDING && r.status !== RES_STATUS.APPROVED) return false;
+            const bStart = r.eventDate;
+            const bEnd = r.returnDate || r.eventDate;
+            return dStart <= bEnd && dEnd >= bStart;
+          });
+          if (conflict) {
+            setConflictErr(`Conflict on ${d.eventDate}: "${conflict.eventName}" (${conflict.status}) already has this item. Adjust the series dates.`);
+            setSaving(false);
+            return;
+          }
+        }
+        const groupId = crypto.randomUUID();
         await addReservation({ ...baseRes, recurrenceGroupId: groupId, recurrenceFreq }, userId, userName);
         for (const d of extraDates) {
           await addReservation({ ...baseRes, eventDate: d.eventDate, returnDate: d.returnDate, recurrenceGroupId: groupId, recurrenceFreq }, userId, userName);
@@ -135,8 +158,11 @@ export function ReservationsPage({ store, userProfile }) {
       setRecurring(false);
       setRecurrenceEnd("");
       setShowAdd(false);
-    } catch(e) { flash("Error: "+e.message); }
-    setSaving(false);
+    } catch(e) {
+      flash("Error: "+e.message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleApprove(res) {
@@ -176,6 +202,11 @@ export function ReservationsPage({ store, userProfile }) {
   }
 
   async function handleCheckOutFromRes(res) {
+    const currentItem = items.find(i => i._docId === res.itemDocId);
+    if (currentItem && currentItem.status !== ITEM_STATUS.AVAILABLE) {
+      flash(`Item is currently "${currentItem.status}" and cannot be checked out.`);
+      return;
+    }
     setSaving(true);
     try {
       await checkOutItem(res.itemDocId, {
@@ -409,7 +440,7 @@ export function ReservationsPage({ store, userProfile }) {
             {/* Actions */}
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end", flexWrap:"wrap" }}>
               {r.status === RES_STATUS.PENDING && (r.requestedBy === userId || isAdmin) && (
-                <button onClick={()=>handleCancel(r)} disabled={saving} style={{ ...btnS, color:B.red, borderColor:"#FECACA" }}>Cancel Request</button>
+                <button onClick={()=>{ if (window.confirm("Cancel this reservation request?")) handleCancel(r); }} disabled={saving} style={{ ...btnS, color:B.red, borderColor:"#FECACA" }}>Cancel Request</button>
               )}
               {r.status === RES_STATUS.PENDING && canApproveReservation(r) && <>
                 <button onClick={()=>handleDeny(r)} disabled={saving} style={btnD}>Deny</button>
