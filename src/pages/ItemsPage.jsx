@@ -29,6 +29,10 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   function setLocation(v) { setLocationFilter(v); localStorage.setItem('inv_locationFilter', v); }
   function setMinistry(v) { setMinistryFilter(v); localStorage.setItem('inv_ministryFilter', v); }
 
+  // Role helpers (needed in useEffect dep arrays — must be before any useEffect)
+  const isAdmin = userProfile?.role === "admin";
+  const isManager = userProfile?.role === "manager";
+
   // Modals — single state: { type: 'add'|'edit'|'checkout'|'return'|'repair'|'retire'|'detail', item: obj|null }
   const [activeModal, setActiveModal] = useState(null);
   const [detailQrUrl, setDetailQrUrl] = useState('');
@@ -39,6 +43,17 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   const showRepair   = activeModal?.type === 'repair'   ? activeModal.item : null;
   const showRetire   = activeModal?.type === 'retire'   ? activeModal.item : null;
   const showDetail   = activeModal?.type === 'detail'   ? activeModal.item : null;
+
+  // Bulk selection (needed in useEffect dep arrays — must be before any useEffect)
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkModal, setBulkModal] = useState(null); // 'coWarn'|'co'|'retWarn'|'ret'|'loc'
+  const [bulkData, setBulkData] = useState({ coItems: [], retItems: [], skipped: 0, retCondition: 'Good', newLoc: '' });
+  const bulkCoItems      = bulkData.coItems;
+  const bulkRetItems     = bulkData.retItems;
+  const bulkSkipped      = bulkData.skipped;
+  const bulkRetCondition = bulkData.retCondition;
+  const bulkNewLoc       = bulkData.newLoc;
 
   useEffect(() => {
     if (!showDetail) { setDetailQrUrl(''); return; }
@@ -103,24 +118,11 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   const [identifying, setIdentifying] = useState(false);
   const searchRef = useRef(null);
 
-  // Bulk selection
-  const [bulkMode, setBulkMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState(new Set());
-  const [bulkModal, setBulkModal] = useState(null); // 'coWarn'|'co'|'retWarn'|'ret'|'loc'
-  const [bulkData, setBulkData] = useState({ coItems: [], retItems: [], skipped: 0, retCondition: 'Good', newLoc: '' });
-  const bulkCoItems    = bulkData.coItems;
-  const bulkRetItems   = bulkData.retItems;
-  const bulkSkipped    = bulkData.skipped;
-  const bulkRetCondition = bulkData.retCondition;
-  const bulkNewLoc     = bulkData.newLoc;
-
   const locations = settings?.locations || [];
   const ministries = settings?.ministries || [];
   const tagOptions = settings?.tags || [];
   const userId = userProfile?.id || userProfile?.uid;
   const userName = userProfile?.name || "Unknown";
-  const isAdmin = userProfile?.role === "admin";
-  const isManager = userProfile?.role === "manager";
 
   // Filter logic
   const displayItems = useMemo(() => (showDisposed ? disposedItems : activeItems).filter(item => {
