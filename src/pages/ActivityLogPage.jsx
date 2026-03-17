@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { B, f1, inp, btnS } from '../components/brand/tokens.js';
 
 export function ActivityLogPage({ store }) {
@@ -12,24 +12,24 @@ export function ActivityLogPage({ store }) {
   const perPage = 25;
 
   const actionLabels = {
-    add_item:"Item Added", check_out:"Checked Out", return:"Returned",
+    add_item:"Item Added", edit_item:"Item Edited", check_out:"Checked Out", return:"Returned",
     dispose:"Disposed", mark_repair:"Sent to Repair", mark_repaired:"Repair Complete",
-    add_supply:"Supply Added", use_supply:"Supply Used", restock:"Restocked"
+    add_supply:"Supply Added", edit_supply:"Supply Edited", use_supply:"Supply Used", restock:"Restocked"
   };
   const actionIcons = {
-    add_item:"➕", check_out:"📤", return:"↩️", dispose:"🗑️",
-    mark_repair:"🔧", mark_repaired:"✅", add_supply:"📋",
+    add_item:"➕", edit_item:"✏️", check_out:"📤", return:"↩️", dispose:"🗑️",
+    mark_repair:"🔧", mark_repaired:"✅", add_supply:"📋", edit_supply:"✏️",
     use_supply:"📉", restock:"📦"
   };
   const actionColors = {
-    add_item:B.teal, check_out:"#1A65C7", return:B.teal,
+    add_item:B.teal, edit_item:B.navy, check_out:"#1A65C7", return:B.teal,
     dispose:B.red, mark_repair:"#96750E", mark_repaired:B.teal,
-    add_supply:B.teal, use_supply:"#96750E", restock:"#1A65C7"
+    add_supply:B.teal, edit_supply:B.navy, use_supply:"#96750E", restock:"#1A65C7"
   };
 
-  const uniqueActions = [...new Set(activityLog.map(l => l.action))].sort();
+  const uniqueActions = useMemo(() => [...new Set(activityLog.map(l => l.action))].sort(), [activityLog]);
 
-  const filtered = activityLog.filter(l => {
+  const filtered = useMemo(() => activityLog.filter(l => {
     if (search) {
       const s = search.toLowerCase();
       if (!(l.itemId||"").toLowerCase().includes(s) &&
@@ -41,7 +41,7 @@ export function ActivityLogPage({ store }) {
     if (dateFrom && (l.timestamp||"").split("T")[0] < dateFrom) return false;
     if (dateTo && (l.timestamp||"").split("T")[0] > dateTo) return false;
     return true;
-  });
+  }), [activityLog, search, actionFilter, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const safePage = Math.min(page, totalPages - 1);
@@ -56,7 +56,7 @@ export function ActivityLogPage({ store }) {
 
   function detailRows(details) {
     if (!details || Object.keys(details).length === 0) return null;
-    return Object.entries(details).filter(([,v]) => v !== undefined && v !== "").map(([k,v]) => (
+    return Object.entries(details).filter(([,v]) => v !== undefined && v !== null && v !== "").map(([k,v]) => (
       <div key={k} style={{ display:"flex", gap:8, fontSize:13, padding:"3px 0" }}>
         <span style={{ color:B.textLight, fontWeight:600, minWidth:120, textTransform:"capitalize" }}>{k.replace(/([A-Z])/g, " $1")}:</span>
         <span style={{ color:B.textDark }}>{String(v)}</span>
@@ -64,7 +64,7 @@ export function ActivityLogPage({ store }) {
     ));
   }
 
-  function handleClearFilters() { setSearch(""); setActionFilter("all"); setDateFrom(""); setDateTo(""); setPage(0); }
+  function handleClearFilters() { setSearch(""); setActionFilter("all"); setDateFrom(""); setDateTo(""); setPage(0); setExpanded(null); }
 
   const hasFilters = search || actionFilter !== "all" || dateFrom || dateTo;
 
@@ -80,25 +80,22 @@ export function ActivityLogPage({ store }) {
         <div style={{ display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end" }}>
           <div style={{ flex:"1 1 200px" }}>
             <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>Search</label>
-            <input style={inp} value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}} placeholder="Item ID, person, details..." />
+            <input style={inp} value={search} onChange={e=>{setSearch(e.target.value);setPage(0);setExpanded(null);}} placeholder="Item ID, person, details..." />
           </div>
           <div style={{ flex:"0 0 170px" }}>
             <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>Action</label>
-            <select style={{...inp, cursor:"pointer"}} value={actionFilter} onChange={e=>{setActionFilter(e.target.value);setPage(0);}}>
+            <select style={{...inp, cursor:"pointer"}} value={actionFilter} onChange={e=>{setActionFilter(e.target.value);setPage(0);setExpanded(null);}}>
               <option value="all">All Actions</option>
               {uniqueActions.map(a => <option key={a} value={a}>{actionLabels[a]||a}</option>)}
             </select>
           </div>
           <div style={{ flex:"0 0 150px" }}>
             <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>From</label>
-            <input type="date" style={inp} value={dateFrom} onChange={e=>{setDateFrom(e.target.value);setPage(0);}} />
+            <input type="date" style={inp} value={dateFrom} onChange={e=>{setDateFrom(e.target.value);setPage(0);setExpanded(null);}} />
           </div>
           <div style={{ flex:"0 0 150px" }}>
             <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>To</label>
-            <input type="date" style={inp} value={dateTo} onChange={e=>{
-              if (dateFrom && e.target.value && e.target.value < dateFrom) { setDateTo(""); return; }
-              setDateTo(e.target.value); setPage(0);
-            }} />
+            <input type="date" style={inp} value={dateTo} min={dateFrom || undefined} onChange={e=>{setDateTo(e.target.value);setPage(0);setExpanded(null);}} />
           </div>
           {hasFilters && (
             <button onClick={handleClearFilters} style={{ ...btnS, padding:"10px 16px", fontSize:12, whiteSpace:"nowrap" }}>Clear All</button>
