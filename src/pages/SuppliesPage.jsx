@@ -1,5 +1,5 @@
 import { useState, useContext, useMemo } from 'react';
-import { B, f1, f2, inp, btnP, btnS } from '../components/brand/tokens.js';
+import { B, f1, f2, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
@@ -7,7 +7,7 @@ import { exportSuppliesCSV } from '../utils/csv.js';
 import { canManageSupply } from '../utils/roleHelpers.js';
 
 export function SuppliesPage({ store, userProfile }) {
-  const { supplies, settings, activityLog, addSupply, updateSupply, useSupply, restockSupply } = store;
+  const { supplies, settings, activityLog, addSupply, updateSupply, useSupply, restockSupply, deleteSupply } = store;
   const isMobile = useContext(MobileCtx);
 
   const [search, setSearch] = useState("");
@@ -118,6 +118,13 @@ export function SuppliesPage({ store, userProfile }) {
     flash("Supply restocked!");
   }
 
+  // ── Delete ──
+  async function handleDelete(s) {
+    if (!window.confirm(`Delete "${s.description}" (${s.supplyId})?\n\nThis cannot be undone. Activity history will be preserved.`)) return;
+    await deleteSupply(s._docId, s.supplyId, userId, userName);
+    flash("Supply deleted.");
+  }
+
   // Stock level indicator
   function StockBar({ quantity, minQuantity }) {
     const pct = minQuantity > 0 ? Math.min(100, (quantity / (minQuantity * 2)) * 100) : 100;
@@ -226,6 +233,7 @@ export function SuppliesPage({ store, userProfile }) {
                     {canManageSupply(userProfile, s) && <button onClick={()=>{setEditSupForm({ supplyId:s.supplyId, description:s.description, location:s.location||"", ministry:s.ministry||"", quantity:s.quantity, minQuantity:s.minQuantity||5, unit:s.unit||"each" });setShowEditSupply(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Edit</button>}
                     <button onClick={()=>{setUseForm({ qty:"1", purpose:"" });setShowUse(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Use</button>
                     <button onClick={()=>{setRestockForm({ qty:"", source:"" });setShowRestock(s);}} style={{ ...btnP, padding:"5px 12px", fontSize:11 }}>Restock</button>
+                    {isAdmin && <button onClick={()=>handleDelete(s)} style={{ ...btnD, padding:"5px 12px", fontSize:11 }}>Delete</button>}
                   </div>
                 </div>
               </div>

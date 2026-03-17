@@ -302,6 +302,13 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
+  const deleteSupply = useCallback(async (docId, supplyId, userId, userName) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'supplies', docId));
+      await logActivity('delete_supply', supplyId, userId, userName);
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
   // ── Activity Log ──
   const logActivity = useCallback(async (action, itemId, userId, userName, details = {}) => {
     try {
@@ -531,7 +538,7 @@ export function useFirestore(churchId) {
     loading, error,
     updateSettings, updateConfig,
     addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired,
-    addSupply, updateSupply, useSupply, restockSupply,
+    addSupply, updateSupply, useSupply, restockSupply, deleteSupply,
     logActivity,
     addReservation, updateReservation,
     updateUser, removeUser,
