@@ -5,5 +5,10 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: 'dist',
+    minify: 'terser',
+    terserOptions: {
+      compress: true,
+      mangle: true,
+    },
   },
 });

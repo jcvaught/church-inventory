@@ -21,6 +21,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
     "firebase-tools": "^15.10.0",
+    "terser": "^5.46.1",
     "vite": "^5.1.0"
   }
 }
