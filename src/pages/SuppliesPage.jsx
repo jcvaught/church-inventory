@@ -1,4 +1,6 @@
 import { useState, useContext, useMemo } from 'react';
+import { app } from '../firebase.js';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { Modal } from '../components/primitives/Modal.jsx';
@@ -32,6 +34,9 @@ export function SuppliesPage({ store, userProfile }) {
   const [restockForm, setRestockForm] = useState({ qty:"", source:"" });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [identifying, setIdentifying] = useState(false);
 
   const locations = settings?.locations || [];
   const ministries = settings?.ministries || [];
@@ -44,6 +49,31 @@ export function SuppliesPage({ store, userProfile }) {
   const [tagFilter, setTagFilter] = useState("");
 
   function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }
+
+  // ── AI Supply Identification ──
+  async function handleIdentify() {
+    if (!photoFile) return;
+    setIdentifying(true);
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(photoFile);
+      });
+      const identify = httpsCallable(getFunctions(app), 'identifyItem');
+      const result = await identify({ imageBase64: base64, mediaType: photoFile.type || 'image/jpeg' });
+      if (result.data?.description) {
+        setSupForm(f => ({ ...f, description: result.data.description }));
+      } else {
+        flash('Could not identify item — try again or enter manually.');
+      }
+    } catch (err) {
+      flash('Identification failed — try again or enter manually.');
+    } finally {
+      setIdentifying(false);
+    }
+  }
 
   // Filter
   const filtered = useMemo(() => supplies.filter(s => {
@@ -76,6 +106,8 @@ export function SuppliesPage({ store, userProfile }) {
     }, userId, userName);
     setShowAdd(false);
     setSupForm(emptySupply);
+    setPhotoFile(null);
+    setPhotoPreview(null);
     setSaving(false);
     flash("Supply added!");
   }
@@ -272,9 +304,21 @@ export function SuppliesPage({ store, userProfile }) {
       )}
 
       {/* ═══ ADD SUPPLY MODAL ═══ */}
-      <Modal open={showAdd} onClose={()=>{ setShowAdd(false); setSupForm(emptySupply); }} title="Add New Supply">
+      <Modal open={showAdd} onClose={()=>{ setShowAdd(false); setSupForm(emptySupply); setPhotoFile(null); setPhotoPreview(null); }} title="Add New Supply">
         <FF label="Supply ID"><input style={{...inp, fontFamily:"monospace", letterSpacing:1}} value={supForm.supplyId} onChange={e=>setSupForm({...supForm, supplyId:e.target.value.toUpperCase()})} placeholder="e.g. BAT-AA"/></FF>
-        <FF label="Description"><input style={inp} value={supForm.description} onChange={e=>setSupForm({...supForm, description:e.target.value})} placeholder="e.g. AA Batteries"/></FF>
+        <FF label="Description">
+          <input style={inp} value={supForm.description} onChange={e=>setSupForm({...supForm, description:e.target.value})} placeholder="e.g. AA Batteries"/>
+          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", marginTop:8 }}>
+            <input type="file" accept="image/*" id="photo-sup-add" style={{ display:"none" }} onChange={e=>{const f=e.target.files[0];if(f){setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));setIdentifying(false);}}}/>
+            <label htmlFor="photo-sup-add" style={{ ...btnS, display:"inline-block", cursor:"pointer", padding:"7px 16px", fontSize:13 }}>{photoPreview ? "📷 Change Photo" : "📷 Take/Upload Photo"}</label>
+            {photoFile && (
+              <button type="button" onClick={handleIdentify} disabled={identifying} style={{ ...btnS, fontSize:13, padding:"7px 16px", opacity:identifying?.6:1 }}>
+                {identifying ? "Identifying…" : "✨ Identify Item"}
+              </button>
+            )}
+          </div>
+          {photoPreview && <img src={photoPreview} alt="preview" style={{ marginTop:8, maxWidth:"100%", maxHeight:120, borderRadius:8, objectFit:"cover" }}/>}
+        </FF>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
           <FF label="Location"><select style={inp} value={supForm.location} onChange={e=>setSupForm({...supForm, location:e.target.value})}>
             <option value="">— Select —</option>
