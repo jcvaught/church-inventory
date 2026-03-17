@@ -5,7 +5,8 @@ import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app } from '../firebase.js';
+import { app, db } from '../firebase.js';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export function SettingsPage({ store, userProfile, subscription, user, canAdd, deleteAccount }) {
   const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, loadErrors } = store;
@@ -82,7 +83,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     setNewItem("");
   }
   function addToList() {
-    if (!newItem.trim() || editList.items.includes(newItem.trim())) return;
+    if (!newItem.trim() || editList.items.map(i => i.toLowerCase()).includes(newItem.trim().toLowerCase())) return;
     const updated = [...editList.items, newItem.trim()];
     setEditList({ ...editList, items: updated });
     updateSettings({ [editList.key]: updated });
@@ -93,10 +94,14 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     setEditList({ ...editList, items: updated });
     updateSettings({ [editList.key]: updated });
   }
-  function handleChangeCode() {
-    if (newCode.trim().length < 3) return;
-    if (!window.confirm(`Change the church code to "${newCode.trim().toUpperCase()}"? Anyone using the old code to join will no longer be able to.`)) return;
-    updateConfig({ churchCode: newCode.trim().toUpperCase() });
+  async function handleChangeCode() {
+    const code = newCode.trim().toUpperCase();
+    if (code.length < 3) return;
+    if (!window.confirm(`Change the church code to "${code}"? Anyone using the old code to join will no longer be able to.`)) return;
+    const snap = await getDocs(query(collection(db, 'churches'), where('churchCode', '==', code)));
+    const takenByOther = snap.docs.some(d => d.id !== userProfile?.churchId);
+    if (takenByOther) { alert(`The code "${code}" is already in use by another church. Please choose a different code.`); return; }
+    updateConfig({ churchCode: code });
     setEditCodeMode(false);
     setNewCode("");
   }
@@ -335,7 +340,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               {editCodeMode ? (
                 <>
-                  <input style={{...inp, width:150, fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", padding:"7px 12px"}} value={newCode} onChange={e=>setNewCode(e.target.value)} placeholder="NEW CODE"/>
+                  <input style={{...inp, width:150, fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", padding:"7px 12px"}} value={newCode} onChange={e=>setNewCode(e.target.value.toUpperCase())} placeholder="NEW CODE"/>
                   <button onClick={handleChangeCode} style={{...btnP, padding:"7px 14px", fontSize:12}}>Save</button>
                   <button onClick={()=>setEditCodeMode(false)} style={{...btnS, padding:"7px 14px", fontSize:12}}>Cancel</button>
                 </>
