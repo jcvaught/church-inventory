@@ -13,6 +13,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
   const [newItem, setNewItem] = useState("");
+  const [editingItem, setEditingItem] = useState(null); // original value being edited
+  const [editingValue, setEditingValue] = useState("");
   const [showCode, setShowCode] = useState(false);
   const [newCode, setNewCode] = useState("");
   const [editCodeMode, setEditCodeMode] = useState(false);
@@ -93,6 +95,18 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     const updated = editList.items.filter(i => i !== item);
     setEditList({ ...editList, items: updated });
     updateSettings({ [editList.key]: updated });
+  }
+
+  function saveEditingItem() {
+    const trimmed = editingValue.trim();
+    if (!trimmed || trimmed === editingItem) { setEditingItem(null); return; }
+    if (editList.items.filter(i => i !== editingItem).map(i => i.toLowerCase()).includes(trimmed.toLowerCase())) {
+      setEditingItem(null); return;
+    }
+    const updated = editList.items.map(i => i === editingItem ? trimmed : i);
+    setEditList({ ...editList, items: updated });
+    updateSettings({ [editList.key]: updated });
+    setEditingItem(null);
   }
   async function handleChangeCode() {
     const code = newCode.trim().toUpperCase();
@@ -834,7 +848,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
       </Modal>
 
       {/* List Editor Modal */}
-      <Modal open={!!editList} onClose={()=>setEditList(null)} title={"Manage " + (editList?.title || "")}>
+      <Modal open={!!editList} onClose={()=>{ setEditList(null); setEditingItem(null); }} title={"Manage " + (editList?.title || "")}>
         {editList && <>
           <div style={{ display:"flex", gap:8, marginBottom:16 }}>
             <input style={{...inp, flex:1}} value={newItem} onChange={e=>setNewItem(e.target.value)} placeholder={`Add new ${editList.title.toLowerCase().slice(0,-1)}...`} onKeyDown={e=>e.key==="Enter"&&addToList()}/>
@@ -842,9 +856,20 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           </div>
           <div style={{ display:"flex", flexDirection:"column", gap:6, maxHeight:400, overflowY:"auto" }}>
             {editList.items.map(item => (
-              <div key={item} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 14px", borderRadius:8, background:B.warmGray }}>
-                <span style={{ fontSize:14 }}>{item}</span>
-                <button onClick={()=>removeFromList(item)} style={{ background:"none", border:"none", color:B.red, cursor:"pointer", fontSize:16, padding:"2px 6px" }}>&times;</button>
+              <div key={item} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px 6px 14px", borderRadius:8, background:B.warmGray }}>
+                {editingItem === item ? (
+                  <>
+                    <input autoFocus style={{...inp, flex:1, padding:"5px 10px", fontSize:14}} value={editingValue} onChange={e=>setEditingValue(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") saveEditingItem(); if(e.key==="Escape") setEditingItem(null); }}/>
+                    <button onClick={saveEditingItem} style={{ ...btnP, padding:"5px 12px", fontSize:12 }}>Save</button>
+                    <button onClick={()=>setEditingItem(null)} style={{ ...btnS, padding:"5px 12px", fontSize:12 }}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ flex:1, fontSize:14 }}>{item}</span>
+                    <button onClick={()=>{ setEditingItem(item); setEditingValue(item); }} style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:13, padding:"2px 6px", fontWeight:600 }}>Edit</button>
+                    <button onClick={()=>removeFromList(item)} style={{ background:"none", border:"none", color:B.red, cursor:"pointer", fontSize:16, padding:"2px 6px" }}>&times;</button>
+                  </>
+                )}
               </div>
             ))}
           </div>
