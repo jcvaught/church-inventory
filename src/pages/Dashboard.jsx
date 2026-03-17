@@ -89,7 +89,7 @@ export function Dashboard({ store, userProfile }) {
           {pendingRes.map(r => (
             <div key={r._docId} style={{ padding:"8px 14px", borderRadius:8, background:B.white, marginBottom:6, fontSize:14 }}>
               <span style={{ fontWeight:600 }}>{r.itemDesc}</span>
-              <span style={{ color:B.textLight }}> — {r.requestedByName} for {r.purpose} ({r.eventDate})</span>
+              <span style={{ color:B.textLight }}> — {r.requestedByName} for {r.purpose || r.eventName} ({r.eventDate})</span>
             </div>
           ))}
         </div>
@@ -115,7 +115,7 @@ export function Dashboard({ store, userProfile }) {
                   <span style={{ color:B.textLight, fontSize:13, marginLeft:8 }}>{item.itemId}</span>
                   {item.assignedTo && <span style={{ color:B.textMid, fontSize:13 }}> — {item.assignedTo}</span>}
                 </div>
-                <Badge status={item.expectedReturn && item.expectedReturn < today ? "Under Repair" : "Checked Out"} />
+                <Badge status="Checked Out" />
               </div>
             ))}
           </div>
@@ -136,7 +136,8 @@ export function Dashboard({ store, userProfile }) {
           </div>
         </div>
         {(() => {
-          const icons = { check_out:"📤", return:"↩️", add_item:"➕", dispose:"🗑️", restock:"📦", use_supply:"📉", mark_repair:"🔧", mark_repaired:"✅", add_supply:"➕", reservation_approved:"✅📅", reservation_denied:"❌📅" };
+          const icons = { add_item:"➕", edit_item:"✏️", check_out:"📤", return:"↩️", dispose:"🗑️", restock:"📦", use_supply:"📉", mark_repair:"🔧", mark_repaired:"✅", add_supply:"📋", edit_supply:"✏️", reservation_approved:"✅📅", reservation_denied:"❌📅" };
+          const labels = { add_item:"Item Added", edit_item:"Item Edited", check_out:"Checked Out", return:"Returned", dispose:"Disposed", mark_repair:"Sent to Repair", mark_repaired:"Repair Complete", add_supply:"Supply Added", edit_supply:"Supply Edited", use_supply:"Supply Used", restock:"Restocked", reservation_approved:"Reservation Approved", reservation_denied:"Reservation Denied" };
           return activityFiltered.length === 0
             ? <p style={{ color:B.textLight, fontSize:14 }}>{activityLog.length === 0 ? "No activity yet. Start by adding items to your inventory!" : `No activity in the last ${activityRange} days.`}</p>
             : <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
@@ -144,7 +145,7 @@ export function Dashboard({ store, userProfile }) {
                   <div key={l._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", borderRadius:8, background:B.warmGray }}>
                     <span style={{ fontSize:16 }}>{icons[l.action]||"📋"}</span>
                     <div style={{ flex:1 }}>
-                      <span style={{ fontWeight:600, fontSize:13 }}>{l.action.replace(/_/g," ")}</span>
+                      <span style={{ fontWeight:600, fontSize:13 }}>{labels[l.action]||l.action.replace(/_/g," ")}</span>
                       <span style={{ color:B.textLight, fontSize:12, marginLeft:6 }}>({l.itemId})</span>
                       <span style={{ color:B.textMid, fontSize:12 }}> — {l.performedByName}</span>
                     </div>
