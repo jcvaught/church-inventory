@@ -136,7 +136,7 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
 
           {error && <p style={{ color:B.red, fontSize:13, fontWeight:600, margin:"0 0 12px" }}>{error}</p>}
 
-          <button onClick={handleLogin} disabled={busy} style={{ ...btnP, width:"100%", marginTop:4, opacity:busy?.6:1 }}>
+          <button onClick={handleLogin} disabled={busy} style={{ ...btnP, width:"100%", marginTop:4, opacity:busy?.5:1 }}>
             {busy ? "Signing in..." : "Sign In"}
           </button>
 

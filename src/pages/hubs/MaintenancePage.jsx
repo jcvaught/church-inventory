@@ -103,9 +103,9 @@ function TicketCard({ ticket, onClick, onDragStart }) {
       )}
       {(ticket.recurrence || ticket.checklist?.length > 0) && (
         <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
-          {ticket.recurrence && <span style={{ fontSize:10, color:B.teal, fontFamily:f1 }}>🔁 {RECURRENCE_LABELS[ticket.recurrence]}</span>}
+          {ticket.recurrence && <span style={{ fontSize:12, color:B.teal, fontFamily:f1 }}>🔁 {RECURRENCE_LABELS[ticket.recurrence]}</span>}
           {ticket.checklist?.length > 0 && (
-            <span style={{ fontSize:10, color:ticket.checklist.filter(c=>c.done).length===ticket.checklist.length ? B.teal : B.textMid, fontFamily:f1 }}>
+            <span style={{ fontSize:12, color:ticket.checklist.filter(c=>c.done).length===ticket.checklist.length ? B.teal : B.textMid, fontFamily:f1 }}>
               ✓ {ticket.checklist.filter(c=>c.done).length}/{ticket.checklist.length}
             </span>
           )}
@@ -800,19 +800,13 @@ export function MaintenancePage({ store, userProfile }) {
         >
           My tickets
         </button>
-        <select style={{ ...inp, width:'auto', cursor:'pointer' }} value={sortBy} onChange={e => setSortBy(e.target.value)}>
-          <option value="createdDesc">Newest first</option>
-          <option value="createdAsc">Oldest first</option>
-          <option value="priority">Priority</option>
-          <option value="dueDate">Due date</option>
-        </select>
         {(filterSearch || filterPriority || filterMyTickets) && (
           <button type="button" onClick={() => { setFilterSearch(''); setFilterPriority(''); setFilterMyTickets(false); }} style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, cursor:'pointer' }}>Clear</button>
         )}
       </div>
 
-      {/* View Toggle */}
-      <div style={{ display:'flex', gap:8, marginBottom:18, alignItems:'center' }}>
+      {/* View Toggle + Sort */}
+      <div style={{ display:'flex', gap:8, marginBottom:18, alignItems:'center', flexWrap:'wrap' }}>
         <div style={{ display:'flex', background:B.warmGray, borderRadius:10, padding:3 }}>
           {[['kanban', 'Kanban'], ['list', 'List']].map(([mode, label]) => (
             <button key={mode} onClick={() => switchViewMode(mode)} style={{ padding:'7px 18px', borderRadius:8, border:'none', background:viewMode===mode ? B.white : 'transparent', color:viewMode===mode ? B.navy : B.textMid, fontWeight:viewMode===mode ? 700 : 500, fontSize:13, fontFamily:f1, cursor:'pointer', boxShadow:viewMode===mode ? '0 1px 3px rgba(27,42,74,0.1)' : 'none', transition:'all 0.15s' }}>
@@ -820,7 +814,16 @@ export function MaintenancePage({ store, userProfile }) {
             </button>
           ))}
         </div>
-        <span style={{ color:B.textLight, fontSize:13, marginLeft:4 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginLeft:4 }}>
+          <span style={{ fontSize:12, color:B.textLight, fontFamily:f1, fontWeight:600, textTransform:'uppercase', letterSpacing:.6, whiteSpace:'nowrap' }}>Sort:</span>
+          <select style={{ ...inp, width:'auto', cursor:'pointer', fontSize:13, padding:'7px 12px' }} value={sortBy} onChange={e => setSortBy(e.target.value)}>
+            <option value="createdDesc">Newest first</option>
+            <option value="createdAsc">Oldest first</option>
+            <option value="priority">Priority</option>
+            <option value="dueDate">Due date</option>
+          </select>
+        </div>
+        <span style={{ color:B.textLight, fontSize:13, marginLeft:'auto' }}>
           {filteredTickets.length}{filteredTickets.length !== maintenanceTickets.length ? ` of ${maintenanceTickets.length}` : ''} ticket{maintenanceTickets.length !== 1 ? 's' : ''}
         </span>
       </div>
@@ -892,7 +895,7 @@ export function MaintenancePage({ store, userProfile }) {
         <FF label="Description">
           <RichTextarea style={{ ...inp, minHeight:72, resize:'vertical' }} value={ticketForm.description} onChange={v => setTicketForm(f => ({ ...f, description:v }))} placeholder="Full details of the issue or maintenance needed..."/>
         </FF>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+        <div style={{ display:'grid', gridTemplateColumns:isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap:12 }}>
           <FF label="Priority">
             <select style={{ ...inp, cursor:'pointer' }} value={ticketForm.priority} onChange={e => setTicketForm(f => ({ ...f, priority:e.target.value }))}>
               {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
@@ -901,11 +904,13 @@ export function MaintenancePage({ store, userProfile }) {
           <FF label="Due Date">
             <input style={inp} type="date" value={ticketForm.dueDate} onChange={e => setTicketForm(f => ({ ...f, dueDate:e.target.value }))}/>
           </FF>
-          <FF label="Recurrence">
-            <select style={{ ...inp, cursor:'pointer' }} value={ticketForm.recurrence} onChange={e => setTicketForm(f => ({ ...f, recurrence:e.target.value }))}>
-              {RECURRENCE_OPTIONS.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
-            </select>
-          </FF>
+          <div style={isMobile ? { gridColumn:'1 / -1' } : {}}>
+            <FF label="Recurrence">
+              <select style={{ ...inp, cursor:'pointer' }} value={ticketForm.recurrence} onChange={e => setTicketForm(f => ({ ...f, recurrence:e.target.value }))}>
+                {RECURRENCE_OPTIONS.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+              </select>
+            </FF>
+          </div>
         </div>
         <FF label="Tags">
           <TagInput tags={ticketForm.tags} onChange={tags => setTicketForm(f => ({ ...f, tags }))} suggestions={maintenanceTags}/>
@@ -965,13 +970,20 @@ export function MaintenancePage({ store, userProfile }) {
             <FF label="Description">
               <RichTextarea style={{ ...inp, minHeight:72, resize:'vertical' }} value={detailEdits.description} onChange={v => setDetailEdits(d => ({ ...d, description:v }))} placeholder="Full details..."/>
             </FF>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <div style={{ display:'grid', gridTemplateColumns:isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap:12 }}>
               <FF label="Due Date">
                 <input style={inp} type="date" value={detailEdits.dueDate} onChange={e => setDetailEdits(d => ({ ...d, dueDate:e.target.value }))}/>
               </FF>
               <FF label="Actual Cost ($)">
                 <input style={inp} type="number" min="0" step="0.01" value={detailEdits.actualCost} onChange={e => setDetailEdits(d => ({ ...d, actualCost:e.target.value }))} placeholder="0.00"/>
               </FF>
+              <div style={isMobile ? { gridColumn:'1 / -1' } : {}}>
+                <FF label="Recurrence">
+                  <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.recurrence} onChange={e => setDetailEdits(d => ({ ...d, recurrence:e.target.value }))}>
+                    {RECURRENCE_OPTIONS.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+                  </select>
+                </FF>
+              </div>
             </div>
             <FF label="Tags">
               <TagInput tags={detailEdits.tags || []} onChange={tags => setDetailEdits(d => ({ ...d, tags }))} suggestions={maintenanceTags}/>
@@ -1001,15 +1013,10 @@ export function MaintenancePage({ store, userProfile }) {
             <FF label="Notes">
               <RichTextarea style={{ ...inp, minHeight:52, resize:'vertical' }} value={detailEdits.notes} onChange={v => setDetailEdits(d => ({ ...d, notes:v }))} placeholder="Additional notes..."/>
             </FF>
-            <FF label="Recurrence">
-              <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.recurrence} onChange={e => setDetailEdits(d => ({ ...d, recurrence:e.target.value }))}>
-                {RECURRENCE_OPTIONS.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
-              </select>
-            </FF>
             <FF label="Checklist">
-              <div>
+              <div style={{ border:'1px dashed '+B.sand, borderRadius:10, padding:'12px 14px' }}>
                 {(detailEdits.checklist || []).length === 0 && (
-                  <div style={{ fontSize:13, color:B.textLight, marginBottom:6, fontFamily:f2 }}>No checklist items yet.</div>
+                  <div style={{ fontSize:13, color:B.textLight, marginBottom:8, fontFamily:f2 }}>No checklist items yet.</div>
                 )}
                 {(detailEdits.checklist || []).map((item, idx) => (
                   <div key={item.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderBottom:'1px solid '+B.sand }}>
@@ -1017,6 +1024,8 @@ export function MaintenancePage({ store, userProfile }) {
                       const cl = [...(detailEdits.checklist || [])];
                       cl[idx] = { ...cl[idx], done: !cl[idx].done };
                       setDetailEdits(d => ({ ...d, checklist: cl }));
+                      setShowDetail(prev => ({ ...prev, checklist: cl }));
+                      updateTicket(showDetail._docId, { checklist: cl });
                     }}/>
                     <span style={{ flex:1, fontSize:13, color:item.done ? B.textLight : B.textDark, textDecoration:item.done ? 'line-through' : 'none', fontFamily:f2 }}>{item.text}</span>
                     <button type="button" onClick={() => setDetailEdits(d => ({ ...d, checklist:(d.checklist||[]).filter((_,i) => i !== idx) }))} style={{ border:'none', background:'none', color:B.textLight, cursor:'pointer', fontSize:18, lineHeight:1, padding:'0 2px' }}>×</button>
