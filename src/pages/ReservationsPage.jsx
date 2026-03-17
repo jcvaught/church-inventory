@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { Stat } from '../components/primitives/Stat.jsx';
 import { exportReservationsCSV } from '../utils/csv.js';
+import { ITEM_STATUS, RES_STATUS } from '../utils/constants.js';
 
 export function ReservationsPage({ store, userProfile }) {
   const { items, settings, reservations, users, notificationConfig, config, addReservation, updateReservation, checkOutItem, logActivity } = store;
-  const activeItems = items.filter(i => i.status !== "Disposed");
+  const activeItems = useMemo(() => items.filter(i => i.status !== ITEM_STATUS.DISPOSED), [items]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
@@ -50,8 +51,12 @@ export function ReservationsPage({ store, userProfile }) {
     return <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"3px 12px", borderRadius:20, fontSize:12, fontWeight:600, fontFamily:f1, background:s.bg, color:s.tx }}>{s.icon} {status}</span>;
   }
 
-  const filtered = reservations.filter(r => statusFilter === "all" || r.status === statusFilter)
-    .sort((a,b) => (b.createdAt||"").localeCompare(a.createdAt||""));
+  const filtered = useMemo(() =>
+    reservations
+      .filter(r => statusFilter === "all" || r.status === statusFilter)
+      .sort((a,b) => (b.createdAt||"").localeCompare(a.createdAt||"")),
+    [reservations, statusFilter]
+  );
 
   async function sendNotificationEmail(templateId, requesterEmail, requesterName, params) {
     const nc = notificationConfig || {};
@@ -86,13 +91,13 @@ export function ReservationsPage({ store, userProfile }) {
 
   async function handleAdd() {
     if (!form.itemDocId || !form.eventName.trim() || !form.eventDate) return;
-    if (form.returnDate && form.returnDate < form.eventDate) { setConflictErr("Return date cannot be before the event date."); return; }
+    if (form.returnDate && new Date(form.returnDate) < new Date(form.eventDate)) { setConflictErr("Return date cannot be before the event date."); return; }
     setConflictErr("");
     const aStart = form.eventDate;
     const aEnd = form.returnDate || form.eventDate;
     const conflict = reservations.find(r => {
       if (r.itemDocId !== form.itemDocId) return false;
-      if (r.status !== "Pending" && r.status !== "Approved") return false;
+      if (r.status !== RES_STATUS.PENDING && r.status !== RES_STATUS.APPROVED) return false;
       const bStart = r.eventDate;
       const bEnd = r.returnDate || r.eventDate;
       return aStart <= bEnd && aEnd >= bStart;
@@ -136,7 +141,7 @@ export function ReservationsPage({ store, userProfile }) {
 
   async function handleApprove(res) {
     setSaving(true);
-    await updateReservation(res._docId, { status:"Approved", approvedBy:userId, approvedByName:userName, approvedAt:new Date().toISOString() });
+    await updateReservation(res._docId, { status:RES_STATUS.APPROVED, approvedBy:userId, approvedByName:userName, approvedAt:new Date().toISOString() });
     await logActivity("reservation_approved", res.itemId, userId, userName, { eventName:res.eventName, requestedBy:res.requestedByName });
     const requester = (users||[]).find(u => u.id === res.requestedBy);
     sendNotificationEmail(notificationConfig?.templateApproved, requester?.email, res.requestedByName, {
@@ -150,7 +155,7 @@ export function ReservationsPage({ store, userProfile }) {
 
   async function handleDeny(res) {
     setSaving(true);
-    await updateReservation(res._docId, { status:"Denied", deniedBy:userId, deniedByName:userName, deniedAt:new Date().toISOString() });
+    await updateReservation(res._docId, { status:RES_STATUS.DENIED, deniedBy:userId, deniedByName:userName, deniedAt:new Date().toISOString() });
     await logActivity("reservation_denied", res.itemId, userId, userName, { eventName:res.eventName, requestedBy:res.requestedByName });
     const requester = (users||[]).find(u => u.id === res.requestedBy);
     sendNotificationEmail(notificationConfig?.templateDenied, requester?.email, res.requestedByName, {
@@ -164,7 +169,7 @@ export function ReservationsPage({ store, userProfile }) {
 
   async function handleCancel(res) {
     setSaving(true);
-    await updateReservation(res._docId, { status:"Cancelled" });
+    await updateReservation(res._docId, { status:RES_STATUS.CANCELLED });
     flash("Reservation cancelled.");
     setShowDetail(null);
     setSaving(false);
@@ -181,7 +186,7 @@ export function ReservationsPage({ store, userProfile }) {
         date: new Date().toISOString().split("T")[0],
         returnDate: res.returnDate || res.eventDate,
       }, userId, userName);
-      await updateReservation(res._docId, { status:"Checked Out", checkedOutAt:new Date().toISOString() });
+      await updateReservation(res._docId, { status:RES_STATUS.CHECKED_OUT, checkedOutAt:new Date().toISOString() });
       flash("Item checked out from reservation!");
       setShowDetail(null);
     } catch(e) { flash("Error: "+e.message); }
@@ -198,15 +203,16 @@ export function ReservationsPage({ store, userProfile }) {
     return new Date(d+"T00:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" });
   }
 
-  const pending = reservations.filter(r => r.status === "Pending");
-  const approved = reservations.filter(r => r.status === "Approved");
+  const today = new Date().toISOString().split("T")[0];
+  const pending = reservations.filter(r => r.status === RES_STATUS.PENDING);
+  const approved = reservations.filter(r => r.status === RES_STATUS.APPROVED);
 
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:0 }}>Reservations</h2>
         <div style={{ display:"flex", gap:8 }}>
-          {reservations.length > 0 && <button onClick={()=>exportReservationsCSV(reservations)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
+          {reservations.length > 0 && <button aria-label="Export reservations as CSV" onClick={()=>exportReservationsCSV(reservations)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
           <button onClick={()=>{setForm(emptyRes);setRecurring(false);setRecurrenceEnd("");setShowAdd(true);}} style={btnP}>+ New Reservation</button>
         </div>
       </div>
@@ -242,7 +248,7 @@ export function ReservationsPage({ store, userProfile }) {
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
           {filtered.map(r => {
-            const isPast = r.eventDate && r.eventDate < new Date().toISOString().split("T")[0];
+            const isPast = r.eventDate && r.eventDate < today;
             return (
               <div key={r._docId} onClick={()=>setShowDetail(r)} style={{ background:B.white, borderRadius:14, padding:"18px 22px", border:"1px solid "+B.sand, cursor:"pointer", boxShadow:"0 1px 3px rgba(27,42,74,0.06)", transition:"box-shadow 0.15s", borderLeft:"4px solid "+(statusMap[r.status]?.dt || B.sand) }}
                 onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 16px rgba(27,42,74,0.12)"}
@@ -264,11 +270,11 @@ export function ReservationsPage({ store, userProfile }) {
                     </div>
                   </div>
                   <div style={{ textAlign:"right" }}>
-                    <div style={{ fontSize:14, fontWeight:600, color: isPast&&r.status==="Pending" ? B.red : B.navy }}>
+                    <div style={{ fontSize:14, fontWeight:600, color: isPast&&r.status===RES_STATUS.PENDING ? B.red : B.navy }}>
                       {formatDate(r.eventDate)}
                     </div>
                     {r.returnDate && <div style={{ fontSize:12, color:B.textLight }}>Return: {formatDate(r.returnDate)}</div>}
-                    {isPast && r.status === "Pending" && <div style={{ fontSize:11, color:B.red, fontWeight:600, marginTop:2 }}>Event date passed!</div>}
+                    {isPast && r.status === RES_STATUS.PENDING && <div style={{ fontSize:11, color:B.red, fontWeight:600, marginTop:2 }}>Event date passed!</div>}
                   </div>
                 </div>
               </div>
@@ -390,26 +396,26 @@ export function ReservationsPage({ store, userProfile }) {
                 {r.notes}
               </div>
             )}
-            {r.status === "Approved" && r.approvedByName && (
+            {r.status === RES_STATUS.APPROVED && r.approvedByName && (
               <div style={{ background:B.tealPale, borderRadius:10, padding:"10px 16px", marginBottom:20, fontSize:13 }}>
                 Approved by <span style={{ fontWeight:600 }}>{r.approvedByName}</span> on {r.approvedAt ? new Date(r.approvedAt).toLocaleDateString() : "—"}
               </div>
             )}
-            {r.status === "Denied" && r.deniedByName && (
+            {r.status === RES_STATUS.DENIED && r.deniedByName && (
               <div style={{ background:B.redPale, borderRadius:10, padding:"10px 16px", marginBottom:20, fontSize:13 }}>
                 Denied by <span style={{ fontWeight:600 }}>{r.deniedByName}</span> on {r.deniedAt ? new Date(r.deniedAt).toLocaleDateString() : "—"}
               </div>
             )}
             {/* Actions */}
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end", flexWrap:"wrap" }}>
-              {r.status === "Pending" && (r.requestedBy === userId || isAdmin) && (
+              {r.status === RES_STATUS.PENDING && (r.requestedBy === userId || isAdmin) && (
                 <button onClick={()=>handleCancel(r)} disabled={saving} style={{ ...btnS, color:B.red, borderColor:"#FECACA" }}>Cancel Request</button>
               )}
-              {r.status === "Pending" && canApproveReservation(r) && <>
+              {r.status === RES_STATUS.PENDING && canApproveReservation(r) && <>
                 <button onClick={()=>handleDeny(r)} disabled={saving} style={btnD}>Deny</button>
                 <button onClick={()=>handleApprove(r)} disabled={saving} style={btnP}>Approve</button>
               </>}
-              {r.status === "Approved" && canApproveReservation(r) && (
+              {r.status === RES_STATUS.APPROVED && canApproveReservation(r) && (
                 <button onClick={()=>handleCheckOutFromRes(r)} disabled={saving} style={{ ...btnP, background:"#1A65C7" }}>Check Out Now</button>
               )}
             </div>

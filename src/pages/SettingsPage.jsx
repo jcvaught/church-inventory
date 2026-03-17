@@ -72,6 +72,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     setEditAccessUser(null);
   }
 
+  // NOTE: owner emails also defined in functions/index.js (OWNER_EMAILS) and firestore.rules. Keep in sync.
   const isOwner = ['jcvaught@gmail.com', 'jvaught@fxcc.org'].includes(user?.email);
 
   if (!settings || !config) return <Spinner />;

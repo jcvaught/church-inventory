@@ -11,13 +11,14 @@ import { resizeImageForUpload } from '../utils/imageResize.js';
 import { printLabel, printInventory } from '../utils/print.js';
 import { exportItemsCSV } from '../utils/csv.js';
 import { canManageItem } from '../utils/roleHelpers.js';
+import { ITEM_STATUS } from '../utils/constants.js';
 import QRCode from 'qrcode';
 
 export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, onScannedItemConsumed }) {
   const { items, settings, config, activityLog, addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, publicRequests, dismissPublicRequest } = store;
   const isMobile = useContext(MobileCtx);
-  const activeItems = useMemo(() => items.filter(i => i.status !== "Disposed"), [items]);
-  const disposedItems = useMemo(() => items.filter(i => i.status === "Disposed"), [items]);
+  const activeItems = useMemo(() => items.filter(i => i.status !== ITEM_STATUS.DISPOSED), [items]);
+  const disposedItems = useMemo(() => items.filter(i => i.status === ITEM_STATUS.DISPOSED), [items]);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -96,7 +97,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   }, [showAdd, showEdit, showDetail, showCheckOut, showReturn, showRepair, showRetire, showBulkCoWarn, showBulkCo, showBulkRetWarn, showBulkRet, showBulkLoc, isAdmin, isManager]);
 
   // Forms
-  const emptyItem = { itemId:"", description:"", location:"", ministry:"", status:"Available", condition:"Good", notes:"", tags:[], purchaseDate:"", purchasePrice:"", warrantyExpiry:"", estimatedValue:"" };
+  const emptyItem = { itemId:"", description:"", location:"", ministry:"", status:ITEM_STATUS.AVAILABLE, condition:"Good", notes:"", tags:[], purchaseDate:"", purchasePrice:"", warrantyExpiry:"", estimatedValue:"" };
   const [itemForm, setItemForm] = useState(emptyItem);
   const [coForm, setCoForm] = useState({ person:"", purpose:"", ministry:"", date:"", returnDate:"" });
   const [retForm, setRetForm] = useState({ condition:"Good", notes:"" });
@@ -187,6 +188,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   async function handleBulkCheckout() {
     if (!coForm.person.trim()) { flash('Please enter who is checking out the items.'); return; }
     if (coForm.returnDate && coForm.date && coForm.returnDate < coForm.date) { flash('Return date cannot be before checkout date.'); return; }
+    if (!window.confirm(`Check out ${bulkCoItems.length} item${bulkCoItems.length !== 1 ? 's' : ''}?`)) return;
     setSaving(true);
     await Promise.all(bulkCoItems.map(item =>
       checkOutItem(item._docId, { itemId:item.itemId, person:coForm.person.trim(), purpose:coForm.purpose.trim(), ministry:coForm.ministry, date:coForm.date, returnDate:coForm.returnDate }, userId, userName)
@@ -208,6 +210,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     else setShowBulkRet(true);
   }
   async function handleBulkReturn() {
+    if (!window.confirm(`Return ${bulkRetItems.length} item${bulkRetItems.length !== 1 ? 's' : ''}?`)) return;
     setSaving(true);
     await Promise.all(bulkRetItems.map(item =>
       returnItem(item._docId, { itemId:item.itemId, condition:bulkRetCondition, person:item.assignedTo||'' }, userId, userName)
@@ -221,8 +224,9 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   // ── Bulk Location ──
   async function handleBulkLocation() {
     if (!bulkNewLoc) { flash('Please select a location.'); return; }
-    setSaving(true);
     const sel = displayItems.filter(i => selectedIds.has(i._docId));
+    if (!window.confirm(`Change location for ${sel.length} item${sel.length !== 1 ? 's' : ''} to "${bulkNewLoc}"?`)) return;
+    setSaving(true);
     await Promise.all(sel.map(item =>
       updateItem(item._docId, { location:bulkNewLoc }, userId, userName)
     ));
@@ -256,7 +260,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       description: itemForm.description.trim(),
       location: itemForm.location,
       ministry: itemForm.ministry,
-      status: "Available",
+      status: ITEM_STATUS.AVAILABLE,
       condition: itemForm.condition || "Good",
       notes: itemForm.notes,
       tags: itemForm.tags || [],
@@ -420,7 +424,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       condition: item.condition || "Good",
       notes: item.notes || "",
       tags: item.tags || [],
-      status: "Available",
+      status: ITEM_STATUS.AVAILABLE,
       purchaseDate: "",
       purchasePrice: "",
       warrantyExpiry: "",
@@ -444,18 +448,18 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   // Status-based action buttons
   function itemActions(item) {
     const acts = [];
-    if (item.status === "Available") {
+    if (item.status === ITEM_STATUS.AVAILABLE) {
       acts.push(<button key="co" onClick={(e)=>{e.stopPropagation();setCoForm({ person:userName, purpose:"", ministry:item.ministry||"", date:today, returnDate:"" });setShowCheckOut(item);}} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Check Out</button>);
       acts.push(<button key="rep" onClick={(e)=>{e.stopPropagation();setShowRepair(item);}} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>Repair</button>);
     }
-    if (item.status === "Checked Out" || item.status === "In Use") {
+    if (item.status === ITEM_STATUS.CHECKED_OUT || item.status === ITEM_STATUS.IN_USE) {
       acts.push(<button key="ret" onClick={(e)=>{e.stopPropagation();setShowReturn(item);}} style={{ ...btnP, padding:"6px 14px", fontSize:12, background:B.gold }}>Return</button>);
     }
-    if (item.status === "Under Repair") {
+    if (item.status === ITEM_STATUS.UNDER_REPAIR) {
       acts.push(<button key="fixed" onClick={(e)=>{e.stopPropagation();handleRepaired(item);}} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Mark Repaired</button>);
     }
-    if (item.status !== "Disposed" && canManageItem(userProfile, item)) {
-      acts.push(<button key="dup" onClick={(e)=>{e.stopPropagation();openDuplicate(item);}} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>⊕ Dup</button>);
+    if (item.status !== ITEM_STATUS.DISPOSED && canManageItem(userProfile, item)) {
+      acts.push(<button key="dup" aria-label="Duplicate item" onClick={(e)=>{e.stopPropagation();openDuplicate(item);}} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>⊕ Dup</button>);
       acts.push(<button key="edit" onClick={(e)=>{e.stopPropagation();openEdit(item);}} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>Edit</button>);
     }
     return acts;
@@ -464,7 +468,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   // ── Item detail row ──
   function ItemRow({ item }) {
     const isMob = useContext(MobileCtx);
-    const overdue = item.status === "Checked Out" && item.expectedReturn && item.expectedReturn < today;
+    const overdue = item.status === ITEM_STATUS.CHECKED_OUT && item.expectedReturn && item.expectedReturn < today;
     return (
       <div
         onClick={()=>{ if(bulkMode) toggleSelect(item._docId); else setShowDetail(showDetail?._docId === item._docId ? null : item); }}
@@ -505,10 +509,10 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   // Status counts for filter bar
   const counts = {
     all: activeItems.length,
-    Available: activeItems.filter(i=>i.status==="Available").length,
-    "Checked Out": activeItems.filter(i=>i.status==="Checked Out").length,
-    "In Use": activeItems.filter(i=>i.status==="In Use").length,
-    "Under Repair": activeItems.filter(i=>i.status==="Under Repair").length,
+    [ITEM_STATUS.AVAILABLE]:    activeItems.filter(i=>i.status===ITEM_STATUS.AVAILABLE).length,
+    [ITEM_STATUS.CHECKED_OUT]:  activeItems.filter(i=>i.status===ITEM_STATUS.CHECKED_OUT).length,
+    [ITEM_STATUS.IN_USE]:       activeItems.filter(i=>i.status===ITEM_STATUS.IN_USE).length,
+    [ITEM_STATUS.UNDER_REPAIR]: activeItems.filter(i=>i.status===ITEM_STATUS.UNDER_REPAIR).length,
   };
 
   return (
@@ -517,9 +521,9 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:0 }}>All Items</h2>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-          {activeItems.length > 0 && !bulkMode && <button onClick={()=>exportItemsCSV(activeItems)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
+          {activeItems.length > 0 && !bulkMode && <button aria-label="Export inventory as CSV" onClick={()=>exportItemsCSV(activeItems)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
           {activeItems.length > 0 && !bulkMode && <button onClick={()=>printInventory(activeItems, config?.churchName)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>🖨 Print</button>}
-          {activeItems.length > 0 && !bulkMode && <button onClick={()=>{setBulkMode(true);setSelectedIds(new Set());}} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>☑ Select</button>}
+          {activeItems.length > 0 && !bulkMode && <button aria-label="Select items for bulk actions" onClick={()=>{setBulkMode(true);setSelectedIds(new Set());}} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>☑ Select</button>}
           {!bulkMode && (isAdmin || isManager) && <button onClick={()=>{setItemForm(emptyItem);setPhotoFile(null);setPhotoPreview(null);setShowAdd(true);}} style={btnP}>+ Add Item</button>}
         </div>
       </div>
@@ -571,10 +575,10 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
           </div>
           <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{...inp, width:"auto", flex:"0 1 180px"}}>
             <option value="all">All Statuses ({counts.all})</option>
-            <option value="Available">Available ({counts.Available})</option>
-            <option value="Checked Out">Checked Out ({counts["Checked Out"]})</option>
-            <option value="In Use">In Use ({counts["In Use"]})</option>
-            <option value="Under Repair">Under Repair ({counts["Under Repair"]})</option>
+            <option value={ITEM_STATUS.AVAILABLE}>Available ({counts[ITEM_STATUS.AVAILABLE]})</option>
+            <option value={ITEM_STATUS.CHECKED_OUT}>Checked Out ({counts[ITEM_STATUS.CHECKED_OUT]})</option>
+            <option value={ITEM_STATUS.IN_USE}>In Use ({counts[ITEM_STATUS.IN_USE]})</option>
+            <option value={ITEM_STATUS.UNDER_REPAIR}>Under Repair ({counts[ITEM_STATUS.UNDER_REPAIR]})</option>
           </select>
           {locations.length > 0 && (
             <select value={locationFilter} onChange={e=>setLocation(e.target.value)} style={{...inp, width:"auto", flex:"0 1 180px"}}>
@@ -610,7 +614,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
             <button onClick={startBulkCheckout} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>Check Out</button>
             <button onClick={startBulkReturn} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>↩ Return</button>
             {locations.length > 0 && <button onClick={()=>{setBulkNewLoc("");setShowBulkLoc(true);}} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>📍 Location</button>}
-            <button onClick={handleBulkExport} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>⬇ Export</button>
+            <button aria-label="Export selected items as CSV" onClick={handleBulkExport} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>⬇ Export</button>
           </>}
           <button onClick={exitBulkMode} style={{ background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", borderRadius:8, color:"#fff", cursor:"pointer", fontSize:12, padding:"6px 12px", fontFamily:f1, fontWeight:600 }}>Cancel</button>
         </div>
@@ -740,10 +744,10 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
           <div style={{ display:"flex", gap:8, marginTop:20, flexWrap:"wrap" }}>
             {itemActions(showDetail)}
             <button onClick={()=>printLabel(showDetail, config?.churchName)} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>🖨 Print Label</button>
-            {canManageItem(userProfile, showDetail) && showDetail.status !== "Disposed" && (
-              <button onClick={()=>openDuplicate(showDetail)} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>⊕ Duplicate</button>
+            {canManageItem(userProfile, showDetail) && showDetail.status !== ITEM_STATUS.DISPOSED && (
+              <button aria-label="Duplicate item" onClick={()=>openDuplicate(showDetail)} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>⊕ Duplicate</button>
             )}
-            {canManageItem(userProfile, showDetail) && showDetail.status !== "Disposed" && (
+            {canManageItem(userProfile, showDetail) && showDetail.status !== ITEM_STATUS.DISPOSED && (
               <button onClick={()=>{setRetireForm({ reason:"Broken", date:today, notes:"", recoveryValue:"" });setShowRetire(showDetail);setShowDetail(null);}} style={{ ...btnD, padding:"6px 14px", fontSize:12 }}>Retire</button>
             )}
           </div>

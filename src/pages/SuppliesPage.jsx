@@ -139,7 +139,7 @@ export function SuppliesPage({ store, userProfile }) {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:0 }}>Supplies & Consumables</h2>
         <div style={{ display:"flex", gap:8 }}>
-          {supplies.length > 0 && <button onClick={()=>exportSuppliesCSV(supplies)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
+          {supplies.length > 0 && <button aria-label="Export supplies as CSV" onClick={()=>exportSuppliesCSV(supplies)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
           {(isAdmin || isManager) && <button onClick={()=>{setSupForm(emptySupply);setShowAdd(true);}} style={btnP}>+ Add Supply</button>}
         </div>
       </div>

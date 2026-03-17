@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { B, f1, f2 } from '../components/brand/tokens.js';
+import { ITEM_STATUS, RES_STATUS } from '../utils/constants.js';
 import { Badge } from '../components/primitives/Badge.jsx';
 import { Stat } from '../components/primitives/Stat.jsx';
 
@@ -8,24 +9,24 @@ export function Dashboard({ store, userProfile }) {
   const [myCheckouts, setMyCheckouts] = useState(false);
   const [activityRange, setActivityRange] = useState(30);
   const [activityVisible, setActivityVisible] = useState(20);
-  const activeItems = useMemo(() => items.filter(i => i.status !== "Disposed"), [items]);
+  const activeItems = useMemo(() => items.filter(i => i.status !== ITEM_STATUS.DISPOSED), [items]);
   const counts = useMemo(() => ({
     total: activeItems.length,
-    avail: activeItems.filter(i => i.status === "Available").length,
-    inUse: activeItems.filter(i => i.status === "In Use").length,
-    co: activeItems.filter(i => i.status === "Checked Out").length,
-    repair: activeItems.filter(i => i.status === "Under Repair").length,
+    avail: activeItems.filter(i => i.status === ITEM_STATUS.AVAILABLE).length,
+    inUse: activeItems.filter(i => i.status === ITEM_STATUS.IN_USE).length,
+    co: activeItems.filter(i => i.status === ITEM_STATUS.CHECKED_OUT).length,
+    repair: activeItems.filter(i => i.status === ITEM_STATUS.UNDER_REPAIR).length,
   }), [activeItems]);
 
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
   const myName = userProfile?.name || "";
   const isAdmin = userProfile?.role === "admin";
   const isManager = userProfile?.role === "manager";
-  const checkedOut = useMemo(() => activeItems.filter(i => i.status === "Checked Out"), [activeItems]);
+  const checkedOut = useMemo(() => activeItems.filter(i => i.status === ITEM_STATUS.CHECKED_OUT), [activeItems]);
   const displayedCheckouts = useMemo(() => myCheckouts ? checkedOut.filter(i => i.assignedTo === myName) : checkedOut, [myCheckouts, checkedOut, myName]);
   const overdue = useMemo(() => checkedOut.filter(i => i.expectedReturn && i.expectedReturn < today), [checkedOut, today]);
   const lowStock = useMemo(() => supplies.filter(c => c.quantity <= c.minQuantity), [supplies]);
-  const pendingRes = useMemo(() => reservations.filter(r => r.status === "Pending"), [reservations]);
+  const pendingRes = useMemo(() => reservations.filter(r => r.status === RES_STATUS.PENDING), [reservations]);
 
   const activityFiltered = useMemo(() => {
     const cutoff = activityRange === "all" ? null : new Date(Date.now() - activityRange * 86400000).toISOString();

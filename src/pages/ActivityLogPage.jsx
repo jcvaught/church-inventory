@@ -95,7 +95,10 @@ export function ActivityLogPage({ store }) {
           </div>
           <div style={{ flex:"0 0 150px" }}>
             <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>To</label>
-            <input type="date" style={inp} value={dateTo} onChange={e=>{setDateTo(e.target.value);setPage(0);}} />
+            <input type="date" style={inp} value={dateTo} onChange={e=>{
+              if (dateFrom && e.target.value && e.target.value < dateFrom) { setDateTo(""); return; }
+              setDateTo(e.target.value); setPage(0);
+            }} />
           </div>
           {hasFilters && (
             <button onClick={handleClearFilters} style={{ ...btnS, padding:"10px 16px", fontSize:12, whiteSpace:"nowrap" }}>Clear All</button>
@@ -149,9 +152,9 @@ export function ActivityLogPage({ store }) {
         {/* Pagination */}
         {totalPages > 1 && (
           <div style={{ display:"flex", justifyContent:"center", alignItems:"center", gap:8, padding:"16px 22px", borderTop:"1px solid "+B.sand }}>
-            <button disabled={safePage===0} onClick={()=>setPage(safePage-1)} style={{ ...btnS, padding:"6px 14px", fontSize:12, opacity:safePage===0?.4:1 }}>← Prev</button>
+            <button disabled={safePage===0} onClick={()=>setPage(safePage-1)} style={{ ...btnS, padding:"6px 14px", fontSize:12, opacity:safePage===0?.5:1 }}>← Prev</button>
             <span style={{ fontSize:13, color:B.textMid, fontFamily:f1 }}>Page {safePage+1} of {totalPages}</span>
-            <button disabled={safePage>=totalPages-1} onClick={()=>setPage(safePage+1)} style={{ ...btnS, padding:"6px 14px", fontSize:12, opacity:safePage>=totalPages-1?.4:1 }}>Next →</button>
+            <button disabled={safePage>=totalPages-1} onClick={()=>setPage(safePage+1)} style={{ ...btnS, padding:"6px 14px", fontSize:12, opacity:safePage>=totalPages-1?.5:1 }}>Next →</button>
           </div>
         )}
       </div>

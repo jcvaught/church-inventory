@@ -2,8 +2,14 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     match /churches/{churchId}/{allPaths=**} {
-      allow read, write: if request.auth != null
-        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.churchId == churchId;
+      function userProfile() {
+        return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+      }
+      allow read: if request.auth != null && userProfile().churchId == churchId;
+      // Writes also require the user to be active (deactivated users cannot upload)
+      allow write: if request.auth != null
+        && userProfile().churchId == churchId
+        && userProfile().active == true;
     }
   }
 }

@@ -47,6 +47,13 @@ exports.identifyItem = onCall(
   async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
 
+    // Task 1: validate caller has a church profile to prevent unauthorized API credit usage
+    const db = getFirestore();
+    const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
+    if (!callerSnap.exists || !callerSnap.data().churchId) {
+      throw new HttpsError('permission-denied', 'No church profile found.');
+    }
+
     const { imageBase64, mediaType } = req.data;
     if (!imageBase64) throw new HttpsError('invalid-argument', 'imageBase64 is required.');
 
@@ -78,6 +85,8 @@ exports.identifyItem = onCall(
 
 // ── getChurchStats ────────────────────────────────────────────────────────
 // Owner-only. Returns all churches with item + user counts.
+// NOTE: OWNER_EMAILS is also hardcoded in firestore.rules (suggestions/errors read rules)
+// and in SettingsPage.jsx (isOwner check). Keep all three in sync.
 const OWNER_EMAILS = ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
 
 exports.getChurchStats = onCall(
@@ -214,6 +223,13 @@ exports.stripeWebhook = onRequest(
         const session = event.data.object;
         const churchId = session.metadata?.churchId;
         if (!churchId) { res.sendStatus(200); return; }
+
+        // Task 4: verify the church still exists before writing subscription data
+        const churchSnap = await db.doc(`churches/${churchId}`).get();
+        if (!churchSnap.exists) {
+          console.warn(`Webhook: church ${churchId} not found, skipping.`);
+          res.sendStatus(200); return;
+        }
 
         const subscription = await stripe.subscriptions.retrieve(session.subscription);
         const priceId = subscription.items.data[0]?.price.id;

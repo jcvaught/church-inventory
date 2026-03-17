@@ -311,7 +311,7 @@ export function useFirestore(churchId) {
         timestamp: new Date().toISOString(),
         details
       });
-    } catch (err) { console.error('Log error:', err); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   // ── Reservations ──
@@ -406,7 +406,7 @@ export function useFirestore(churchId) {
       await updateDoc(doc(db, 'churches', churchId, 'config', 'settings'), {
         maintenanceTags: arrayUnion(...tags)
       });
-    } catch (err) { console.error('Error adding maintenance tags:', err); }
+    } catch (err) { handleErr(err); }
   }, [churchId]);
 
   // ── Bundles ──
@@ -488,7 +488,9 @@ export function useFirestore(churchId) {
       const snap = await getDocs(query(collection(db, 'errors'), orderBy('timestamp', 'desc'), limit(200)));
       return snap.docs.map(d => ({ id: d.id, ...d.data() }));
     } catch (err) {
+      // Use console.error + setError only here (not handleErr) to avoid writing to the errors collection while loading it
       console.error('[ChurchOpsHub] loadErrors failed', err);
+      setError(err.message);
       return [];
     }
   }, []);

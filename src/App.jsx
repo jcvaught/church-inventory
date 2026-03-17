@@ -22,6 +22,7 @@ import { ActivityLogPage } from './pages/ActivityLogPage.jsx';
 import { SettingsPage } from './pages/SettingsPage.jsx';
 import { BarcodeScanner } from './components/primitives/BarcodeScanner.jsx';
 import { HelpPage } from './pages/HelpPage.jsx';
+import { RES_STATUS } from './utils/constants.js';
 
 
 /* ═══════════════════════════════════════════════ */
@@ -496,7 +497,7 @@ function AppShell({ authHook }) {
   });
 
   const lowStock = (store.supplies || []).filter(c => c.quantity <= c.minQuantity);
-  const pendingRes = (store.reservations || []).filter(r => r.status === "Pending");
+  const pendingRes = (store.reservations || []).filter(r => r.status === RES_STATUS.PENDING);
   const hasMaintenance = hasHub('maintenance');
   const hasInsights = hasHub('insights');
   const hasCoordination = hasHub('coordination');
@@ -528,7 +529,7 @@ function AppShell({ authHook }) {
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
             <FullLogo size={36} light={true} />
             <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-              <button onClick={() => setShowScanner(true)} style={{ display:"flex", alignItems:"center", gap:6, background:"rgba(255,255,255,0.08)", borderRadius:10, padding:"7px 12px", border:"1px solid rgba(255,255,255,0.1)", cursor:"pointer", color:B.white, fontFamily:f1, fontSize:13, fontWeight:600 }}>
+              <button onClick={() => setShowScanner(true)} aria-label="Scan barcode or QR code" style={{ display:"flex", alignItems:"center", gap:6, background:"rgba(255,255,255,0.08)", borderRadius:10, padding:"7px 12px", border:"1px solid rgba(255,255,255,0.1)", cursor:"pointer", color:B.white, fontFamily:f1, fontSize:13, fontWeight:600 }}>
                 📷 Scan
               </button>
               <div style={{ position:"relative" }}>
