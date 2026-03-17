@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useContext } from 'react';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { Stat } from '../../components/primitives/Stat.jsx';
+import { MobileCtx } from '../../hooks/useMobile.js';
 
 export function CoordinationPage({ store, userProfile }) {
   const {
@@ -10,6 +11,7 @@ export function CoordinationPage({ store, userProfile }) {
     addBundle, updateBundle, deleteBundle, updateNotificationConfig,
     checkOutItem,
   } = store;
+  const isMobile = useContext(MobileCtx);
 
   const isAdmin = userProfile?.role === 'admin';
   const isManager = userProfile?.role === 'manager';
@@ -292,7 +294,7 @@ export function CoordinationPage({ store, userProfile }) {
           <div style={{ background: B.white, borderRadius: 14, padding: 24, border: '1px solid ' + B.sand }}>
             {notifForm ? (
               <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14, marginBottom: 14 }}>
                   <FF label="EmailJS Service ID">
                     <input style={inp} value={notifForm.serviceId} onChange={e => setNotifForm(f => ({ ...f, serviceId: e.target.value }))} placeholder="service_xxxxxxx" />
                   </FF>
@@ -420,7 +422,7 @@ export function CoordinationPage({ store, userProfile }) {
                 </div>
               ))}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
               <FF label="Person *">
                 <input style={inp} value={coForm.person} onChange={e => setCoForm(f => ({ ...f, person: e.target.value }))} placeholder="Who is checking out?" />
               </FF>
