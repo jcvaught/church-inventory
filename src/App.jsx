@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, Component } from 'react';
 import { useAuth } from './useAuth.js';
 import { useFirestore } from './useFirestore.js';
 import { useSubscription } from './hooks/useSubscription.js';
@@ -24,6 +24,23 @@ import { BarcodeScanner } from './components/primitives/BarcodeScanner.jsx';
 import { HelpPage } from './pages/HelpPage.jsx';
 import { RES_STATUS } from './utils/constants.js';
 
+
+class PageErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 32, fontFamily: 'monospace', background: '#FFF1F2', border: '1px solid #FECACA', borderRadius: 14, margin: 24 }}>
+          <div style={{ fontWeight: 700, color: '#B91C1C', marginBottom: 12 }}>Page crashed — error details:</div>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: '#7F1D1D' }}>{this.state.error.toString()}{'\n\n'}{this.state.error.stack}</pre>
+          <button onClick={() => this.setState({ error: null })} style={{ marginTop: 16, padding: '8px 18px', background: '#B91C1C', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Try again</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 /* ═══════════════════════════════════════════════ */
 /* ═══ AUTH SCREENS ═════════════════════════════ */
@@ -599,6 +616,7 @@ function AppShell({ authHook }) {
       )}
 
       {/* Page content */}
+      <PageErrorBoundary key={tab}>
       <div style={{ maxWidth:1100, margin:"0 auto", padding:isMobile?"16px 14px 96px":"28px 28px 60px" }} onClick={()=>menuOpen&&setMenuOpen(false)}>
         {tab === "dashboard" && <Dashboard store={store} userProfile={userProfile} />}
         {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} subscription={subscription} user={user} canAdd={canAdd} deleteAccount={deleteAccount} />}
@@ -651,6 +669,7 @@ function AppShell({ authHook }) {
           </UpgradeGate>
         )}
       </div>
+      </PageErrorBoundary>
 
       {/* Error toast */}
       {store.error && (
