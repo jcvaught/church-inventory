@@ -201,6 +201,13 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
+  const deleteItem = useCallback(async (docId, itemId, userId, userName) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'items', docId));
+      await logActivity('delete_item', itemId, userId, userName);
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
   const retireItem = useCallback(async (docId, data, userId, userName) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'items', docId), {
@@ -537,7 +544,7 @@ export function useFirestore(churchId) {
     maintenanceTickets, vendors, bundles, notificationConfig, audits,
     loading, error,
     updateSettings, updateConfig,
-    addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired,
+    addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem,
     addSupply, updateSupply, useSupply, restockSupply, deleteSupply,
     logActivity,
     addReservation, updateReservation,

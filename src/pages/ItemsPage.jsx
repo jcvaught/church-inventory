@@ -15,7 +15,7 @@ import { ITEM_STATUS } from '../utils/constants.js';
 import QRCode from 'qrcode';
 
 export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, onScannedItemConsumed }) {
-  const { items, settings, config, activityLog, addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, publicRequests, dismissPublicRequest } = store;
+  const { items, settings, config, activityLog, addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem, publicRequests, dismissPublicRequest } = store;
   const isMobile = useContext(MobileCtx);
   const activeItems = useMemo(() => items.filter(i => i.status !== ITEM_STATUS.DISPOSED), [items]);
   const disposedItems = useMemo(() => items.filter(i => i.status === ITEM_STATUS.DISPOSED), [items]);
@@ -383,6 +383,14 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     flash("Item retired.");
   }
 
+  // ── Delete ──
+  async function handleDeleteItem(item) {
+    if (!window.confirm(`Permanently delete "${item.description}" (${item.itemId})?\n\nThis cannot be undone. Activity history will be preserved.`)) return;
+    await deleteItem(item._docId, item.itemId, userId, userName);
+    setActiveModal(null);
+    flash("Item deleted.");
+  }
+
   // Open edit with pre-filled data
   function openEdit(item) {
     setItemForm({
@@ -740,6 +748,9 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
             )}
             {canManageItem(userProfile, showDetail) && showDetail.status !== ITEM_STATUS.DISPOSED && (
               <button onClick={()=>{setRetireForm({ reason:"Broken", date:today, notes:"", recoveryValue:"" });setActiveModal({ type:'retire', item:showDetail });}} style={{ ...btnD, padding:"6px 14px", fontSize:12 }}>Retire</button>
+            )}
+            {isAdmin && (
+              <button onClick={()=>handleDeleteItem(showDetail)} style={{ ...btnD, padding:"6px 14px", fontSize:12, background:"#7f1d1d", borderColor:"#7f1d1d" }}>Delete</button>
             )}
           </div>
         </Modal>
