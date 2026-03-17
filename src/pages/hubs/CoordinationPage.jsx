@@ -137,6 +137,7 @@ export function CoordinationPage({ store, userProfile }) {
       publicKey: notificationConfig?.publicKey || '',
       templateApproved: notificationConfig?.templateApproved || '',
       templateDenied: notificationConfig?.templateDenied || '',
+      templateAssigned: notificationConfig?.templateAssigned || '',
     });
   }
 
@@ -303,6 +304,9 @@ export function CoordinationPage({ store, userProfile }) {
                   </FF>
                   <FF label="Template ID — Denied">
                     <input style={inp} value={notifForm.templateDenied} onChange={e => setNotifForm(f => ({ ...f, templateDenied: e.target.value }))} placeholder="template_xxxxxxx" />
+                  </FF>
+                  <FF label="Template ID — Ticket Assigned (Maintenance)">
+                    <input style={inp} value={notifForm.templateAssigned} onChange={e => setNotifForm(f => ({ ...f, templateAssigned: e.target.value }))} placeholder="template_xxxxxxx" />
                   </FF>
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, cursor: 'pointer' }}>

@@ -17,6 +17,18 @@ function initials(name) {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 const PRIORITIES = ['High', 'Medium', 'Low'];
+const RECURRENCE_OPTIONS = [['', 'None'], ['weekly', 'Weekly'], ['biweekly', 'Every 2 weeks'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['annually', 'Annually']];
+const RECURRENCE_LABELS = { weekly:'Weekly', biweekly:'Every 2 wks', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' };
+
+function calculateNextDue(dueDate, recurrence) {
+  const base = dueDate ? new Date(dueDate + 'T12:00:00') : new Date();
+  if (recurrence === 'weekly') base.setDate(base.getDate() + 7);
+  else if (recurrence === 'biweekly') base.setDate(base.getDate() + 14);
+  else if (recurrence === 'monthly') base.setMonth(base.getMonth() + 1);
+  else if (recurrence === 'quarterly') base.setMonth(base.getMonth() + 3);
+  else if (recurrence === 'annually') base.setFullYear(base.getFullYear() + 1);
+  return base.toISOString().slice(0, 10);
+}
 
 const priorityColors = {
   High:   { bg: '#FEE8E8', tx: B.red,      dot: '#E87171' },
@@ -87,6 +99,16 @@ function TicketCard({ ticket, onClick, onDragStart }) {
           {ticket.tags.slice(0,4).map(tag => (
             <span key={tag} style={{ padding:'2px 8px', borderRadius:12, background:B.warmGray, color:B.textMid, fontSize:10, fontFamily:f1 }}>{tag}</span>
           ))}
+        </div>
+      )}
+      {(ticket.recurrence || ticket.checklist?.length > 0) && (
+        <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
+          {ticket.recurrence && <span style={{ fontSize:10, color:B.teal, fontFamily:f1 }}>🔁 {RECURRENCE_LABELS[ticket.recurrence]}</span>}
+          {ticket.checklist?.length > 0 && (
+            <span style={{ fontSize:10, color:ticket.checklist.filter(c=>c.done).length===ticket.checklist.length ? B.teal : B.textMid, fontFamily:f1 }}>
+              ✓ {ticket.checklist.filter(c=>c.done).length}/{ticket.checklist.length}
+            </span>
+          )}
         </div>
       )}
       {(ticket.photos?.length > 0 || ticket.dueDate) && (
@@ -320,11 +342,11 @@ function KanbanColumn({ status, tickets, onTicketClick, onDrop, isMobile }) {
   );
 }
 
-const getEmptyTicket = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', assignees:[], linkedItemDocId:'', vendorId:'', estimatedCost:'', notes:'' });
+const getEmptyTicket = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], linkedItemDocId:'', vendorId:'', estimatedCost:'', notes:'', checklist:[] });
 const getEmptyVendor = () => ({ name:'', phone:'', email:'', specialty:'', notes:'' });
 
 export function MaintenancePage({ store, userProfile }) {
-  const { items, maintenanceTickets, vendors, users, settings, addTicket, updateTicket, deleteTicket, addTicketComment, addMaintenanceTags, addVendor, updateVendor, deleteVendor } = store;
+  const { items, maintenanceTickets, vendors, users, settings, notificationConfig, addTicket, updateTicket, deleteTicket, addTicketComment, addMaintenanceTags, addVendor, updateVendor, deleteVendor } = store;
   const isMobile = useContext(MobileCtx);
 
   const userId = userProfile?.id || userProfile?.uid;
@@ -357,6 +379,8 @@ export function MaintenancePage({ store, userProfile }) {
   const [photoPreviews, setPhotoPreviews] = useState([]);
   const [detailEdits, setDetailEdits] = useState({});
   const [vendorForm, setVendorForm] = useState(getEmptyVendor);
+  const [sortBy, setSortBy] = useState('createdDesc');
+  const [detailChecklistInput, setDetailChecklistInput] = useState('');
 
   // Comments
   const [comments, setComments] = useState([]);
@@ -391,6 +415,7 @@ export function MaintenancePage({ store, userProfile }) {
   function openDetail(ticket) {
     setShowDetail(ticket);
     setNewComment('');
+    setDetailChecklistInput('');
     setDetailEdits({
       name: ticket.name || '',
       description: ticket.description || '',
@@ -398,12 +423,14 @@ export function MaintenancePage({ store, userProfile }) {
       priority: ticket.priority || 'Medium',
       tags: ticket.tags || [],
       dueDate: ticket.dueDate || '',
+      recurrence: ticket.recurrence || '',
       assignees: ticket.assignees || [],
       linkedItemDocId: ticket.linkedItemDocId || '',
       vendorId: ticket.vendorId || '',
       estimatedCost: ticket.estimatedCost != null ? String(ticket.estimatedCost) : '',
       actualCost: ticket.actualCost != null ? String(ticket.actualCost) : '',
       notes: ticket.notes || '',
+      checklist: ticket.checklist || [],
     });
   }
 
@@ -432,7 +459,9 @@ export function MaintenancePage({ store, userProfile }) {
         status: 'Backlog',
         tags: ticketForm.tags,
         dueDate: ticketForm.dueDate || null,
+        recurrence: ticketForm.recurrence || null,
         assignees: ticketForm.assignees,
+        checklist: [],
         photos: [],
         linkedItemDocId: ticketForm.linkedItemDocId || null,
         linkedItemId: linkedItem?.itemId || null,
@@ -479,15 +508,64 @@ export function MaintenancePage({ store, userProfile }) {
         linkedItemDescription: linkedItem?.description || null,
         estimatedCost: detailEdits.estimatedCost ? Number(detailEdits.estimatedCost) : null,
         actualCost: detailEdits.actualCost ? Number(detailEdits.actualCost) : null,
+        recurrence: detailEdits.recurrence || null,
         completedAt: isNowComplete && !wasComplete ? new Date().toISOString() : (isNowComplete ? showDetail.completedAt : null),
       };
       await updateTicket(showDetail._docId, updates);
       if (detailEdits.tags?.length > 0 && addMaintenanceTags) {
         await addMaintenanceTags(detailEdits.tags);
       }
+
+      // Email newly added assignees
+      const oldAssigneeUids = new Set((showDetail.assignees || []).map(a => a.uid));
+      const newlyAdded = (detailEdits.assignees || []).filter(a => a.uid !== userId && !oldAssigneeUids.has(a.uid));
+      if (newlyAdded.length > 0 && notificationConfig?.enabled && notificationConfig?.templateAssigned && notificationConfig?.serviceId && notificationConfig?.publicKey) {
+        try {
+          const emailjs = await import('@emailjs/browser');
+          for (const assignee of newlyAdded) {
+            const assigneeUser = users.find(u => u.id === assignee.uid);
+            if (!assigneeUser?.email) continue;
+            await emailjs.send(notificationConfig.serviceId, notificationConfig.templateAssigned, {
+              to_email: assigneeUser.email,
+              to_name: assignee.name,
+              ticket_name: detailEdits.name,
+              ticket_number: showDetail.ticketNumber,
+              priority: detailEdits.priority,
+              due_date: detailEdits.dueDate || 'Not set',
+              assigned_by: userName,
+            }, notificationConfig.publicKey);
+          }
+        } catch (emailErr) { console.error('Assignment email failed:', emailErr); }
+      }
+
+      // Auto-create next recurring ticket on completion
+      if (isNowComplete && !wasComplete && detailEdits.recurrence) {
+        const nextDue = calculateNextDue(detailEdits.dueDate, detailEdits.recurrence);
+        const linkedItem2 = activeItems.find(i => i._docId === detailEdits.linkedItemDocId);
+        await addTicket({
+          name: detailEdits.name,
+          description: detailEdits.description,
+          priority: detailEdits.priority,
+          tags: detailEdits.tags || [],
+          dueDate: nextDue,
+          recurrence: detailEdits.recurrence,
+          assignees: detailEdits.assignees || [],
+          checklist: (detailEdits.checklist || []).map(c => ({ ...c, done: false })),
+          photos: [],
+          linkedItemDocId: detailEdits.linkedItemDocId || null,
+          linkedItemId: linkedItem2?.itemId || null,
+          linkedItemDescription: linkedItem2?.description || null,
+          vendorId: detailEdits.vendorId || null,
+          vendorName,
+          estimatedCost: detailEdits.estimatedCost ? Number(detailEdits.estimatedCost) : null,
+          actualCost: null,
+        }, userId, userName);
+      }
+
       setShowDetail(null);
       setDetailEdits({});
-      flash('Ticket updated!');
+      setDetailChecklistInput('');
+      flash(isNowComplete && !wasComplete && detailEdits.recurrence ? 'Ticket completed — next recurring ticket created!' : 'Ticket updated!');
     } finally {
       setSaving(false);
     }
@@ -609,6 +687,25 @@ export function MaintenancePage({ store, userProfile }) {
     });
   }, [maintenanceTickets, filterSearch, filterPriority, filterMyTickets, userId]);
 
+  const sortedTickets = useMemo(() => {
+    const sorted = [...filteredTickets];
+    if (sortBy === 'priority') {
+      const order = { High:0, Medium:1, Low:2 };
+      sorted.sort((a, b) => (order[a.priority] ?? 1) - (order[b.priority] ?? 1));
+    } else if (sortBy === 'dueDate') {
+      sorted.sort((a, b) => {
+        if (!a.dueDate && !b.dueDate) return 0;
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return a.dueDate.localeCompare(b.dueDate);
+      });
+    } else if (sortBy === 'createdAsc') {
+      sorted.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+    }
+    // createdDesc: already sorted by Firestore subscription
+    return sorted;
+  }, [filteredTickets, sortBy]);
+
   // ── Render ──
   return (
     <div>
@@ -703,6 +800,12 @@ export function MaintenancePage({ store, userProfile }) {
         >
           My tickets
         </button>
+        <select style={{ ...inp, width:'auto', cursor:'pointer' }} value={sortBy} onChange={e => setSortBy(e.target.value)}>
+          <option value="createdDesc">Newest first</option>
+          <option value="createdAsc">Oldest first</option>
+          <option value="priority">Priority</option>
+          <option value="dueDate">Due date</option>
+        </select>
         {(filterSearch || filterPriority || filterMyTickets) && (
           <button type="button" onClick={() => { setFilterSearch(''); setFilterPriority(''); setFilterMyTickets(false); }} style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, cursor:'pointer' }}>Clear</button>
         )}
@@ -747,7 +850,7 @@ export function MaintenancePage({ store, userProfile }) {
       {viewMode === 'kanban' && maintenanceTickets.length > 0 && (
         <div style={{ display:'flex', gap:12, overflowX:isMobile ? 'hidden' : 'auto', flexDirection:isMobile ? 'column' : 'row', paddingBottom:8, alignItems:'flex-start' }}>
           {STATUSES.map(status => (
-            <KanbanColumn key={status} status={status} tickets={filteredTickets.filter(t => t.status === status)} onTicketClick={openDetail} onDrop={canOperate ? docId => handleDrop(docId, status) : undefined} isMobile={isMobile}/>
+            <KanbanColumn key={status} status={status} tickets={sortedTickets.filter(t => t.status === status)} onTicketClick={openDetail} onDrop={canOperate ? docId => handleDrop(docId, status) : undefined} isMobile={isMobile}/>
           ))}
         </div>
       )}
@@ -756,7 +859,7 @@ export function MaintenancePage({ store, userProfile }) {
       {viewMode === 'list' && maintenanceTickets.length > 0 && (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           {STATUSES.map(status => {
-            const tickets = filteredTickets.filter(t => t.status === status);
+            const tickets = sortedTickets.filter(t => t.status === status);
             const collapsed = collapsedStatuses.has(status);
             const sc = statusColors[status];
             return (
@@ -789,7 +892,7 @@ export function MaintenancePage({ store, userProfile }) {
         <FF label="Description">
           <RichTextarea style={{ ...inp, minHeight:72, resize:'vertical' }} value={ticketForm.description} onChange={v => setTicketForm(f => ({ ...f, description:v }))} placeholder="Full details of the issue or maintenance needed..."/>
         </FF>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
           <FF label="Priority">
             <select style={{ ...inp, cursor:'pointer' }} value={ticketForm.priority} onChange={e => setTicketForm(f => ({ ...f, priority:e.target.value }))}>
               {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
@@ -797,6 +900,11 @@ export function MaintenancePage({ store, userProfile }) {
           </FF>
           <FF label="Due Date">
             <input style={inp} type="date" value={ticketForm.dueDate} onChange={e => setTicketForm(f => ({ ...f, dueDate:e.target.value }))}/>
+          </FF>
+          <FF label="Recurrence">
+            <select style={{ ...inp, cursor:'pointer' }} value={ticketForm.recurrence} onChange={e => setTicketForm(f => ({ ...f, recurrence:e.target.value }))}>
+              {RECURRENCE_OPTIONS.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+            </select>
           </FF>
         </div>
         <FF label="Tags">
@@ -836,7 +944,7 @@ export function MaintenancePage({ store, userProfile }) {
       </Modal>
 
       {/* ═══ TICKET DETAIL MODAL ═══ */}
-      <Modal open={!!showDetail} onClose={() => { setShowDetail(null); setDetailEdits({}); setComments([]); }} title={(showDetail?.ticketNumber || '') + (showDetail?.name ? ' — ' + showDetail.name.slice(0, 40) : '')} wide>
+      <Modal open={!!showDetail} onClose={() => { setShowDetail(null); setDetailEdits({}); setComments([]); setDetailChecklistInput(''); }} title={(showDetail?.ticketNumber || '') + (showDetail?.name ? ' — ' + showDetail.name.slice(0, 40) : '')} wide>
         {showDetail && (
           <div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
@@ -892,6 +1000,49 @@ export function MaintenancePage({ store, userProfile }) {
             </div>
             <FF label="Notes">
               <RichTextarea style={{ ...inp, minHeight:52, resize:'vertical' }} value={detailEdits.notes} onChange={v => setDetailEdits(d => ({ ...d, notes:v }))} placeholder="Additional notes..."/>
+            </FF>
+            <FF label="Recurrence">
+              <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.recurrence} onChange={e => setDetailEdits(d => ({ ...d, recurrence:e.target.value }))}>
+                {RECURRENCE_OPTIONS.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+              </select>
+            </FF>
+            <FF label="Checklist">
+              <div>
+                {(detailEdits.checklist || []).length === 0 && (
+                  <div style={{ fontSize:13, color:B.textLight, marginBottom:6, fontFamily:f2 }}>No checklist items yet.</div>
+                )}
+                {(detailEdits.checklist || []).map((item, idx) => (
+                  <div key={item.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderBottom:'1px solid '+B.sand }}>
+                    <input type="checkbox" checked={item.done} style={{ flexShrink:0, width:16, height:16, cursor:'pointer' }} onChange={() => {
+                      const cl = [...(detailEdits.checklist || [])];
+                      cl[idx] = { ...cl[idx], done: !cl[idx].done };
+                      setDetailEdits(d => ({ ...d, checklist: cl }));
+                    }}/>
+                    <span style={{ flex:1, fontSize:13, color:item.done ? B.textLight : B.textDark, textDecoration:item.done ? 'line-through' : 'none', fontFamily:f2 }}>{item.text}</span>
+                    <button type="button" onClick={() => setDetailEdits(d => ({ ...d, checklist:(d.checklist||[]).filter((_,i) => i !== idx) }))} style={{ border:'none', background:'none', color:B.textLight, cursor:'pointer', fontSize:18, lineHeight:1, padding:'0 2px' }}>×</button>
+                  </div>
+                ))}
+                <div style={{ display:'flex', gap:6, marginTop:8 }}>
+                  <input
+                    style={{ ...inp, flex:1 }}
+                    placeholder="Add checklist item... (Enter to add)"
+                    value={detailChecklistInput}
+                    onChange={e => setDetailChecklistInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && detailChecklistInput.trim()) {
+                        e.preventDefault();
+                        setDetailEdits(d => ({ ...d, checklist:[...(d.checklist||[]), {id:Date.now().toString(), text:detailChecklistInput.trim(), done:false}] }));
+                        setDetailChecklistInput('');
+                      }
+                    }}
+                  />
+                  <button type="button" onClick={() => {
+                    if (!detailChecklistInput.trim()) return;
+                    setDetailEdits(d => ({ ...d, checklist:[...(d.checklist||[]), {id:Date.now().toString(), text:detailChecklistInput.trim(), done:false}] }));
+                    setDetailChecklistInput('');
+                  }} style={{ ...btnS, padding:'9px 14px', fontSize:13, flexShrink:0 }}>Add</button>
+                </div>
+              </div>
             </FF>
             <div style={{ display:'flex', gap:10, justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', marginBottom:20 }}>
               <div style={{ fontSize:12, color:B.textLight }}>
