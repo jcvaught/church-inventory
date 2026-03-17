@@ -654,7 +654,7 @@ function AppShell({ authHook }) {
 
       {/* Error toast */}
       {store.error && (
-        <div style={{ position:"fixed", bottom: isMobile ? 80 : 24, left:"50%", transform:"translateX(-50%)", zIndex:300, background:"#1E1E1E", color:"#fff", borderRadius:12, padding:"12px 20px", display:"flex", alignItems:"center", gap:14, boxShadow:"0 4px 20px rgba(0,0,0,0.3)", maxWidth:"90vw", minWidth:280 }}>
+        <div style={{ position:"fixed", bottom: isMobile ? 96 : 24, left:"50%", transform:"translateX(-50%)", zIndex:300, background:"#1E1E1E", color:"#fff", borderRadius:12, padding:"12px 20px", display:"flex", alignItems:"center", gap:14, boxShadow:"0 4px 20px rgba(0,0,0,0.3)", maxWidth:"90vw", minWidth:280 }}>
           <span style={{ fontSize:16 }}>⚠️</span>
           <span style={{ fontSize:13, fontFamily:f1, fontWeight:500, flex:1 }}>{store.error}</span>
           <button onClick={() => store.clearError()} style={{ background:"none", border:"none", color:"rgba(255,255,255,0.6)", cursor:"pointer", fontSize:18, lineHeight:1, padding:0 }}>×</button>

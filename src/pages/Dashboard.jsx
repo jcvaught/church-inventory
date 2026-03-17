@@ -1,11 +1,13 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useContext } from 'react';
 import { B, f1, f2 } from '../components/brand/tokens.js';
 import { ITEM_STATUS, RES_STATUS } from '../utils/constants.js';
 import { Badge } from '../components/primitives/Badge.jsx';
 import { Stat } from '../components/primitives/Stat.jsx';
+import { MobileCtx } from '../hooks/useMobile.js';
 
 export function Dashboard({ store, userProfile }) {
   const { items, supplies, activityLog, reservations } = store;
+  const isMobile = useContext(MobileCtx);
   const [myCheckouts, setMyCheckouts] = useState(false);
   const [activityRange, setActivityRange] = useState(30);
   const [activityVisible, setActivityVisible] = useState(20);
@@ -37,7 +39,7 @@ export function Dashboard({ store, userProfile }) {
     <div>
       <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:"0 0 20px" }}>Dashboard</h2>
 
-      <div style={{ display:"flex", flexWrap:"wrap", gap:14, marginBottom:24 }}>
+      <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(5, 1fr)", gap:14, marginBottom:24 }}>
         <Stat label="Total Items" value={counts.total} icon="📦"/>
         <Stat label="Available" value={counts.avail} icon="✅" color={B.teal}/>
         <Stat label="In Use" value={counts.inUse} icon="🔵" color="#1A65C7"/>

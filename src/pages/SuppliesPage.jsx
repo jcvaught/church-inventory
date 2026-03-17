@@ -216,12 +216,12 @@ export function SuppliesPage({ store, userProfile }) {
 
                 <StockBar quantity={s.quantity || 0} minQuantity={s.minQuantity || 5} />
 
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:12 }}>
-                  <span style={{ fontSize:11, color:B.textLight, fontFamily:f1 }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:12, gap:8 }}>
+                  <span style={{ fontSize:11, color:B.textLight, fontFamily:f1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     Min: {s.minQuantity || 5} {s.unit || "each"}
                     {s.lastRestocked && ` · Restocked ${s.lastRestocked.split("T")[0]}`}
                   </span>
-                  <div style={{ display:"flex", gap:6 }}>
+                  <div style={{ display:"flex", gap:6, flexShrink:0 }}>
                     <button onClick={()=>setShowHistory(s)} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>History</button>
                     {canManageSupply(userProfile, s) && <button onClick={()=>{setEditSupForm({ supplyId:s.supplyId, description:s.description, location:s.location||"", ministry:s.ministry||"", quantity:s.quantity, minQuantity:s.minQuantity||5, unit:s.unit||"each" });setShowEditSupply(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Edit</button>}
                     <button onClick={()=>{setUseForm({ qty:"1", purpose:"" });setShowUse(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Use</button>

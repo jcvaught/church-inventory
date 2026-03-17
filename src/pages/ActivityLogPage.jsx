@@ -1,8 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useContext } from 'react';
 import { B, f1, inp, btnS } from '../components/brand/tokens.js';
+import { MobileCtx } from '../hooks/useMobile.js';
 
 export function ActivityLogPage({ store }) {
   const { activityLog } = store;
+  const isMobile = useContext(MobileCtx);
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -77,28 +79,30 @@ export function ActivityLogPage({ store }) {
 
       {/* Filters */}
       <div style={{ background:B.white, borderRadius:14, padding:"18px 22px", border:"1px solid "+B.sand, marginBottom:20, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
-        <div style={{ display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end" }}>
-          <div style={{ flex:"1 1 200px" }}>
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          <div>
             <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>Search</label>
             <input style={inp} value={search} onChange={e=>{setSearch(e.target.value);setPage(0);setExpanded(null);}} placeholder="Item ID, person, details..." />
           </div>
-          <div style={{ flex:"0 0 170px" }}>
-            <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>Action</label>
-            <select style={{...inp, cursor:"pointer"}} value={actionFilter} onChange={e=>{setActionFilter(e.target.value);setPage(0);setExpanded(null);}}>
-              <option value="all">All Actions</option>
-              {uniqueActions.map(a => <option key={a} value={a}>{actionLabels[a]||a}</option>)}
-            </select>
-          </div>
-          <div style={{ flex:"0 0 150px" }}>
-            <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>From</label>
-            <input type="date" style={inp} value={dateFrom} onChange={e=>{setDateFrom(e.target.value);setPage(0);setExpanded(null);}} />
-          </div>
-          <div style={{ flex:"0 0 150px" }}>
-            <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>To</label>
-            <input type="date" style={inp} value={dateTo} min={dateFrom || undefined} onChange={e=>{setDateTo(e.target.value);setPage(0);setExpanded(null);}} />
+          <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr 1fr", gap:10 }}>
+            <div>
+              <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>Action</label>
+              <select style={{...inp, cursor:"pointer"}} value={actionFilter} onChange={e=>{setActionFilter(e.target.value);setPage(0);setExpanded(null);}}>
+                <option value="all">All Actions</option>
+                {uniqueActions.map(a => <option key={a} value={a}>{actionLabels[a]||a}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>From</label>
+              <input type="date" style={inp} value={dateFrom} onChange={e=>{setDateFrom(e.target.value);setPage(0);setExpanded(null);}} />
+            </div>
+            <div style={isMobile ? { gridColumn:"1/-1" } : {}}>
+              <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>To</label>
+              <input type="date" style={inp} value={dateTo} min={dateFrom || undefined} onChange={e=>{setDateTo(e.target.value);setPage(0);setExpanded(null);}} />
+            </div>
           </div>
           {hasFilters && (
-            <button onClick={handleClearFilters} style={{ ...btnS, padding:"10px 16px", fontSize:12, whiteSpace:"nowrap" }}>Clear All</button>
+            <button onClick={handleClearFilters} style={{ ...btnS, padding:"10px 16px", fontSize:12, whiteSpace:"nowrap", alignSelf:"flex-start" }}>Clear All</button>
           )}
         </div>
       </div>
@@ -136,7 +140,7 @@ export function ActivityLogPage({ store }) {
                     )}
                   </div>
                   {isOpen && dets && (
-                    <div style={{ padding:"0 22px 14px 52px", background:B.warmGray, borderTop:"1px solid "+B.sand }}>
+                    <div style={{ padding:isMobile?"0 14px 14px 14px":"0 22px 14px 52px", background:B.warmGray, borderTop:"1px solid "+B.sand }}>
                       <div style={{ padding:"12px 16px" }}>{dets}</div>
                     </div>
                   )}
