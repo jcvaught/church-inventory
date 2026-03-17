@@ -296,7 +296,7 @@ export function HelpPage({ onBack }) {
                 'Tags — for filtering and search',
                 'Notes — free-form text',
               ]} />
-              <Tip>Use the ✨ Identify Item button after uploading a photo to have AI pre-fill the description.</Tip>
+              <Tip>Use the <strong>✨ Identify Item</strong> button in the Add Item modal to take or select a photo and have AI pre-fill the description.</Tip>
             </Accordion>
 
             <Accordion title="Checking out and returning items">
@@ -365,6 +365,17 @@ export function HelpPage({ onBack }) {
                 'Tags — for filtering (uses the same tags list as inventory items)',
               ]} />
               <P>Use <strong>Log Usage</strong> to reduce quantity and <strong>Restock</strong> to increase it. Every change is logged.</P>
+              <Tip>Not sure what something is? Use <strong>✨ Identify Item</strong> in the Add Supply modal to have AI pre-fill the description from a photo.</Tip>
+            </Accordion>
+
+            <Accordion title="Identifying a supply with AI">
+              <P>In the <strong>Add Supply</strong> modal, click <strong>✨ Identify Item</strong> and take or select a photo of the item. AI will analyze the photo and automatically fill in the Description field.</P>
+              <UL items={[
+                'The photo is used for identification only — it is not saved or stored anywhere',
+                'Works best with a clear, well-lit photo of the item or its packaging',
+                'You can edit the description after identification if needed',
+              ]} />
+              <Note>This feature uses the same AI identification available when adding inventory items.</Note>
             </Accordion>
 
             <Accordion title="Editing a supply">

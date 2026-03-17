@@ -243,6 +243,12 @@ Hub visibility is controlled at two levels:
 - **Registration UX**: Split "Your Name" field into separate First Name + Last Name fields on all registration forms (register, createChurch); `useAuth` stores `firstName`, `lastName`, and `name` on user profiles; `registerWithGoogle` splits `displayName` on first space; backward-compatible (`name` field still used everywhere for display)
 - **Two-character initials**: `initials(name)` helper in MaintenancePage derives two-char initials (e.g. "JS" for John Smith); assignee avatar circle size increased 22→26px with `title` tooltip; SettingsPage team member avatars updated with same logic
 
+### ✅ Done — Phase 21 — AI Supply Identification (2026-03-17)
+
+- **`✨ Identify Item` in Add Supply modal**: single button opens the device camera/file picker; on photo selection, automatically converts to base64 and calls the existing `identifyItem` Cloud Function (Claude Haiku vision); pre-fills the Description field; photo is used for identification only and is **not stored**
+- Button label stays `✨ Identify Item` throughout (no "upload" language to avoid implying the photo is saved); button shows `Identifying…` and is disabled while the Cloud Function runs
+- Reuses the same `identifyItem` Cloud Function and `ANTHROPIC_API_KEY` secret already in place for items; no backend changes required
+
 ### ✅ Done — Phase 20 — Delete Actions & Supply Tags (2026-03-17)
 
 - **Item delete**: `deleteItem(docId, itemId, userId, userName)` added to `useFirestore`; permanently removes item from Firestore and logs `delete_item` to activity log; **Delete** button (dark red, admin only) in item detail modal footer alongside Retire; `window.confirm` dialog before executing
