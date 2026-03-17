@@ -295,9 +295,10 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const updateSupply = useCallback(async (docId, updates) => {
+  const updateSupply = useCallback(async (docId, updates, userId, userName) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'supplies', docId), updates);
+      await logActivity('edit_supply', updates.supplyId || docId, userId, userName, { description: updates.description });
     } catch (err) { handleErr(err); }
   }, [churchId]);
 

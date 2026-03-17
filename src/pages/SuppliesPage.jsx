@@ -1,4 +1,4 @@
-import { useState, useContext } from 'react';
+import { useState, useContext, useMemo } from 'react';
 import { B, f1, f2, inp, btnP, btnS } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { Modal } from '../components/primitives/Modal.jsx';
@@ -39,17 +39,20 @@ export function SuppliesPage({ store, userProfile }) {
   function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }
 
   // Filter
-  const filtered = supplies.filter(s => {
+  const filtered = useMemo(() => supplies.filter(s => {
     if (search && !s.description?.toLowerCase().includes(search.toLowerCase()) && !s.supplyId?.toLowerCase().includes(search.toLowerCase())) return false;
     if (showLowOnly && s.quantity > s.minQuantity) return false;
     return true;
-  });
+  }), [supplies, search, showLowOnly]);
 
   const lowCount = supplies.filter(s => s.quantity <= s.minQuantity).length;
 
   // ── Add ──
   async function handleAdd() {
     if (!supForm.supplyId.trim() || !supForm.description.trim()) return;
+    if (supForm.supplyId.trim().length < 3) { flash("Supply ID must be at least 3 characters."); return; }
+    const duplicate = supplies.find(s => s.supplyId === supForm.supplyId.trim());
+    if (duplicate) { flash(`Supply ID "${supForm.supplyId.trim()}" already exists. Use a unique ID.`); return; }
     if (Number(supForm.quantity) < 0) { flash("Quantity cannot be negative."); return; }
     if (Number(supForm.minQuantity) < 0) { flash("Minimum quantity cannot be negative."); return; }
     setSaving(true);
@@ -71,14 +74,16 @@ export function SuppliesPage({ store, userProfile }) {
   // ── Edit Supply ──
   async function handleEditSupply() {
     if (!showEditSupply || !editSupForm.description.trim()) return;
+    if (Number(editSupForm.minQuantity) < 0) { flash("Minimum quantity cannot be negative."); return; }
     setSaving(true);
     await updateSupply(showEditSupply._docId, {
+      supplyId: showEditSupply.supplyId,
       description: editSupForm.description.trim(),
       location: editSupForm.location,
       ministry: editSupForm.ministry,
       minQuantity: Number(editSupForm.minQuantity) || 5,
       unit: editSupForm.unit || "each"
-    });
+    }, userId, userName);
     setShowEditSupply(null);
     setSaving(false);
     flash("Supply updated!");
@@ -87,6 +92,7 @@ export function SuppliesPage({ store, userProfile }) {
   // ── Use ──
   async function handleUse() {
     if (!showUse || !useForm.qty || Number(useForm.qty) <= 0) return;
+    if (Number(useForm.qty) > (showUse.quantity || 0)) { flash("Cannot exceed current stock."); return; }
     setSaving(true);
     await useSupply(showUse._docId, {
       qty: useForm.qty,
@@ -149,7 +155,7 @@ export function SuppliesPage({ store, userProfile }) {
       {/* Low Stock Banner */}
       {lowCount > 0 && (
         <div style={{ background:"#FFF8E1", border:"1px solid #FFECB3", borderLeft:"4px solid "+B.gold, borderRadius:14, padding:"14px 20px", marginBottom:16, display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
-          <span style={{ fontSize:14, fontWeight:600, color:"#96750E", fontFamily:f1 }}>⚠️ {lowCount} supply{lowCount!==1?"items":""} at or below minimum stock</span>
+          <span style={{ fontSize:14, fontWeight:600, color:"#96750E", fontFamily:f1 }}>⚠️ {lowCount} supply {lowCount!==1?"items":"item"} at or below minimum stock</span>
           <button onClick={()=>setShowLowOnly(!showLowOnly)} style={{ ...btnS, padding:"6px 14px", fontSize:12, borderColor:"#FFECB3", color:"#96750E" }}>
             {showLowOnly ? "Show all" : "Show low stock only"}
           </button>
@@ -229,7 +235,7 @@ export function SuppliesPage({ store, userProfile }) {
       )}
 
       {/* ═══ ADD SUPPLY MODAL ═══ */}
-      <Modal open={showAdd} onClose={()=>setShowAdd(false)} title="Add New Supply">
+      <Modal open={showAdd} onClose={()=>{ setShowAdd(false); setSupForm(emptySupply); }} title="Add New Supply">
         <FF label="Supply ID"><input style={{...inp, fontFamily:"monospace", letterSpacing:1}} value={supForm.supplyId} onChange={e=>setSupForm({...supForm, supplyId:e.target.value.toUpperCase()})} placeholder="e.g. BAT-AA"/></FF>
         <FF label="Description"><input style={inp} value={supForm.description} onChange={e=>setSupForm({...supForm, description:e.target.value})} placeholder="e.g. AA Batteries"/></FF>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
@@ -319,7 +325,7 @@ export function SuppliesPage({ store, userProfile }) {
             This exceeds current stock ({showUse.quantity || 0} available)
           </div>
         )}
-        <button onClick={handleUse} disabled={saving||!useForm.qty||Number(useForm.qty)<=0} style={{ ...btnP, width:"100%", opacity:(saving||!useForm.qty)?.5:1, marginTop:4 }}>
+        <button onClick={handleUse} disabled={saving||!useForm.qty||Number(useForm.qty)<=0} style={{ ...btnP, width:"100%", opacity:(saving||!useForm.qty||Number(useForm.qty)<=0)?.5:1, marginTop:4 }}>
           {saving ? "Logging..." : "Log Usage"}
         </button>
       </Modal>
