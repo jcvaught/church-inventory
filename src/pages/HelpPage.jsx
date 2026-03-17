@@ -334,6 +334,7 @@ export function HelpPage({ onBack }) {
                 'Bulk Location — moves all selected items to a new location',
                 'Bulk Export — exports selected items to CSV',
               ]} />
+              <Note>Checkout, Return, and Location actions each show a confirmation dialog before executing.</Note>
             </Accordion>
 
             <Accordion title="Public item request form">
@@ -390,7 +391,7 @@ export function HelpPage({ onBack }) {
 
             <Accordion title="Using the activity log" defaultOpen>
               <UL items={[
-                'Filter by date range using the From/To pickers',
+                'Filter by date range using the From/To pickers — the To date must be on or after the From date',
                 'Entries show the action, item, actor, and timestamp',
                 'Load more entries with the "Load more" button at the bottom (loads 20 at a time)',
                 'Export to CSV for external reporting',
