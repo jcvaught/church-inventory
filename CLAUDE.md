@@ -259,6 +259,7 @@ Hub visibility is controlled at two levels:
 - **ARIA labels on icon-only buttons**: `aria-label` added to `📷 Scan` (App.jsx), `⬇ Export CSV` (ItemsPage, SuppliesPage, ReservationsPage), `☑ Select` (ItemsPage), `⊕ Dup/Duplicate` (ItemsPage), `⬇ Export` (bulk bar)
 - **Status constants**: `src/utils/constants.js` created with `ITEM_STATUS`, `RES_STATUS`, `TICKET_STATUS` string enums; Dashboard, ItemsPage, ReservationsPage, and App.jsx updated to import and use them
 - **`today` hoisted out of map**: `new Date().toISOString().split("T")[0]` computed once per render in ReservationsPage (above the JSX), not inside each `.map()` iteration
+- **HelpPage updated**: bulk actions accordion notes confirmation dialogs; activity log date range tip clarifies "To" must be on or after "From"
 
 ### ✅ Done — Phase 14 — UI Polish (2026-03-16)
 
