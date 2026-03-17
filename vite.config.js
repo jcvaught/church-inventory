@@ -8,7 +8,21 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: true,
-      mangle: true,
+      mangle: false,
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-firebase': [
+            'firebase/app',
+            'firebase/auth',
+            'firebase/firestore',
+            'firebase/storage',
+            'firebase/functions',
+          ],
+        },
+      },
     },
   },
 });
