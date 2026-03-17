@@ -51,18 +51,18 @@ export function SuppliesPage({ store, userProfile }) {
   function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }
 
   // ── AI Supply Identification ──
-  async function handleIdentify() {
-    if (!photoFile) return;
+  async function handleIdentify(file) {
+    if (!file) return;
     setIdentifying(true);
     try {
       const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = e => resolve(e.target.result.split(',')[1]);
         reader.onerror = reject;
-        reader.readAsDataURL(photoFile);
+        reader.readAsDataURL(file);
       });
       const identify = httpsCallable(getFunctions(app), 'identifyItem');
-      const result = await identify({ imageBase64: base64, mediaType: photoFile.type || 'image/jpeg' });
+      const result = await identify({ imageBase64: base64, mediaType: file.type || 'image/jpeg' });
       if (result.data?.description) {
         setSupForm(f => ({ ...f, description: result.data.description }));
       } else {
@@ -309,13 +309,10 @@ export function SuppliesPage({ store, userProfile }) {
         <FF label="Description">
           <input style={inp} value={supForm.description} onChange={e=>setSupForm({...supForm, description:e.target.value})} placeholder="e.g. AA Batteries"/>
           <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", marginTop:8 }}>
-            <input type="file" accept="image/*" id="photo-sup-add" style={{ display:"none" }} onChange={e=>{const f=e.target.files[0];if(f){setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));setIdentifying(false);}}}/>
-            <label htmlFor="photo-sup-add" style={{ ...btnS, display:"inline-block", cursor:"pointer", padding:"7px 16px", fontSize:13 }}>{photoPreview ? "📷 Change Photo" : "📷 Take/Upload Photo"}</label>
-            {photoFile && (
-              <button type="button" onClick={handleIdentify} disabled={identifying} style={{ ...btnS, fontSize:13, padding:"7px 16px", opacity:identifying?.6:1 }}>
-                {identifying ? "Identifying…" : "✨ Identify Item"}
-              </button>
-            )}
+            <input type="file" accept="image/*" id="photo-sup-add" style={{ display:"none" }} onChange={e=>{const f=e.target.files[0];if(f){setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));handleIdentify(f);}}}/>
+            <label htmlFor="photo-sup-add" style={{ ...btnS, display:"inline-block", cursor:"pointer", padding:"7px 16px", fontSize:13, opacity:identifying?.6:1, pointerEvents:identifying?"none":"auto" }}>
+              {identifying ? "Identifying…" : "✨ Identify Item"}
+            </label>
           </div>
           {photoPreview && <img src={photoPreview} alt="preview" style={{ marginTop:8, maxWidth:"100%", maxHeight:120, borderRadius:8, objectFit:"cover" }}/>}
         </FF>
