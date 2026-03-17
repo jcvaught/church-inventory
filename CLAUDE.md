@@ -243,6 +243,12 @@ Hub visibility is controlled at two levels:
 - **Registration UX**: Split "Your Name" field into separate First Name + Last Name fields on all registration forms (register, createChurch); `useAuth` stores `firstName`, `lastName`, and `name` on user profiles; `registerWithGoogle` splits `displayName` on first space; backward-compatible (`name` field still used everywhere for display)
 - **Two-character initials**: `initials(name)` helper in MaintenancePage derives two-char initials (e.g. "JS" for John Smith); assignee avatar circle size increased 22→26px with `title` tooltip; SettingsPage team member avatars updated with same logic
 
+### ✅ Done — Phase 18 — Production Crash Fixes & UX Polish (2026-03-17)
+
+- **esbuild TDZ production crash on All Items**: `ItemsPage` crashed with `ReferenceError: Cannot access 'Pn' before initialization` in every production build. Root cause: the component had 30+ imports and 28+ `useState` declarations, causing esbuild's minifier to assign the same short name (`Pn`) to both the module-scope `ITEM_STATUS` import and a function-scope `const` from one of the 5 bulk-action `useState(false)` booleans. Fixed by consolidating `showBulkCoWarn`, `showBulkCo`, `showBulkRetWarn`, `showBulkRet`, `showBulkLoc` into a single `const [bulkModal, setBulkModal] = useState(null)` string state — reducing local variable count by 8 and eliminating the naming collision. See **Known Pitfalls** for the full explanation of this class of bug.
+- **Error boundary added**: `PageErrorBoundary` (class component) wraps the page content area in `App.jsx`; keyed by `tab` so it resets on navigation. Future production render crashes now show an error message with stack trace instead of a blank screen.
+- **Settings list inline editing**: Locations, Ministries, and Tags lists now support inline rename — each row has an Edit button that swaps the label for a text input (pre-filled); Save/Cancel via button or keyboard (Enter/Escape); duplicate-name check on save.
+
 ### ✅ Done — Phase 17 — Mobile Audit & Responsive Fixes (2026-03-17)
 
 - **Modal safe-area-inset**: bottom-sheet modals on iPhone X+ now include `env(safe-area-inset-bottom, 0px)` in their bottom padding so action buttons are never hidden behind the home indicator
@@ -416,6 +422,10 @@ function MyComponent() {
 // ✅ ALSO CORRECT — alias the import (see ItemsPage.jsx)
 import { ref as storageRef } from 'firebase/storage';
 ```
+
+**Variant — too many variables in one component (harder to spot):** Even without an explicit name match in source code, a component with many imports AND many `useState` declarations can trigger the same crash. esbuild assigns short names sequentially; once the module-scope names and function-scope names both reach the same two-character name (e.g. `Pn`), ANY import accessed inside the function before the shadowing `const` is initialized will throw TDZ.
+
+`ItemsPage` hit this in production (Phase 18): `ITEM_STATUS` (module scope) and a bulk-action `useState` boolean (function scope) were both assigned `Pn`. Accessing `ITEM_STATUS.DISPOSED` inside an early `useMemo` callback caused a crash on every render. **Fix: reduce the number of `useState` declarations in the component** — consolidate related boolean states into a single string/enum state to lower the variable count and shift esbuild's name assignments. After the fix, verify with `grep -o 'const Pn[^;]*;' dist/assets/index-*.js` — if `Pn` appears more than once as a `const`, there may still be a collision risk.
 
 ### 🟡 `setMonth()` rolls over on month-end dates
 `date.setMonth(n + 1)` silently overflows to the next month when the current day doesn't exist in the target month (e.g. Jan 31 + 1 month → Mar 3, not Feb 28). Always clamp after advancing:
