@@ -71,6 +71,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
         if (showBulkRetWarn) { setShowBulkRetWarn(false); return; }
         if (showBulkCo) { setShowBulkCo(false); return; }
         if (showBulkCoWarn) { setShowBulkCoWarn(false); return; }
+        if (bulkMode) { setBulkMode(false); setSelectedIds(new Set()); return; }
         if (showRetire) { setShowRetire(null); return; }
         if (showRepair) { setShowRepair(null); return; }
         if (showReturn) { setShowReturn(null); return; }
@@ -84,7 +85,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) {
         if (!showAdd && !showEdit && !showDetail && !showCheckOut && !showReturn && !showRepair && !showRetire && (isAdmin || isManager)) {
-          setItemForm(emptyItem); setPhotoFile(null); setPhotoPreview(null); setShowAdd(true);
+          setItemForm(emptyItem); setPhotoFile(null); setPhotoPreview(null); setShowFinancial(false); setShowAdd(true);
         }
       }
       if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
@@ -94,7 +95,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [showAdd, showEdit, showDetail, showCheckOut, showReturn, showRepair, showRetire, showBulkCoWarn, showBulkCo, showBulkRetWarn, showBulkRet, showBulkLoc, isAdmin, isManager]);
+  }, [showAdd, showEdit, showDetail, showCheckOut, showReturn, showRepair, showRetire, showBulkCoWarn, showBulkCo, showBulkRetWarn, showBulkRet, showBulkLoc, bulkMode, isAdmin, isManager]);
 
   // Forms
   const emptyItem = { itemId:"", description:"", location:"", ministry:"", status:ITEM_STATUS.AVAILABLE, condition:"Good", notes:"", tags:[], purchaseDate:"", purchasePrice:"", warrantyExpiry:"", estimatedValue:"" };
@@ -285,6 +286,8 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   async function handleEdit() {
     if (!showEdit) return;
     if (itemForm.itemId.trim().length < 3) { flash("Item ID must be at least 3 characters."); return; }
+    const duplicate = items.find(i => i.itemId === itemForm.itemId.trim() && i._docId !== showEdit._docId);
+    if (duplicate) { flash(`Item ID "${itemForm.itemId.trim()}" is already used by another item.`); return; }
     setSaving(true);
     let photoUrl = showEdit.photoUrl || "";
     if (photoFile) {
@@ -378,6 +381,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   // ── Retire ──
   async function handleRetire() {
     if (!showRetire) return;
+    if (retireForm.recoveryValue !== "" && Number(retireForm.recoveryValue) < 0) { flash("Recovery value cannot be negative."); return; }
     setSaving(true);
     await retireItem(showRetire._docId, {
       itemId: showRetire.itemId,
@@ -483,7 +487,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
         onMouseLeave={e=>{ e.currentTarget.style.borderColor=selectedIds.has(item._docId)?B.teal:overdue?"#FECACA":B.sand; e.currentTarget.style.boxShadow="none"; }}
       >
         {bulkMode && (
-          <input type="checkbox" checked={selectedIds.has(item._docId)} onChange={()=>toggleSelect(item._docId)} onClick={e=>e.stopPropagation()} style={{ width:16, height:16, cursor:"pointer", flexShrink:0, accentColor:B.teal }} />
+          <input type="checkbox" aria-label={`Select ${item.description || 'item'}`} checked={selectedIds.has(item._docId)} onChange={()=>toggleSelect(item._docId)} onClick={e=>e.stopPropagation()} style={{ width:16, height:16, cursor:"pointer", flexShrink:0, accentColor:B.teal }} />
         )}
         <div style={{ display:"flex", alignItems:"center", gap:12, flex:1, minWidth:0 }}>
           <div style={{ width:38, height:38, borderRadius:10, background:B.tealPale, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>📋</div>
@@ -554,7 +558,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
                   {req.notes && <div style={{ fontSize:12, color:B.textLight, marginTop:4 }}>{req.notes}</div>}
                   {req.submittedAt && <div style={{ fontSize:11, color:B.textLight, marginTop:4 }}>{req.submittedAt.split("T")[0]}</div>}
                 </div>
-                <button onClick={()=>dismissPublicRequest(req._docId)} style={{ ...btnS, fontSize:12, padding:"5px 12px", flexShrink:0 }}>Dismiss</button>
+                <button onClick={()=>{ if (window.confirm(`Dismiss request from ${req.name}?`)) dismissPublicRequest(req._docId); }} style={{ ...btnS, fontSize:12, padding:"5px 12px", flexShrink:0 }}>Dismiss</button>
               </div>
             ))}
           </div>
@@ -601,6 +605,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
           <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer" }}>
             <input
               type="checkbox"
+              aria-label="Select all visible items"
               checked={displayItems.length > 0 && displayItems.every(i => selectedIds.has(i._docId))}
               onChange={e => setSelectedIds(e.target.checked ? new Set(displayItems.map(i => i._docId)) : new Set())}
               style={{ width:15, height:15, accentColor:B.teal, cursor:"pointer" }}
@@ -626,10 +631,10 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
           <div style={{ background:B.white, borderRadius:18, padding:"48px 32px", border:"1px solid "+B.sand, textAlign:"center" }}>
             <div style={{ fontSize:48, marginBottom:16 }}>📋</div>
             <h3 style={{ fontFamily:f1, color:B.navy, margin:"0 0 8px", fontSize:18 }}>
-              {activeItems.length === 0 ? "No items yet" : "No items match your filters"}
+              {activeItems.length === 0 ? "No items yet" : search ? "No items match your search" : "No items match your filters"}
             </h3>
             <p style={{ color:B.textLight, fontSize:14 }}>
-              {activeItems.length === 0 ? "Add your first inventory item to get started." : "Try adjusting your search or filters."}
+              {activeItems.length === 0 ? "Add your first inventory item to get started." : search ? "Try a different search term or clear the search." : "Try adjusting your filters."}
             </p>
           </div>
         ) : displayItems.map(item => <ItemRow key={item._docId} item={item} />)}

@@ -162,6 +162,7 @@ export function useFirestore(churchId) {
         ...updates,
         updatedAt: new Date().toISOString()
       });
+      await logActivity('edit_item', updates.itemId || docId, userId, userName, { description: updates.description });
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
