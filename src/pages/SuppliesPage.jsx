@@ -84,8 +84,9 @@ export function SuppliesPage({ store, userProfile }) {
   async function handleEditSupply() {
     if (!showEditSupply || !editSupForm.description.trim()) return;
     if (Number(editSupForm.minQuantity) < 0) { flash("Minimum quantity cannot be negative."); return; }
+    if (isAdmin && Number(editSupForm.quantity) < 0) { flash("Quantity cannot be negative."); return; }
     setSaving(true);
-    await updateSupply(showEditSupply._docId, {
+    const updates = {
       supplyId: showEditSupply.supplyId,
       description: editSupForm.description.trim(),
       location: editSupForm.location,
@@ -93,7 +94,9 @@ export function SuppliesPage({ store, userProfile }) {
       minQuantity: Number(editSupForm.minQuantity) || 5,
       unit: editSupForm.unit || "each",
       tags: editSupForm.tags || []
-    }, userId, userName);
+    };
+    if (isAdmin) updates.quantity = Number(editSupForm.quantity) || 0;
+    await updateSupply(showEditSupply._docId, updates, userId, userName);
     setShowEditSupply(null);
     setSaving(false);
     flash("Supply updated!");
@@ -325,6 +328,11 @@ export function SuppliesPage({ store, userProfile }) {
             <option value="each">Each</option><option value="pack">Pack</option><option value="box">Box</option><option value="roll">Roll</option><option value="ream">Ream</option><option value="case">Case</option><option value="gallon">Gallon</option><option value="bottle">Bottle</option>
           </select></FF>
         </div>
+        {isAdmin && (
+          <FF label="Current Quantity (admin correction)">
+            <input style={inp} type="number" min="0" value={editSupForm.quantity} onChange={e=>setEditSupForm({...editSupForm, quantity:e.target.value})}/>
+          </FF>
+        )}
         {tagOptions.length > 0 && (
           <FF label="Tags">
             <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
