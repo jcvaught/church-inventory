@@ -245,8 +245,8 @@ Hub visibility is controlled at two levels:
 
 ### ✅ Done — Phase 19 — Permanent TDZ Fix: Switch to Terser (2026-03-17)
 
-- **Root cause identified**: Consolidating `useState` declarations in Phase 18 only shifted the collision name (`Pn` → `on` → `Se`). esbuild's identifier minifier is not scope-aware — it assigns sequential short names across the entire flattened bundle without checking for shadowing, so any sufficiently large component will eventually collide.
-- **Permanent fix**: `vite.config.js` now sets `build.minify: 'terser'`. Terser performs full scope-aware variable renaming and guarantees no two variables in different scopes get the same name. `terser` added as a `devDependency`. The `useState` consolidation from Phase 18 (`activeModal`, `bulkData`) remains for code cleanliness.
+- **Root cause fully diagnosed**: Consolidating `useState` declarations in Phase 18 only shifted the collision name (`Pn` → `on` → `Se` → `be`). Both esbuild and Terser (with `mangle: true`) assign short names sequentially across the flattened Rollup bundle — React/Firebase internal module-scope vars compete with every page component's function-scope `useState` vars for the same two-char names. Code splitting helped (moved React's `var be` out of the app chunk) but app-internal modules (`useFirestore`, etc.) still produced module-scope vars that collided with page component state vars in the same chunk.
+- **Permanent fix**: `vite.config.js` now uses Terser with `mangle: false` — variable names are kept as their original source names, making collisions structurally impossible. `terser` is a `devDependency`. `compress: true` still strips dead code and whitespace. The `useState` consolidation from Phase 18 (`activeModal`, `bulkData`) remains for code cleanliness.
 
 ### ✅ Done — Phase 18 — Production Crash Fixes & UX Polish (2026-03-17)
 
@@ -430,7 +430,7 @@ import { ref as storageRef } from 'firebase/storage';
 
 **Variant — too many variables in one component:** Even without an explicit name match in source code, a component with many imports AND many `useState` declarations can trigger the same crash. esbuild assigns short names sequentially without full scope analysis; once module-scope and function-scope names converge on the same two-character identifier (e.g. `Pn`, `on`, `Se`), the TDZ crash occurs. Consolidating `useState` calls just shifts which name collides — it doesn't fix the root cause.
 
-**The permanent fix (Phase 19): switch `vite.config.js` to use Terser instead of esbuild for minification.** Terser performs proper scope-aware variable renaming and will never assign the same name to variables in different scopes that shadow each other. `vite.config.js` now sets `build.minify: 'terser'`; `terser` is a `devDependency`. Do not revert this to esbuild.
+**The permanent fix (Phase 19): `vite.config.js` uses Terser with `mangle: false`.** This keeps all variable names as their original source names, making name collisions structurally impossible. Switching to Terser alone was not enough — code splitting alone was not enough either, because app-internal modules (e.g. `useFirestore`) also produce module-scope vars that collide with page component `useState` vars in the same chunk. `mangle: false` is the only reliable solution. `compress: true` still strips dead code and whitespace. Bundle gzip size increases modestly (~130 KB) but correctness outweighs size. **Do not re-enable `mangle: true` or switch back to esbuild.**
 
 ### 🟡 `setMonth()` rolls over on month-end dates
 `date.setMonth(n + 1)` silently overflows to the next month when the current day doesn't exist in the target month (e.g. Jan 31 + 1 month → Mar 3, not Feb 28). Always clamp after advancing:
