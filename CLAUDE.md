@@ -284,6 +284,8 @@ build: {
 ```
 **Do not re-enable `mangle: true` or switch back to esbuild.**
 
+**Post-fix audit (2026-03-17):** After resolving the crashes, a full hook-ordering audit was run across all 15 source files (every page, hook, and hub). No further violations found. Files with `useEffect` and confirmed clean ordering: `App.jsx`, `ItemsPage.jsx`, `SettingsPage.jsx`, `MaintenancePage.jsx`, `useAuth.js`, `useFirestore.js`, `useMobile.js`, `useSubscription.js`. Files with no `useEffect` at all: `Dashboard.jsx`, `SuppliesPage.jsx`, `ReservationsPage.jsx`, `ActivityLogPage.jsx`, `InsightsPage.jsx`, `CoordinationPage.jsx`, `AccountabilityPage.jsx`.
+
 ### ✅ Done — Phase 18 — UX Polish & Settings Inline Editing (2026-03-17)
 
 - **Error boundary added**: `PageErrorBoundary` (class component) wraps the page content area in `App.jsx`; keyed by `tab` so it resets on navigation. Production render crashes show an error message with stack trace instead of a blank screen.
