@@ -243,6 +243,11 @@ Hub visibility is controlled at two levels:
 - **Registration UX**: Split "Your Name" field into separate First Name + Last Name fields on all registration forms (register, createChurch); `useAuth` stores `firstName`, `lastName`, and `name` on user profiles; `registerWithGoogle` splits `displayName` on first space; backward-compatible (`name` field still used everywhere for display)
 - **Two-character initials**: `initials(name)` helper in MaintenancePage derives two-char initials (e.g. "JS" for John Smith); assignee avatar circle size increased 22→26px with `title` tooltip; SettingsPage team member avatars updated with same logic
 
+### ✅ Done — Phase 19 — Permanent TDZ Fix: Switch to Terser (2026-03-17)
+
+- **Root cause identified**: Consolidating `useState` declarations in Phase 18 only shifted the collision name (`Pn` → `on` → `Se`). esbuild's identifier minifier is not scope-aware — it assigns sequential short names across the entire flattened bundle without checking for shadowing, so any sufficiently large component will eventually collide.
+- **Permanent fix**: `vite.config.js` now sets `build.minify: 'terser'`. Terser performs full scope-aware variable renaming and guarantees no two variables in different scopes get the same name. `terser` added as a `devDependency`. The `useState` consolidation from Phase 18 (`activeModal`, `bulkData`) remains for code cleanliness.
+
 ### ✅ Done — Phase 18 — Production Crash Fixes & UX Polish (2026-03-17)
 
 - **esbuild TDZ production crash on All Items**: `ItemsPage` crashed with `ReferenceError: Cannot access 'Pn' before initialization` in every production build. Root cause: the component had 30+ imports and 28+ `useState` declarations, causing esbuild's minifier to assign the same short name (`Pn`) to both the module-scope `ITEM_STATUS` import and a function-scope `const` from one of the 5 bulk-action `useState(false)` booleans. Fixed by consolidating `showBulkCoWarn`, `showBulkCo`, `showBulkRetWarn`, `showBulkRet`, `showBulkLoc` into a single `const [bulkModal, setBulkModal] = useState(null)` string state — reducing local variable count by 8 and eliminating the naming collision. See **Known Pitfalls** for the full explanation of this class of bug.
@@ -423,9 +428,9 @@ function MyComponent() {
 import { ref as storageRef } from 'firebase/storage';
 ```
 
-**Variant — too many variables in one component (harder to spot):** Even without an explicit name match in source code, a component with many imports AND many `useState` declarations can trigger the same crash. esbuild assigns short names sequentially; once the module-scope names and function-scope names both reach the same two-character name (e.g. `Pn`), ANY import accessed inside the function before the shadowing `const` is initialized will throw TDZ.
+**Variant — too many variables in one component:** Even without an explicit name match in source code, a component with many imports AND many `useState` declarations can trigger the same crash. esbuild assigns short names sequentially without full scope analysis; once module-scope and function-scope names converge on the same two-character identifier (e.g. `Pn`, `on`, `Se`), the TDZ crash occurs. Consolidating `useState` calls just shifts which name collides — it doesn't fix the root cause.
 
-`ItemsPage` hit this in production (Phase 18): `ITEM_STATUS` (module scope) and a bulk-action `useState` boolean (function scope) were both assigned `Pn`. Accessing `ITEM_STATUS.DISPOSED` inside an early `useMemo` callback caused a crash on every render. **Fix: reduce the number of `useState` declarations in the component** — consolidate related boolean states into a single string/enum state to lower the variable count and shift esbuild's name assignments. After the fix, verify with `grep -o 'const Pn[^;]*;' dist/assets/index-*.js` — if `Pn` appears more than once as a `const`, there may still be a collision risk.
+**The permanent fix (Phase 19): switch `vite.config.js` to use Terser instead of esbuild for minification.** Terser performs proper scope-aware variable renaming and will never assign the same name to variables in different scopes that shadow each other. `vite.config.js` now sets `build.minify: 'terser'`; `terser` is a `devDependency`. Do not revert this to esbuild.
 
 ### 🟡 `setMonth()` rolls over on month-end dates
 `date.setMonth(n + 1)` silently overflows to the next month when the current day doesn't exist in the target month (e.g. Jan 31 + 1 month → Mar 3, not Feb 28). Always clamp after advancing:
