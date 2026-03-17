@@ -29,15 +29,16 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   function setLocation(v) { setLocationFilter(v); localStorage.setItem('inv_locationFilter', v); }
   function setMinistry(v) { setMinistryFilter(v); localStorage.setItem('inv_ministryFilter', v); }
 
-  // Modals
-  const [showAdd, setShowAdd] = useState(false);
-  const [showEdit, setShowEdit] = useState(null);       // item object
-  const [showCheckOut, setShowCheckOut] = useState(null); // item object
-  const [showReturn, setShowReturn] = useState(null);     // item object
-  const [showRepair, setShowRepair] = useState(null);     // item object
-  const [showRetire, setShowRetire] = useState(null);     // item object
-  const [showDetail, setShowDetail] = useState(null);     // item object
+  // Modals — single state: { type: 'add'|'edit'|'checkout'|'return'|'repair'|'retire'|'detail', item: obj|null }
+  const [activeModal, setActiveModal] = useState(null);
   const [detailQrUrl, setDetailQrUrl] = useState('');
+  const showAdd      = activeModal?.type === 'add';
+  const showEdit     = activeModal?.type === 'edit'     ? activeModal.item : null;
+  const showCheckOut = activeModal?.type === 'checkout' ? activeModal.item : null;
+  const showReturn   = activeModal?.type === 'return'   ? activeModal.item : null;
+  const showRepair   = activeModal?.type === 'repair'   ? activeModal.item : null;
+  const showRetire   = activeModal?.type === 'retire'   ? activeModal.item : null;
+  const showDetail   = activeModal?.type === 'detail'   ? activeModal.item : null;
 
   useEffect(() => {
     if (!showDetail) { setDetailQrUrl(''); return; }
@@ -50,14 +51,14 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   useEffect(() => {
     if (!initialItemId || deepLinked.current || !items.length) return;
     const found = items.find(i => i.itemId === initialItemId);
-    if (found) { setShowDetail(found); deepLinked.current = true; }
+    if (found) { setActiveModal({ type: 'detail', item: found }); deepLinked.current = true; }
   }, [initialItemId, items]);
 
   // Scanner: open item from camera scan
   useEffect(() => {
     if (!scannedItemId || !items.length) return;
     const found = items.find(i => i.itemId === scannedItemId);
-    if (found) { setShowDetail(found); }
+    if (found) { setActiveModal({ type: 'detail', item: found }); }
     else { flash(`No item found with ID "${scannedItemId}"`); }
     onScannedItemConsumed?.();
   }, [scannedItemId, items]);
@@ -68,20 +69,14 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       if (e.key === 'Escape') {
         if (bulkModal) { setBulkModal(null); return; }
         if (bulkMode) { setBulkMode(false); setSelectedIds(new Set()); return; }
-        if (showRetire) { setShowRetire(null); return; }
-        if (showRepair) { setShowRepair(null); return; }
-        if (showReturn) { setShowReturn(null); return; }
-        if (showCheckOut) { setShowCheckOut(null); return; }
-        if (showEdit) { setShowEdit(null); return; }
-        if (showAdd) { setShowAdd(false); return; }
-        if (showDetail) { setShowDetail(null); return; }
+        if (activeModal) { setActiveModal(null); return; }
         return;
       }
       const tag = e.target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        if (!showAdd && !showEdit && !showDetail && !showCheckOut && !showReturn && !showRepair && !showRetire && (isAdmin || isManager)) {
-          setItemForm(emptyItem); setPhotoFile(null); setPhotoPreview(null); setShowFinancial(false); setShowAdd(true);
+        if (!activeModal && (isAdmin || isManager)) {
+          setItemForm(emptyItem); setPhotoFile(null); setPhotoPreview(null); setShowFinancial(false); setActiveModal({ type: 'add', item: null });
         }
       }
       if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
@@ -91,7 +86,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [showAdd, showEdit, showDetail, showCheckOut, showReturn, showRepair, showRetire, bulkModal, bulkMode, isAdmin, isManager]);
+  }, [activeModal, bulkModal, bulkMode, isAdmin, isManager]);
 
   // Forms
   const emptyItem = { itemId:"", description:"", location:"", ministry:"", status:ITEM_STATUS.AVAILABLE, condition:"Good", notes:"", tags:[], purchaseDate:"", purchasePrice:"", warrantyExpiry:"", estimatedValue:"" };
@@ -112,11 +107,12 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkModal, setBulkModal] = useState(null); // 'coWarn'|'co'|'retWarn'|'ret'|'loc'
-  const [bulkCoItems, setBulkCoItems] = useState([]);
-  const [bulkRetItems, setBulkRetItems] = useState([]);
-  const [bulkSkipped, setBulkSkipped] = useState(0);
-  const [bulkRetCondition, setBulkRetCondition] = useState('Good');
-  const [bulkNewLoc, setBulkNewLoc] = useState('');
+  const [bulkData, setBulkData] = useState({ coItems: [], retItems: [], skipped: 0, retCondition: 'Good', newLoc: '' });
+  const bulkCoItems    = bulkData.coItems;
+  const bulkRetItems   = bulkData.retItems;
+  const bulkSkipped    = bulkData.skipped;
+  const bulkRetCondition = bulkData.retCondition;
+  const bulkNewLoc     = bulkData.newLoc;
 
   const locations = settings?.locations || [];
   const ministries = settings?.ministries || [];
@@ -172,8 +168,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   function startBulkCheckout() {
     const sel = displayItems.filter(i => selectedIds.has(i._docId));
     const coable = sel.filter(i => i.status === 'Available');
-    setBulkCoItems(coable);
-    setBulkSkipped(sel.length - coable.length);
+    setBulkData({ coItems: coable, retItems: [], skipped: sel.length - coable.length, retCondition: 'Good', newLoc: '' });
     setCoForm({ person:"", purpose:"", ministry:"", date:today, returnDate:"" });
     if (sel.length - coable.length > 0) setBulkModal('coWarn');
     else setBulkModal('co');
@@ -196,9 +191,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   function startBulkReturn() {
     const sel = displayItems.filter(i => selectedIds.has(i._docId));
     const retable = sel.filter(i => i.status === 'Checked Out' || i.status === 'In Use');
-    setBulkRetItems(retable);
-    setBulkSkipped(sel.length - retable.length);
-    setBulkRetCondition('Good');
+    setBulkData(d => ({ ...d, retItems: retable, skipped: sel.length - retable.length, retCondition: 'Good' }));
     if (sel.length - retable.length > 0) setBulkModal('retWarn');
     else setBulkModal('ret');
   }
@@ -266,7 +259,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       warrantyExpiry: itemForm.warrantyExpiry || null,
       estimatedValue: itemForm.estimatedValue !== "" ? Number(itemForm.estimatedValue) : null,
     }, userId, userName);
-    setShowAdd(false);
+    setActiveModal(null);
     setItemForm(emptyItem);
     setPhotoFile(null);
     setPhotoPreview(null);
@@ -304,7 +297,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       warrantyExpiry: itemForm.warrantyExpiry || null,
       estimatedValue: itemForm.estimatedValue !== "" ? Number(itemForm.estimatedValue) : null,
     }, userId, userName);
-    setShowEdit(null);
+    setActiveModal(null);
     setPhotoFile(null);
     setPhotoPreview(null);
     setSaving(false);
@@ -325,7 +318,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       date: coForm.date || today,
       returnDate: coForm.returnDate
     }, userId, userName);
-    setShowCheckOut(null);
+    setActiveModal(null);
     setCoForm({ person:"", purpose:"", ministry:"", date:"", returnDate:"" });
     setSaving(false);
     flash("Item checked out!");
@@ -340,7 +333,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       condition: retForm.condition,
       person: showReturn.assignedTo
     }, userId, userName);
-    setShowReturn(null);
+    setActiveModal(null);
     setRetForm({ condition:"Good", notes:"" });
     setSaving(false);
     flash("Item returned!");
@@ -356,7 +349,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       handler: repairForm.handler,
       expectedDate: repairForm.expectedDate
     }, userId, userName);
-    setShowRepair(null);
+    setActiveModal(null);
     setRepairForm({ issue:"", handler:"", expectedDate:"" });
     setSaving(false);
     flash("Item sent to repair!");
@@ -382,7 +375,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       notes: retireForm.notes,
       recoveryValue: retireForm.recoveryValue ? Number(retireForm.recoveryValue) : null
     }, userId, userName);
-    setShowRetire(null);
+    setActiveModal(null);
     setRetireForm({ reason:"Broken", date:"", notes:"", recoveryValue:"" });
     setSaving(false);
     flash("Item retired.");
@@ -407,7 +400,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     setShowFinancial(!!(item.purchaseDate || item.purchasePrice != null || item.warrantyExpiry || item.estimatedValue != null));
     setPhotoFile(null);
     setPhotoPreview(item.photoUrl || null);
-    setShowEdit(item);
+    setActiveModal({ type: 'edit', item });
   }
 
   // Duplicate item — opens Add modal pre-filled (ID cleared)
@@ -429,8 +422,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     setShowFinancial(!!(item.purchaseDate || item.purchasePrice != null || item.warrantyExpiry || item.estimatedValue != null));
     setPhotoFile(null);
     setPhotoPreview(null);
-    setShowDetail(null);
-    setShowAdd(true);
+    setActiveModal({ type: 'add', item: null });
   }
 
   // Tag toggle
@@ -445,11 +437,11 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   function itemActions(item) {
     const acts = [];
     if (item.status === ITEM_STATUS.AVAILABLE) {
-      acts.push(<button key="co" onClick={(e)=>{e.stopPropagation();setCoForm({ person:userName, purpose:"", ministry:item.ministry||"", date:today, returnDate:"" });setShowCheckOut(item);}} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Check Out</button>);
-      acts.push(<button key="rep" onClick={(e)=>{e.stopPropagation();setShowRepair(item);}} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>Repair</button>);
+      acts.push(<button key="co" onClick={(e)=>{e.stopPropagation();setCoForm({ person:userName, purpose:"", ministry:item.ministry||"", date:today, returnDate:"" });setActiveModal({ type:'checkout', item });}} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Check Out</button>);
+      acts.push(<button key="rep" onClick={(e)=>{e.stopPropagation();setActiveModal({ type:'repair', item });}} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>Repair</button>);
     }
     if (item.status === ITEM_STATUS.CHECKED_OUT || item.status === ITEM_STATUS.IN_USE) {
-      acts.push(<button key="ret" onClick={(e)=>{e.stopPropagation();setShowReturn(item);}} style={{ ...btnP, padding:"6px 14px", fontSize:12, background:B.gold }}>Return</button>);
+      acts.push(<button key="ret" onClick={(e)=>{e.stopPropagation();setActiveModal({ type:'return', item });}} style={{ ...btnP, padding:"6px 14px", fontSize:12, background:B.gold }}>Return</button>);
     }
     if (item.status === ITEM_STATUS.UNDER_REPAIR) {
       acts.push(<button key="fixed" onClick={(e)=>{e.stopPropagation();handleRepaired(item);}} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Mark Repaired</button>);
@@ -467,7 +459,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     const overdue = item.status === ITEM_STATUS.CHECKED_OUT && item.expectedReturn && item.expectedReturn < today;
     return (
       <div
-        onClick={()=>{ if(bulkMode) toggleSelect(item._docId); else setShowDetail(showDetail?._docId === item._docId ? null : item); }}
+        onClick={()=>{ if(bulkMode) toggleSelect(item._docId); else setActiveModal(showDetail?._docId === item._docId ? null : { type:'detail', item }); }}
         style={{
           display:"flex", alignItems:"center", justifyContent:"space-between",
           padding:isMob?"12px 14px":"14px 18px", borderRadius:12, cursor:"pointer",
@@ -520,7 +512,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
           {activeItems.length > 0 && !bulkMode && <button aria-label="Export inventory as CSV" onClick={()=>exportItemsCSV(activeItems)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
           {activeItems.length > 0 && !bulkMode && <button onClick={()=>printInventory(activeItems, config?.churchName)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>🖨 Print</button>}
           {activeItems.length > 0 && !bulkMode && <button aria-label="Select items for bulk actions" onClick={()=>{setBulkMode(true);setSelectedIds(new Set());}} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>☑ Select</button>}
-          {!bulkMode && (isAdmin || isManager) && <button onClick={()=>{setItemForm(emptyItem);setPhotoFile(null);setPhotoPreview(null);setShowAdd(true);}} style={btnP}>+ Add Item</button>}
+          {!bulkMode && (isAdmin || isManager) && <button onClick={()=>{setItemForm(emptyItem);setPhotoFile(null);setPhotoPreview(null);setActiveModal({ type:'add', item:null });}} style={btnP}>+ Add Item</button>}
         </div>
       </div>
 
@@ -610,7 +602,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
           {selectedIds.size > 0 && <>
             <button onClick={startBulkCheckout} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>Check Out</button>
             <button onClick={startBulkReturn} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>↩ Return</button>
-            {locations.length > 0 && <button onClick={()=>{setBulkNewLoc("");setBulkModal('loc');}} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>📍 Location</button>}
+            {locations.length > 0 && <button onClick={()=>{setBulkData(d=>({...d,newLoc:''}));setBulkModal('loc');}} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>📍 Location</button>}
             <button aria-label="Export selected items as CSV" onClick={handleBulkExport} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>⬇ Export</button>
           </>}
           <button onClick={exitBulkMode} style={{ background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", borderRadius:8, color:"#fff", cursor:"pointer", fontSize:12, padding:"6px 12px", fontFamily:f1, fontWeight:600 }}>Cancel</button>
@@ -643,7 +635,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
 
       {/* Detail Expand */}
       {showDetail && (
-        <Modal open={true} onClose={()=>setShowDetail(null)} title={showDetail.description || "Item Details"}>
+        <Modal open={true} onClose={()=>setActiveModal(null)} title={showDetail.description || "Item Details"}>
           {/* Photo */}
           {showDetail.photoUrl && (
             <div style={{ marginBottom:16, textAlign:"center" }}>
@@ -745,14 +737,14 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
               <button aria-label="Duplicate item" onClick={()=>openDuplicate(showDetail)} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>⊕ Duplicate</button>
             )}
             {canManageItem(userProfile, showDetail) && showDetail.status !== ITEM_STATUS.DISPOSED && (
-              <button onClick={()=>{setRetireForm({ reason:"Broken", date:today, notes:"", recoveryValue:"" });setShowRetire(showDetail);setShowDetail(null);}} style={{ ...btnD, padding:"6px 14px", fontSize:12 }}>Retire</button>
+              <button onClick={()=>{setRetireForm({ reason:"Broken", date:today, notes:"", recoveryValue:"" });setActiveModal({ type:'retire', item:showDetail });}} style={{ ...btnD, padding:"6px 14px", fontSize:12 }}>Retire</button>
             )}
           </div>
         </Modal>
       )}
 
       {/* ═══ ADD ITEM MODAL ═══ */}
-      <Modal open={showAdd} onClose={()=>setShowAdd(false)} title="Add New Item">
+      <Modal open={showAdd} onClose={()=>setActiveModal(null)} title="Add New Item">
         <FF label="Item ID"><input style={{...inp, fontFamily:"monospace", letterSpacing:1}} value={itemForm.itemId} onChange={e=>setItemForm({...itemForm, itemId:e.target.value.toUpperCase()})} placeholder="e.g. MIC-001"/></FF>
         <FF label="Description"><input style={inp} value={itemForm.description} onChange={e=>setItemForm({...itemForm, description:e.target.value})} placeholder="e.g. Wireless Microphone A"/></FF>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
@@ -822,7 +814,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       </Modal>
 
       {/* ═══ EDIT ITEM MODAL ═══ */}
-      <Modal open={!!showEdit} onClose={()=>setShowEdit(null)} title="Edit Item">
+      <Modal open={!!showEdit} onClose={()=>setActiveModal(null)} title="Edit Item">
         <FF label="Item ID"><input style={{...inp, fontFamily:"monospace", letterSpacing:1}} value={itemForm.itemId} onChange={e=>setItemForm({...itemForm, itemId:e.target.value.toUpperCase()})} placeholder="e.g. MIC-001"/></FF>
         <FF label="Description"><input style={inp} value={itemForm.description} onChange={e=>setItemForm({...itemForm, description:e.target.value})} placeholder="Description"/></FF>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
@@ -884,7 +876,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       </Modal>
 
       {/* ═══ CHECK OUT MODAL ═══ */}
-      <Modal open={!!showCheckOut} onClose={()=>setShowCheckOut(null)} title={`Check Out: ${showCheckOut?.description||""}`}>
+      <Modal open={!!showCheckOut} onClose={()=>setActiveModal(null)} title={`Check Out: ${showCheckOut?.description||""}`}>
         <FF label="Who's taking it?"><input style={inp} value={coForm.person} onChange={e=>setCoForm({...coForm, person:e.target.value})} placeholder="Person's name"/></FF>
         <FF label="Purpose"><input style={inp} value={coForm.purpose} onChange={e=>setCoForm({...coForm, purpose:e.target.value})} placeholder="e.g. Sunday worship, youth retreat"/></FF>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
@@ -901,7 +893,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       </Modal>
 
       {/* ═══ RETURN MODAL ═══ */}
-      <Modal open={!!showReturn} onClose={()=>setShowReturn(null)} title={`Return: ${showReturn?.description||""}`}>
+      <Modal open={!!showReturn} onClose={()=>setActiveModal(null)} title={`Return: ${showReturn?.description||""}`}>
         <div style={{ background:B.warmGray, borderRadius:10, padding:"12px 16px", marginBottom:16, fontSize:13, color:B.textMid }}>
           Checked out to <strong>{showReturn?.assignedTo}</strong> {showReturn?.checkOutDate && `on ${showReturn.checkOutDate}`}
         </div>
@@ -917,7 +909,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       </Modal>
 
       {/* ═══ REPAIR MODAL ═══ */}
-      <Modal open={!!showRepair} onClose={()=>setShowRepair(null)} title={`Send to Repair: ${showRepair?.description||""}`}>
+      <Modal open={!!showRepair} onClose={()=>setActiveModal(null)} title={`Send to Repair: ${showRepair?.description||""}`}>
         <FF label="What's the issue?"><textarea style={{...inp, minHeight:60, resize:"vertical"}} value={repairForm.issue} onChange={e=>setRepairForm({...repairForm, issue:e.target.value})} placeholder="Describe the problem..."/></FF>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
           <FF label="Handler / Vendor"><input style={inp} value={repairForm.handler} onChange={e=>setRepairForm({...repairForm, handler:e.target.value})} placeholder="Who's fixing it?"/></FF>
@@ -929,7 +921,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       </Modal>
 
       {/* ═══ RETIRE MODAL ═══ */}
-      <Modal open={!!showRetire} onClose={()=>setShowRetire(null)} title={`Retire: ${showRetire?.description||""}`}>
+      <Modal open={!!showRetire} onClose={()=>setActiveModal(null)} title={`Retire: ${showRetire?.description||""}`}>
         <div style={{ background:B.redPale, borderRadius:10, padding:"12px 16px", marginBottom:16, fontSize:13, color:B.red, fontWeight:500 }}>
           This item will be moved to the retired list and removed from active inventory.
         </div>
@@ -1004,7 +996,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
         <div style={{ background:B.tealPale, borderRadius:10, padding:"10px 14px", marginBottom:14, fontSize:12, color:B.teal, fontFamily:f1 }}>
           This condition applies to all items being returned.
         </div>
-        <FF label="Condition on Return"><select style={inp} value={bulkRetCondition} onChange={e=>setBulkRetCondition(e.target.value)}>
+        <FF label="Condition on Return"><select style={inp} value={bulkRetCondition} onChange={e=>setBulkData(d=>({...d,retCondition:e.target.value}))}>
           <option value="Good">Good — No issues</option>
           <option value="Fair">Fair — Minor wear</option>
           <option value="Poor">Poor — Needs attention</option>
@@ -1017,7 +1009,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
 
       {/* ═══ BULK LOCATION MODAL ═══ */}
       <Modal open={bulkModal === 'loc'} onClose={()=>setBulkModal(null)} title={`Change Location (${selectedIds.size} item${selectedIds.size !== 1 ? "s" : ""})`}>
-        <FF label="Move to Location"><select style={inp} value={bulkNewLoc} onChange={e=>setBulkNewLoc(e.target.value)}>
+        <FF label="Move to Location"><select style={inp} value={bulkNewLoc} onChange={e=>setBulkData(d=>({...d,newLoc:e.target.value}))}>
           <option value="">— Select location —</option>
           {locations.map(l => <option key={l} value={l}>{l}</option>)}
         </select></FF>
