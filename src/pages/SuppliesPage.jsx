@@ -21,7 +21,11 @@ export function SuppliesPage({ store, userProfile }) {
   const [showHistory, setShowHistory] = useState(null); // supply object
 
   // Forms
-  const emptySupply = { supplyId:"", description:"", location:"", ministry:"", quantity:0, minQuantity:5, unit:"each" };
+  const emptySupply = { supplyId:"", description:"", location:"", ministry:"", quantity:0, minQuantity:5, unit:"each", tags:[] };
+
+  function toggleSupTag(form, setForm, tag) {
+    setForm(prev => ({ ...prev, tags: prev.tags.includes(tag) ? prev.tags.filter(t => t !== tag) : [...prev.tags, tag] }));
+  }
   const [supForm, setSupForm] = useState(emptySupply);
   const [editSupForm, setEditSupForm] = useState(emptySupply);
   const [useForm, setUseForm] = useState({ qty:"1", purpose:"" });
@@ -31,10 +35,13 @@ export function SuppliesPage({ store, userProfile }) {
 
   const locations = settings?.locations || [];
   const ministries = settings?.ministries || [];
+  const tagOptions = settings?.tags || [];
   const userId = userProfile?.id || userProfile?.uid;
   const userName = userProfile?.name || "Unknown";
   const isAdmin = userProfile?.role === "admin";
   const isManager = userProfile?.role === "manager";
+
+  const [tagFilter, setTagFilter] = useState("");
 
   function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }
 
@@ -42,8 +49,9 @@ export function SuppliesPage({ store, userProfile }) {
   const filtered = useMemo(() => supplies.filter(s => {
     if (search && !s.description?.toLowerCase().includes(search.toLowerCase()) && !s.supplyId?.toLowerCase().includes(search.toLowerCase())) return false;
     if (showLowOnly && s.quantity > s.minQuantity) return false;
+    if (tagFilter && !(s.tags || []).includes(tagFilter)) return false;
     return true;
-  }), [supplies, search, showLowOnly]);
+  }), [supplies, search, showLowOnly, tagFilter]);
 
   const lowCount = supplies.filter(s => s.quantity <= s.minQuantity).length;
 
@@ -63,7 +71,8 @@ export function SuppliesPage({ store, userProfile }) {
       ministry: supForm.ministry,
       quantity: Number(supForm.quantity) || 0,
       minQuantity: Number(supForm.minQuantity) || 5,
-      unit: supForm.unit || "each"
+      unit: supForm.unit || "each",
+      tags: supForm.tags || []
     }, userId, userName);
     setShowAdd(false);
     setSupForm(emptySupply);
@@ -82,7 +91,8 @@ export function SuppliesPage({ store, userProfile }) {
       location: editSupForm.location,
       ministry: editSupForm.ministry,
       minQuantity: Number(editSupForm.minQuantity) || 5,
-      unit: editSupForm.unit || "each"
+      unit: editSupForm.unit || "each",
+      tags: editSupForm.tags || []
     }, userId, userName);
     setShowEditSupply(null);
     setSaving(false);
@@ -171,7 +181,7 @@ export function SuppliesPage({ store, userProfile }) {
 
       {/* Search */}
       <div style={{ background:B.white, borderRadius:14, padding:"16px 20px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
-        <div style={{ position:"relative" }}>
+        <div style={{ position:"relative", marginBottom: tagOptions.length > 0 ? 10 : 0 }}>
           <input
             style={{...inp, paddingLeft:36}}
             placeholder="Search supplies..."
@@ -179,6 +189,16 @@ export function SuppliesPage({ store, userProfile }) {
           />
           <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:14, color:B.textLight }}>🔍</span>
         </div>
+        {tagOptions.length > 0 && (
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+            {tagOptions.map(t => (
+              <button key={t} type="button" onClick={()=>setTagFilter(tagFilter === t ? "" : t)}
+                style={{ padding:"4px 12px", borderRadius:20, fontSize:12, fontFamily:f1, fontWeight:500, cursor:"pointer", border: tagFilter===t ? "1px solid "+B.teal : "1px solid "+B.sand, background: tagFilter===t ? B.tealPale : B.white, color: tagFilter===t ? B.teal : B.textMid }}>
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Supply Cards */}
@@ -223,6 +243,12 @@ export function SuppliesPage({ store, userProfile }) {
 
                 <StockBar quantity={s.quantity || 0} minQuantity={s.minQuantity || 5} />
 
+                {s.tags?.length > 0 && (
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:8 }}>
+                    {s.tags.map(t => <span key={t} style={{ padding:"2px 8px", borderRadius:20, background:B.warmGray, fontSize:11, color:B.textMid, fontFamily:f1, fontWeight:500 }}>{t}</span>)}
+                  </div>
+                )}
+
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:12, gap:8 }}>
                   <span style={{ fontSize:11, color:B.textLight, fontFamily:f1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     Min: {s.minQuantity || 5} {s.unit || "each"}
@@ -230,7 +256,7 @@ export function SuppliesPage({ store, userProfile }) {
                   </span>
                   <div style={{ display:"flex", gap:6, flexShrink:0 }}>
                     <button onClick={()=>setShowHistory(s)} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>History</button>
-                    {canManageSupply(userProfile, s) && <button onClick={()=>{setEditSupForm({ supplyId:s.supplyId, description:s.description, location:s.location||"", ministry:s.ministry||"", quantity:s.quantity, minQuantity:s.minQuantity||5, unit:s.unit||"each" });setShowEditSupply(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Edit</button>}
+                    {canManageSupply(userProfile, s) && <button onClick={()=>{setEditSupForm({ supplyId:s.supplyId, description:s.description, location:s.location||"", ministry:s.ministry||"", quantity:s.quantity, minQuantity:s.minQuantity||5, unit:s.unit||"each", tags:s.tags||[] });setShowEditSupply(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Edit</button>}
                     <button onClick={()=>{setUseForm({ qty:"1", purpose:"" });setShowUse(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Use</button>
                     <button onClick={()=>{setRestockForm({ qty:"", source:"" });setShowRestock(s);}} style={{ ...btnP, padding:"5px 12px", fontSize:11 }}>Restock</button>
                     {isAdmin && <button onClick={()=>handleDelete(s)} style={{ ...btnD, padding:"5px 12px", fontSize:11 }}>Delete</button>}
@@ -263,6 +289,18 @@ export function SuppliesPage({ store, userProfile }) {
             <option value="each">Each</option><option value="pack">Pack</option><option value="box">Box</option><option value="roll">Roll</option><option value="ream">Ream</option><option value="case">Case</option><option value="gallon">Gallon</option><option value="bottle">Bottle</option>
           </select></FF>
         </div>
+        {tagOptions.length > 0 && (
+          <FF label="Tags">
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+              {tagOptions.map(t => (
+                <button key={t} type="button" onClick={()=>toggleSupTag(supForm, setSupForm, t)}
+                  style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontFamily:f1, fontWeight:500, cursor:"pointer", border: supForm.tags.includes(t) ? "1px solid "+B.teal : "1px solid "+B.sand, background: supForm.tags.includes(t) ? B.tealPale : B.white, color: supForm.tags.includes(t) ? B.teal : B.textMid }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </FF>
+        )}
         <button onClick={handleAdd} disabled={saving||!supForm.supplyId.trim()||!supForm.description.trim()} style={{ ...btnP, width:"100%", opacity:(saving||!supForm.supplyId.trim()||!supForm.description.trim())?.5:1, marginTop:4 }}>
           {saving ? "Saving..." : "Add Supply"}
         </button>
@@ -287,6 +325,18 @@ export function SuppliesPage({ store, userProfile }) {
             <option value="each">Each</option><option value="pack">Pack</option><option value="box">Box</option><option value="roll">Roll</option><option value="ream">Ream</option><option value="case">Case</option><option value="gallon">Gallon</option><option value="bottle">Bottle</option>
           </select></FF>
         </div>
+        {tagOptions.length > 0 && (
+          <FF label="Tags">
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+              {tagOptions.map(t => (
+                <button key={t} type="button" onClick={()=>toggleSupTag(editSupForm, setEditSupForm, t)}
+                  style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontFamily:f1, fontWeight:500, cursor:"pointer", border: editSupForm.tags.includes(t) ? "1px solid "+B.teal : "1px solid "+B.sand, background: editSupForm.tags.includes(t) ? B.tealPale : B.white, color: editSupForm.tags.includes(t) ? B.teal : B.textMid }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </FF>
+        )}
         <button onClick={handleEditSupply} disabled={saving||!editSupForm.description.trim()} style={{ ...btnP, width:"100%", opacity:(saving||!editSupForm.description.trim())?.5:1, marginTop:4 }}>
           {saving ? "Saving..." : "Save Changes"}
         </button>
