@@ -243,15 +243,50 @@ Hub visibility is controlled at two levels:
 - **Registration UX**: Split "Your Name" field into separate First Name + Last Name fields on all registration forms (register, createChurch); `useAuth` stores `firstName`, `lastName`, and `name` on user profiles; `registerWithGoogle` splits `displayName` on first space; backward-compatible (`name` field still used everywhere for display)
 - **Two-character initials**: `initials(name)` helper in MaintenancePage derives two-char initials (e.g. "JS" for John Smith); assignee avatar circle size increased 22→26px with `title` tooltip; SettingsPage team member avatars updated with same logic
 
-### ✅ Done — Phase 19 — Permanent TDZ Fix: Switch to Terser (2026-03-17)
+### ✅ Done — Phase 19 — Production Crash: Full Investigation & Fix (2026-03-17)
 
-- **Root cause fully diagnosed**: Consolidating `useState` declarations in Phase 18 only shifted the collision name (`Pn` → `on` → `Se` → `be`). Both esbuild and Terser (with `mangle: true`) assign short names sequentially across the flattened Rollup bundle — React/Firebase internal module-scope vars compete with every page component's function-scope `useState` vars for the same two-char names. Code splitting helped (moved React's `var be` out of the app chunk) but app-internal modules (`useFirestore`, etc.) still produced module-scope vars that collided with page component state vars in the same chunk.
-- **Permanent fix**: `vite.config.js` now uses Terser with `mangle: false` — variable names are kept as their original source names, making collisions structurally impossible. `terser` is a `devDependency`. `compress: true` still strips dead code and whitespace. The `useState` consolidation from Phase 18 (`activeModal`, `bulkData`) remains for code cleanliness.
+The All Items tab crashed on every production load with a blank screen. This was the most complex bug in the project — four separate issues stacked on top of each other, each one only visible after the previous was fixed.
 
-### ✅ Done — Phase 18 — Production Crash Fixes & UX Polish (2026-03-17)
+**Step 1 — Add error boundary to surface the actual error.**
+The blank screen gave no information. Added `PageErrorBoundary` (class component with `getDerivedStateFromError`) wrapping the page area in `App.jsx`, keyed by `tab` so it resets on navigation. This turned the blank screen into a readable crash report.
 
-- **esbuild TDZ production crash on All Items**: `ItemsPage` crashed with `ReferenceError: Cannot access 'Pn' before initialization` in every production build. Root cause: the component had 30+ imports and 28+ `useState` declarations, causing esbuild's minifier to assign the same short name (`Pn`) to both the module-scope `ITEM_STATUS` import and a function-scope `const` from one of the 5 bulk-action `useState(false)` booleans. Fixed by consolidating `showBulkCoWarn`, `showBulkCo`, `showBulkRetWarn`, `showBulkRet`, `showBulkLoc` into a single `const [bulkModal, setBulkModal] = useState(null)` string state — reducing local variable count by 8 and eliminating the naming collision. See **Known Pitfalls** for the full explanation of this class of bug.
-- **Error boundary added**: `PageErrorBoundary` (class component) wraps the page content area in `App.jsx`; keyed by `tab` so it resets on navigation. Future production render crashes now show an error message with stack trace instead of a blank screen.
+**Step 2 — First crash: `ReferenceError: Cannot access 'Pn' before initialization`**
+`ItemsPage` had 32 `useState` calls and 30+ imports. esbuild's minifier assigns short names (`a`, `b`, ..., `Pn`, ...) sequentially across the entire flattened Rollup bundle without scope analysis. The module-scope `ITEM_STATUS` constant and a function-scope bulk-action `useState` boolean both got assigned `Pn`. Any access to `ITEM_STATUS` inside the component (e.g. in a `useMemo`) threw TDZ before the `const [Pn] = useState(false)` line executed.
+
+*Attempted fix:* consolidated 5 bulk boolean states (`showBulkCoWarn`, `showBulkCo`, `showBulkRetWarn`, `showBulkRet`, `showBulkLoc`) into one `bulkModal` string state and 5 bulk data states into one `bulkData` object — saving 20 function-scope variable slots. This resolved `Pn` but the collision shifted.
+
+**Step 3 — Collisions kept shifting: `Pn` → `on` → `Se` → `be`**
+Every `useState` consolidation just shifted which two-char name collided. Switching from esbuild to Terser (`minify: 'terser'`) made no difference — Terser with `mangle: true` has the same sequential naming problem. Adding `manualChunks` to split React and Firebase into separate vendor chunks helped (removed React's internal `var be` from the app chunk) but app-internal modules (`useFirestore`, etc.) still produced module-scope vars that collided with page component state vars in the same chunk.
+
+*Actual fix:* `vite.config.js` set `mangle: false` in `terserOptions`. With identifier mangling disabled, all variable names stay as their original source names — structurally impossible to collide. `compress: true` still strips dead code and whitespace. Bundle gzip size increased ~130 KB (acceptable for a SaaS app).
+
+**Step 4 — New crash with readable name: `ReferenceError: Cannot access 'bulkModal' before initialization`**
+With `mangle: false` preserving real names, a second independent bug became visible: a genuine source-level TDZ. The keyboard shortcut `useEffect` at line 89 had a dependency array `[activeModal, bulkModal, bulkMode, isAdmin, isManager]`. React evaluates dependency arrays *immediately during render* — but `bulkModal`, `bulkMode`, and `isAdmin`/`isManager` were all declared *below* that `useEffect` call in the component body (lines 107–123). JavaScript's `const` is hoisted but stays in TDZ until execution reaches the declaration, so evaluating the dep array crashed on every render.
+
+This bug had always existed in the source but was invisible in development (Vite serves modules separately, not flattened) and was masked in production by the earlier minification crash — the app was already crashing before reaching this point.
+
+*Fix:* moved all `useState` declarations and derived values that appear in `useEffect` dependency arrays to the top of the component, before any `useEffect` call.
+
+**Final state of `vite.config.js`:**
+```js
+build: {
+  minify: 'terser',
+  terserOptions: { compress: true, mangle: false },
+  rollupOptions: {
+    output: {
+      manualChunks: {
+        'vendor-react': ['react', 'react-dom'],
+        'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage', 'firebase/functions'],
+      },
+    },
+  },
+}
+```
+**Do not re-enable `mangle: true` or switch back to esbuild.**
+
+### ✅ Done — Phase 18 — UX Polish & Settings Inline Editing (2026-03-17)
+
+- **Error boundary added**: `PageErrorBoundary` (class component) wraps the page content area in `App.jsx`; keyed by `tab` so it resets on navigation. Production render crashes show an error message with stack trace instead of a blank screen.
 - **Settings list inline editing**: Locations, Ministries, and Tags lists now support inline rename — each row has an Edit button that swaps the label for a text input (pre-filled); Save/Cancel via button or keyboard (Enter/Escape); duplicate-name check on save.
 
 ### ✅ Done — Phase 17 — Mobile Audit & Responsive Fixes (2026-03-17)
