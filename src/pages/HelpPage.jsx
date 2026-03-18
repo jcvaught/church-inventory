@@ -664,6 +664,10 @@ export function HelpPage({ onBack }) {
               <P>The All-In Bundle ($29/mo) includes all five paid hubs — Maintenance, Insights, Coordination, Accountability, and Team (unlimited users) — at a significant discount versus subscribing individually.</P>
             </Accordion>
 
+            <Accordion title="What if someone added something to the wrong list — items vs. supplies?">
+              <P>Admins can move a record between lists without losing data. Open the supply's Edit modal and click <strong>Move to Inventory →</strong> at the bottom, or open an item's detail modal and click <strong>Move to Supplies →</strong> below the action buttons. Description, location, ministry, and tags carry over automatically — you just fill in the fields that differ between the two lists (Item ID and status for items; Supply ID, quantity, and unit for supplies). The original record is deleted once the new one is created.</P>
+            </Accordion>
+
             <Accordion title="How do I report a bug or request a feature?">
               <P>Use the <strong>Suggest a Feature / Report a Bug</strong> button in Settings. Your feedback goes directly to us and is reviewed regularly.</P>
             </Accordion>
