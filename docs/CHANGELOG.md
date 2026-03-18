@@ -238,6 +238,12 @@ build: {
 - **⬇ Export CSV** button downloads a combined file (Type, ID, Description, Status/Qty, Ministry, Tags)
 - HelpPage updated with Location Report accordion in the Insights Hub section
 
+### ✅ Auto-Generated IDs & Inline Tag Creation (2026-03-18)
+
+- **Auto-generated Item/Supply IDs**: Description field moved to top of Add modals (items and supplies); as the user types a description, the ID field auto-fills with a `PREFIX-NNN` suggestion derived from the first meaningful word of the description (e.g. `Wireless Microphone` → `MIC-001`). The prefix is the first 3 alphanumeric characters of the first non-article word, uppercased; the number is the next available for that prefix among existing records. The field remains fully editable — any manual keystroke locks it and stops auto-updates. Also fires on AI Identify and when duplicating an item. Duplicate now pre-generates an ID from the copied description instead of leaving the field blank.
+- **Inline tag creation for items**: Add/Edit Item modals now include a "New tag…" input + "+ Add" button below the tag pills, matching the same feature already in supplies. New tags are saved to `settings.tags` and auto-selected. Enter key also triggers add. The `tagOptions.length > 0` gate removed — tag section always visible.
+- **FXCC data migration**: All 61 supply IDs and the single item ID migrated via Firestore REST API to consistent category-prefix scheme: `ENV-001–014` (envelopes), `PPR-001–008` (paper), `MED-001–021` (medical/first aid), `OFF-001–005` (office equipment), `LBL-001–002` (labels), `STA-001–004` (stationery/cards), `CLN-001–004` (cleaning), `GEN-001–003` (general), `STPLR-01` (stapler item).
+
 ---
 
 ## Public Launch Checklist (All Resolved)

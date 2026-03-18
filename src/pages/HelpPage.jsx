@@ -286,17 +286,17 @@ export function HelpPage({ onBack }) {
             <Accordion title="Adding items" defaultOpen>
               <P>Click <strong>+ Add Item</strong> (or press <kbd style={{ background: B.warmGray, borderRadius: 4, padding: '1px 6px', fontFamily: 'monospace', fontSize: 13 }}>N</kbd> on desktop). Each item has:</P>
               <UL items={[
-                'Item ID — a unique identifier (3+ characters). Used for QR codes and quick lookup.',
-                'Description — what the item is',
+                'Description — what the item is (fill this first)',
+                'Item ID — auto-filled from the description as you type (e.g. "Wireless Microphone" → MIC-001). Edit it if you want something different.',
                 'Location — where it lives when not in use',
                 'Ministry — which ministry owns or uses it',
                 'Status — Available, Checked Out, In Use, Under Repair, or Disposed',
                 'Photo — optional; resized automatically before upload',
                 'Financial fields (optional) — purchase date, price, warranty expiry, estimated value',
-                'Tags — for filtering and search',
+                'Tags — for filtering and search; type a new tag name and click + Add to create one on the spot',
                 'Notes — free-form text',
               ]} />
-              <Tip>Use the <strong>✨ Identify Item</strong> button in the Add Item modal to take or select a photo and have AI pre-fill the description.</Tip>
+              <Tip>Use the <strong>✨ Identify Item</strong> button in the Add Item modal to take or select a photo and have AI pre-fill the description — the Item ID auto-fills from the AI result too.</Tip>
             </Accordion>
 
             <Accordion title="Checking out and returning items">
@@ -322,7 +322,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Duplicating an item">
-              <P>Open an item's detail panel and click <strong>⊕ Duplicate</strong>. This opens the Add Item form pre-filled with all the same fields — just clear or update the Item ID and save.</P>
+              <P>Open an item's detail panel and click <strong>⊕ Duplicate</strong>. This opens the Add Item form pre-filled with all the same fields. The Item ID is auto-generated from the description — edit it if the duplicate needs a different identifier, then save.</P>
               <P>Also available on desktop in the item row without opening the detail panel.</P>
             </Accordion>
 
@@ -358,14 +358,15 @@ export function HelpPage({ onBack }) {
 
             <Accordion title="Adding and tracking supplies" defaultOpen>
               <UL items={[
-                'Supply ID — unique identifier (3+ characters)',
-                'Description, location, ministry',
+                'Description — fill this first; the Supply ID auto-fills as you type (e.g. "AA Batteries" → AAB-001)',
+                'Supply ID — auto-generated, editable if you want something different',
+                'Location, ministry',
                 'Current quantity + unit (e.g. "48 rolls")',
                 'Low-stock threshold — highlighted when quantity falls at or below this number',
-                'Tags — for filtering (uses the same tags list as inventory items)',
+                'Tags — for filtering; type a new tag name and click + Add to create one on the spot',
               ]} />
               <P>Use <strong>Log Usage</strong> to reduce quantity and <strong>Restock</strong> to increase it. Every change is logged.</P>
-              <Tip>Not sure what something is? Use <strong>✨ Identify Item</strong> in the Add Supply modal to have AI pre-fill the description from a photo.</Tip>
+              <Tip>Not sure what something is? Use <strong>✨ Identify Item</strong> in the Add Supply modal to have AI pre-fill the description from a photo — the Supply ID auto-fills from the AI result too.</Tip>
             </Accordion>
 
             <Accordion title="Identifying a supply with AI">
