@@ -22,6 +22,8 @@ import { ActivityLogPage } from './pages/ActivityLogPage.jsx';
 import { SettingsPage } from './pages/SettingsPage.jsx';
 import { BarcodeScanner } from './components/primitives/BarcodeScanner.jsx';
 import { HelpPage } from './pages/HelpPage.jsx';
+import { BlogIndex } from './pages/BlogIndex.jsx';
+import { BlogPost } from './pages/BlogPost.jsx';
 import { RES_STATUS } from './utils/constants.js';
 
 
@@ -438,6 +440,10 @@ export default function App() {
     setAuthInitialMode(mode);
     setShowAuth(true);
   };
+
+  const pathname = window.location.pathname;
+  if (pathname === '/blog') return <BlogIndex onGetStarted={handleGetStarted} />;
+  if (pathname.startsWith('/blog/')) return <BlogPost slug={pathname.replace('/blog/', '')} onGetStarted={handleGetStarted} />;
 
   if (publicRequest) return <PublicRequestPage churchId={publicRequest.churchId} churchName={publicRequest.churchName} />;
 

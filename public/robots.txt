@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /?request=
+Disallow: /?signup
+Disallow: /?invite
+
+Sitemap: https://churchopshub.com/sitemap.xml

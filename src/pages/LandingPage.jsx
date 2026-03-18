@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { B, f1, f2, btnP, btnS } from '../components/brand/tokens.js';
 import { FullLogo } from '../components/brand/Logo.jsx';
+import { SEO } from '../components/SEO.jsx';
 
 const FREE_FEATURES = [
   { icon: '📦', title: 'Equipment Inventory', desc: 'Track every item your church owns — status, location, ministry, photos, and printable QR code labels.' },
@@ -43,8 +44,25 @@ export function LandingPage({ onGetStarted }) {
     <span style={{ color: dark ? B.tealLight : B.teal, fontWeight: 700, marginRight: 8 }}>✓</span>
   );
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'ChurchOpsHub',
+    applicationCategory: 'BusinessApplication',
+    operatingSystem: 'Web',
+    description: 'Free church inventory and asset management platform. Track equipment, supplies, reservations, maintenance, and more.',
+    url: 'https://churchopshub.com',
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  };
+
   return (
     <div style={{ fontFamily: f2, color: B.textDark, background: B.cream }}>
+      <SEO
+        title="ChurchOpsHub — Simple Inventory Management for Churches"
+        description="ChurchOpsHub is the free church inventory management system. Track equipment, supplies, and reservations. Accountability, maintenance, and insights hubs available."
+        canonical="/"
+        jsonLd={jsonLd}
+      />
 
       {/* ── NAV ── */}
       <nav style={{
@@ -56,9 +74,14 @@ export function LandingPage({ onGetStarted }) {
         <FullLogo size={30} light />
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           {!mob && (
-            <a href="?help" style={{ color: 'rgba(255,255,255,0.6)', fontFamily: f1, fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>
-              Help
-            </a>
+            <>
+              <a href="/blog" style={{ color: 'rgba(255,255,255,0.6)', fontFamily: f1, fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>
+                Blog
+              </a>
+              <a href="?help" style={{ color: 'rgba(255,255,255,0.6)', fontFamily: f1, fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>
+                Help
+              </a>
+            </>
           )}
           <button
             onClick={() => onGetStarted('login')}
@@ -102,11 +125,19 @@ export function LandingPage({ onGetStarted }) {
           </h1>
           <p style={{
             fontSize: mob ? 16 : 19, color: 'rgba(255,255,255,0.65)',
-            margin: '0 0 44px', lineHeight: 1.7,
+            margin: '0 0 16px', lineHeight: 1.7,
             maxWidth: 540, marginLeft: 'auto', marginRight: 'auto',
           }}>
             ChurchOpsHub is the free inventory system built for churches — with optional hubs for
             maintenance, insights, scheduling, and accountability when you're ready to grow.
+          </p>
+          <p style={{
+            fontSize: mob ? 13 : 15, color: 'rgba(255,255,255,0.4)',
+            margin: '0 0 44px', lineHeight: 1.7,
+            maxWidth: 540, marginLeft: 'auto', marginRight: 'auto',
+          }}>
+            Done with spreadsheets and lost equipment? Planning Center doesn't track physical assets —
+            ChurchOpsHub was built specifically for that gap.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button
@@ -365,6 +396,9 @@ export function LandingPage({ onGetStarted }) {
         }}>
           <FullLogo size={28} light />
           <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'center' }}>
+            <a href="/blog" style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14, textDecoration: 'none', fontFamily: f1 }}>
+              Blog
+            </a>
             <a
               href="mailto:churchopshub@gmail.com"
               style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14, textDecoration: 'none', fontFamily: f1 }}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { B, f1, f2, btnS } from '../components/brand/tokens.js';
 import { FullLogo } from '../components/brand/Logo.jsx';
+import { SEO } from '../components/SEO.jsx';
 
 /* ─── Section data ─────────────────────────────────────── */
 const SECTIONS = [
@@ -163,6 +164,11 @@ export function HelpPage({ onBack }) {
 
   return (
     <div style={{ fontFamily: f2, color: B.textDark, background: B.cream, minHeight: '100vh' }}>
+      <SEO
+        title="Help Center — ChurchOpsHub"
+        description="Find answers about ChurchOpsHub church inventory management. Guides for inventory, supplies, reservations, maintenance, and more."
+        canonical="/?help"
+      />
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
       {/* ── TOP NAV ── */}
