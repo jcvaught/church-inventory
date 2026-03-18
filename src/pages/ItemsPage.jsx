@@ -15,7 +15,7 @@ import { ITEM_STATUS } from '../utils/constants.js';
 import QRCode from 'qrcode';
 
 export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, onScannedItemConsumed }) {
-  const { items, settings, config, activityLog, addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem, publicRequests, dismissPublicRequest } = store;
+  const { items, supplies, settings, config, activityLog, addItem, addSupply, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem, publicRequests, dismissPublicRequest } = store;
   const _isMobile = useContext(MobileCtx);
   const activeItems = useMemo(() => items.filter(i => i.status !== ITEM_STATUS.DISPOSED), [items]);
   const disposedItems = useMemo(() => items.filter(i => i.status === ITEM_STATUS.DISPOSED), [items]);
@@ -112,6 +112,8 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   const [retireForm, setRetireForm] = useState({ reason:"Broken", date:"", notes:"", recoveryValue:"" });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [showMoveToSupply, setShowMoveToSupply] = useState(null);
+  const [moveSupplyForm, setMoveSupplyForm] = useState({ supplyId:"", quantity:"0", minQuantity:"5", unit:"each" });
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [showFinancial, setShowFinancial] = useState(false);
@@ -389,6 +391,30 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     await deleteItem(item._docId, item.itemId, userId, userName);
     setActiveModal(null);
     flash("Item deleted.");
+  }
+
+  // ── Move to Supplies ──
+  async function handleMoveToSupply() {
+    if (!showMoveToSupply) return;
+    const id = moveSupplyForm.supplyId.trim();
+    if (id.length < 3) { flash("Supply ID must be at least 3 characters."); return; }
+    if (supplies.some(s => s.supplyId === id)) { flash("A supply with that ID already exists."); return; }
+    if (Number(moveSupplyForm.quantity) < 0) { flash("Quantity cannot be negative."); return; }
+    setSaving(true);
+    await addSupply({
+      supplyId: id,
+      description: showMoveToSupply.description,
+      location: showMoveToSupply.location || "",
+      ministry: showMoveToSupply.ministry || "",
+      tags: showMoveToSupply.tags || [],
+      quantity: Number(moveSupplyForm.quantity) || 0,
+      minQuantity: Number(moveSupplyForm.minQuantity) || 5,
+      unit: moveSupplyForm.unit || "each",
+    }, userId, userName);
+    await deleteItem(showMoveToSupply._docId, showMoveToSupply.itemId, userId, userName);
+    setSaving(false);
+    setShowMoveToSupply(null);
+    flash("Moved to supplies.");
   }
 
   // Open edit with pre-filled data
@@ -753,6 +779,35 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
               <button onClick={()=>handleDeleteItem(showDetail)} style={{ ...btnD, padding:"6px 14px", fontSize:12, background:"#7f1d1d", borderColor:"#7f1d1d" }}>Delete</button>
             )}
           </div>
+          {isAdmin && showDetail?.status !== ITEM_STATUS.DISPOSED && (
+            <div style={{ marginTop:8 }}>
+              <button type="button" onClick={()=>{ setMoveSupplyForm({ supplyId:"", quantity:"0", minQuantity:"5", unit:"each" }); setShowMoveToSupply(showDetail); setActiveModal(null); }} style={{ background:"none", border:"none", color:B.textLight, fontSize:12, cursor:"pointer", fontFamily:f1 }}>
+                Move to Supplies →
+              </button>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* ═══ MOVE TO SUPPLIES MODAL ═══ */}
+      {showMoveToSupply && (
+        <Modal open={!!showMoveToSupply} onClose={()=>setShowMoveToSupply(null)} title={`Move to Supplies: ${showMoveToSupply?.description||""}`}>
+          <p style={{ fontSize:13, color:B.textMid, marginBottom:16 }}>
+            Description, location, ministry, and tags will carry over. The inventory record will be permanently deleted.
+          </p>
+          <FF label="Supply ID (required)">
+            <input style={inp} value={moveSupplyForm.supplyId} onChange={e=>setMoveSupplyForm({...moveSupplyForm, supplyId:e.target.value})} placeholder="e.g. BATT-AA (min 3 chars)" autoFocus/>
+          </FF>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+            <FF label="Starting Qty"><input style={inp} type="number" min="0" value={moveSupplyForm.quantity} onChange={e=>setMoveSupplyForm({...moveSupplyForm, quantity:e.target.value})}/></FF>
+            <FF label="Min Qty (alert)"><input style={inp} type="number" min="0" value={moveSupplyForm.minQuantity} onChange={e=>setMoveSupplyForm({...moveSupplyForm, minQuantity:e.target.value})}/></FF>
+            <FF label="Unit"><select style={inp} value={moveSupplyForm.unit} onChange={e=>setMoveSupplyForm({...moveSupplyForm, unit:e.target.value})}>
+              <option value="each">Each</option><option value="pack">Pack</option><option value="box">Box</option><option value="roll">Roll</option><option value="ream">Ream</option><option value="case">Case</option><option value="gallon">Gallon</option><option value="bottle">Bottle</option>
+            </select></FF>
+          </div>
+          <button onClick={handleMoveToSupply} disabled={saving||moveSupplyForm.supplyId.trim().length < 3} style={{ ...btnP, width:"100%", opacity:(saving||moveSupplyForm.supplyId.trim().length < 3)?.5:1, marginTop:4 }}>
+            {saving ? "Moving…" : "Move to Supplies"}
+          </button>
         </Modal>
       )}
 

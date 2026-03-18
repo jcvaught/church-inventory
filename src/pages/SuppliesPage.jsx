@@ -9,7 +9,7 @@ import { exportSuppliesCSV } from '../utils/csv.js';
 import { canManageSupply } from '../utils/roleHelpers.js';
 
 export function SuppliesPage({ store, userProfile }) {
-  const { supplies, settings, activityLog, addSupply, updateSupply, useSupply, restockSupply, deleteSupply, updateSettings } = store;
+  const { supplies, settings, activityLog, items, addSupply, addItem, updateSupply, useSupply, restockSupply, deleteSupply, updateSettings } = store;
   const isMobile = useContext(MobileCtx);
 
   const [search, setSearch] = useState("");
@@ -55,6 +55,8 @@ export function SuppliesPage({ store, userProfile }) {
 
   const [tagFilter, setTagFilter] = useState("");
   const [newTagInput, setNewTagInput] = useState("");
+  const [showMoveToItem, setShowMoveToItem] = useState(null);
+  const [moveItemForm, setMoveItemForm] = useState({ itemId: "", notes: "" });
 
   function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }
 
@@ -177,6 +179,28 @@ export function SuppliesPage({ store, userProfile }) {
     if (!window.confirm(`Delete "${s.description}" (${s.supplyId})?\n\nThis cannot be undone. Activity history will be preserved.`)) return;
     await deleteSupply(s._docId, s.supplyId, userId, userName);
     flash("Supply deleted.");
+  }
+
+  // ── Move to Inventory ──
+  async function handleMoveToItem() {
+    if (!showMoveToItem) return;
+    const id = moveItemForm.itemId.trim();
+    if (id.length < 3) { flash("Item ID must be at least 3 characters."); return; }
+    if (items.some(i => i.itemId === id)) { flash("An item with that ID already exists."); return; }
+    setSaving(true);
+    await addItem({
+      itemId: id,
+      description: showMoveToItem.description,
+      location: showMoveToItem.location || "",
+      ministry: showMoveToItem.ministry || "",
+      status: "Available",
+      tags: showMoveToItem.tags || [],
+      notes: moveItemForm.notes || "",
+    }, userId, userName);
+    await deleteSupply(showMoveToItem._docId, showMoveToItem.supplyId, userId, userName);
+    setSaving(false);
+    setShowMoveToItem(null);
+    flash("Moved to inventory.");
   }
 
   // Stock level indicator
@@ -401,6 +425,27 @@ export function SuppliesPage({ store, userProfile }) {
         </FF>
         <button onClick={handleEditSupply} disabled={saving||!editSupForm.description.trim()} style={{ ...btnP, width:"100%", opacity:(saving||!editSupForm.description.trim())?.5:1, marginTop:4 }}>
           {saving ? "Saving..." : "Save Changes"}
+        </button>
+        {isAdmin && (
+          <button type="button" onClick={()=>{ setShowEditSupply(null); setMoveItemForm({ itemId:"", notes:"" }); setShowMoveToItem(showEditSupply); }} style={{ background:"none", border:"none", color:B.textLight, fontSize:12, cursor:"pointer", width:"100%", marginTop:8, fontFamily:f1 }}>
+            Move to Inventory →
+          </button>
+        )}
+      </Modal>
+
+      {/* ═══ MOVE TO INVENTORY MODAL ═══ */}
+      <Modal open={!!showMoveToItem} onClose={()=>setShowMoveToItem(null)} title={`Move to Inventory: ${showMoveToItem?.description||""}`}>
+        <p style={{ fontSize:13, color:B.textMid, marginBottom:16 }}>
+          Description, location, ministry, and tags will carry over. The supply record will be permanently deleted.
+        </p>
+        <FF label="Item ID (required)">
+          <input style={inp} value={moveItemForm.itemId} onChange={e=>setMoveItemForm({...moveItemForm, itemId:e.target.value})} placeholder="e.g. MIC-001 (min 3 chars)" autoFocus/>
+        </FF>
+        <FF label="Notes (optional)">
+          <textarea style={{...inp, minHeight:60, resize:"vertical"}} value={moveItemForm.notes} onChange={e=>setMoveItemForm({...moveItemForm, notes:e.target.value})} placeholder="Any notes for the new item record…"/>
+        </FF>
+        <button onClick={handleMoveToItem} disabled={saving||moveItemForm.itemId.trim().length < 3} style={{ ...btnP, width:"100%", opacity:(saving||moveItemForm.itemId.trim().length < 3)?.5:1, marginTop:4 }}>
+          {saving ? "Moving…" : "Move to Inventory"}
         </button>
       </Modal>
 
