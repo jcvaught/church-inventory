@@ -4,7 +4,7 @@ import {
   PieChart, Pie, Cell,
   AreaChart, Area,
 } from 'recharts';
-import { B, f1, f2, btnS } from '../../components/brand/tokens.js';
+import { B, f1, f2, inp, btnS } from '../../components/brand/tokens.js';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { Stat } from '../../components/primitives/Stat.jsx';
 
@@ -456,6 +456,103 @@ function SuppliesSection({ supplies, activityLog, isMobile }) {
   );
 }
 
+/* ─── Location Report Section ────────────────────────────── */
+
+function LocationSection({ items, supplies, settings, isMobile }) {
+  const locations = useMemo(() => settings?.locations || [], [settings]);
+  const [loc, setLoc] = useState('');
+
+  const locItems = useMemo(() =>
+    loc ? items.filter(i => i.status !== 'Disposed' && i.location === loc) : [],
+  [items, loc]);
+
+  const locSupplies = useMemo(() =>
+    loc ? supplies.filter(s => s.location === loc) : [],
+  [supplies, loc]);
+
+  function exportCSV() {
+    const rows = [
+      ['Type', 'ID', 'Description', 'Status / Qty', 'Ministry', 'Tags'],
+      ...locItems.map(i => ['Item', i.itemId, i.description, i.status, i.ministry || '', (i.tags || []).join('; ')]),
+      ...locSupplies.map(s => ['Supply', s.supplyId, s.description, s.quantity + (s.unit ? ' ' + s.unit : ''), s.ministry || '', (s.tags || []).join('; ')]),
+    ];
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `location-${(loc || 'report').replace(/\s+/g, '-').toLowerCase()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  if (!locations.length) {
+    return <EmptyState icon="📍" title="No locations configured" sub="Add locations in Settings to use this report." />;
+  }
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
+        <select style={{ ...inp, flex: isMobile ? '1' : '0 0 240px' }} value={loc} onChange={e => setLoc(e.target.value)}>
+          <option value="">— Select a location —</option>
+          {locations.map(l => <option key={l} value={l}>{l}</option>)}
+        </select>
+        {loc && (
+          <button onClick={exportCSV} style={{ ...btnS, fontSize: 13, padding: '8px 14px' }} aria-label="Export location report CSV">
+            ⬇ Export CSV
+          </button>
+        )}
+      </div>
+
+      {loc && (
+        <>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+            <Stat label="Items" value={locItems.length} icon="📦" color={B.navy} />
+            <Stat label="Supplies" value={locSupplies.length} icon="🧴" color={B.teal} />
+          </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 12, color: B.textLight, fontFamily: f1, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
+              Items ({locItems.length})
+            </div>
+            {locItems.length === 0
+              ? <p style={{ color: B.textLight, fontSize: 13 }}>No active items at this location.</p>
+              : <SimpleTable
+                  headers={['ID', 'Description', 'Status', 'Ministry']}
+                  rows={locItems.map(i => [
+                    <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{i.itemId}</span>,
+                    i.description,
+                    <span style={{ color: i.status === 'Available' ? B.teal : i.status === 'Checked Out' ? B.gold : B.textMid, fontWeight: 600, fontSize: 12 }}>{i.status}</span>,
+                    i.ministry || <span style={{ color: B.textLight }}>—</span>,
+                  ])}
+                />
+            }
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12, color: B.textLight, fontFamily: f1, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
+              Supplies ({locSupplies.length})
+            </div>
+            {locSupplies.length === 0
+              ? <p style={{ color: B.textLight, fontSize: 13 }}>No supplies at this location.</p>
+              : <SimpleTable
+                  headers={['ID', 'Description', 'In Stock', 'Min', 'Ministry']}
+                  rows={locSupplies.map(s => [
+                    <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{s.supplyId}</span>,
+                    s.description,
+                    <span style={{ color: s.quantity <= s.minQuantity ? B.red : B.teal, fontWeight: 600 }}>{s.quantity} {s.unit || ''}</span>,
+                    s.minQuantity || '—',
+                    s.ministry || <span style={{ color: B.textLight }}>—</span>,
+                  ])}
+                />
+            }
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 /* ─── Print Report ────────────────────────────────────────── */
 
 function printInsightsReport({ utilization, ministry, financial, churchName }) {
@@ -508,10 +605,11 @@ const SECTIONS = [
   { key: 'seasonal',    label: 'Seasonal Trends', icon: '📅' },
   { key: 'financial',   label: 'Financial', icon: '💰' },
   { key: 'supplies',    label: 'Supply Burn Rate', icon: '🧴' },
+  { key: 'location',    label: 'Location Report', icon: '📍' },
 ];
 
 export function InsightsPage({ store, userProfile: _userProfile }) {
-  const { items, supplies, activityLog, config } = store;
+  const { items, supplies, activityLog, config, settings } = store;
   const isMobile = useContext(MobileCtx);
   const [section, setSection] = useState(() => localStorage.getItem('insights_section') || 'utilization');
 
@@ -614,6 +712,11 @@ export function InsightsPage({ store, userProfile: _userProfile }) {
       {section === 'supplies' && (
         <SectionCard title="Supply Burn Rate" icon="🧴">
           <SuppliesSection supplies={supplies} activityLog={activityLog} isMobile={isMobile} />
+        </SectionCard>
+      )}
+      {section === 'location' && (
+        <SectionCard title="Location Report" icon="📍">
+          <LocationSection items={activeItems} supplies={supplies} settings={settings} isMobile={isMobile} />
         </SectionCard>
       )}
     </div>
