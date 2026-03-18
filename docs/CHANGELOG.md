@@ -238,6 +238,15 @@ build: {
 - **⬇ Export CSV** button downloads a combined file (Type, ID, Description, Status/Qty, Ministry, Tags)
 - HelpPage updated with Location Report accordion in the Insights Hub section
 
+### ✅ iOS Safari Compatibility (2026-03-18)
+
+- **PWA standalone mode**: Added `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style` (`black-translucent`), and `apple-mobile-web-app-title` meta tags to `index.html` so the app runs as a true full-screen standalone app when added to the iPhone home screen
+- **Notch / safe-area support**: Added `viewport-fit=cover` to the viewport meta tag so `env(safe-area-inset-*)` extends background to screen edges on notched and Dynamic Island devices (already used in Modal and bottom nav styles)
+- **Input auto-zoom prevention**: Added a CSS `@supports (-webkit-touch-callout: none)` rule forcing `font-size: 16px` on all `input`, `select`, and `textarea` elements on iOS only — iOS Safari auto-zooms inputs with font-size < 16px on focus; desktop rendering unchanged (still 14px via inline styles)
+- **Overscroll / pull-to-refresh**: Added `overscroll-behavior: none` to the `<body>` element to prevent accidental Safari pull-to-refresh when users scroll to the top of a page
+- **Stable viewport height**: Changed `Spinner.jsx` from `height: 100vh` to `height: 100svh` (small stable viewport height, which excludes the collapsing address bar) to prevent the loading screen from being clipped on initial load in Safari
+- **Clipboard silent failure**: Added `.catch(() => {})` to all three `navigator.clipboard.writeText()` calls in `SettingsPage.jsx` — iOS requires user permission for clipboard access and rejects silently on denial; without the catch, this produced an unhandled promise rejection
+
 ### ✅ Auto-Generated IDs & Inline Tag Creation (2026-03-18)
 
 - **Auto-generated Item/Supply IDs**: Description field moved to top of Add modals (items and supplies); as the user types a description, the ID field auto-fills with a `PREFIX-NNN` suggestion derived from the first meaningful word of the description (e.g. `Wireless Microphone` → `MIC-001`). The prefix is the first 3 alphanumeric characters of the first non-article word, uppercased; the number is the next available for that prefix among existing records. The field remains fully editable — any manual keystroke locks it and stops auto-updates. Also fires on AI Identify and when duplicating an item. Duplicate now pre-generates an ID from the copied description instead of leaving the field blank.

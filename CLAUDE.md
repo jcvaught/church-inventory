@@ -224,6 +224,7 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Location Report (Insights Hub) | 2026-03-18 |
 | — | Move between Inventory and Supplies (admin) | 2026-03-18 |
 | — | Auto-generated IDs & inline tag creation for items | 2026-03-18 |
+| — | iOS Safari compatibility fixes | 2026-03-18 |
 
 ---
 
