@@ -30,7 +30,7 @@ function generateId(description, existingIds) {
 }
 
 export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, onScannedItemConsumed }) {
-  const { items, supplies, settings, config, activityLog, addItem, addSupply, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem, publicRequests, dismissPublicRequest } = store;
+  const { items, supplies, settings, config, activityLog, addItem, addSupply, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem, publicRequests, dismissPublicRequest, updateSettings } = store;
   const _isMobile = useContext(MobileCtx);
   const activeItems = useMemo(() => items.filter(i => i.status !== ITEM_STATUS.DISPOSED), [items]);
   const disposedItems = useMemo(() => items.filter(i => i.status === ITEM_STATUS.DISPOSED), [items]);
@@ -484,12 +484,21 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     setActiveModal({ type: 'add', item: null });
   }
 
+  const [newTagInput, setNewTagInput] = useState("");
+
   // Tag toggle
   function toggleTag(tag) {
     setItemForm(prev => ({
       ...prev,
       tags: prev.tags.includes(tag) ? prev.tags.filter(t => t !== tag) : [...prev.tags, tag]
     }));
+  }
+  function addNewItemTag() {
+    const tag = newTagInput.trim();
+    if (!tag || tagOptions.map(t => t.toLowerCase()).includes(tag.toLowerCase())) return;
+    updateSettings({ tags: [...tagOptions, tag] });
+    setItemForm(prev => ({ ...prev, tags: [...prev.tags, tag] }));
+    setNewTagInput("");
   }
 
   // Status-based action buttons
@@ -851,20 +860,22 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
         <FF label="Condition"><select style={inp} value={itemForm.condition} onChange={e=>setItemForm({...itemForm, condition:e.target.value})}>
           <option value="New">New</option><option value="Good">Good</option><option value="Fair">Fair</option><option value="Poor">Poor</option>
         </select></FF>
-        {tagOptions.length > 0 && (
-          <FF label="Tags">
-            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-              {tagOptions.map(t => (
-                <button key={t} type="button" onClick={()=>toggleTag(t)}
-                  style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontFamily:f1, fontWeight:500, cursor:"pointer",
-                    border: itemForm.tags.includes(t) ? "1px solid "+B.teal : "1px solid "+B.sand,
-                    background: itemForm.tags.includes(t) ? B.tealPale : B.white,
-                    color: itemForm.tags.includes(t) ? B.teal : B.textMid
-                  }}>{t}</button>
-              ))}
-            </div>
-          </FF>
-        )}
+        <FF label="Tags">
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom: tagOptions.length > 0 ? 8 : 0 }}>
+            {tagOptions.map(t => (
+              <button key={t} type="button" onClick={()=>toggleTag(t)}
+                style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontFamily:f1, fontWeight:500, cursor:"pointer",
+                  border: itemForm.tags.includes(t) ? "1px solid "+B.teal : "1px solid "+B.sand,
+                  background: itemForm.tags.includes(t) ? B.tealPale : B.white,
+                  color: itemForm.tags.includes(t) ? B.teal : B.textMid
+                }}>{t}</button>
+            ))}
+          </div>
+          <div style={{ display:"flex", gap:6 }}>
+            <input style={{ ...inp, flex:1, fontSize:12, padding:"5px 10px" }} placeholder="New tag…" value={newTagInput} onChange={e=>setNewTagInput(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"){e.preventDefault();addNewItemTag();}}} />
+            <button type="button" onClick={addNewItemTag} style={{ ...btnS, padding:"5px 12px", fontSize:12, whiteSpace:"nowrap" }}>+ Add</button>
+          </div>
+        </FF>
         <FF label="Notes"><textarea style={{...inp, minHeight:60, resize:"vertical"}} value={itemForm.notes} onChange={e=>setItemForm({...itemForm, notes:e.target.value})} placeholder="Optional notes..."/></FF>
         <div style={{ marginBottom:12 }}>
           <button type="button" onClick={()=>setShowFinancial(v=>!v)} style={{ background:"none", border:"none", cursor:"pointer", color:B.teal, fontWeight:600, fontSize:13, fontFamily:f1, padding:0, display:"flex", alignItems:"center", gap:4 }}>
@@ -921,20 +932,22 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
         <FF label="Condition"><select style={inp} value={itemForm.condition} onChange={e=>setItemForm({...itemForm, condition:e.target.value})}>
           <option value="New">New</option><option value="Good">Good</option><option value="Fair">Fair</option><option value="Poor">Poor</option>
         </select></FF>
-        {tagOptions.length > 0 && (
-          <FF label="Tags">
-            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-              {tagOptions.map(t => (
-                <button key={t} type="button" onClick={()=>toggleTag(t)}
-                  style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontFamily:f1, fontWeight:500, cursor:"pointer",
-                    border: itemForm.tags.includes(t) ? "1px solid "+B.teal : "1px solid "+B.sand,
-                    background: itemForm.tags.includes(t) ? B.tealPale : B.white,
-                    color: itemForm.tags.includes(t) ? B.teal : B.textMid
-                  }}>{t}</button>
-              ))}
-            </div>
-          </FF>
-        )}
+        <FF label="Tags">
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom: tagOptions.length > 0 ? 8 : 0 }}>
+            {tagOptions.map(t => (
+              <button key={t} type="button" onClick={()=>toggleTag(t)}
+                style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontFamily:f1, fontWeight:500, cursor:"pointer",
+                  border: itemForm.tags.includes(t) ? "1px solid "+B.teal : "1px solid "+B.sand,
+                  background: itemForm.tags.includes(t) ? B.tealPale : B.white,
+                  color: itemForm.tags.includes(t) ? B.teal : B.textMid
+                }}>{t}</button>
+            ))}
+          </div>
+          <div style={{ display:"flex", gap:6 }}>
+            <input style={{ ...inp, flex:1, fontSize:12, padding:"5px 10px" }} placeholder="New tag…" value={newTagInput} onChange={e=>setNewTagInput(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"){e.preventDefault();addNewItemTag();}}} />
+            <button type="button" onClick={addNewItemTag} style={{ ...btnS, padding:"5px 12px", fontSize:12, whiteSpace:"nowrap" }}>+ Add</button>
+          </div>
+        </FF>
         <FF label="Notes"><textarea style={{...inp, minHeight:60, resize:"vertical"}} value={itemForm.notes} onChange={e=>setItemForm({...itemForm, notes:e.target.value})} placeholder="Optional notes..."/></FF>
         <div style={{ marginBottom:12 }}>
           <button type="button" onClick={()=>setShowFinancial(v=>!v)} style={{ background:"none", border:"none", cursor:"pointer", color:B.teal, fontWeight:600, fontSize:13, fontFamily:f1, padding:0, display:"flex", alignItems:"center", gap:4 }}>
