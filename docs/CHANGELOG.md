@@ -219,6 +219,15 @@ build: {
 - Button label stays `✨ Identify Item` throughout (no "upload" language to avoid implying the photo is saved); button shows `Identifying…` and is disabled while the Cloud Function runs
 - Reuses the same `identifyItem` Cloud Function and `ANTHROPIC_API_KEY` secret already in place for items; no backend changes required
 
+### ✅ Move Between Inventory and Supplies (2026-03-18)
+
+- **Admin-only** action available in two places:
+  - Supply Edit modal: "Move to Inventory →" link at the bottom opens a modal asking for an Item ID (3+ chars, duplicate-checked); status defaults to Available
+  - Item detail modal: "Move to Supplies →" link below the action buttons opens a modal asking for a Supply ID, starting qty, min qty, and unit
+- Description, location, ministry, and tags carry over automatically in both directions
+- Original record is deleted after the new one is created; both steps log through existing `addItem`/`addSupply` + `deleteItem`/`deleteSupply` activity logging
+- FAQ entry added to HelpPage: "What if someone added something to the wrong list?"
+
 ### ✅ Location Report — Insights Hub (2026-03-18)
 
 - New **📍 Location Report** section in Insights Hub

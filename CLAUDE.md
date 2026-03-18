@@ -222,6 +222,7 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | 20 | Delete Actions & Supply Tags | 2026-03-17 |
 | 21 | AI Supply Identification | 2026-03-17 |
 | — | Location Report (Insights Hub) | 2026-03-18 |
+| — | Move between Inventory and Supplies (admin) | 2026-03-18 |
 
 ---
 
