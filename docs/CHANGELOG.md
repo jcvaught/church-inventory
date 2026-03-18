@@ -219,6 +219,16 @@ build: {
 - Button label stays `✨ Identify Item` throughout (no "upload" language to avoid implying the photo is saved); button shows `Identifying…` and is disabled while the Cloud Function runs
 - Reuses the same `identifyItem` Cloud Function and `ANTHROPIC_API_KEY` secret already in place for items; no backend changes required
 
+### ✅ Location Report — Insights Hub (2026-03-18)
+
+- New **📍 Location Report** section in Insights Hub
+- Location dropdown (populated from `settings.locations`); selecting a location shows all active items and all supplies at that location in two separate tables
+- Items table: ID, description, status (color-coded), ministry
+- Supplies table: ID, description, quantity (red if below minimum), min qty, ministry
+- Stat summary: item count + supply count
+- **⬇ Export CSV** button downloads a combined file (Type, ID, Description, Status/Qty, Ministry, Tags)
+- HelpPage updated with Location Report accordion in the Insights Hub section
+
 ---
 
 ## Public Launch Checklist (All Resolved)

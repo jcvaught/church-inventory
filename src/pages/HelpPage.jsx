@@ -508,6 +508,16 @@ export function HelpPage({ onBack }) {
             <Accordion title="Supply Burn Rate">
               <P>Charts supply usage over time so you can forecast when you'll need to restock.</P>
             </Accordion>
+
+            <Accordion title="Location Report">
+              <P>Select a location to see every active item and supply stored there in one combined view. Shows item status (color-coded) and supply stock levels alongside ministry assignment.</P>
+              <UL items={[
+                'Items table — ID, description, status, ministry',
+                'Supplies table — ID, description, quantity (red if below minimum), ministry',
+                'Export CSV — downloads a combined file with both items and supplies for that location',
+              ]} />
+              <Tip>Use this before an event to do a quick walk-through of a room and confirm everything is present.</Tip>
+            </Accordion>
           </Section>
 
           {/* ──────────────────────────────────── */}
