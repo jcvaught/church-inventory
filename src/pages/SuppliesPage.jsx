@@ -9,7 +9,7 @@ import { exportSuppliesCSV } from '../utils/csv.js';
 import { canManageSupply } from '../utils/roleHelpers.js';
 
 export function SuppliesPage({ store, userProfile }) {
-  const { supplies, settings, activityLog, addSupply, updateSupply, useSupply, restockSupply, deleteSupply } = store;
+  const { supplies, settings, activityLog, addSupply, updateSupply, useSupply, restockSupply, deleteSupply, updateSettings } = store;
   const isMobile = useContext(MobileCtx);
 
   const [search, setSearch] = useState("");
@@ -27,6 +27,13 @@ export function SuppliesPage({ store, userProfile }) {
 
   function toggleSupTag(form, setForm, tag) {
     setForm(prev => ({ ...prev, tags: prev.tags.includes(tag) ? prev.tags.filter(t => t !== tag) : [...prev.tags, tag] }));
+  }
+  function addNewTag(setForm) {
+    const tag = newTagInput.trim();
+    if (!tag || tagOptions.map(t => t.toLowerCase()).includes(tag.toLowerCase())) return;
+    updateSettings({ tags: [...tagOptions, tag] });
+    setForm(prev => ({ ...prev, tags: [...prev.tags, tag] }));
+    setNewTagInput("");
   }
   const [supForm, setSupForm] = useState(emptySupply);
   const [editSupForm, setEditSupForm] = useState(emptySupply);
@@ -47,6 +54,7 @@ export function SuppliesPage({ store, userProfile }) {
   const isManager = userProfile?.role === "manager";
 
   const [tagFilter, setTagFilter] = useState("");
+  const [newTagInput, setNewTagInput] = useState("");
 
   function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }
 
@@ -334,18 +342,20 @@ export function SuppliesPage({ store, userProfile }) {
             <option value="each">Each</option><option value="pack">Pack</option><option value="box">Box</option><option value="roll">Roll</option><option value="ream">Ream</option><option value="case">Case</option><option value="gallon">Gallon</option><option value="bottle">Bottle</option>
           </select></FF>
         </div>
-        {tagOptions.length > 0 && (
-          <FF label="Tags">
-            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-              {tagOptions.map(t => (
-                <button key={t} type="button" onClick={()=>toggleSupTag(supForm, setSupForm, t)}
-                  style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontFamily:f1, fontWeight:500, cursor:"pointer", border: supForm.tags.includes(t) ? "1px solid "+B.teal : "1px solid "+B.sand, background: supForm.tags.includes(t) ? B.tealPale : B.white, color: supForm.tags.includes(t) ? B.teal : B.textMid }}>
-                  {t}
-                </button>
-              ))}
-            </div>
-          </FF>
-        )}
+        <FF label="Tags">
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom: tagOptions.length > 0 ? 8 : 0 }}>
+            {tagOptions.map(t => (
+              <button key={t} type="button" onClick={()=>toggleSupTag(supForm, setSupForm, t)}
+                style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontFamily:f1, fontWeight:500, cursor:"pointer", border: supForm.tags.includes(t) ? "1px solid "+B.teal : "1px solid "+B.sand, background: supForm.tags.includes(t) ? B.tealPale : B.white, color: supForm.tags.includes(t) ? B.teal : B.textMid }}>
+                {t}
+              </button>
+            ))}
+          </div>
+          <div style={{ display:"flex", gap:6 }}>
+            <input style={{ ...inp, flex:1, fontSize:12, padding:"5px 10px" }} placeholder="New tag…" value={newTagInput} onChange={e=>setNewTagInput(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"){e.preventDefault();addNewTag(setSupForm);}}} />
+            <button type="button" onClick={()=>addNewTag(setSupForm)} style={{ ...btnS, padding:"5px 12px", fontSize:12, whiteSpace:"nowrap" }}>+ Add</button>
+          </div>
+        </FF>
         <button onClick={handleAdd} disabled={saving||!supForm.supplyId.trim()||!supForm.description.trim()} style={{ ...btnP, width:"100%", opacity:(saving||!supForm.supplyId.trim()||!supForm.description.trim())?.5:1, marginTop:4 }}>
           {saving ? "Saving..." : "Add Supply"}
         </button>
@@ -375,18 +385,20 @@ export function SuppliesPage({ store, userProfile }) {
             <input style={inp} type="number" min="0" value={editSupForm.quantity} onChange={e=>setEditSupForm({...editSupForm, quantity:e.target.value})}/>
           </FF>
         )}
-        {tagOptions.length > 0 && (
-          <FF label="Tags">
-            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-              {tagOptions.map(t => (
-                <button key={t} type="button" onClick={()=>toggleSupTag(editSupForm, setEditSupForm, t)}
-                  style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontFamily:f1, fontWeight:500, cursor:"pointer", border: editSupForm.tags.includes(t) ? "1px solid "+B.teal : "1px solid "+B.sand, background: editSupForm.tags.includes(t) ? B.tealPale : B.white, color: editSupForm.tags.includes(t) ? B.teal : B.textMid }}>
-                  {t}
-                </button>
-              ))}
-            </div>
-          </FF>
-        )}
+        <FF label="Tags">
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom: tagOptions.length > 0 ? 8 : 0 }}>
+            {tagOptions.map(t => (
+              <button key={t} type="button" onClick={()=>toggleSupTag(editSupForm, setEditSupForm, t)}
+                style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontFamily:f1, fontWeight:500, cursor:"pointer", border: editSupForm.tags.includes(t) ? "1px solid "+B.teal : "1px solid "+B.sand, background: editSupForm.tags.includes(t) ? B.tealPale : B.white, color: editSupForm.tags.includes(t) ? B.teal : B.textMid }}>
+                {t}
+              </button>
+            ))}
+          </div>
+          <div style={{ display:"flex", gap:6 }}>
+            <input style={{ ...inp, flex:1, fontSize:12, padding:"5px 10px" }} placeholder="New tag…" value={newTagInput} onChange={e=>setNewTagInput(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"){e.preventDefault();addNewTag(setEditSupForm);}}} />
+            <button type="button" onClick={()=>addNewTag(setEditSupForm)} style={{ ...btnS, padding:"5px 12px", fontSize:12, whiteSpace:"nowrap" }}>+ Add</button>
+          </div>
+        </FF>
         <button onClick={handleEditSupply} disabled={saving||!editSupForm.description.trim()} style={{ ...btnP, width:"100%", opacity:(saving||!editSupForm.description.trim())?.5:1, marginTop:4 }}>
           {saving ? "Saving..." : "Save Changes"}
         </button>
