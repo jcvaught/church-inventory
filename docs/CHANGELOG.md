@@ -247,6 +247,22 @@ build: {
 - **Stable viewport height**: Changed `Spinner.jsx` from `height: 100vh` to `height: 100svh` (small stable viewport height, which excludes the collapsing address bar) to prevent the loading screen from being clipped on initial load in Safari
 - **Clipboard silent failure**: Added `.catch(() => {})` to all three `navigator.clipboard.writeText()` calls in `SettingsPage.jsx` — iOS requires user permission for clipboard access and rejects silently on denial; without the catch, this produced an unhandled promise rejection
 
+### ✅ SEO: Sitemap, Meta Tags, Schema Markup & Blog (2026-03-18)
+
+- **`public/robots.txt`**: Allows all crawlers; disallows `?request=`, `?signup`, `?invite`; references sitemap at `https://churchopshub.com/sitemap.xml`
+- **`public/sitemap.xml`**: Static sitemap with all 6 public URLs — `/` (priority 1.0), `/?help` (0.6), `/blog` (0.8), and all 3 blog post slugs (0.7 each); `changefreq: monthly`
+- **`react-helmet-async`**: Installed and `<HelmetProvider>` wraps the app in `main.jsx`
+- **`src/components/SEO.jsx`**: Reusable component wrapping `<Helmet>`; sets `<title>`, `<meta name="description">`, `<link rel="canonical">`, Open Graph tags (`og:type`, `og:title`, `og:description`, `og:url`, `og:image`, `og:site_name`), Twitter Card tags, and an optional JSON-LD `<script>` block; accepts `title`, `description`, `canonical`, `ogImage`, `ogType`, `jsonLd` props; canonical URLs are absolute (`https://churchopshub.com` + path)
+- **`LandingPage.jsx`**: `<SEO>` added with optimized title/description; SoftwareApplication JSON-LD schema (`@type: SoftwareApplication`, `applicationCategory: BusinessApplication`, free `Offer`); pain points paragraph added to hero section calling out spreadsheets and Planning Center's lack of inventory features; Blog link added to nav and footer
+- **`HelpPage.jsx`**: `<SEO>` added with `canonical="/?help"`
+- **`src/data/blogPosts.js`**: Array of 3 post objects (`slug`, `title`, `description`, `date`, `keywords`, `content` as markdown string); posts are ~600-800 words of real copy with h2/h3 heading structure
+  - *Why Churches Need Dedicated Inventory Management* — lost equipment, no accountability, reservation conflicts, deferred maintenance
+  - *Moving Beyond Spreadsheets: Church Inventory Best Practices* — version/history/access/reservation/mobile problems with spreadsheets; 7 best practices
+  - *What Planning Center Can't Do: Managing Your Church's Physical Assets* — PCO's people/events focus, common workarounds (Resources, fake People records, spreadsheets), what dedicated inventory adds, how both systems coexist
+- **`src/pages/BlogIndex.jsx`**: Blog listing page at `/blog`; reuses LandingPage nav pattern; post cards with hover shadow; CTA section; footer with nav links; `<SEO ogType="website">`
+- **`src/pages/BlogPost.jsx`**: Single post layout at `/blog/:slug`; `renderContent()` converts markdown headings and paragraphs to styled JSX; BlogPosting JSON-LD schema; related articles section (other posts); CTA card; 404-style fallback for unknown slugs; `<SEO ogType="article">`
+- **`App.jsx`**: Pathname routing added before query-param checks — `window.location.pathname === '/blog'` → BlogIndex; `.startsWith('/blog/')` → BlogPost with extracted slug; works because `vercel.json` already rewrites all paths to `index.html`
+
 ### ✅ Auto-Generated IDs & Inline Tag Creation (2026-03-18)
 
 - **Auto-generated Item/Supply IDs**: Description field moved to top of Add modals (items and supplies); as the user types a description, the ID field auto-fills with a `PREFIX-NNN` suggestion derived from the first meaningful word of the description (e.g. `Wireless Microphone` → `MIC-001`). The prefix is the first 3 alphanumeric characters of the first non-article word, uppercased; the number is the next available for that prefix among existing records. The field remains fully editable — any manual keystroke locks it and stops auto-updates. Also fires on AI Identify and when duplicating an item. Duplicate now pre-generates an ID from the copied description instead of leaving the field blank.

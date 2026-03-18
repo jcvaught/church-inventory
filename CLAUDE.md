@@ -43,14 +43,17 @@ src/
 │   ├── brand/
 │   │   ├── tokens.js          ← B, f1, f2, inp, btnP, btnS, btnD
 │   │   └── Logo.jsx           ← Logo, FullLogo
-│   └── primitives/
-│       ├── Modal.jsx, FF.jsx, Badge.jsx, Stat.jsx, Spinner.jsx
-│       ├── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive
-│       └── (RichTextarea is a local component inside MaintenancePage.jsx, not a shared primitive)
+│   ├── primitives/
+│   │   ├── Modal.jsx, FF.jsx, Badge.jsx, Stat.jsx, Spinner.jsx
+│   │   ├── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive
+│   │   └── (RichTextarea is a local component inside MaintenancePage.jsx, not a shared primitive)
+│   └── SEO.jsx                ← Reusable SEO component (react-helmet-async); sets title, description, canonical, OG tags, Twitter card, JSON-LD
 ├── pages/
-│   ├── LandingPage.jsx        ← Marketing landing page (shown to unauthenticated visitors)
+│   ├── LandingPage.jsx        ← Marketing landing page; includes SoftwareApplication JSON-LD schema and pain points copy
 │   ├── HelpPage.jsx           ← User-facing help center (no auth required); shown when ?help param present; 12 sections, accordion UI, responsive sidebar
 │   ├── PublicRequestPage.jsx  ← Public item request form (no auth required); shown when ?request=CHURCH_ID param present
+│   ├── BlogIndex.jsx          ← Blog listing page at /blog; nav, post cards, CTA, footer
+│   ├── BlogPost.jsx           ← Single blog post at /blog/:slug; related articles, post-level JSON-LD, CTA
 │   ├── Dashboard.jsx
 │   ├── ItemsPage.jsx
 │   ├── SuppliesPage.jsx
@@ -69,7 +72,11 @@ src/
 │   ├── roleHelpers.js         ← canManageMinistry, canManageItem, canManageSupply
 │   └── constants.js           ← ITEM_STATUS, RES_STATUS, TICKET_STATUS string enums
 └── data/
-    └── referenceData.js       ← Static reference inventory (not auto-seeded; reference only)
+    ├── referenceData.js       ← Static reference inventory (not auto-seeded; reference only)
+    └── blogPosts.js           ← Blog post data: slug, title, description, date, keywords, content (markdown string)
+public/
+├── robots.txt                 ← Disallows ?request=, ?signup, ?invite; references sitemap
+└── sitemap.xml                ← Static sitemap: /, /?help, /blog, and all 3 blog post URLs
 functions/
 ├── index.js                   ← Cloud Functions: createCheckoutSession, createPortalSession, stripeWebhook
 └── package.json               ← Node 18, firebase-functions v4, firebase-admin v12, stripe v14
@@ -127,6 +134,7 @@ All church data is namespaced under `churches/{churchId}/`:
 - Tab keys: `dashboard`, `inventory`, `supplies`, `reservations`, `log`, `insights`, `maintenance`, `coordination`, `accountability`, `settings`. Hub tabs hidden from users whose `allowedHubs[]` excludes them; shown with 🔒 when church hasn't subscribed (drives discovery).
 - `MobileCtx` React context + `useWindowWidth()` hook in `src/hooks/useMobile.js`. Components read `useContext(MobileCtx)` — no prop drilling needed. Breakpoint is 768px.
 - Mobile: tabs hidden, bottom nav bar fixed at bottom, modals slide up from bottom.
+- **Routing:** No router library. `App.jsx` checks `window.location.pathname` first (`/blog` → BlogIndex, `/blog/:slug` → BlogPost), then query params (`?request=` → PublicRequestPage, `?help` → HelpPage, `?signup`/`?invite` → AuthScreen), then auth state (unauthenticated → LandingPage, authenticated → AppShell).
 - **Deep linking:** `?item=ITEM_ID` URL param auto-opens item detail. URL cleaned with `history.replaceState` after read.
 - **QR codes:** Generated locally via the `qrcode` npm package (`QRCode.toDataURL()`). Links back to the app with `?item=` param. In the item detail modal, the QR data URL is stored in `detailQrUrl` state (generated in a `useEffect` when `showDetail` changes). `printLabel` is async (awaits `QRCode.toDataURL()` before opening the print window).
 - **Firebase Storage** (Blaze plan): item photos stored under `churches/{churchId}/items/`. Images are client-side resized to max 1200px / 82% JPEG quality before upload via Canvas API (`resizeImageForUpload`).
@@ -137,6 +145,7 @@ All church data is namespaced under `churches/{churchId}/`:
   - Items/supplies with no ministry assigned are admin-only (managers cannot edit unscoped items).
   - Settings page: all users see a Profile card (name, email, role, managed ministries); Team Members section is admin-only; list editors (locations/ministries/tags) are editable by admin and manager.
   - Hub visibility per user controlled by `allowedHubs[]` on user profile (see Per-User Hub Access).
+- **SEO:** `react-helmet-async` installed; `<HelmetProvider>` wraps the app in `main.jsx`. Reusable `<SEO>` component in `src/components/SEO.jsx` sets `<title>`, `<meta name="description">`, `<link rel="canonical">`, Open Graph tags, Twitter Card tags, and optional JSON-LD via `<script type="application/ld+json">`. Applied to LandingPage (with SoftwareApplication schema), HelpPage, BlogIndex, and BlogPost (with BlogPosting schema). Blog posts use `ogType="article"`.
 - **localStorage:** Items page persists `locationFilter` and `ministryFilter` under keys `inv_locationFilter` / `inv_ministryFilter`.
 
 ### Item Status Values
@@ -225,6 +234,7 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Move between Inventory and Supplies (admin) | 2026-03-18 |
 | — | Auto-generated IDs & inline tag creation for items | 2026-03-18 |
 | — | iOS Safari compatibility fixes | 2026-03-18 |
+| — | SEO: sitemap, robots.txt, meta tags, schema markup, blog | 2026-03-18 |
 
 ---
 
