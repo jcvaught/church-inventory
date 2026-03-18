@@ -14,6 +14,21 @@ import { canManageItem } from '../utils/roleHelpers.js';
 import { ITEM_STATUS } from '../utils/constants.js';
 import QRCode from 'qrcode';
 
+function generateId(description, existingIds) {
+  const skip = new Set(['a','an','the','of','in','for','and','or','to']);
+  const words = description.trim().split(/\s+/).filter(w => !skip.has(w.toLowerCase()));
+  if (!words.length) return '';
+  const prefix = words[0].replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase();
+  if (prefix.length < 2) return '';
+  const re = new RegExp('^' + prefix + '-(\\d+)$', 'i');
+  let max = 0;
+  for (const id of existingIds) {
+    const m = String(id).match(re);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return prefix + '-' + String(max + 1).padStart(3, '0');
+}
+
 export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, onScannedItemConsumed }) {
   const { items, supplies, settings, config, activityLog, addItem, addSupply, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem, publicRequests, dismissPublicRequest } = store;
   const _isMobile = useContext(MobileCtx);
@@ -91,7 +106,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) {
         if (!activeModal && (isAdmin || isManager)) {
-          setItemForm(emptyItem); setPhotoFile(null); setPhotoPreview(null); setShowFinancial(false); setActiveModal({ type: 'add', item: null });
+          setItemForm(emptyItem); setPhotoFile(null); setPhotoPreview(null); setShowFinancial(false); setIdTouched(false); setActiveModal({ type: 'add', item: null });
         }
       }
       if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
@@ -106,6 +121,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   // Forms
   const emptyItem = { itemId:"", description:"", location:"", ministry:"", status:ITEM_STATUS.AVAILABLE, condition:"Good", notes:"", tags:[], purchaseDate:"", purchasePrice:"", warrantyExpiry:"", estimatedValue:"" };
   const [itemForm, setItemForm] = useState(emptyItem);
+  const [idTouched, setIdTouched] = useState(false);
   const [coForm, setCoForm] = useState({ person:"", purpose:"", ministry:"", date:"", returnDate:"" });
   const [retForm, setRetForm] = useState({ condition:"Good", notes:"" });
   const [repairForm, setRepairForm] = useState({ issue:"", handler:"", expectedDate:"" });
@@ -153,7 +169,12 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       const identify = httpsCallable(getFunctions(app), 'identifyItem');
       const result = await identify({ imageBase64: base64, mediaType: photoFile.type || 'image/jpeg' });
       if (result.data?.description) {
-        setItemForm(f => ({ ...f, description: result.data.description }));
+        const desc = result.data.description;
+        setItemForm(f => {
+          const u = { ...f, description: desc };
+          if (!idTouched) u.itemId = generateId(desc, items.map(i => i.itemId));
+          return u;
+        });
       } else {
         flash('Could not identify item — try again or enter manually.');
       }
@@ -441,9 +462,11 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
 
   // Duplicate item — opens Add modal pre-filled (ID cleared)
   function openDuplicate(item) {
+    const desc = item.description || "";
+    setIdTouched(false);
     setItemForm({
-      itemId: "",
-      description: item.description || "",
+      itemId: generateId(desc, items.map(i => i.itemId)),
+      description: desc,
       location: item.location || "",
       ministry: item.ministry || "",
       condition: item.condition || "Good",
@@ -548,7 +571,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
           {activeItems.length > 0 && !bulkMode && <button aria-label="Export inventory as CSV" onClick={()=>exportItemsCSV(activeItems)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
           {activeItems.length > 0 && !bulkMode && <button onClick={()=>printInventory(activeItems, config?.churchName)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>🖨 Print</button>}
           {activeItems.length > 0 && !bulkMode && <button aria-label="Select items for bulk actions" onClick={()=>{setBulkMode(true);setSelectedIds(new Set());}} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>☑ Select</button>}
-          {!bulkMode && (isAdmin || isManager) && <button onClick={()=>{setItemForm(emptyItem);setPhotoFile(null);setPhotoPreview(null);setActiveModal({ type:'add', item:null });}} style={btnP}>+ Add Item</button>}
+          {!bulkMode && (isAdmin || isManager) && <button onClick={()=>{setItemForm(emptyItem);setPhotoFile(null);setPhotoPreview(null);setIdTouched(false);setActiveModal({ type:'add', item:null });}} style={btnP}>+ Add Item</button>}
         </div>
       </div>
 
@@ -813,8 +836,8 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
 
       {/* ═══ ADD ITEM MODAL ═══ */}
       <Modal open={showAdd} onClose={()=>setActiveModal(null)} title="Add New Item">
-        <FF label="Item ID"><input style={{...inp, fontFamily:"monospace", letterSpacing:1}} value={itemForm.itemId} onChange={e=>setItemForm({...itemForm, itemId:e.target.value.toUpperCase()})} placeholder="e.g. MIC-001"/></FF>
-        <FF label="Description"><input style={inp} value={itemForm.description} onChange={e=>setItemForm({...itemForm, description:e.target.value})} placeholder="e.g. Wireless Microphone A"/></FF>
+        <FF label="Description"><input style={inp} value={itemForm.description} onChange={e=>{const d=e.target.value;setItemForm(f=>{const u={...f,description:d};if(!idTouched)u.itemId=generateId(d,items.map(i=>i.itemId));return u;});}} placeholder="e.g. Wireless Microphone A" autoFocus/></FF>
+        <FF label="Item ID"><input style={{...inp, fontFamily:"monospace", letterSpacing:1}} value={itemForm.itemId} onChange={e=>{setIdTouched(true);setItemForm({...itemForm,itemId:e.target.value.toUpperCase()});}} placeholder="Auto-filled from description"/></FF>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
           <FF label="Location"><select style={inp} value={itemForm.location} onChange={e=>setItemForm({...itemForm, location:e.target.value})}>
             <option value="">— Select —</option>

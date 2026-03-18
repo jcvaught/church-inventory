@@ -8,6 +8,21 @@ import { FF } from '../components/primitives/FF.jsx';
 import { exportSuppliesCSV } from '../utils/csv.js';
 import { canManageSupply } from '../utils/roleHelpers.js';
 
+function generateId(description, existingIds) {
+  const skip = new Set(['a','an','the','of','in','for','and','or','to']);
+  const words = description.trim().split(/\s+/).filter(w => !skip.has(w.toLowerCase()));
+  if (!words.length) return '';
+  const prefix = words[0].replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase();
+  if (prefix.length < 2) return '';
+  const re = new RegExp('^' + prefix + '-(\\d+)$', 'i');
+  let max = 0;
+  for (const id of existingIds) {
+    const m = String(id).match(re);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return prefix + '-' + String(max + 1).padStart(3, '0');
+}
+
 export function SuppliesPage({ store, userProfile }) {
   const { supplies, settings, activityLog, items, addSupply, addItem, updateSupply, useSupply, restockSupply, deleteSupply, updateSettings } = store;
   const isMobile = useContext(MobileCtx);
@@ -36,6 +51,7 @@ export function SuppliesPage({ store, userProfile }) {
     setNewTagInput("");
   }
   const [supForm, setSupForm] = useState(emptySupply);
+  const [supIdTouched, setSupIdTouched] = useState(false);
   const [editSupForm, setEditSupForm] = useState(emptySupply);
   const [useForm, setUseForm] = useState({ qty:"1", purpose:"" });
   const [restockForm, setRestockForm] = useState({ qty:"", source:"" });
@@ -74,7 +90,12 @@ export function SuppliesPage({ store, userProfile }) {
       const identify = httpsCallable(getFunctions(app), 'identifyItem');
       const result = await identify({ imageBase64: base64, mediaType: file.type || 'image/jpeg' });
       if (result.data?.description) {
-        setSupForm(f => ({ ...f, description: result.data.description }));
+        const desc = result.data.description;
+        setSupForm(f => {
+          const u = { ...f, description: desc };
+          if (!supIdTouched) u.supplyId = generateId(desc, supplies.map(s => s.supplyId));
+          return u;
+        });
       } else {
         flash('Could not identify item — try again or enter manually.');
       }
@@ -231,7 +252,7 @@ export function SuppliesPage({ store, userProfile }) {
         <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:0 }}>Supplies & Consumables</h2>
         <div style={{ display:"flex", gap:8 }}>
           {supplies.length > 0 && <button aria-label="Export supplies as CSV" onClick={()=>exportSuppliesCSV(supplies)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
-          {(isAdmin || isManager) && <button onClick={()=>{setSupForm(emptySupply);setShowAdd(true);}} style={btnP}>+ Add Supply</button>}
+          {(isAdmin || isManager) && <button onClick={()=>{setSupForm(emptySupply);setSupIdTouched(false);setShowAdd(true);}} style={btnP}>+ Add Supply</button>}
         </div>
       </div>
 
@@ -337,10 +358,9 @@ export function SuppliesPage({ store, userProfile }) {
       )}
 
       {/* ═══ ADD SUPPLY MODAL ═══ */}
-      <Modal open={showAdd} onClose={()=>{ setShowAdd(false); setSupForm(emptySupply); setPhotoFile(null); setPhotoPreview(null); }} title="Add New Supply">
-        <FF label="Supply ID"><input style={{...inp, fontFamily:"monospace", letterSpacing:1}} value={supForm.supplyId} onChange={e=>setSupForm({...supForm, supplyId:e.target.value.toUpperCase()})} placeholder="e.g. BAT-AA"/></FF>
+      <Modal open={showAdd} onClose={()=>{ setShowAdd(false); setSupForm(emptySupply); setSupIdTouched(false); setPhotoFile(null); setPhotoPreview(null); }} title="Add New Supply">
         <FF label="Description">
-          <input style={inp} value={supForm.description} onChange={e=>setSupForm({...supForm, description:e.target.value})} placeholder="e.g. AA Batteries"/>
+          <input style={inp} value={supForm.description} onChange={e=>{const d=e.target.value;setSupForm(f=>{const u={...f,description:d};if(!supIdTouched)u.supplyId=generateId(d,supplies.map(s=>s.supplyId));return u;});}} placeholder="e.g. AA Batteries" autoFocus/>
           <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", marginTop:8 }}>
             <input type="file" accept="image/*" id="photo-sup-add" style={{ display:"none" }} onChange={e=>{const f=e.target.files[0];if(f){setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));handleIdentify(f);}}}/>
             <label htmlFor="photo-sup-add" style={{ ...btnS, display:"inline-block", cursor:"pointer", padding:"7px 16px", fontSize:13, opacity:identifying?.6:1, pointerEvents:identifying?"none":"auto" }}>
@@ -349,6 +369,7 @@ export function SuppliesPage({ store, userProfile }) {
           </div>
           {photoPreview && <img src={photoPreview} alt="preview" style={{ marginTop:8, maxWidth:"100%", maxHeight:120, borderRadius:8, objectFit:"cover" }}/>}
         </FF>
+        <FF label="Supply ID"><input style={{...inp, fontFamily:"monospace", letterSpacing:1}} value={supForm.supplyId} onChange={e=>{setSupIdTouched(true);setSupForm({...supForm,supplyId:e.target.value.toUpperCase()});}} placeholder="Auto-filled from description"/></FF>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
           <FF label="Location"><select style={inp} value={supForm.location} onChange={e=>setSupForm({...supForm, location:e.target.value})}>
             <option value="">— Select —</option>
