@@ -169,14 +169,14 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   function handleCopyInviteLink() {
     const params = new URLSearchParams({ invite: config.churchCode });
     if (inviteHubs.length > 0) params.set('hubs', inviteHubs.join(','));
-    navigator.clipboard.writeText(window.location.origin + '/?' + params.toString());
+    navigator.clipboard.writeText(window.location.origin + '/?' + params.toString()).catch(() => {});
     setInviteLinkCopied(true);
     setTimeout(() => setInviteLinkCopied(false), 2000);
   }
 
   function handleCopyRequestLink() {
     const params = new URLSearchParams({ request: userProfile.churchId, cn: config?.churchName || '' });
-    navigator.clipboard.writeText(window.location.origin + '/?' + params.toString());
+    navigator.clipboard.writeText(window.location.origin + '/?' + params.toString()).catch(() => {});
     setRequestLinkCopied(true);
     setTimeout(() => setRequestLinkCopied(false), 2000);
   }
@@ -367,7 +367,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                   <button onClick={()=>setShowCode(!showCode)} style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:12, fontFamily:f1, fontWeight:600 }}>
                     {showCode ? "Hide" : "Show"}
                   </button>
-                  <button onClick={()=>{ navigator.clipboard.writeText(config.churchCode||""); setCodeCopied(true); setTimeout(()=>setCodeCopied(false), 2000); }} style={{ background:"none", border:"none", color:codeCopied?B.teal:B.textMid, cursor:"pointer", fontSize:12, fontFamily:f1, fontWeight:600 }}>
+                  <button onClick={()=>{ navigator.clipboard.writeText(config.churchCode||"").catch(()=>{}); setCodeCopied(true); setTimeout(()=>setCodeCopied(false), 2000); }} style={{ background:"none", border:"none", color:codeCopied?B.teal:B.textMid, cursor:"pointer", fontSize:12, fontFamily:f1, fontWeight:600 }}>
                     {codeCopied ? "Copied!" : "Copy"}
                   </button>
                   {userProfile?.role === "admin" && (

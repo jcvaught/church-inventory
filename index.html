@@ -2,10 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>ChurchOpsHub — Inventory Management</title>
     <meta name="description" content="ChurchOpsHub — Inventory management for churches. Track equipment, tools, and supplies." />
     <meta name="theme-color" content="#1B2A4A" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ChurchOpsHub" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
@@ -16,9 +19,13 @@
         box-shadow: 0 0 0 3px rgba(42,125,110,0.12) !important;
         outline: none;
       }
+      /* Prevent iOS Safari from auto-zooming inputs with font-size < 16px */
+      @supports (-webkit-touch-callout: none) {
+        input, select, textarea { font-size: 16px !important; }
+      }
     </style>
   </head>
-  <body style="margin:0;background:#FAFAF7">
+  <body style="margin:0;background:#FAFAF7;overscroll-behavior:none">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
