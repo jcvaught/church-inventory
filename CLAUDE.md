@@ -59,14 +59,14 @@ src/
 │   ├── SuppliesPage.jsx
 │   ├── ReservationsPage.jsx
 │   ├── ActivityLogPage.jsx
-│   ├── SettingsPage.jsx       ← Includes Subscription & Billing card for admins
+│   ├── SettingsPage.jsx       ← Includes Subscription & Billing card for admins; My Compliance card (shows linked accessPerson records for current user); Team Members compliance badges (🔴/🟡 when linked users have expiring records)
 │   ├── HubsPage.jsx           ← Hub picker + sub-navigation container; renders hub cards and routes into active hub with breadcrumb
 │   └── hubs/
 │       ├── MaintenancePage.jsx     ← Maintenance Hub (Phase 3)
 │       ├── InsightsPage.jsx        ← Insights Hub (Phase 4): utilization, ministry, seasonal, financial, supply analytics (Recharts)
 │       ├── CoordinationPage.jsx    ← Coordination Hub (Phase 6): checkout bundles, email notification settings
 │       ├── AccountabilityPage.jsx  ← Accountability Hub (Phase 7): physical audits, chain of custody, insurance export
-│       └── PeopleAccessPage.jsx    ← People Access Hub: background checks, key assignments, certifications, custom compliance milestones
+│       └── PeopleAccessPage.jsx    ← People Access Hub: background checks, key assignments, certifications, custom compliance milestones; bulk entry modal; link/unlink to user accounts
 ├── utils/
 │   ├── csv.js                 ← exportItemsCSV, exportSuppliesCSV, exportReservationsCSV, exportAccessRecordsCSV
 │   ├── print.js               ← printLabel, printInventory
@@ -115,7 +115,7 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/bundles` | Coordination Hub: checkout bundles; fields: `name`, `description`, `items[{docId,itemId,description,location}]`, `createdBy`, `createdByName`, `createdAt` |
 | `churches/{churchId}/config/notifications` | Coordination Hub: EmailJS config; fields: `enabled`, `serviceId`, `publicKey`, `templateApproved`, `templateDenied`, `templateAssigned` (maintenance ticket assignment notification) |
 | `churches/{churchId}/audits` | Accountability Hub: physical audit records; fields: `location`, `conductedBy`, `conductedByName`, `startedAt`, `completedAt`, `status`, `itemsChecked`, `discrepancyCount`, `items[{docId,itemId,description,currentStatus,auditResult,condition,notes}]`, `discrepancies[]`, `createdAt` |
-| `churches/{churchId}/accessPeople` | People Access Hub: tracked people (staff/volunteers); fields: `name`, `email`, `phone`, `ministries[]`, `notes`, `active` (soft archive), `createdBy`, `createdAt`, `updatedAt` |
+| `churches/{churchId}/accessPeople` | People Access Hub: tracked people (staff/volunteers); fields: `name`, `email`, `phone`, `ministries[]`, `notes`, `active` (soft archive), `userId` (nullable — linked ChurchOpsHub user uid, set by auto-link or admin), `createdBy`, `createdAt`, `updatedAt` |
 | `churches/{churchId}/accessRecords` | People Access Hub: one flat collection for all compliance record types; fields: `personId`, `personName` (denormalized), `type` (`background_check`/`key_assignment`/`certification`/`custom`), `completedDate`, `expiryDate`, `notes`, `ministry`, `recordedBy`, `recordedByName`, `createdAt`, `updatedAt`; key_assignment adds: `keyIdentifier`, `returnedDate`; certification adds: `certType`, `issuingOrganization`; custom adds: `requirementId`, `requirementName` |
 | `churches/{churchId}/config/settings.peopleAccessRequirements` | `[{id, name, hasExpiry}]` — custom requirement types for People Access Hub; added via `arrayUnion` |
 | `churches/{churchId}/publicRequests` | Public item requests submitted via `PublicRequestPage`; **unauthenticated creates allowed** (Firestore rule); fields: `name`, `email`, `phone`, `itemDescription`, `quantity`, `dateNeeded`, `urgency` (Low/Medium/High), `notes`, `status` (`pending`/`dismissed`), `submittedAt`; admins see pending requests in ItemsPage panel; dismissed via `dismissPublicRequest()` |
@@ -247,6 +247,8 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Auto-generate Item ID when moving supply to inventory | 2026-03-19 |
 | — | Hub picker (HubsPage): single "Hubs" tab replaces individual hub tabs; picker grid + sub-nav breadcrumb | 2026-03-19 |
 | — | People Access Hub: background checks, key assignments, certifications, custom requirements, expiry alerts, CSV export | 2026-03-19 |
+| — | People Access: bulk entry modal (spreadsheet-style, interval expiry, name autocomplete) | 2026-03-19 |
+| — | People Access: link accessPeople to user accounts (auto-link by email on login, manual link by admin); My Compliance card in Settings; Team Members compliance badges | 2026-03-19 |
 
 ---
 
