@@ -618,6 +618,18 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
+  const linkAccessPerson = useCallback(async (docId, userId) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'accessPeople', docId), { userId, updatedAt: new Date().toISOString() });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const unlinkAccessPerson = useCallback(async (docId) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'accessPeople', docId), { userId: null, updatedAt: new Date().toISOString() });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
   const removePeopleAccessRequirement = useCallback(async (reqId) => {
     try {
       const snap = await getDoc(doc(db, 'churches', churchId, 'config', 'settings'));
@@ -647,6 +659,7 @@ export function useFirestore(churchId) {
     publicRequests, dismissPublicRequest,
     accessPeople, accessRecords,
     addAccessPerson, updateAccessPerson, archiveAccessPerson,
+    linkAccessPerson, unlinkAccessPerson,
     addAccessRecord, updateAccessRecord, deleteAccessRecord,
     addPeopleAccessRequirement, removePeopleAccessRequirement,
     clearError

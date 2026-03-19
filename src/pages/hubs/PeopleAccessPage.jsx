@@ -25,8 +25,9 @@ const BUILT_IN_TYPES = [
 
 export function PeopleAccessPage({ store, userProfile }) {
   const {
-    accessPeople, accessRecords, settings,
+    accessPeople, accessRecords, settings, users,
     addAccessPerson, updateAccessPerson, archiveAccessPerson,
+    linkAccessPerson, unlinkAccessPerson,
     addAccessRecord, updateAccessRecord, deleteAccessRecord,
     addPeopleAccessRequirement, removePeopleAccessRequirement,
   } = store;
@@ -63,6 +64,8 @@ export function PeopleAccessPage({ store, userProfile }) {
   const [bulkRows, setBulkRows] = useState(() => Array.from({ length: 5 }, () => ({ personName: '', completedDate: '', expiryDate: '', keyIdentifier: '' })));
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkResult, setBulkResult] = useState(null);
+  const [showLinkUser, setShowLinkUser] = useState(false);
+  const [linkUserId, setLinkUserId] = useState('');
 
   // ── Derived values (after all useState) ──
   const isAdmin = userProfile?.role === 'admin';
@@ -481,6 +484,7 @@ export function PeopleAccessPage({ store, userProfile }) {
                     <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 11, color: B.textLight, fontFamily: f1 }}>{pRecords.length} record{pRecords.length !== 1 ? 's' : ''}</span>
                       {activeKeys.length > 0 && <span style={{ fontSize: 11, color: B.textMid, fontFamily: f1 }}>🔑 {activeKeys.length} key{activeKeys.length > 1 ? 's' : ''} out</span>}
+                      {person.userId && <span style={{ fontSize: 11, color: B.teal, fontFamily: f1 }}>🔗 Linked</span>}
                     </div>
                   </div>
                 );
@@ -573,6 +577,47 @@ export function PeopleAccessPage({ store, userProfile }) {
                 </div>
               )}
             </div>
+
+            {/* Link to user account */}
+            {isAdmin && (
+              <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: `1px solid ${B.sand}` }}>
+                {detailPerson.userId ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, color: B.teal, fontFamily: f1 }}>
+                      🔗 Linked to {(users || []).find(u => u.id === detailPerson.userId)?.name || 'user account'}
+                    </span>
+                    <button onClick={() => { unlinkAccessPerson(detailPerson._docId); }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: B.textLight, fontFamily: f1, textDecoration: 'underline' }}>
+                      Unlink
+                    </button>
+                  </div>
+                ) : showLinkUser ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <select value={linkUserId} onChange={e => setLinkUserId(e.target.value)}
+                      style={{ ...inp, fontSize: 13, padding: '6px 10px', flex: '1 1 200px' }}>
+                      <option value="">Select user account…</option>
+                      {(users || []).filter(u => u.active).map(u => (
+                        <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+                      ))}
+                    </select>
+                    <button onClick={() => { linkAccessPerson(detailPerson._docId, linkUserId); setShowLinkUser(false); setLinkUserId(''); }}
+                      disabled={!linkUserId}
+                      style={{ ...btnP, padding: '6px 12px', fontSize: 12, opacity: !linkUserId ? 0.6 : 1 }}>
+                      Link
+                    </button>
+                    <button onClick={() => { setShowLinkUser(false); setLinkUserId(''); }}
+                      style={{ ...btnS, padding: '6px 12px', fontSize: 12 }}>
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setShowLinkUser(true); setLinkUserId(''); }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: B.textLight, fontFamily: f1, textDecoration: 'underline' }}>
+                    🔗 Link to user account
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Record type tabs */}
             <div style={{ display: 'flex', gap: 2, marginBottom: 16, overflowX: 'auto', scrollbarWidth: 'none' }}>

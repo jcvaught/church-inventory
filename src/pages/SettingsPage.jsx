@@ -9,7 +9,7 @@ import { app, db } from '../firebase.js';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export function SettingsPage({ store, userProfile, subscription, user, canAdd, deleteAccount }) {
-  const { settings, config, users, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, loadErrors } = store;
+  const { settings, config, users, accessPeople, accessRecords, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, loadErrors } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
   const [newItem, setNewItem] = useState("");
@@ -198,6 +198,34 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const isAdmin = userProfile?.role === "admin";
   const isManager = userProfile?.role === "manager";
   const managedMinistries = userProfile?.managedMinistries || [];
+
+  // ── People Access helpers (used for My Compliance card + Team badges) ──
+  const ACCESS_TYPE_LABELS = { background_check: 'Background Check', key_assignment: 'Key / Fob', certification: 'Certification', custom: 'Custom' };
+  const ACCESS_TYPE_ICONS = { background_check: '🔍', key_assignment: '🔑', certification: '🎓', custom: '✅' };
+
+  function accessExpiryStatus(expiryDate) {
+    if (!expiryDate) return null;
+    const [y, m, d] = expiryDate.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
+    if (date < now) return 'expired';
+    if (date <= in30) return 'warning';
+    return 'ok';
+  }
+
+  function getUserComplianceBadge(userId) {
+    const person = (accessPeople || []).find(p => p.userId === userId && p.active);
+    if (!person) return null;
+    const recs = (accessRecords || []).filter(r => r.personId === person._docId);
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
+    const hasExpired = recs.some(r => { if (!r.expiryDate) return false; const [y,m,d] = r.expiryDate.split('-').map(Number); return new Date(y,m-1,d) < now; });
+    const hasWarning = recs.some(r => { if (!r.expiryDate) return false; const [y,m,d] = r.expiryDate.split('-').map(Number); const dt = new Date(y,m-1,d); return dt >= now && dt <= in30; });
+    if (hasExpired) return '🔴';
+    if (hasWarning) return '🟡';
+    return null;
+  }
   const listCard = (key, title, icon) => {
     const items = settings[key] || [];
     return (
@@ -291,6 +319,53 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           )}
         </div>
       </div>
+
+      {/* My Compliance — visible if this user is linked to an accessPerson */}
+      {(() => {
+        const myPerson = (accessPeople || []).find(p => p.userId === userProfile.uid);
+        if (!myPerson) return null;
+        const myRecords = (accessRecords || [])
+          .filter(r => r.personId === myPerson._docId)
+          .sort((a, b) => (b.completedDate || '').localeCompare(a.completedDate || ''));
+        return (
+          <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
+            <h3 style={{ margin:"0 0 16px", fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>My Compliance</h3>
+            {myRecords.length === 0 ? (
+              <p style={{ color:B.textLight, fontSize:14, margin:0 }}>No compliance records on file.</p>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {myRecords.map(r => {
+                  const es = accessExpiryStatus(r.expiryDate);
+                  return (
+                    <div key={r._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:10, background:B.warmGray }}>
+                      <span style={{ fontSize:18 }}>{ACCESS_TYPE_ICONS[r.type] || '✅'}</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:600, fontSize:13, fontFamily:f1, color:B.navy }}>
+                          {ACCESS_TYPE_LABELS[r.type] || r.type}
+                          {r.certType ? ` — ${r.certType}` : ''}
+                          {r.requirementName ? ` — ${r.requirementName}` : ''}
+                          {r.keyIdentifier ? ` — ${r.keyIdentifier}` : ''}
+                        </div>
+                        <div style={{ fontSize:12, color:B.textMid }}>
+                          Completed {r.completedDate}
+                          {r.expiryDate && (
+                            <span style={{ color: es === 'expired' ? B.red : es === 'warning' ? '#92400E' : B.textMid }}>
+                              {' '}· Expires {r.expiryDate}
+                              {es === 'expired' && ' 🔴'}
+                              {es === 'warning' && ' 🟡'}
+                            </span>
+                          )}
+                          {r.type === 'key_assignment' && !r.returnedDate && <span style={{ color:B.gold }}> · Key not returned</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Subscription & Billing */}
       <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
@@ -418,6 +493,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                           background: u.role==="admin"?B.goldLight:u.role==="manager"?"#EDF2FF":B.tealPale,
                           color: u.role==="admin"?"#96750E":u.role==="manager"?"#3730A3":B.teal }}>{u.role}</span>
                         {!u.active && <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background:B.redPale, color:B.red }}>Inactive</span>}
+                        {getUserComplianceBadge(u.id) && (
+                          <span title="Has compliance records requiring attention" style={{ fontSize:14, lineHeight:1 }}>{getUserComplianceBadge(u.id)}</span>
+                        )}
                       </div>
                       <div style={{ fontSize:12, color:B.textLight }}>{u.email}</div>
                     </div>

@@ -484,6 +484,14 @@ function AppShell({ authHook }) {
     return () => clearTimeout(t);
   }, [store.error]);
 
+  // Auto-link accessPerson by email when user logs in
+  useEffect(() => {
+    if (!userProfile?.email || !store.accessPeople?.length) return;
+    const email = userProfile.email.toLowerCase();
+    const unlinked = store.accessPeople.filter(p => p.active && !p.userId && p.email?.toLowerCase() === email);
+    unlinked.forEach(p => store.linkAccessPerson(p._docId, userProfile.uid));
+  }, [userProfile?.uid, store.accessPeople]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Show onboarding for new admins with no items yet
   useEffect(() => {
     if (!store.loading && userProfile.role === 'admin' && !store.config?.onboardingComplete && store.items.length === 0) {
