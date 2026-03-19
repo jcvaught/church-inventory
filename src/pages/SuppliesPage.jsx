@@ -448,7 +448,7 @@ export function SuppliesPage({ store, userProfile }) {
           {saving ? "Saving..." : "Save Changes"}
         </button>
         {isAdmin && (
-          <button type="button" onClick={()=>{ setShowEditSupply(null); setMoveItemForm({ itemId:"", notes:"" }); setShowMoveToItem(showEditSupply); }} style={{ background:"none", border:"none", color:B.textLight, fontSize:12, cursor:"pointer", width:"100%", marginTop:8, fontFamily:f1 }}>
+          <button type="button" onClick={()=>{ const autoId = generateId(showEditSupply.description||"", items.map(i=>i.itemId)); setShowEditSupply(null); setMoveItemForm({ itemId:autoId, notes:"" }); setShowMoveToItem(showEditSupply); }} style={{ background:"none", border:"none", color:B.textLight, fontSize:12, cursor:"pointer", width:"100%", marginTop:8, fontFamily:f1 }}>
             Move to Inventory →
           </button>
         )}
@@ -460,7 +460,7 @@ export function SuppliesPage({ store, userProfile }) {
           Description, location, ministry, and tags will carry over. The supply record will be permanently deleted.
         </p>
         <FF label="Item ID (required)">
-          <input style={inp} value={moveItemForm.itemId} onChange={e=>setMoveItemForm({...moveItemForm, itemId:e.target.value})} placeholder="e.g. MIC-001 (min 3 chars)" autoFocus/>
+          <input style={{...inp, fontFamily:"monospace", letterSpacing:1}} value={moveItemForm.itemId} onChange={e=>setMoveItemForm({...moveItemForm, itemId:e.target.value.toUpperCase()})} placeholder="Auto-filled from description" autoFocus/>
         </FF>
         <FF label="Notes (optional)">
           <textarea style={{...inp, minHeight:60, resize:"vertical"}} value={moveItemForm.notes} onChange={e=>setMoveItemForm({...moveItemForm, notes:e.target.value})} placeholder="Any notes for the new item record…"/>
