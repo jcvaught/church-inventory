@@ -49,7 +49,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [billingError, setBillingError] = useState("");
   const [inviteHubsInitialized, setInviteHubsInitialized] = useState(false);
 
-  const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub' };
+  const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub', people_access: 'People Access Hub' };
   const churchHubs = subscription?.grandfathered || subscription?.plan === 'all_in'
     ? Object.keys(HUB_LABELS)
     : (subscription?.hubs || []);

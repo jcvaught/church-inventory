@@ -19,6 +19,8 @@ export function useFirestore(churchId) {
   const [notificationConfig, setNotificationConfig] = useState(null);
   const [audits, setAudits] = useState([]);
   const [publicRequests, setPublicRequests] = useState([]);
+  const [accessPeople, setAccessPeople] = useState([]);
+  const [accessRecords, setAccessRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const clearError = useCallback(() => setError(null), []);
@@ -39,7 +41,7 @@ export function useFirestore(churchId) {
     if (!churchId) return;
     const unsubs = [];
     let loaded = 0;
-    const totalSubs = 13;
+    const totalSubs = 15;
     const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
     // Config
@@ -123,6 +125,18 @@ export function useFirestore(churchId) {
       const reqs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
       reqs.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       setPublicRequests(reqs);
+      checkDone();
+    }, (err) => { handleErr(err); checkDone(); }));
+
+    // Access People
+    unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'accessPeople'), orderBy('name')), (snap) => {
+      setAccessPeople(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
+      checkDone();
+    }, (err) => { handleErr(err); checkDone(); }));
+
+    // Access Records
+    unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'accessRecords'), orderBy('createdAt', 'desc')), (snap) => {
+      setAccessRecords(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
     }, (err) => { handleErr(err); checkDone(); }));
 
@@ -539,6 +553,81 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
+  // ── Access People ──
+  const addAccessPerson = useCallback(async (person, userId) => {
+    try {
+      await addDoc(collection(db, 'churches', churchId, 'accessPeople'), {
+        ...person,
+        active: true,
+        createdBy: userId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const updateAccessPerson = useCallback(async (docId, updates) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'accessPeople', docId), {
+        ...updates,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const archiveAccessPerson = useCallback(async (docId) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'accessPeople', docId), {
+        active: false,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  // ── Access Records ──
+  const addAccessRecord = useCallback(async (record) => {
+    try {
+      await addDoc(collection(db, 'churches', churchId, 'accessRecords'), {
+        ...record,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const updateAccessRecord = useCallback(async (docId, updates) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'accessRecords', docId), {
+        ...updates,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const deleteAccessRecord = useCallback(async (docId) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'accessRecords', docId));
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const addPeopleAccessRequirement = useCallback(async (requirement) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'config', 'settings'), {
+        peopleAccessRequirements: arrayUnion(requirement)
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const removePeopleAccessRequirement = useCallback(async (reqId) => {
+    try {
+      const snap = await getDoc(doc(db, 'churches', churchId, 'config', 'settings'));
+      const reqs = (snap.data()?.peopleAccessRequirements || []).filter(r => r.id !== reqId);
+      await updateDoc(doc(db, 'churches', churchId, 'config', 'settings'), {
+        peopleAccessRequirements: reqs
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
   return {
     config, settings, items, supplies, activityLog, reservations, users,
     maintenanceTickets, vendors, bundles, notificationConfig, audits,
@@ -556,6 +645,10 @@ export function useFirestore(churchId) {
     addAudit, updateAudit,
     submitSuggestion, loadSuggestions, loadErrors,
     publicRequests, dismissPublicRequest,
+    accessPeople, accessRecords,
+    addAccessPerson, updateAccessPerson, archiveAccessPerson,
+    addAccessRecord, updateAccessRecord, deleteAccessRecord,
+    addPeopleAccessRequirement, removePeopleAccessRequirement,
     clearError
   };
 }

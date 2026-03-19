@@ -26,3 +26,11 @@ export const TICKET_STATUS = {
   COMPLETE:    'Complete',
   CANCELLED:   'Cancelled',
 };
+
+// ── People Access record types ────────────────────────────────────────────
+export const ACCESS_RECORD_TYPE = {
+  BACKGROUND_CHECK: 'background_check',
+  KEY_ASSIGNMENT:   'key_assignment',
+  CERTIFICATION:    'certification',
+  CUSTOM:           'custom',
+};

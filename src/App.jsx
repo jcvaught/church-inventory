@@ -7,11 +7,7 @@ import { MobileCtx, useWindowWidth } from './hooks/useMobile.js';
 import { Logo, FullLogo } from './components/brand/Logo.jsx';
 import { FF } from './components/primitives/FF.jsx';
 import { Spinner } from './components/primitives/Spinner.jsx';
-import { UpgradeGate } from './components/primitives/UpgradeGate.jsx';
-import { MaintenancePage } from './pages/hubs/MaintenancePage.jsx';
-import { InsightsPage } from './pages/hubs/InsightsPage.jsx';
-import { CoordinationPage } from './pages/hubs/CoordinationPage.jsx';
-import { AccountabilityPage } from './pages/hubs/AccountabilityPage.jsx';
+import { HubsPage } from './pages/HubsPage.jsx';
 import { LandingPage } from './pages/LandingPage.jsx';
 import { PublicRequestPage } from './pages/PublicRequestPage.jsx';
 import { Dashboard } from './pages/Dashboard.jsx';
@@ -466,6 +462,7 @@ function AppShell({ authHook }) {
   const store = useFirestore(userProfile.churchId);
   const { subscription, hasHub, canAddUser } = useSubscription(userProfile.churchId);
   const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('item') ? 'inventory' : 'dashboard');
+  const [hubKey, setHubKey] = useState(() => localStorage.getItem('lastHub') || null);
   const [menuOpen, setMenuOpen] = useState(false);
   const isMobile = useWindowWidth() < 768;
   const [initialItemId] = useState(() => new URLSearchParams(window.location.search).get('item'));
@@ -521,10 +518,6 @@ function AppShell({ authHook }) {
 
   const lowStock = (store.supplies || []).filter(c => c.quantity <= c.minQuantity);
   const pendingRes = (store.reservations || []).filter(r => r.status === RES_STATUS.PENDING);
-  const hasMaintenance = hasHub('maintenance');
-  const hasInsights = hasHub('insights');
-  const hasCoordination = hasHub('coordination');
-  const hasAccountability = hasHub('accountability');
 
   // Per-user hub visibility: admins see all; others filtered by allowedHubs
   function userCanSeeHub(hubName) {
@@ -534,10 +527,13 @@ function AppShell({ authHook }) {
     if (allowed == null) return true;
     return allowed.includes(hubName);
   }
-  const showMaintenanceTab = !hasMaintenance || userCanSeeHub('maintenance');
-  const showInsightsTab = !hasInsights || userCanSeeHub('insights');
-  const showCoordinationTab = !hasCoordination || userCanSeeHub('coordination');
-  const showAccountabilityTab = !hasAccountability || userCanSeeHub('accountability');
+
+  function openHub(key) {
+    if (key) localStorage.setItem('lastHub', key);
+    else localStorage.removeItem('lastHub');
+    setHubKey(key);
+  }
+
   const canAdd = canAddUser((store.users || []).length);
 
   return (
@@ -582,17 +578,14 @@ function AppShell({ authHook }) {
             {[
               ["dashboard","Dashboard"],["inventory","All Items"],["supplies","Supplies"],
               ["reservations","Reservations"],["log","Activity Log"],
-              ...(showInsightsTab ? [["insights","Insights"]] : []),
-              ...(showMaintenanceTab ? [["maintenance","Maintenance"]] : []),
-              ...(showCoordinationTab ? [["coordination","Coordination"]] : []),
-              ...(showAccountabilityTab ? [["accountability","Accountability"]] : []),
+              ["hubs","Hubs"],
               ["settings","Settings"],
             ].map(([k,v]) =>
-              <button key={k} onClick={()=>{setTab(k);setMenuOpen(false);}} style={tabBtn(k)}>{v}
-                {k==="maintenance"&&!hasMaintenance&&<span style={{ marginLeft:4, opacity:.7 }}>🔒</span>}
-                {k==="insights"&&!hasInsights&&<span style={{ marginLeft:4, opacity:.7 }}>🔒</span>}
-                {k==="coordination"&&!hasCoordination&&<span style={{ marginLeft:4, opacity:.7 }}>🔒</span>}
-                {k==="accountability"&&!hasAccountability&&<span style={{ marginLeft:4, opacity:.7 }}>🔒</span>}
+              <button key={k} onClick={()=>{
+                if(k==="hubs"&&tab==="hubs"){openHub(null);}
+                else{setTab(k);}
+                setMenuOpen(false);
+              }} style={tabBtn(k)}>{v}
                 {k==="supplies"&&lowStock.length>0&&<span style={{ marginLeft:6, background:B.red, color:"#fff", borderRadius:10, padding:"1px 7px", fontSize:10, fontWeight:700 }}>{lowStock.length}</span>}
                 {k==="reservations"&&pendingRes.length>0&&<span style={{ marginLeft:6, background:B.gold, color:"#fff", borderRadius:10, padding:"1px 7px", fontSize:10, fontWeight:700 }}>{pendingRes.length}</span>}
               </button>
@@ -630,49 +623,15 @@ function AppShell({ authHook }) {
         {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
         {tab === "reservations" && <ReservationsPage store={store} userProfile={userProfile} />}
         {tab === "log" && <ActivityLogPage store={store} />}
-        {tab === "insights" && (
-          <UpgradeGate
-            hubName="insights"
-            hubLabel="Insights Hub"
-            hubPrice="$7"
-            hubDescription="Understand how your inventory is really being used — utilization stats, ministry breakdowns, seasonal trends, and financial tracking."
-            hasHub={hasInsights}
-          >
-            <InsightsPage store={store} userProfile={userProfile} />
-          </UpgradeGate>
-        )}
-        {tab === "maintenance" && (
-          <UpgradeGate
-            hubName="maintenance"
-            hubLabel="Maintenance Hub"
-            hubPrice="$7"
-            hubDescription="Track repair tickets, manage vendors, and keep your equipment in top shape."
-            hasHub={hasMaintenance}
-          >
-            <MaintenancePage store={store} userProfile={userProfile} />
-          </UpgradeGate>
-        )}
-        {tab === "coordination" && (
-          <UpgradeGate
-            hubName="coordination"
-            hubLabel="Coordination Hub"
-            hubPrice="$7"
-            hubDescription="Checkout bundles, recurring reservations, and email notifications for your team."
-            hasHub={hasCoordination}
-          >
-            <CoordinationPage store={store} userProfile={userProfile} />
-          </UpgradeGate>
-        )}
-        {tab === "accountability" && (
-          <UpgradeGate
-            hubName="accountability"
-            hubLabel="Accountability Hub"
-            hubPrice="$5"
-            hubDescription="Physical audits, chain of custody reports, and insurance-ready inventory exports."
-            hasHub={hasAccountability}
-          >
-            <AccountabilityPage store={store} userProfile={userProfile} />
-          </UpgradeGate>
+        {tab === "hubs" && (
+          <HubsPage
+            store={store}
+            userProfile={userProfile}
+            hubKey={hubKey}
+            onOpenHub={openHub}
+            hasHub={hasHub}
+            userCanSeeHub={userCanSeeHub}
+          />
         )}
       </div>
       </PageErrorBoundary>
@@ -707,16 +666,17 @@ function AppShell({ authHook }) {
             ["inventory","Items","📦"],
             ["supplies","Stock","🧴"],
             ["reservations","Reserve","📅"],
-            ...(showInsightsTab ? [["insights","Insights","📊"]] : []),
-            ...(showMaintenanceTab ? [["maintenance","Maint","🔧"]] : []),
-            ...(showCoordinationTab ? [["coordination","Coord","🤝"]] : []),
-            ...(showAccountabilityTab ? [["accountability","Audit","📋"]] : []),
+            ["hubs","Hubs","🔌"],
             ["settings","Settings","⚙️"],
           ].map(([k,label,icon]) => (
-            <button key={k} onClick={()=>{setTab(k);setMenuOpen(false);}}
+            <button key={k} onClick={()=>{
+              if(k==="hubs"&&tab==="hubs"){openHub(null);}
+              else{setTab(k);}
+              setMenuOpen(false);
+            }}
               style={{ flex:"0 0 64px", padding:"8px 2px 6px", border:"none", background:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:tab===k?B.teal:B.textLight, position:"relative" }}>
               <span style={{ fontSize:20 }}>{icon}</span>
-              <span style={{ fontSize:9, fontWeight:700, fontFamily:f1, letterSpacing:.3 }}>{label}{k==="maintenance"&&!hasMaintenance?" 🔒":""}{k==="insights"&&!hasInsights?" 🔒":""}{k==="coordination"&&!hasCoordination?" 🔒":""}{k==="accountability"&&!hasAccountability?" 🔒":""}</span>
+              <span style={{ fontSize:9, fontWeight:700, fontFamily:f1, letterSpacing:.3 }}>{label}</span>
               {k==="supplies"&&lowStock.length>0&&<span style={{ position:"absolute", top:4, right:"calc(50% - 16px)", background:B.red, color:"#fff", borderRadius:10, padding:"0 4px", fontSize:9, fontWeight:700, minWidth:14, textAlign:"center" }}>{lowStock.length}</span>}
               {k==="reservations"&&pendingRes.length>0&&<span style={{ position:"absolute", top:4, right:"calc(50% - 16px)", background:B.gold, color:"#fff", borderRadius:10, padding:"0 4px", fontSize:9, fontWeight:700, minWidth:14, textAlign:"center" }}>{pendingRes.length}</span>}
             </button>

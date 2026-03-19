@@ -35,6 +35,25 @@ export function exportSuppliesCSV(supplies) {
   URL.revokeObjectURL(a.href);
 }
 
+export function exportAccessRecordsCSV(records) {
+  const cols = ['personName','type','completedDate','expiryDate','ministry','notes',
+                 'keyIdentifier','returnedDate','certType','issuingOrganization','requirementName','recordedByName'];
+  const header = cols.join(',');
+  const rows = (records||[]).map(r => cols.map(c => {
+    const v = r[c];
+    if (v == null || v === '') return '';
+    const s = String(v);
+    return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g,'""')}"` : s;
+  }).join(','));
+  const csv = [header, ...rows].join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
+    download: `people-access-${new Date().toISOString().split('T')[0]}.csv`
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
 export function exportReservationsCSV(reservations) {
   const cols = ['itemId','itemDesc','eventName','eventDate','returnDate','purpose','ministry','status','requestedByName','approvedByName','notes'];
   const header = cols.join(',');

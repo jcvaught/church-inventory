@@ -60,17 +60,19 @@ src/
 │   ├── ReservationsPage.jsx
 │   ├── ActivityLogPage.jsx
 │   ├── SettingsPage.jsx       ← Includes Subscription & Billing card for admins
+│   ├── HubsPage.jsx           ← Hub picker + sub-navigation container; renders hub cards and routes into active hub with breadcrumb
 │   └── hubs/
 │       ├── MaintenancePage.jsx     ← Maintenance Hub (Phase 3)
 │       ├── InsightsPage.jsx        ← Insights Hub (Phase 4): utilization, ministry, seasonal, financial, supply analytics (Recharts)
 │       ├── CoordinationPage.jsx    ← Coordination Hub (Phase 6): checkout bundles, email notification settings
-│       └── AccountabilityPage.jsx  ← Accountability Hub (Phase 7): physical audits, chain of custody, insurance export
+│       ├── AccountabilityPage.jsx  ← Accountability Hub (Phase 7): physical audits, chain of custody, insurance export
+│       └── PeopleAccessPage.jsx    ← People Access Hub: background checks, key assignments, certifications, custom compliance milestones
 ├── utils/
-│   ├── csv.js                 ← exportItemsCSV, exportSuppliesCSV, exportReservationsCSV
+│   ├── csv.js                 ← exportItemsCSV, exportSuppliesCSV, exportReservationsCSV, exportAccessRecordsCSV
 │   ├── print.js               ← printLabel, printInventory
 │   ├── imageResize.js         ← resizeImageForUpload
 │   ├── roleHelpers.js         ← canManageMinistry, canManageItem, canManageSupply
-│   └── constants.js           ← ITEM_STATUS, RES_STATUS, TICKET_STATUS string enums
+│   └── constants.js           ← ITEM_STATUS, RES_STATUS, TICKET_STATUS, ACCESS_RECORD_TYPE string enums
 └── data/
     ├── referenceData.js       ← Static reference inventory (not auto-seeded; reference only)
     └── blogPosts.js           ← Blog post data: slug, title, description, date, keywords, content (markdown string)
@@ -113,6 +115,9 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/bundles` | Coordination Hub: checkout bundles; fields: `name`, `description`, `items[{docId,itemId,description,location}]`, `createdBy`, `createdByName`, `createdAt` |
 | `churches/{churchId}/config/notifications` | Coordination Hub: EmailJS config; fields: `enabled`, `serviceId`, `publicKey`, `templateApproved`, `templateDenied`, `templateAssigned` (maintenance ticket assignment notification) |
 | `churches/{churchId}/audits` | Accountability Hub: physical audit records; fields: `location`, `conductedBy`, `conductedByName`, `startedAt`, `completedAt`, `status`, `itemsChecked`, `discrepancyCount`, `items[{docId,itemId,description,currentStatus,auditResult,condition,notes}]`, `discrepancies[]`, `createdAt` |
+| `churches/{churchId}/accessPeople` | People Access Hub: tracked people (staff/volunteers); fields: `name`, `email`, `phone`, `ministries[]`, `notes`, `active` (soft archive), `createdBy`, `createdAt`, `updatedAt` |
+| `churches/{churchId}/accessRecords` | People Access Hub: one flat collection for all compliance record types; fields: `personId`, `personName` (denormalized), `type` (`background_check`/`key_assignment`/`certification`/`custom`), `completedDate`, `expiryDate`, `notes`, `ministry`, `recordedBy`, `recordedByName`, `createdAt`, `updatedAt`; key_assignment adds: `keyIdentifier`, `returnedDate`; certification adds: `certType`, `issuingOrganization`; custom adds: `requirementId`, `requirementName` |
+| `churches/{churchId}/config/settings.peopleAccessRequirements` | `[{id, name, hasExpiry}]` — custom requirement types for People Access Hub; added via `arrayUnion` |
 | `churches/{churchId}/publicRequests` | Public item requests submitted via `PublicRequestPage`; **unauthenticated creates allowed** (Firestore rule); fields: `name`, `email`, `phone`, `itemDescription`, `quantity`, `dateNeeded`, `urgency` (Low/Medium/High), `notes`, `status` (`pending`/`dismissed`), `submittedAt`; admins see pending requests in ItemsPage panel; dismissed via `dismissPublicRequest()` |
 | `users/{uid}` | User profile with `churchId`, `role` (`admin`/`manager`/`user`), `name`, `email`, `active`, `allowedHubs[]`, `managedMinistries[]` |
 | `suggestions/{docId}` | **Top-level** (not church-scoped) — cross-church user suggestions; fields: `text`, `category`, `submittedBy`, `submittedByName`, `churchId`, `churchName`, `submittedAt` |
@@ -132,7 +137,7 @@ All church data is namespaced under `churches/{churchId}/`:
 - Two font families: `f1 = 'Outfit'` (headings/UI), `f2 = 'Source Sans 3'` (body text) — loaded from Google Fonts at runtime.
 - Shared style objects: `inp` (inputs), `btnP` (primary button), `btnS` (secondary), `btnD` (danger) — all from `src/components/brand/tokens.js`.
 - Reusable primitives in `src/components/primitives/`: `Modal`, `FF` (form field wrapper), `Badge` (status pill), `Stat` (dashboard stat card), `Spinner`, `UpgradeGate`.
-- Tab keys: `dashboard`, `inventory`, `supplies`, `reservations`, `log`, `insights`, `maintenance`, `coordination`, `accountability`, `settings`. Hub tabs hidden from users whose `allowedHubs[]` excludes them; shown with 🔒 when church hasn't subscribed (drives discovery).
+- Tab keys: `dashboard`, `inventory`, `supplies`, `reservations`, `log`, `hubs`, `settings`. All paid hubs are accessed via the `hubs` tab through `HubsPage`. Hub picker shows cards for all 5 hubs (Insights, Maintenance, Coordination, Accountability, People Access) — active hubs show "Open →", inactive show price and upgrade CTA. Clicking a hub sets `hubKey` (stored in `localStorage` as `lastHub`) and renders the hub with a `← All Hubs` breadcrumb. Clicking "Hubs" nav tab while already on hubs resets to the picker.
 - `MobileCtx` React context + `useWindowWidth()` hook in `src/hooks/useMobile.js`. Components read `useContext(MobileCtx)` — no prop drilling needed. Breakpoint is 768px.
 - Mobile: tabs hidden, bottom nav bar fixed at bottom, modals slide up from bottom.
 - **Routing:** No router library. `App.jsx` checks `window.location.pathname` first (`/blog` → BlogIndex, `/blog/:slug` → BlogPost), then query params (`?request=` → PublicRequestPage, `?help` → HelpPage, `?signup`/`?invite` → AuthScreen), then auth state (unauthenticated → LandingPage, authenticated → AppShell).
@@ -171,6 +176,7 @@ Everything existing stays free. 10 team members per church included.
 | **Coordination Hub** | $7/mo | ✅ Done — Phase 6 |
 | **Accountability Hub** | $5/mo | ✅ Done — Phase 7 |
 | **All-In Bundle** | $29/mo | ✅ Done — Phase 8 |
+| **People Access Hub** | $7/mo | ✅ Done |
 
 ### Grandfathering
 Existing churches at launch: 12 months Founder status (unlimited users, all hubs).
@@ -239,6 +245,8 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | SEO: sitemap, robots.txt, meta tags, schema markup, blog | 2026-03-18 |
 | — | Blog link in AppShell desktop footer; Google Search Console verification | 2026-03-19 |
 | — | Auto-generate Item ID when moving supply to inventory | 2026-03-19 |
+| — | Hub picker (HubsPage): single "Hubs" tab replaces individual hub tabs; picker grid + sub-nav breadcrumb | 2026-03-19 |
+| — | People Access Hub: background checks, key assignments, certifications, custom requirements, expiry alerts, CSV export | 2026-03-19 |
 
 ---
 
