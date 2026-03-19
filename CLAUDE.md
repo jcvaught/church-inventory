@@ -76,7 +76,8 @@ src/
     └── blogPosts.js           ← Blog post data: slug, title, description, date, keywords, content (markdown string)
 public/
 ├── robots.txt                 ← Disallows ?request=, ?signup, ?invite; references sitemap
-└── sitemap.xml                ← Static sitemap: /, /?help, /blog, and all 3 blog post URLs
+├── sitemap.xml                ← Static sitemap: /, /?help, /blog, and all 3 blog post URLs
+└── google254ab6f07b8682a3.html ← Google Search Console ownership verification file
 functions/
 ├── index.js                   ← Cloud Functions: createCheckoutSession, createPortalSession, stripeWebhook
 └── package.json               ← Node 18, firebase-functions v4, firebase-admin v12, stripe v14
@@ -145,7 +146,8 @@ All church data is namespaced under `churches/{churchId}/`:
   - Items/supplies with no ministry assigned are admin-only (managers cannot edit unscoped items).
   - Settings page: all users see a Profile card (name, email, role, managed ministries); Team Members section is admin-only; list editors (locations/ministries/tags) are editable by admin and manager.
   - Hub visibility per user controlled by `allowedHubs[]` on user profile (see Per-User Hub Access).
-- **SEO:** `react-helmet-async` installed; `<HelmetProvider>` wraps the app in `main.jsx`. Reusable `<SEO>` component in `src/components/SEO.jsx` sets `<title>`, `<meta name="description">`, `<link rel="canonical">`, Open Graph tags, Twitter Card tags, and optional JSON-LD via `<script type="application/ld+json">`. Applied to LandingPage (with SoftwareApplication schema), HelpPage, BlogIndex, and BlogPost (with BlogPosting schema). Blog posts use `ogType="article"`.
+- **SEO:** `react-helmet-async` installed; `<HelmetProvider>` wraps the app in `main.jsx`. Reusable `<SEO>` component in `src/components/SEO.jsx` sets `<title>`, `<meta name="description">`, `<link rel="canonical">`, Open Graph tags, Twitter Card tags, and optional JSON-LD via `<script type="application/ld+json">`. Applied to LandingPage (with SoftwareApplication schema), HelpPage, BlogIndex, and BlogPost (with BlogPosting schema). Blog posts use `ogType="article"`. Google Search Console verified via `public/google254ab6f07b8682a3.html`.
+- **AppShell footer (desktop only):** Displays logo, domain, and links to Help Center and Blog. Hidden on mobile (`!isMobile`). Blog link uses `href="/blog"` — works via Vercel catch-all rewrite.
 - **localStorage:** Items page persists `locationFilter` and `ministryFilter` under keys `inv_locationFilter` / `inv_ministryFilter`.
 
 ### Item Status Values
@@ -235,6 +237,8 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Auto-generated IDs & inline tag creation for items | 2026-03-18 |
 | — | iOS Safari compatibility fixes | 2026-03-18 |
 | — | SEO: sitemap, robots.txt, meta tags, schema markup, blog | 2026-03-18 |
+| — | Blog link in AppShell desktop footer; Google Search Console verification | 2026-03-19 |
+| — | Auto-generate Item ID when moving supply to inventory | 2026-03-19 |
 
 ---
 
