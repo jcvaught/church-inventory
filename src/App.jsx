@@ -631,6 +631,7 @@ function AppShell({ authHook }) {
             onOpenHub={openHub}
             hasHub={hasHub}
             userCanSeeHub={userCanSeeHub}
+            onGoToSettings={() => setTab('settings')}
           />
         )}
       </div>

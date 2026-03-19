@@ -72,7 +72,7 @@ function HubContent({ hubKey, store, userProfile }) {
   return null;
 }
 
-export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, userCanSeeHub }) {
+export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, userCanSeeHub, onGoToSettings }) {
   const isMobile = useContext(MobileCtx);
   const def = HUB_DEFS.find(h => h.key === hubKey);
 
@@ -167,10 +167,10 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, userCa
               All 5 hubs for $29/mo — save over 30% vs. buying individually.
             </div>
           </div>
-          <a href="?settings" onClick={e => { e.preventDefault(); onOpenHub(null); }}
-            style={{ ...btnP, background: B.gold, color: B.navy, padding: '9px 18px', fontSize: 13, textDecoration: 'none', display: 'inline-block' }}>
+          <button onClick={() => { onGoToSettings?.(); }}
+            style={{ ...btnP, background: B.gold, color: B.navy, padding: '9px 18px', fontSize: 13, cursor: 'pointer' }}>
             View Plans
-          </a>
+          </button>
         </div>
       </div>
     </div>

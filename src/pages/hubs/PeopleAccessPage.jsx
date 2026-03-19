@@ -68,7 +68,9 @@ export function PeopleAccessPage({ store, userProfile }) {
 
   function getExpiryStatus(expiryDate) {
     if (!expiryDate) return null;
-    const d = new Date(expiryDate);
+    // Parse YYYY-MM-DD as local date (not UTC) to avoid timezone-shift false positives
+    const [y, m, day] = expiryDate.split('-').map(Number);
+    const d = new Date(y, m - 1, day);
     if (d < today) return 'expired';
     if (d <= in7) return 'critical';
     if (d <= in30) return 'warning';
