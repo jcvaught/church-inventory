@@ -691,7 +691,11 @@ function AppShell({ authHook }) {
         <div style={{ background:B.navy, padding:"24px 28px", textAlign:"center" }}>
           <FullLogo size={26} light={true} />
           <p style={{ color:"rgba(255,255,255,0.25)", fontSize:11, fontFamily:f1, marginTop:10 }}>churchopshub.com</p>
-          <a href="?help" style={{ color:"rgba(255,255,255,0.35)", fontSize:11, fontFamily:f1, textDecoration:"none" }}>Help Center</a>
+          <div style={{ display:"flex", gap:16, justifyContent:"center", alignItems:"center" }}>
+            <a href="?help" style={{ color:"rgba(255,255,255,0.35)", fontSize:11, fontFamily:f1, textDecoration:"none" }}>Help Center</a>
+            <span style={{ color:"rgba(255,255,255,0.15)", fontSize:11 }}>·</span>
+            <a href="/blog" style={{ color:"rgba(255,255,255,0.35)", fontSize:11, fontFamily:f1, textDecoration:"none" }}>Blog</a>
+          </div>
         </div>
       )}
 
