@@ -54,6 +54,15 @@ export function PeopleAccessPage({ store, userProfile }) {
   const [busy, setBusy] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(null);
   const [confirmDeleteRecord, setConfirmDeleteRecord] = useState(null);
+  const [showBulkEntry, setShowBulkEntry] = useState(false);
+  const [bulkType, setBulkType] = useState('background_check');
+  const [bulkExpiryMode, setBulkExpiryMode] = useState('interval');
+  const [bulkExpiryInterval, setBulkExpiryInterval] = useState(3);
+  const [bulkCertType, setBulkCertType] = useState('');
+  const [bulkRequirementId, setBulkRequirementId] = useState('');
+  const [bulkRows, setBulkRows] = useState(() => Array.from({ length: 5 }, () => ({ personName: '', completedDate: '', expiryDate: '', keyIdentifier: '' })));
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkResult, setBulkResult] = useState(null);
 
   // ── Derived values (after all useState) ──
   const isAdmin = userProfile?.role === 'admin';
@@ -235,6 +244,85 @@ export function PeopleAccessPage({ store, userProfile }) {
     }));
   }
 
+  // ── Bulk entry helpers ──
+  const blankBulkRow = () => ({ personName: '', completedDate: '', expiryDate: '', keyIdentifier: '' });
+
+  function openBulkEntry() {
+    setBulkType('background_check');
+    setBulkExpiryMode('interval');
+    setBulkExpiryInterval(3);
+    setBulkCertType('');
+    setBulkRequirementId(customRequirements[0]?.id || '');
+    setBulkRows(Array.from({ length: 5 }, blankBulkRow));
+    setBulkResult(null);
+    setShowBulkEntry(true);
+  }
+
+  function changeBulkType(type) {
+    setBulkType(type);
+    if (type === 'key_assignment') {
+      setBulkExpiryMode('none');
+    } else if (type === 'background_check') {
+      setBulkExpiryMode('interval'); setBulkExpiryInterval(3);
+    } else if (type === 'certification') {
+      setBulkExpiryMode('interval'); setBulkExpiryInterval(2);
+    } else {
+      setBulkExpiryMode('interval'); setBulkExpiryInterval(1);
+    }
+  }
+
+  function updateBulkRow(idx, field, value) {
+    setBulkRows(rows => rows.map((r, i) => i === idx ? { ...r, [field]: value } : r));
+  }
+
+  function deleteBulkRow(idx) {
+    setBulkRows(rows => rows.filter((_, i) => i !== idx));
+  }
+
+  function computeBulkExpiry(completedDate, interval) {
+    if (!completedDate || !interval) return null;
+    const [y, m, d] = completedDate.split('-').map(Number);
+    return `${y + interval}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+
+  async function handleBulkSave() {
+    const filled = bulkRows.filter(r => r.personName.trim() && r.completedDate);
+    if (!filled.length) return;
+    setBulkSaving(true);
+    let saved = 0;
+    const skipped = [];
+    for (const row of filled) {
+      const name = row.personName.trim().toLowerCase();
+      const person = allPeople.find(p => p.active && p.name?.toLowerCase() === name);
+      if (!person) { skipped.push(row.personName.trim()); continue; }
+      let expiryDate = null;
+      if (bulkExpiryMode === 'per_row') expiryDate = row.expiryDate || null;
+      else if (bulkExpiryMode === 'interval') expiryDate = computeBulkExpiry(row.completedDate, bulkExpiryInterval);
+      const record = {
+        personId: person._docId, personName: person.name,
+        type: bulkType, completedDate: row.completedDate,
+        expiryDate, notes: null, ministry: null,
+        recordedBy: userProfile.uid, recordedByName: userProfile.name,
+      };
+      if (bulkType === 'key_assignment') {
+        record.keyIdentifier = row.keyIdentifier || null;
+        record.returnedDate = null;
+      } else if (bulkType === 'certification') {
+        record.certType = bulkCertType || '';
+        record.issuingOrganization = null;
+      } else if (bulkType === 'custom') {
+        const req = customRequirements.find(r => r.id === bulkRequirementId);
+        record.requirementId = bulkRequirementId || '';
+        record.requirementName = req?.name || '';
+      }
+      await addAccessRecord(record);
+      saved++;
+    }
+    setBulkSaving(false);
+    setBulkResult({ saved, skipped });
+    if (skipped.length === 0) setBulkRows(Array.from({ length: 5 }, blankBulkRow));
+  }
+
   // Detail records filtered by tab
   const detailRecords = detailPerson
     ? allRecords.filter(r => r.personId === detailPerson._docId &&
@@ -310,6 +398,11 @@ export function PeopleAccessPage({ store, userProfile }) {
           {allRecords.length > 0 && (
             <button onClick={() => exportAccessRecordsCSV(allRecords)} style={{ ...btnS, padding: '8px 14px', fontSize: 13 }}>
               ⬇ Export CSV
+            </button>
+          )}
+          {canEdit && view === 'people' && (
+            <button onClick={openBulkEntry} style={{ ...btnS, padding: '8px 14px', fontSize: 13 }}>
+              ≡ Bulk Entry
             </button>
           )}
           {canEdit && view === 'people' && (
@@ -729,6 +822,155 @@ export function PeopleAccessPage({ store, userProfile }) {
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
             <button onClick={() => setConfirmDeleteRecord(null)} style={btnS}>Cancel</button>
             <button onClick={handleDeleteRecord} style={btnD}>Delete</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ══════════════════════════ BULK ENTRY MODAL ══════════════════════ */}
+      {showBulkEntry && (
+        <Modal onClose={() => setShowBulkEntry(false)}>
+          <div style={{ maxWidth: 700, width: '100%' }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: 18, fontFamily: f1, color: B.navy }}>Bulk Entry</h3>
+            <p style={{ margin: '0 0 20px', fontSize: 13, color: B.textLight, fontFamily: f2 }}>
+              Enter records for existing people. Names must match exactly.
+            </p>
+
+            {/* Result banner */}
+            {bulkResult && (
+              <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 10,
+                background: bulkResult.skipped.length > 0 ? '#FFFBEB' : '#F0FDF4',
+                border: `1px solid ${bulkResult.skipped.length > 0 ? '#FDE68A' : '#BBF7D0'}` }}>
+                <div style={{ fontWeight: 700, fontSize: 13, fontFamily: f1, color: bulkResult.skipped.length > 0 ? '#92400E' : B.teal }}>
+                  ✅ {bulkResult.saved} record{bulkResult.saved !== 1 ? 's' : ''} saved
+                  {bulkResult.skipped.length > 0 && ` — ${bulkResult.skipped.length} name${bulkResult.skipped.length > 1 ? 's' : ''} not found`}
+                </div>
+                {bulkResult.skipped.length > 0 && (
+                  <div style={{ fontSize: 12, color: '#92400E', fontFamily: f2, marginTop: 4 }}>
+                    Not found: {bulkResult.skipped.join(', ')}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Controls row */}
+            <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 150px' }}>
+                <label style={{ fontSize: 11, fontWeight: 700, fontFamily: f1, color: B.textLight, letterSpacing: 1, textTransform: 'uppercase' }}>Record Type</label>
+                <select value={bulkType} onChange={e => changeBulkType(e.target.value)} style={inp}>
+                  <option value="background_check">Background Check</option>
+                  <option value="key_assignment">Key / Fob</option>
+                  <option value="certification">Certification</option>
+                  {customRequirements.length > 0 && <option value="custom">Custom</option>}
+                </select>
+              </div>
+
+              {bulkType === 'certification' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 160px' }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, fontFamily: f1, color: B.textLight, letterSpacing: 1, textTransform: 'uppercase' }}>Cert Type (all rows)</label>
+                  <input value={bulkCertType} onChange={e => setBulkCertType(e.target.value)}
+                    placeholder="e.g. CPR/First Aid" list="bulk-cert-suggestions" style={inp} />
+                  <datalist id="bulk-cert-suggestions">
+                    {['CPR/First Aid', 'SafeGuarding', 'Child Protection', 'Food Handler', 'First Aid'].map(s => <option key={s} value={s} />)}
+                  </datalist>
+                </div>
+              )}
+
+              {bulkType === 'custom' && customRequirements.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 160px' }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, fontFamily: f1, color: B.textLight, letterSpacing: 1, textTransform: 'uppercase' }}>Requirement (all rows)</label>
+                  <select value={bulkRequirementId} onChange={e => setBulkRequirementId(e.target.value)} style={inp}>
+                    <option value="">Select…</option>
+                    {customRequirements.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {bulkType !== 'key_assignment' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 120 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, fontFamily: f1, color: B.textLight, letterSpacing: 1, textTransform: 'uppercase' }}>Expiry</label>
+                  <select value={bulkExpiryMode} onChange={e => setBulkExpiryMode(e.target.value)} style={inp}>
+                    <option value="none">No expiry</option>
+                    <option value="interval">Interval</option>
+                    <option value="per_row">Per row</option>
+                  </select>
+                </div>
+              )}
+
+              {bulkExpiryMode === 'interval' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 100 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, fontFamily: f1, color: B.textLight, letterSpacing: 1, textTransform: 'uppercase' }}>Interval</label>
+                  <select value={bulkExpiryInterval} onChange={e => setBulkExpiryInterval(Number(e.target.value))} style={inp}>
+                    {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n} year{n > 1 ? 's' : ''}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Shared datalist for person name autocomplete */}
+            <datalist id="bulk-person-list">
+              {allPeople.filter(p => p.active).map(p => <option key={p._docId} value={p.name} />)}
+            </datalist>
+
+            {/* Table header */}
+            {(() => {
+              const showKeyId = bulkType === 'key_assignment';
+              const showExpiry = bulkExpiryMode === 'per_row' && bulkType !== 'key_assignment';
+              const cols = showKeyId ? '1fr 150px 130px 28px'
+                         : showExpiry ? '1fr 130px 130px 28px'
+                         : '1fr 130px 28px';
+              const hStyle = { fontSize: 11, fontWeight: 700, fontFamily: f1, color: B.textLight, letterSpacing: 1, textTransform: 'uppercase' };
+              return (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: cols, gap: '0 8px', marginBottom: 6, padding: '0 2px' }}>
+                    <span style={hStyle}>Name</span>
+                    {showKeyId && <span style={hStyle}>Key ID</span>}
+                    <span style={hStyle}>Completed</span>
+                    {showExpiry && <span style={hStyle}>Expires</span>}
+                    <span />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, maxHeight: 300, overflowY: 'auto' }}>
+                    {bulkRows.map((row, idx) => (
+                      <div key={idx} style={{ display: 'grid', gridTemplateColumns: cols, gap: '0 8px', alignItems: 'center' }}>
+                        <input list="bulk-person-list" value={row.personName}
+                          onChange={e => updateBulkRow(idx, 'personName', e.target.value)}
+                          placeholder="Person name…"
+                          style={{ ...inp, padding: '7px 10px', fontSize: 13 }} />
+                        {showKeyId && (
+                          <input value={row.keyIdentifier}
+                            onChange={e => updateBulkRow(idx, 'keyIdentifier', e.target.value)}
+                            placeholder="Key #…"
+                            style={{ ...inp, padding: '7px 10px', fontSize: 13 }} />
+                        )}
+                        <input type="date" value={row.completedDate}
+                          onChange={e => updateBulkRow(idx, 'completedDate', e.target.value)}
+                          style={{ ...inp, padding: '7px 10px', fontSize: 13 }} />
+                        {showExpiry && (
+                          <input type="date" value={row.expiryDate}
+                            onChange={e => updateBulkRow(idx, 'expiryDate', e.target.value)}
+                            style={{ ...inp, padding: '7px 10px', fontSize: 13 }} />
+                        )}
+                        <button onClick={() => deleteBulkRow(idx)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.textLight, fontSize: 18, lineHeight: 1, padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
+
+            <button onClick={() => setBulkRows(r => [...r, ...Array.from({ length: 5 }, blankBulkRow)])}
+              style={{ ...btnS, fontSize: 12, padding: '6px 12px', marginBottom: 20 }}>
+              + Add 5 Rows
+            </button>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowBulkEntry(false)} style={btnS}>Close</button>
+              <button onClick={handleBulkSave}
+                disabled={bulkSaving || !bulkRows.some(r => r.personName.trim() && r.completedDate)}
+                style={{ ...btnP, opacity: (bulkSaving || !bulkRows.some(r => r.personName.trim() && r.completedDate)) ? 0.6 : 1 }}>
+                {bulkSaving ? 'Saving…' : `Save ${bulkRows.filter(r => r.personName.trim() && r.completedDate).length} Records`}
+              </button>
+            </div>
           </div>
         </Modal>
       )}
