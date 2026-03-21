@@ -140,6 +140,114 @@ The result: a system your whole team can trust, that maintains itself through no
   },
 
   {
+    slug: 'church-supply-management',
+    title: "Church Supply Management: How to Stop Running Out of What You Need",
+    description: "Communion elements, batteries, cleaning supplies, paper — churches burn through consumables constantly. Here's how to track them so you're never caught short.",
+    date: '2026-03-21',
+    keywords: 'church supply management, church consumables tracking, church inventory supplies, church facilities management',
+    content: `
+## The Supply Problem Most Churches Don't Talk About
+
+Equipment gets attention. Instruments, projectors, PA systems — those are visible, valuable, and easy to advocate for. But supplies? The batteries that died mid-service, the communion cups that ran out the week of Easter, the paper towels that disappeared before a big event — these are the unglamorous breakdowns that make ministry feel chaotic.
+
+Every church deals with supply management. Most churches deal with it poorly. The result is a recurring pattern of last-minute runs to the store, duplicate purchases nobody needed, and that sinking feeling when someone opens the cabinet and finds it empty at the worst possible time.
+
+The fix isn't complicated — but it requires a system. Here's how to build one.
+
+## Why Supplies Are Harder to Manage Than Equipment
+
+Equipment has a natural tracking anchor: it's individual, it has a serial number or unique description, and it's worth enough that people notice when it's gone. Supplies don't have any of these properties. A box of batteries looks like every other box of batteries. No one can tell if it's half-empty until they open it. And because each unit is cheap, no one thinks to track it — until there are none left.
+
+This creates a specific failure mode: **invisible depletion**. Supplies drop from full to empty in small increments, each one invisible, until someone reaches for the thing and it isn't there.
+
+The other complication is distributed ownership. Your worship team manages audio consumables. Your facilities team manages cleaning supplies and maintenance materials. Your children's ministry manages craft supplies and snacks. Your office staff manages paper and printer supplies. No single person has full visibility into what the whole church is running low on — and no one has an obvious reason to coordinate.
+
+## Building a Supply Tracking System That Works
+
+### Step 1: Inventory What You Actually Have
+
+Most churches have a rough mental model of their supplies — "we keep batteries in the sound booth, cleaning stuff in the janitor's closet" — but no comprehensive list. Start there.
+
+Walk through every storage space with your team leads and document what you have, organized by category and location. This first pass usually surfaces things you forgot you owned, things you have too many of, and things you've been buying repeatedly because they keep getting lost.
+
+Key categories to cover:
+- **AV/Tech consumables:** Batteries (AA, AAA, 9V), gaffer tape, cable ties, HDMI/XLR cables, lamp/bulb replacements
+- **Worship supplies:** Communion elements (cups, wafers/bread, juice), offering envelopes, bulletins/programs
+- **Office/Admin:** Printer paper, toner, envelopes, pens, binder clips
+- **Facilities/Cleaning:** Cleaning sprays, paper towels, trash bags, light bulbs, toilet paper, soap
+- **Children's Ministry:** Craft supplies, snacks, disposable cups/plates, name tags
+- **Kitchen/Fellowship:** Coffee, cups, plates, utensils, napkins
+
+### Step 2: Set a Minimum Quantity for Each Item
+
+Once you know what you have, set a minimum quantity for each supply — the level at which you need to reorder. This is the most important setup step, and it requires thinking about:
+
+- **Lead time:** How long does it take to get more? Amazon next-day is different from a specialty supplier with a two-week lead time.
+- **Usage rate:** How fast do you burn through it? Battery usage spikes on Sunday. Communion elements peak at Easter and Christmas.
+- **Consequence of running out:** Batteries during a service is a crisis. Running low on envelopes is inconvenient. Set your minimums accordingly.
+
+A reasonable default for most consumables: set the minimum at one full "event's worth" of supply. You should never be below the amount you'd need to run a single Sunday service.
+
+### Step 3: Log Usage Consistently
+
+This is where most informal systems break down. Writing on a whiteboard works until someone forgets. A shared spreadsheet works until no one updates it. The discipline of logging usage has to be lower-friction than not logging it.
+
+The most effective approach: log usage at the point of consumption, not at some separate reconciliation time. When someone grabs the last package of communion cups, they log it then — not at the end of the week when they remember to check the spreadsheet.
+
+QR-coded supply labels that link directly to the item's usage form get you close to this ideal. The label is on the shelf; the person grabbing the last unit scans it; the log is updated in seconds. Friction approaches zero.
+
+### Step 4: Assign Ownership by Category
+
+Supply management works best when each category has a named owner — someone who is responsible for monitoring levels and initiating reorders. This doesn't have to be a paid staff member. A reliable volunteer who attends every week and has manager-level access to the supply system can do this effectively.
+
+The owner doesn't do all the purchasing. They do the noticing — and the flagging — so that purchases happen proactively instead of reactively.
+
+### Step 5: Review on a Fixed Schedule
+
+Even with good real-time logging, a weekly or biweekly walkthrough catches what slips through. Fifteen minutes before or after the Sunday service, with a phone and your supply list, is enough: confirm quantities match the system, flag anything that's getting low, note anything that needs to be reordered.
+
+This review also catches items that weren't logged — a volunteer who grabbed something without scanning it, or a supply that depleted faster than expected due to an event.
+
+## Seasonal Demand: The Overlooked Variable
+
+Church supply usage isn't constant. It spikes predictably at:
+
+- **Easter and Christmas:** Communion elements, bulletins, visitor materials, hospitality supplies
+- **Back to school:** Children's ministry supplies, office supplies for fall programming launch
+- **Summer:** Outdoor event supplies, increased facilities usage
+- **Special events:** Community dinners, outreach events, retreats
+
+If you track usage over time, these patterns become visible. Once you can see that your communion element usage triples in the four weeks before Easter, you can order appropriately in February instead of scrambling the week before.
+
+A supply management system that logs usage dates makes this analysis easy. Even a year of data is enough to identify your church's unique demand curves.
+
+## The Connection Between Supplies and Budget
+
+Untracked supplies are a budget black hole. When purchases are reactive — someone runs to the store when something runs out — they happen at retail prices, often with rush shipping, and frequently in quantities that don't make economic sense. You buy what you need right now, not what would be cost-effective to buy.
+
+When supply levels are tracked, purchasing becomes proactive. You can buy in bulk when prices are favorable. You can consolidate orders to reduce shipping costs. You can identify which supplies you're over-purchasing (the shelf full of paper you'll never use) and which you're perpetually under-stocked on.
+
+Over a year, the difference between reactive and proactive supply purchasing can be hundreds or thousands of dollars — money that goes directly back to ministry.
+
+## Supplies and Equipment: Two Parts of the Same System
+
+Equipment and supplies aren't separate problems. They're two parts of your church's physical asset picture, and they're most useful when they're managed in the same place.
+
+A maintenance ticket on a projector might note that you need replacement lamp bulbs — a supply item. A reservation for a fellowship hall event needs both the tables (equipment) and the disposable plates and napkins (supplies). An audit of the children's wing captures both the physical inventory of toys and furniture and the current quantity of craft supplies.
+
+Managing both in one system means your team has a single place to check, a single audit trail, and a single view of what's available — instead of one system for equipment and a separate process (or no process) for supplies.
+
+## Getting Started Without Overwhelm
+
+You don't need to track everything to start. Pick the supply categories where running out causes the most pain — typically AV consumables and communion elements for most churches — and start there. Get consistent with those categories before expanding.
+
+The goal isn't a perfect system from day one. It's building the habit of tracking, starting with the supplies that matter most. Once that habit is established with two or three categories, expanding to the rest of your supply inventory takes a fraction of the effort the first categories did.
+
+Running out of batteries on Sunday morning is avoidable. So is the panic that comes with it. A supply tracking system doesn't eliminate all friction — but it converts surprise shortages into planned reorders, and that's the difference between a team that's scrambling and one that's ready.
+    `.trim(),
+  },
+
+  {
     slug: 'what-planning-center-cant-do',
     title: "What Planning Center Can't Do: Managing Your Church's Physical Assets",
     description: "Planning Center is excellent for people and events. But it has no inventory features. Here's how to fill that gap without adding complexity.",
