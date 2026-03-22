@@ -129,7 +129,12 @@ All church data is namespaced under `churches/{churchId}/`:
 
 1. **Create church** — admin creates a church with a unique alphanumeric church code; their UID becomes the churchId prefix.
 2. **Join church** — new members register with email/password or Google, entering the church code to be linked to the right `churchId`.
-3. Firestore rules scope all church data to the user's own `churchId` via a `get()` lookup. Admins can update role/active for users in their own church. Storage rules apply the same scoping via `firestore.get()`.
+3. Firestore rules use granular per-subcollection rules (not a wildcard). Each collection has explicit read/create/update/delete grants based on role. Key constraints:
+   - `config/subscription` — client create only at church creation time; no client updates (webhook/Admin SDK only)
+   - `activityLog` — immutable; members can create, nobody can update or delete
+   - `maintenanceTickets` — members can update (edit fields, assign, move status); only admin/manager can create or delete
+   - Users cannot self-escalate role: create requires `role == 'user'` (or `role == 'admin'` only if churchId matches own church); self-updates cannot change `role`, `churchId`, `active`, or `allowedHubs`
+   - Storage rules enforce 5MB max upload size and `image/*` content type only
 
 ### UI Conventions
 
@@ -144,7 +149,7 @@ All church data is namespaced under `churches/{churchId}/`:
 - **Deep linking:** `?item=ITEM_ID` URL param auto-opens item detail. URL cleaned with `history.replaceState` after read.
 - **QR codes:** Generated locally via the `qrcode` npm package (`QRCode.toDataURL()`). Links back to the app with `?item=` param. In the item detail modal, the QR data URL is stored in `detailQrUrl` state (generated in a `useEffect` when `showDetail` changes). `printLabel` is async (awaits `QRCode.toDataURL()` before opening the print window).
 - **Firebase Storage** (Blaze plan): item photos stored under `churches/{churchId}/items/`. Images are client-side resized to max 1200px / 82% JPEG quality before upload via Canvas API (`resizeImageForUpload`).
-- **Role enforcement:** Three roles — `admin`, `manager`, `user`. UI-only enforcement; Firestore rules unchanged. Shared helpers in `src/utils/roleHelpers.js` (`canManageMinistry`, `canManageItem`, `canManageSupply`).
+- **Role enforcement:** Three roles — `admin`, `manager`, `user`. Enforced at both UI level and Firestore rules level. Shared helpers in `src/utils/roleHelpers.js` (`canManageMinistry`, `canManageItem`, `canManageSupply`).
   - **admin**: full access — team management, church code, billing, invite links, EmailJS config, plus all manager capabilities.
   - **manager**: full operational access — edit dropdown lists (Locations/Ministries/Tags); add/edit/retire items + supplies scoped to `managedMinistries[]`; approve/deny/checkout reservations for their ministries; create/manage maintenance tickets and vendors; run audits; create/edit/delete bundles. Cannot manage team members, billing, or EmailJS config.
   - **user**: day-to-day use — checkout/return items, request reservations (cancel own), log supply usage/restock, view all accessible hubs. Cannot add/edit items or supplies, approve reservations, or start audits.
@@ -249,6 +254,9 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | People Access Hub: background checks, key assignments, certifications, custom requirements, expiry alerts, CSV export | 2026-03-19 |
 | — | People Access: bulk entry modal (spreadsheet-style, interval expiry, name autocomplete) | 2026-03-19 |
 | — | People Access: link accessPeople to user accounts (auto-link by email on login, manual link by admin); My Compliance card in Settings; Team Members compliance badges | 2026-03-19 |
+| — | Security hardening: granular Firestore rules (per-subcollection), user self-escalation fix, `escapeHtml` XSS fix for print functions, CSP/security headers in vercel.json, URL allowlist in Cloud Functions, supply quantity race condition → runTransaction, storage size+type limits | 2026-03-20 |
+| — | Blog post: "Church Supply Management: How to Stop Running Out of What You Need" | 2026-03-21 |
+| — | Maintenance Hub: user role can now update/edit tickets and drag Kanban status; Delete gated to admin+mgr; removed dead allowedHubs args from invite registration flow | 2026-03-22 |
 
 ---
 
