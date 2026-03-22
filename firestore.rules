@@ -2,65 +2,188 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function userChurchId() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.churchId;
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    // Single get() per request; all helpers derive from it.
+    function userData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
+    function userChurchId()         { return userData().churchId; }
+    function userIsAdmin()          { return userData().role == 'admin'; }
+    function userIsAdminOrManager() { return userData().role == 'admin' || userData().role == 'manager'; }
+    function isMember(churchId)     { return request.auth != null && userChurchId() == churchId; }
+    function isChurchAdmin(churchId)          { return isMember(churchId) && userIsAdmin(); }
+    function isChurchAdminOrManager(churchId) { return isMember(churchId) && userIsAdminOrManager(); }
 
-    function userIsAdmin() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
-    }
-
-    // Church parent doc — creator and existing members can read directly (get).
-    // Any authenticated user can list (needed for the join-by-church-code query).
-    // Only the church creator or existing members can write.
+    // ── Church parent doc ─────────────────────────────────────────────────────
+    // Any authenticated user can list (needed for join-by-church-code query).
+    // Creator or existing member can get. Only admin can update/delete.
     match /churches/{churchId} {
-      allow get: if request.auth != null && (
-        request.auth.uid + '-church' == churchId ||
-        userChurchId() == churchId
-      );
-      allow list: if request.auth != null;
-      allow write: if request.auth != null && (
-        request.auth.uid + '-church' == churchId ||
-        userChurchId() == churchId
-      );
+      allow get:    if request.auth != null && (
+                      request.auth.uid + '-church' == churchId ||
+                      userChurchId() == churchId
+                    );
+      allow list:   if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid + '-church' == churchId;
+      allow update, delete: if isChurchAdmin(churchId);
     }
 
-    // Public item requests — anyone can submit; only church members can read/dismiss
+    // ── Subscription — client create allowed only for church creator (initial setup);
+    //    all subsequent writes are done by webhooks via Admin SDK (bypasses rules). ──
+    match /churches/{churchId}/config/subscription {
+      allow read:   if isMember(churchId);
+      allow create: if request.auth != null && request.auth.uid + '-church' == churchId;
+      allow update, delete: if false;
+    }
+
+    // ── Config/main — members read; admins+managers write ───────────────────
+    match /churches/{churchId}/config/main {
+      allow read:  if isMember(churchId);
+      allow write: if isChurchAdminOrManager(churchId);
+    }
+
+    // ── Config/settings — members read; admins+managers write ───────────────
+    match /churches/{churchId}/config/settings {
+      allow read:  if isMember(churchId);
+      allow write: if isChurchAdminOrManager(churchId);
+    }
+
+    // ── Notifications — members read; admin-only write ───────────────────────
+    match /churches/{churchId}/config/notifications {
+      allow read:  if isMember(churchId);
+      allow write: if isChurchAdmin(churchId);
+    }
+
+    // ── Items — members read + update (checkout/return); admins+mgrs create/delete ──
+    match /churches/{churchId}/items/{docId} {
+      allow read:          if isMember(churchId);
+      allow create, delete: if isChurchAdminOrManager(churchId);
+      allow update:        if isMember(churchId);
+    }
+
+    // ── Supplies — members read + update (usage/restock); admins+mgrs create/delete ──
+    match /churches/{churchId}/supplies/{docId} {
+      allow read:           if isMember(churchId);
+      allow create, delete: if isChurchAdminOrManager(churchId);
+      allow update:         if isMember(churchId);
+    }
+
+    // ── Activity log — immutable audit trail; members create, nobody modifies ──
+    match /churches/{churchId}/activityLog/{docId} {
+      allow read:          if isMember(churchId);
+      allow create:        if isMember(churchId);
+      allow update, delete: if false;
+    }
+
+    // ── Reservations — members create+update; admins+mgrs delete ─────────────
+    match /churches/{churchId}/reservations/{docId} {
+      allow read:   if isMember(churchId);
+      allow create: if isMember(churchId);
+      allow update: if isMember(churchId);
+      allow delete: if isChurchAdminOrManager(churchId);
+    }
+
+    // ── Maintenance tickets ───────────────────────────────────────────────────
+    match /churches/{churchId}/maintenanceTickets/{docId} {
+      allow read:           if isMember(churchId);
+      allow create, delete: if isChurchAdminOrManager(churchId);
+      allow update:         if isMember(churchId);
+    }
+
+    // ── Ticket comments — any member can add; admins+mgrs can edit/delete ─────
+    match /churches/{churchId}/maintenanceTickets/{ticketId}/comments/{commentId} {
+      allow read:          if isMember(churchId);
+      allow create:        if isMember(churchId);
+      allow update, delete: if isChurchAdminOrManager(churchId);
+    }
+
+    // ── Vendors ───────────────────────────────────────────────────────────────
+    match /churches/{churchId}/vendors/{docId} {
+      allow read:  if isMember(churchId);
+      allow write: if isChurchAdminOrManager(churchId);
+    }
+
+    // ── Bundles ───────────────────────────────────────────────────────────────
+    match /churches/{churchId}/bundles/{docId} {
+      allow read:  if isMember(churchId);
+      allow write: if isChurchAdminOrManager(churchId);
+    }
+
+    // ── Audits ────────────────────────────────────────────────────────────────
+    match /churches/{churchId}/audits/{docId} {
+      allow read:  if isMember(churchId);
+      allow write: if isChurchAdminOrManager(churchId);
+    }
+
+    // ── Access People ─────────────────────────────────────────────────────────
+    match /churches/{churchId}/accessPeople/{docId} {
+      allow read:  if isMember(churchId);
+      allow write: if isChurchAdminOrManager(churchId);
+    }
+
+    // ── Access Records ────────────────────────────────────────────────────────
+    match /churches/{churchId}/accessRecords/{docId} {
+      allow read:  if isMember(churchId);
+      allow write: if isChurchAdminOrManager(churchId);
+    }
+
+    // ── Public requests — anyone can submit; only church members can read/dismiss ──
     match /churches/{churchId}/publicRequests/{docId} {
       allow create: if true;
-      allow read, delete, update: if request.auth != null && userChurchId() == churchId;
+      allow read, update, delete: if request.auth != null && userChurchId() == churchId;
     }
 
-    // Church subcollections — restricted to authenticated users belonging to that church
-    match /churches/{churchId}/{document=**} {
-      allow read, write: if request.auth != null && userChurchId() == churchId;
-    }
-
-    // User profiles — own profile always readable; same-church reads allowed (needed for team management)
-    // Users can write their own profile; admins can update users in their church (role, active)
+    // ── User profiles ─────────────────────────────────────────────────────────
     match /users/{userId} {
       allow read: if request.auth != null && (
         request.auth.uid == userId ||
         userChurchId() == resource.data.churchId
       );
-      allow write: if request.auth != null && (
+
+      // New users can create their own profile.
+      // Church creators may set role 'admin' only for their own church.
+      // All other new registrations must set role 'user' (prevents self-escalation at signup).
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && (
+          request.resource.data.role == 'user'
+          || (
+            request.resource.data.role == 'admin'
+            && request.resource.data.churchId == request.auth.uid + '-church'
+          )
+        );
+
+      // Self-updates are allowed but cannot change role, churchId, active, or allowedHubs.
+      // Admins in the same church can update anything (role, active, allowedHubs, etc.).
+      allow update: if request.auth != null && (
+        (
+          request.auth.uid == userId
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.churchId == resource.data.churchId
+          && request.resource.data.active == resource.data.active
+          && request.resource.data.get('allowedHubs', null) == resource.data.get('allowedHubs', null)
+        )
+        || (userIsAdmin() && userChurchId() == resource.data.churchId)
+      );
+
+      // Self-delete or admin in same church
+      allow delete: if request.auth != null && (
         request.auth.uid == userId ||
         (userIsAdmin() && userChurchId() == resource.data.churchId)
       );
     }
 
-    // Suggestions — any authenticated user can submit; only app owner can read
+    // ── Suggestions — any authenticated user can submit; owner-only read ──────
     // NOTE: owner emails also defined in functions/index.js (OWNER_EMAILS) and SettingsPage.jsx (isOwner). Keep in sync.
     match /suggestions/{docId} {
       allow create: if request.auth != null;
-      allow read: if request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
+      allow read:   if request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
     }
 
-    // Errors — any authenticated user can write; only app owner can read
+    // ── Errors — any authenticated user can write; owner-only read ────────────
     // NOTE: owner emails also defined in functions/index.js (OWNER_EMAILS) and SettingsPage.jsx (isOwner). Keep in sync.
     match /errors/{docId} {
       allow create: if request.auth != null;
-      allow read: if request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
+      allow read:   if request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
     }
   }
 }

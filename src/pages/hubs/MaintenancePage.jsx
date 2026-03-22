@@ -888,7 +888,7 @@ export function MaintenancePage({ store, userProfile }) {
       {viewMode === 'kanban' && maintenanceTickets.length > 0 && (
         <div style={{ display:'flex', gap:12, overflowX:isMobile ? 'hidden' : 'auto', flexDirection:isMobile ? 'column' : 'row', paddingBottom:8, alignItems:'flex-start' }}>
           {STATUSES.map(status => (
-            <KanbanColumn key={status} status={status} tickets={sortedTickets.filter(t => t.status === status)} onTicketClick={openDetail} onDrop={canOperate ? docId => handleDrop(docId, status) : undefined} isMobile={isMobile}/>
+            <KanbanColumn key={status} status={status} tickets={sortedTickets.filter(t => t.status === status)} onTicketClick={openDetail} onDrop={docId => handleDrop(docId, status)} isMobile={isMobile}/>
           ))}
         </div>
       )}
@@ -1097,7 +1097,7 @@ export function MaintenancePage({ store, userProfile }) {
                 {showDetail.completedAt && <> · Completed {showDetail.completedAt.split('T')[0]}</>}
               </div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                <button onClick={handleDeleteTicket} style={{ ...btnD, fontSize:13, padding:'9px 14px' }}>Delete</button>
+                {canOperate && <button onClick={handleDeleteTicket} style={{ ...btnD, fontSize:13, padding:'9px 14px' }}>Delete</button>}
                 <button onClick={() => { setShowDetail(null); setDetailEdits({}); setComments([]); setNewComment(''); setDetailChecklistInput(''); }} style={btnS}>Cancel</button>
                 <button onClick={handleUpdateTicket} disabled={saving || !detailEdits.name?.trim()} style={{ ...btnP, opacity:(saving || !detailEdits.name?.trim()) ? .5 : 1 }}>
                   {saving ? 'Saving...' : 'Save Changes'}
