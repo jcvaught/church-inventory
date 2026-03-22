@@ -528,9 +528,11 @@ function AppShell({ authHook }) {
   const pendingRes = (store.reservations || []).filter(r => r.status === RES_STATUS.PENDING);
 
   // Per-user hub visibility: admins see all; others filtered by allowedHubs
+  // people_access is manager+ only — regular users cannot see it regardless of allowedHubs
   function userCanSeeHub(hubName) {
     if (!hasHub(hubName)) return false;
     if (userProfile?.role === 'admin') return true;
+    if (hubName === 'people_access' && userProfile?.role === 'user') return false;
     const allowed = userProfile?.allowedHubs;
     if (allowed == null) return true;
     return allowed.includes(hubName);

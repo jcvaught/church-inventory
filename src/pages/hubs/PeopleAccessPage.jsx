@@ -182,6 +182,7 @@ export function PeopleAccessPage({ store, userProfile }) {
 
   async function handleSaveRecord() {
     if (!recordForm.completedDate || !detailPerson) return;
+    if (recordForm.type === 'certification' && !isAdmin) return;
     setBusy(true);
     const base = {
       personId: detailPerson._docId,
@@ -677,7 +678,7 @@ export function PeopleAccessPage({ store, userProfile }) {
                           </div>
                           {record.notes && <div style={{ fontSize: 12, color: B.textLight, fontFamily: f2, marginTop: 6 }}>{record.notes}</div>}
                         </div>
-                        {canEdit && (
+                        {(record.type === 'certification' ? isAdmin : canEdit) && (
                           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                             {record.type === 'key_assignment' && !record.returnedDate && (
                               <button onClick={() => handleMarkReturned(record)}
@@ -766,7 +767,7 @@ export function PeopleAccessPage({ store, userProfile }) {
               <select value={recordForm.type} onChange={e => setRecordForm(f => ({ ...f, type: e.target.value }))} style={inp}>
                 <option value="background_check">Background Check</option>
                 <option value="key_assignment">Key / Fob Assignment</option>
-                <option value="certification">Certification</option>
+                {isAdmin && <option value="certification">Certification</option>}
                 {customRequirements.length > 0 && <option value="custom">Custom Requirement</option>}
               </select>
             </FF>
@@ -904,7 +905,7 @@ export function PeopleAccessPage({ store, userProfile }) {
                 <select value={bulkType} onChange={e => changeBulkType(e.target.value)} style={inp}>
                   <option value="background_check">Background Check</option>
                   <option value="key_assignment">Key / Fob</option>
-                  <option value="certification">Certification</option>
+                  {isAdmin && <option value="certification">Certification</option>}
                   {customRequirements.length > 0 && <option value="custom">Custom</option>}
                 </select>
               </div>

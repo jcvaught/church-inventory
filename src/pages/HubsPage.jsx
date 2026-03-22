@@ -119,7 +119,7 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, userCa
         </p>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-        {HUB_DEFS.map(hub => {
+        {HUB_DEFS.filter(hub => !(hub.key === 'people_access' && userProfile?.role === 'user')).map(hub => {
           const active = hasHub(hub.key);
           const canSee = active && userCanSeeHub(hub.key);
           return (
