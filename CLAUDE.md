@@ -152,7 +152,7 @@ All church data is namespaced under `churches/{churchId}/`:
 - **Role enforcement:** Three roles — `admin`, `manager`, `user`. Enforced at both UI level and Firestore rules level. Shared helpers in `src/utils/roleHelpers.js` (`canManageMinistry`, `canManageItem`, `canManageSupply`).
   - **admin**: full access — team management, church code, billing, invite links, EmailJS config, plus all manager capabilities.
   - **manager**: full operational access — edit dropdown lists (Locations/Ministries/Tags); add/edit/retire items + supplies scoped to `managedMinistries[]`; approve/deny/checkout reservations for their ministries; create/manage maintenance tickets and vendors; run audits; create/edit/delete bundles. Cannot manage team members, billing, or EmailJS config.
-  - **user**: day-to-day use — checkout/return items, request reservations (cancel own), log supply usage/restock, view all accessible hubs. Cannot add/edit items or supplies, approve reservations, or start audits.
+  - **user**: day-to-day use — checkout/return items, request reservations (cancel own), log supply usage/restock, view all accessible hubs. Cannot add/edit items or supplies, approve reservations, or start audits. Cannot see People Access Hub at all (hidden from picker and blocked on access).
   - Items/supplies with no ministry assigned are admin-only (managers cannot edit unscoped items).
   - Settings page: all users see a Profile card (name, email, role, managed ministries); Team Members section is admin-only; list editors (locations/ministries/tags) are editable by admin and manager.
   - Hub visibility per user controlled by `allowedHubs[]` on user profile (see Per-User Hub Access).
@@ -203,7 +203,7 @@ Existing churches at launch: 12 months Founder status (unlimited users, all hubs
 - `useSubscription(churchId)` → `hasHub(name)`, `canAddUser(count)`, `isTrialing(name)`
 - `UpgradeGate` component wraps paid pages
 - Hub tabs: shown with 🔒 when church hasn't subscribed (drives discovery); hidden entirely when user's `allowedHubs[]` excludes them
-- `userCanSeeHub(hubName)` in `App.jsx` combines church-level `hasHub()` + user-level `allowedHubs` check
+- `userCanSeeHub(hubName)` in `App.jsx` combines church-level `hasHub()` + role check (people_access blocked for `user` role) + user-level `allowedHubs` check
 - Payment: Stripe (Cloud Functions — wired up via `createCheckoutSession` / `createPortalSession`)
 
 ### Per-User Hub Access
@@ -213,9 +213,11 @@ Hub visibility is controlled at two levels:
 
 **Rules:**
 - `admin` role always sees all church hubs — no `allowedHubs` check needed
-- `manager` and `user` roles: visible hubs = intersection of church `hubs[]` and user `allowedHubs[]`
+- `manager` role: visible hubs = intersection of church `hubs[]` and user `allowedHubs[]`; `allowedHubs` null/missing = inherits all church hubs
+- `user` role: same as manager but **People Access Hub is always hidden** regardless of `allowedHubs`
 - `allowedHubs` null/missing = user inherits all church hubs (default for backward compatibility)
 - Admins assign hub access per-user in Settings > Team Members (only showing hubs the church has)
+- **People Access Hub** — manager+ only; certifications within it are admin-only (background checks, key assignments, custom requirements editable by manager)
 - This is a **UI/UX concern only** — Firestore rules do not change
 
 ## Completed Phases
@@ -257,6 +259,7 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Security hardening: granular Firestore rules (per-subcollection), user self-escalation fix, `escapeHtml` XSS fix for print functions, CSP/security headers in vercel.json, URL allowlist in Cloud Functions, supply quantity race condition → runTransaction, storage size+type limits | 2026-03-20 |
 | — | Blog post: "Church Supply Management: How to Stop Running Out of What You Need" | 2026-03-21 |
 | — | Maintenance Hub: user role can now update/edit tickets and drag Kanban status; Delete gated to admin+mgr; removed dead allowedHubs args from invite registration flow | 2026-03-22 |
+| — | Hub access control: People Access Hub hidden from user role entirely; certifications admin-only (add/edit/delete); managers handle background checks, key assignments, custom requirements | 2026-03-22 |
 
 ---
 
