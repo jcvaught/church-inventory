@@ -290,6 +290,7 @@ export function PeopleAccessPage({ store, userProfile }) {
   }
 
   async function handleBulkSave() {
+    if (bulkType === 'certification' && !isAdmin) return;
     const filled = bulkRows.filter(r => r.personName.trim() && r.completedDate);
     if (!filled.length) return;
     setBulkSaving(true);
