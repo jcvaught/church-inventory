@@ -109,7 +109,7 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/activityLog` | Audit trail (every action logged) |
 | `churches/{churchId}/reservations` | Future item reservation requests |
 | `churches/{churchId}/maintenanceTickets` | Maintenance Hub: repair tickets (MNT-### numbering, max-based); fields: `ticketNumber`, `name`, `description`, `priority` (High/Medium/Low), `status` (Backlog/Planning/In Progress/On Hold/Complete/Cancelled), `tags[]`, `dueDate`, `recurrence` (weekly/biweekly/monthly/quarterly/annually/null), `assignees[{uid,name}]`, `checklist[{id,text,done}]`, `photos[]`, `linkedItemDocId/Id/Description`, `vendorId/Name`, `estimatedCost`, `actualCost`, `createdBy`, `createdByName`, `createdAt`, `updatedAt`, `completedAt` |
-| `churches/{churchId}/maintenanceTickets/{id}/comments` | Comment subcollection: `text`, `authorId`, `authorName`, `createdAt` |
+| `churches/{churchId}/maintenanceTickets/{id}/comments` | Comment subcollection: `text`, `authorId`, `authorName`, `createdAt`, `updatedAt` (set on edit) |
 | `churches/{churchId}/vendors` | Maintenance Hub: vendor/contractor directory |
 | `churches/{churchId}/config/settings.maintenanceTags` | `string[]` — tag autocomplete for maintenance tickets; new tags added via `arrayUnion` |
 | `churches/{churchId}/bundles` | Coordination Hub: checkout bundles; fields: `name`, `description`, `items[{docId,itemId,description,location}]`, `createdBy`, `createdByName`, `createdAt` |
@@ -133,6 +133,7 @@ All church data is namespaced under `churches/{churchId}/`:
    - `config/subscription` — client create only at church creation time; no client updates (webhook/Admin SDK only)
    - `activityLog` — immutable; members can create, nobody can update or delete
    - `maintenanceTickets` — members can update (edit fields, assign, move status); only admin/manager can create or delete
+   - `maintenanceTickets/comments` — any member can create; authors can update/delete their own; admin/manager can update/delete any
    - Users cannot self-escalate role: create requires `role == 'user'` (or `role == 'admin'` only if churchId matches own church); self-updates cannot change `role`, `churchId`, `active`, or `allowedHubs`
    - Storage rules enforce 5MB max upload size and `image/*` content type only
 
@@ -260,6 +261,28 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Blog post: "Church Supply Management: How to Stop Running Out of What You Need" | 2026-03-21 |
 | — | Maintenance Hub: user role can now update/edit tickets and drag Kanban status; Delete gated to admin+mgr; removed dead allowedHubs args from invite registration flow | 2026-03-22 |
 | — | Hub access control: People Access Hub hidden from user role entirely; certifications admin-only (add/edit/delete); managers handle background checks, key assignments, custom requirements | 2026-03-22 |
+| — | Security audit: fixed missing cert role guard in `handleBulkSave` (PeopleAccessPage) | 2026-03-22 |
+| — | Maintenance Hub UX (user role audit): role-aware subtitle + empty state; ticket number search; checklist add/remove now auto-save | 2026-03-22 |
+| — | Maintenance Hub UX (mobile + comments): mobile Kanban replaced with "Move to:" select on cards; unsaved-changes confirm on modal close; comment edit/delete for own comments; relative timestamps; own-comment styling; Firestore rule updated to allow comment author self-edit/delete | 2026-03-22 |
+
+---
+
+## Future Work (Maintenance Hub — from UX Audit)
+
+These items were identified during a full Maintenance Hub UX audit (2026-03-22) but deferred. Prioritized by impact:
+
+### Medium Priority
+- **Status filter** — No way to filter by one or more statuses in the filter bar. Especially useful in Kanban view where all 6 columns are always visible.
+- **Read-only fields for `user` role** — Financial fields (Estimated Cost, Actual Cost), Vendor assignment, Recurrence, and Linked Equipment are editable by all roles. Consider showing these as read-only text for `user` role to reduce accidental edits.
+- **Confirmation on drag to Complete/Cancelled** — Moving a recurring ticket to Complete silently creates the next recurring ticket. A confirm step for terminal statuses would prevent accidents.
+- **Flash message duration** — 3-second flash is too short for longer messages (e.g., "Ticket saved, but notification email failed"). Increase to 5–6 seconds or make dismissible.
+- **Loading state on initial render** — Brief empty-state flash while Firestore loads. A spinner or skeleton prevents misleading "No tickets yet" flash.
+
+### Low Priority
+- **Photo upload error feedback** — `handleDetailPhotoAdd` silently swallows upload errors. Show a flash message on failure.
+- **Checklist item reordering** — No drag-to-reorder for checklist items; items can only be added at the bottom.
+- **Assignee filter** — "My Tickets" toggle exists but no way to filter by a specific other team member.
+- **Default list view on mobile** — View mode persists from last use; a user coming from desktop Kanban gets stacked columns on mobile. Could auto-suggest list view on narrow viewports.
 
 ---
 
