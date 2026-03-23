@@ -717,7 +717,7 @@ export function MaintenancePage({ store, userProfile }) {
     return maintenanceTickets.filter(t => {
       if (filterPriority && t.priority !== filterPriority) return false;
       if (filterMyTickets && !t.assignees?.some(a => a.uid === userId)) return false;
-      if (search && !t.name?.toLowerCase().includes(search) && !t.description?.toLowerCase().includes(search) && !t.tags?.some(tag => tag.includes(search))) return false;
+      if (search && !t.name?.toLowerCase().includes(search) && !t.description?.toLowerCase().includes(search) && !t.tags?.some(tag => tag.includes(search)) && !t.ticketNumber?.toLowerCase().includes(search)) return false;
       return true;
     });
   }, [maintenanceTickets, filterSearch, filterPriority, filterMyTickets, userId]);
@@ -748,7 +748,7 @@ export function MaintenancePage({ store, userProfile }) {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20, flexWrap:'wrap', gap:12 }}>
         <div>
           <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:'0 0 2px' }}>Maintenance Hub</h2>
-          <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Track repair tickets and manage service vendors</p>
+          <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Track repair tickets{canOperate ? ' and manage service vendors' : ''}</p>
         </div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
           {canOperate && (
@@ -868,7 +868,7 @@ export function MaintenancePage({ store, userProfile }) {
         <div style={{ background:B.white, borderRadius:18, padding:'48px 32px', border:'1px solid '+B.sand, textAlign:'center' }}>
           <div style={{ fontSize:48, marginBottom:16 }}>🔧</div>
           <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 8px', fontSize:18 }}>No maintenance tickets yet</h3>
-          <p style={{ color:B.textLight, fontSize:14 }}>Create a ticket to track repairs and maintenance tasks.</p>
+          <p style={{ color:B.textLight, fontSize:14 }}>{canOperate ? 'Create a ticket to track repairs and maintenance tasks.' : 'No tickets yet. Ask an admin or manager to create one.'}</p>
         </div>
       )}
 
@@ -1063,7 +1063,11 @@ export function MaintenancePage({ store, userProfile }) {
                       updateTicket(showDetail._docId, { checklist: cl });
                     }}/>
                     <span style={{ flex:1, fontSize:13, color:item.done ? B.textLight : B.textDark, textDecoration:item.done ? 'line-through' : 'none', fontFamily:f2 }}>{item.text}</span>
-                    <button type="button" onClick={() => setDetailEdits(d => ({ ...d, checklist:(d.checklist||[]).filter((_,i) => i !== idx) }))} style={{ border:'none', background:'none', color:B.textLight, cursor:'pointer', fontSize:18, lineHeight:1, padding:'0 2px' }}>×</button>
+                    <button type="button" onClick={() => {
+                      const cl = (detailEdits.checklist || []).filter((_, i) => i !== idx);
+                      setDetailEdits(d => ({ ...d, checklist: cl }));
+                      updateTicket(showDetail._docId, { checklist: cl });
+                    }} style={{ border:'none', background:'none', color:B.textLight, cursor:'pointer', fontSize:18, lineHeight:1, padding:'0 2px' }}>×</button>
                   </div>
                 ))}
                 <div style={{ display:'flex', gap:6, marginTop:8 }}>
@@ -1076,7 +1080,9 @@ export function MaintenancePage({ store, userProfile }) {
                     onKeyDown={e => {
                       if (e.key === 'Enter' && detailChecklistInput.trim()) {
                         e.preventDefault();
-                        setDetailEdits(d => ({ ...d, checklist:[...(d.checklist||[]), {id:Date.now().toString(), text:detailChecklistInput.trim(), done:false}] }));
+                        const cl = [...(detailEdits.checklist || []), { id: Date.now().toString(), text: detailChecklistInput.trim(), done: false }];
+                        setDetailEdits(d => ({ ...d, checklist: cl }));
+                        updateTicket(showDetail._docId, { checklist: cl });
                         setDetailChecklistInput('');
                         checklistInputRef.current?.focus();
                       }
@@ -1084,7 +1090,9 @@ export function MaintenancePage({ store, userProfile }) {
                   />
                   <button type="button" onClick={() => {
                     if (!detailChecklistInput.trim()) return;
-                    setDetailEdits(d => ({ ...d, checklist:[...(d.checklist||[]), {id:Date.now().toString(), text:detailChecklistInput.trim(), done:false}] }));
+                    const cl = [...(detailEdits.checklist || []), { id: Date.now().toString(), text: detailChecklistInput.trim(), done: false }];
+                    setDetailEdits(d => ({ ...d, checklist: cl }));
+                    updateTicket(showDetail._docId, { checklist: cl });
                     setDetailChecklistInput('');
                     checklistInputRef.current?.focus();
                   }} style={{ ...btnS, padding:'9px 14px', fontSize:13, flexShrink:0 }}>Add</button>
