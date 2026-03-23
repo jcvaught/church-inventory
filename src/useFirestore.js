@@ -284,11 +284,15 @@ export function useFirestore(churchId) {
   const useSupply = useCallback(async (docId, data, userId, userName) => {
     try {
       const ref = doc(db, 'churches', churchId, 'supplies', docId);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) return;
-      const current = snap.data();
-      const newQty = Math.max(0, (current.quantity || 0) - Number(data.qty));
-      await updateDoc(ref, { quantity: newQty });
+      let current, newQty;
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        current = snap.data();
+        newQty = Math.max(0, (current.quantity || 0) - Number(data.qty));
+        tx.update(ref, { quantity: newQty });
+      });
+      if (!current) return;
       await logActivity('use_supply', current.supplyId, userId, userName, {
         quantityUsed: Number(data.qty),
         purpose: data.purpose,
@@ -300,14 +304,15 @@ export function useFirestore(churchId) {
   const restockSupply = useCallback(async (docId, data, userId, userName) => {
     try {
       const ref = doc(db, 'churches', churchId, 'supplies', docId);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) return;
-      const current = snap.data();
-      const newQty = (current.quantity || 0) + Number(data.qty);
-      await updateDoc(ref, {
-        quantity: newQty,
-        lastRestocked: new Date().toISOString()
+      let current, newQty;
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        current = snap.data();
+        newQty = (current.quantity || 0) + Number(data.qty);
+        tx.update(ref, { quantity: newQty, lastRestocked: new Date().toISOString() });
       });
+      if (!current) return;
       await logActivity('restock', current.supplyId, userId, userName, {
         quantityAdded: Number(data.qty),
         source: data.source,
@@ -421,6 +426,20 @@ export function useFirestore(churchId) {
         authorName,
         createdAt: new Date().toISOString()
       });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const updateTicketComment = useCallback(async (ticketId, commentId, text) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'maintenanceTickets', ticketId, 'comments', commentId), {
+        text, updatedAt: new Date().toISOString()
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const deleteTicketComment = useCallback(async (ticketId, commentId) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'maintenanceTickets', ticketId, 'comments', commentId));
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
@@ -650,7 +669,7 @@ export function useFirestore(churchId) {
     logActivity,
     addReservation, updateReservation,
     updateUser, removeUser,
-    addTicket, updateTicket, addTicketComment, deleteTicket, addMaintenanceTags,
+    addTicket, updateTicket, addTicketComment, updateTicketComment, deleteTicketComment, deleteTicket, addMaintenanceTags,
     addVendor, updateVendor, deleteVendor,
     addBundle, updateBundle, deleteBundle,
     updateNotificationConfig,

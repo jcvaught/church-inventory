@@ -71,15 +71,15 @@ function _StatusBadge({ status }) {
   );
 }
 
-function TicketCard({ ticket, onClick, onDragStart }) {
+function TicketCard({ ticket, onClick, onDragStart, onStatusChange, isMobile }) {
   const sc = statusColors[ticket.status] || statusColors['Backlog'];
   const isOverdue = ticket.dueDate && new Date(ticket.dueDate) < new Date() && ticket.status !== 'Complete' && ticket.status !== 'Cancelled';
   return (
     <div
-      draggable={!!onDragStart}
-      onDragStart={onDragStart ? e => { e.dataTransfer.setData('ticketDocId', ticket._docId); e.dataTransfer.effectAllowed = 'move'; } : undefined}
+      draggable={!isMobile && !!onDragStart}
+      onDragStart={!isMobile && onDragStart ? e => { e.dataTransfer.setData('ticketDocId', ticket._docId); e.dataTransfer.effectAllowed = 'move'; } : undefined}
       onClick={() => onClick(ticket)}
-      style={{ background:B.white, borderRadius:12, padding:'14px 16px', border:'1px solid '+B.sand, cursor:onDragStart ? 'grab' : 'pointer', borderLeft:'4px solid '+sc.dot, boxShadow:'0 1px 3px rgba(27,42,74,0.06)', marginBottom:8, transition:'box-shadow 0.15s' }}
+      style={{ background:B.white, borderRadius:12, padding:'14px 16px', border:'1px solid '+B.sand, cursor: !isMobile && onDragStart ? 'grab' : 'pointer', borderLeft:'4px solid '+sc.dot, boxShadow:'0 1px 3px rgba(27,42,74,0.06)', marginBottom:8, transition:'box-shadow 0.15s' }}
       onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(27,42,74,0.12)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 3px rgba(27,42,74,0.06)'}
     >
@@ -123,6 +123,18 @@ function TicketCard({ ticket, onClick, onDragStart }) {
         <div style={{ display:'flex', justifyContent:'flex-end', gap:8, alignItems:'center' }}>
           {ticket.photos?.length > 0 && <span style={{ fontSize:11, color:B.textLight }}>📷 {ticket.photos.length}</span>}
           {ticket.dueDate && <span style={{ fontSize:11, color: isOverdue ? B.red : B.textLight }}>📅 {ticket.dueDate}</span>}
+        </div>
+      )}
+      {isMobile && onStatusChange && (
+        <div onClick={e => e.stopPropagation()} style={{ marginTop:10, borderTop:'1px solid '+B.sand, paddingTop:8, display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:11, color:B.textLight, fontFamily:f1, fontWeight:600, flexShrink:0 }}>Move to:</span>
+          <select
+            value={ticket.status}
+            onChange={e => onStatusChange(ticket, e.target.value)}
+            style={{ flex:1, fontSize:12, borderRadius:8, border:'1px solid '+B.sand, padding:'4px 8px', fontFamily:f1, color:B.navy, background:B.white }}
+          >
+            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
         </div>
       )}
     </div>
@@ -287,9 +299,31 @@ function RichTextarea({ value, onChange, style, placeholder, onKeyDown }) {
   );
 }
 
-function CommentThread({ comments, loading, newComment, onChange, onPost, posting }) {
+function formatCommentDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}h ago`;
+  const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString([], { month:'short', day:'numeric' });
+}
+
+function CommentThread({ comments, loading, newComment, onChange, onPost, posting, userId, canOperate, onEdit, onDelete }) {
   const endRef = useRef();
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState('');
   useEffect(() => { if (comments.length) endRef.current?.scrollIntoView({ behavior:'smooth' }); }, [comments.length]);
+
+  function startEdit(c) { setEditingId(c.id); setEditText(c.text); }
+  function cancelEdit() { setEditingId(null); setEditText(''); }
+  async function submitEdit(c) { await onEdit(c.id, editText); setEditingId(null); setEditText(''); }
+
   return (
     <div>
       <div style={{ maxHeight:200, overflowY:'auto', display:'flex', flexDirection:'column', gap:10, marginBottom:10, paddingRight:2 }}>
@@ -297,15 +331,41 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
           ? <div style={{ color:B.textLight, fontSize:13 }}>Loading...</div>
           : comments.length === 0
             ? <div style={{ color:B.textLight, fontSize:13 }}>No comments yet.</div>
-            : comments.map(c => (
-                <div key={c.id} style={{ background:B.warmGray, borderRadius:10, padding:'10px 14px' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
-                    <span style={{ fontWeight:700, fontSize:13, color:B.navy, fontFamily:f1 }}>{c.authorName}</span>
-                    <span style={{ fontSize:11, color:B.textLight }}>{c.createdAt ? (c.createdAt.slice(0,10) === new Date().toISOString().slice(0,10) ? new Date(c.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : c.createdAt.slice(0,10)) : ''}</span>
+            : comments.map(c => {
+                const isOwn = c.authorId === userId;
+                const canModify = isOwn || canOperate;
+                return (
+                  <div key={c.id} style={{ background: isOwn ? B.tealPale : B.warmGray, borderRadius:10, padding:'10px 14px', border: isOwn ? '1px solid '+B.tealLight : '1px solid transparent' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3, gap:6 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <span style={{ fontWeight:700, fontSize:13, color:B.navy, fontFamily:f1 }}>{c.authorName}</span>
+                        {isOwn && <span style={{ fontSize:10, fontWeight:700, color:B.teal, fontFamily:f1, background:B.white, borderRadius:10, padding:'1px 6px' }}>You</span>}
+                      </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <span style={{ fontSize:11, color:B.textLight }}>{formatCommentDate(c.createdAt)}{c.updatedAt ? ' · edited' : ''}</span>
+                        {canModify && editingId !== c.id && (
+                          <div style={{ display:'flex', gap:4 }}>
+                            <button onClick={() => startEdit(c)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:12, color:B.textLight, padding:'0 2px' }} title="Edit">✏️</button>
+                            <button onClick={() => onDelete(c.id)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:12, color:B.textLight, padding:'0 2px' }} title="Delete">🗑️</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {editingId === c.id
+                      ? (
+                        <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:4 }}>
+                          <textarea value={editText} onChange={e => setEditText(e.target.value)} style={{ ...inp, minHeight:60, resize:'vertical', width:'100%', boxSizing:'border-box' }} autoFocus/>
+                          <div style={{ display:'flex', gap:6, justifyContent:'flex-end' }}>
+                            <button onClick={cancelEdit} style={{ ...btnS, padding:'5px 12px', fontSize:12 }}>Cancel</button>
+                            <button onClick={() => submitEdit(c)} disabled={!editText.trim()} style={{ ...btnP, padding:'5px 12px', fontSize:12, opacity:editText.trim() ? 1 : 0.5 }}>Save</button>
+                          </div>
+                        </div>
+                      )
+                      : <div style={{ fontSize:13, color:B.textDark, lineHeight:1.5, whiteSpace:'pre-wrap' }}>{c.text}</div>
+                    }
                   </div>
-                  <div style={{ fontSize:13, color:B.textDark, lineHeight:1.5, whiteSpace:'pre-wrap' }}>{c.text}</div>
-                </div>
-              ))
+                );
+              })
         }
         <div ref={endRef}/>
       </div>
@@ -325,14 +385,14 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
   );
 }
 
-function KanbanColumn({ status, tickets, onTicketClick, onDrop, isMobile }) {
+function KanbanColumn({ status, tickets, onTicketClick, onDrop, onStatusChange, isMobile }) {
   const sc = statusColors[status] || statusColors['Backlog'];
   const [dragOver, setDragOver] = useState(false);
   return (
     <div
-      onDragOver={onDrop ? e => { e.preventDefault(); setDragOver(true); } : undefined}
-      onDragLeave={onDrop ? () => setDragOver(false) : undefined}
-      onDrop={onDrop ? e => { e.preventDefault(); setDragOver(false); const docId = e.dataTransfer.getData('ticketDocId'); if (docId) onDrop(docId); } : undefined}
+      onDragOver={!isMobile && onDrop ? e => { e.preventDefault(); setDragOver(true); } : undefined}
+      onDragLeave={!isMobile && onDrop ? () => setDragOver(false) : undefined}
+      onDrop={!isMobile && onDrop ? e => { e.preventDefault(); setDragOver(false); const docId = e.dataTransfer.getData('ticketDocId'); if (docId) onDrop(docId); } : undefined}
       style={{ minWidth:isMobile ? '100%' : 260, maxWidth:isMobile ? '100%' : 280, flexShrink:0, background:dragOver ? B.tealPale : B.warmGray, borderRadius:14, padding:'12px 10px', border:'2px solid '+(dragOver ? B.teal : 'transparent'), transition:'background 0.15s, border-color 0.15s' }}
     >
       <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10, paddingLeft:4 }}>
@@ -343,7 +403,7 @@ function KanbanColumn({ status, tickets, onTicketClick, onDrop, isMobile }) {
       <div style={{ overflowY:'auto', maxHeight:isMobile ? 'none' : 'calc(100vh - 380px)', minHeight:80 }}>
         {tickets.length === 0
           ? <div style={{ textAlign:'center', color:B.textLight, fontSize:12, padding:'16px 0', fontStyle:'italic' }}>Empty</div>
-          : tickets.map(t => <TicketCard key={t._docId} ticket={t} onClick={onTicketClick} onDragStart={onDrop ? true : undefined}/>)
+          : tickets.map(t => <TicketCard key={t._docId} ticket={t} onClick={onTicketClick} onDragStart={onDrop ? true : undefined} onStatusChange={onStatusChange} isMobile={isMobile}/>)
         }
       </div>
     </div>
@@ -354,7 +414,7 @@ const getEmptyTicket = () => ({ name:'', description:'', priority:'Medium', tags
 const getEmptyVendor = () => ({ name:'', phone:'', email:'', specialty:'', notes:'' });
 
 export function MaintenancePage({ store, userProfile }) {
-  const { items, maintenanceTickets, vendors, users, settings, notificationConfig, addTicket, updateTicket, deleteTicket, addTicketComment, addMaintenanceTags, addVendor, updateVendor, deleteVendor } = store;
+  const { items, maintenanceTickets, vendors, users, settings, notificationConfig, addTicket, updateTicket, deleteTicket, addTicketComment, updateTicketComment, deleteTicketComment, addMaintenanceTags, addVendor, updateVendor, deleteVendor } = store;
   const isMobile = useContext(MobileCtx);
 
   const userId = userProfile?.id || userProfile?.uid;
@@ -386,6 +446,7 @@ export function MaintenancePage({ store, userProfile }) {
   const [photoFiles, setPhotoFiles] = useState([]);
   const [photoPreviews, setPhotoPreviews] = useState([]);
   const [detailEdits, setDetailEdits] = useState({});
+  const [detailSnapshot, setDetailSnapshot] = useState({});
   const [vendorForm, setVendorForm] = useState(getEmptyVendor);
   const [sortBy, setSortBy] = useState(() => localStorage.getItem('maint_sortBy') || 'createdDesc');
   const [detailChecklistInput, setDetailChecklistInput] = useState('');
@@ -422,10 +483,7 @@ export function MaintenancePage({ store, userProfile }) {
   }
 
   function openDetail(ticket) {
-    setShowDetail(ticket);
-    setNewComment('');
-    setDetailChecklistInput('');
-    setDetailEdits({
+    const edits = {
       name: ticket.name || '',
       description: ticket.description || '',
       status: ticket.status || 'Backlog',
@@ -440,7 +498,30 @@ export function MaintenancePage({ store, userProfile }) {
       actualCost: ticket.actualCost != null ? String(ticket.actualCost) : '',
       notes: ticket.notes || '',
       checklist: ticket.checklist || [],
-    });
+    };
+    setShowDetail(ticket);
+    setDetailEdits(edits);
+    setDetailSnapshot(edits);
+    setNewComment('');
+    setDetailChecklistInput('');
+  }
+
+  function isDetailDirty() {
+    const fields = ['name', 'description', 'status', 'priority', 'dueDate', 'recurrence', 'linkedItemDocId', 'vendorId', 'estimatedCost', 'actualCost', 'notes'];
+    if (fields.some(f => (detailEdits[f] ?? '') !== (detailSnapshot[f] ?? ''))) return true;
+    if (JSON.stringify(detailEdits.tags) !== JSON.stringify(detailSnapshot.tags)) return true;
+    if (JSON.stringify(detailEdits.assignees) !== JSON.stringify(detailSnapshot.assignees)) return true;
+    return false;
+  }
+
+  function closeDetail() {
+    if (isDetailDirty() && !window.confirm('You have unsaved changes. Close without saving?')) return;
+    setShowDetail(null);
+    setDetailEdits({});
+    setDetailSnapshot({});
+    setComments([]);
+    setNewComment('');
+    setDetailChecklistInput('');
   }
 
   async function uploadPhotos(docId, files) {
@@ -574,6 +655,7 @@ export function MaintenancePage({ store, userProfile }) {
 
       setShowDetail(null);
       setDetailEdits({});
+      setDetailSnapshot({});
       setDetailChecklistInput('');
       flash(isNowComplete && !wasComplete && detailEdits.recurrence ? 'Ticket completed — next recurring ticket created!' : 'Ticket updated!');
     } finally {
@@ -590,6 +672,17 @@ export function MaintenancePage({ store, userProfile }) {
     } finally {
       setPostingComment(false);
     }
+  }
+
+  async function handleEditComment(commentId, text) {
+    if (!showDetail?._docId || !text.trim()) return;
+    await updateTicketComment(showDetail._docId, commentId, text.trim());
+  }
+
+  async function handleDeleteComment(commentId) {
+    if (!showDetail?._docId) return;
+    if (!window.confirm('Delete this comment?')) return;
+    await deleteTicketComment(showDetail._docId, commentId);
   }
 
   async function handleDetailPhotoAdd(files) {
@@ -888,7 +981,7 @@ export function MaintenancePage({ store, userProfile }) {
       {viewMode === 'kanban' && maintenanceTickets.length > 0 && (
         <div style={{ display:'flex', gap:12, overflowX:isMobile ? 'hidden' : 'auto', flexDirection:isMobile ? 'column' : 'row', paddingBottom:8, alignItems:'flex-start' }}>
           {STATUSES.map(status => (
-            <KanbanColumn key={status} status={status} tickets={sortedTickets.filter(t => t.status === status)} onTicketClick={openDetail} onDrop={docId => handleDrop(docId, status)} isMobile={isMobile}/>
+            <KanbanColumn key={status} status={status} tickets={sortedTickets.filter(t => t.status === status)} onTicketClick={openDetail} onDrop={docId => handleDrop(docId, status)} onStatusChange={(ticket, newStatus) => handleDrop(ticket._docId, newStatus)} isMobile={isMobile}/>
           ))}
         </div>
       )}
@@ -984,7 +1077,7 @@ export function MaintenancePage({ store, userProfile }) {
       </Modal>
 
       {/* ═══ TICKET DETAIL MODAL ═══ */}
-      <Modal open={!!showDetail} onClose={() => { setShowDetail(null); setDetailEdits({}); setComments([]); setNewComment(''); setDetailChecklistInput(''); }} title={(showDetail?.ticketNumber || '') + (showDetail?.name ? ' — ' + showDetail.name.slice(0, 40) : '')} wide>
+      <Modal open={!!showDetail} onClose={closeDetail} title={(showDetail?.ticketNumber || '') + (showDetail?.name ? ' — ' + showDetail.name.slice(0, 40) : '')} wide>
         {showDetail && (
           <div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
@@ -1106,7 +1199,7 @@ export function MaintenancePage({ store, userProfile }) {
               </div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                 {canOperate && <button onClick={handleDeleteTicket} style={{ ...btnD, fontSize:13, padding:'9px 14px' }}>Delete</button>}
-                <button onClick={() => { setShowDetail(null); setDetailEdits({}); setComments([]); setNewComment(''); setDetailChecklistInput(''); }} style={btnS}>Cancel</button>
+                <button onClick={closeDetail} style={btnS}>Cancel</button>
                 <button onClick={handleUpdateTicket} disabled={saving || !detailEdits.name?.trim()} style={{ ...btnP, opacity:(saving || !detailEdits.name?.trim()) ? .5 : 1 }}>
                   {saving ? 'Saving...' : 'Save Changes'}
                 </button>
@@ -1122,7 +1215,7 @@ export function MaintenancePage({ store, userProfile }) {
             {/* Comments */}
             <div>
               <div style={{ fontWeight:700, fontSize:12, color:B.textMid, fontFamily:f1, textTransform:'uppercase', letterSpacing:.5, marginBottom:10 }}>Comments</div>
-              <CommentThread comments={comments} loading={commentsLoading} newComment={newComment} onChange={setNewComment} onPost={handlePostComment} posting={postingComment}/>
+              <CommentThread comments={comments} loading={commentsLoading} newComment={newComment} onChange={setNewComment} onPost={handlePostComment} posting={postingComment} userId={userId} canOperate={canOperate} onEdit={handleEditComment} onDelete={handleDeleteComment}/>
             </div>
           </div>
         )}

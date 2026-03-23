@@ -89,11 +89,11 @@ service cloud.firestore {
       allow update:         if isMember(churchId);
     }
 
-    // ── Ticket comments — any member can add; admins+mgrs can edit/delete ─────
+    // ── Ticket comments — any member can add; authors can edit/delete own; admins+mgrs can edit/delete any ─────
     match /churches/{churchId}/maintenanceTickets/{ticketId}/comments/{commentId} {
       allow read:          if isMember(churchId);
       allow create:        if isMember(churchId);
-      allow update, delete: if isChurchAdminOrManager(churchId);
+      allow update, delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && request.auth.uid == resource.data.authorId);
     }
 
     // ── Vendors ───────────────────────────────────────────────────────────────
