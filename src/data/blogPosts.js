@@ -248,6 +248,180 @@ Running out of batteries on Sunday morning is avoidable. So is the panic that co
   },
 
   {
+    slug: 'church-equipment-maintenance',
+    title: 'Church Equipment Maintenance: A Complete Guide',
+    description: "Deferred maintenance is costing your church more than you think. Here's how to build a maintenance system that catches problems early, manages vendors, and protects your ministry budget.",
+    date: '2026-03-24',
+    keywords: 'church equipment maintenance, church maintenance management, church repair tracking, preventive maintenance church, church facilities maintenance',
+    content: `
+## The Real Cost of Deferred Maintenance
+
+Every church facilities team knows the feeling: something breaks at the worst possible moment. The main projector dies thirty minutes before the Sunday service. The HVAC fails the week before a major event. The sound system develops a hum that no one can trace because the last person who worked on it left two years ago.
+
+These aren't random failures. They're the predictable result of deferred maintenance — small problems that go unaddressed until they become expensive emergencies. And in churches, where budgets are tight and weekend services are non-negotiable, the cost isn't just the repair bill. It's the volunteer scramble, the distracted worship, and the distrust that builds when equipment fails the people who depend on it.
+
+The solution isn't more money. It's a system.
+
+## Why Churches Struggle With Maintenance
+
+Most churches manage maintenance the same way they manage supplies: reactively. Something breaks, someone reports it (maybe), and eventually someone fixes it (hopefully before the next service). There's no central record of what needs attention, no visibility into what's been done, and no history to inform future decisions.
+
+This creates three recurring problems:
+
+**The information problem.** When the person who fixed the HVAC three years ago leaves, their knowledge leaves with them. What was wrong? What parts were used? Who did the work? What should we watch for next time? Without a written record, every repair starts from zero.
+
+**The priority problem.** When everything is tracked informally, everything feels equally urgent — or nothing does. A squeaky door gets the same mental weight as a failing circuit panel because both exist only as notes in someone's head. A ticketing system with explicit priority levels makes triage possible.
+
+**The cost problem.** Without repair records, you can't make an informed repair-versus-replace decision. You don't know that the audio console has been repaired four times in three years for a combined cost of $2,400. You only see the $700 estimate in front of you today — which looks reasonable in isolation but is the wrong choice given the history.
+
+## Building a Church Maintenance System
+
+A good maintenance system doesn't have to be complicated. It needs to do four things: capture issues when they happen, track them through to resolution, preserve the history, and give you visibility into what's outstanding.
+
+### Step 1: Create a Single Place to Report Issues
+
+The biggest failure point in informal maintenance management is that issues never get reported at all. A volunteer notices the stage monitor crackling but doesn't know who to tell. A staff member sees water staining on a ceiling tile but figures someone else already reported it. A tech director spots a fraying cable and makes a mental note that never becomes an action.
+
+Fix this with a single, low-friction reporting mechanism. If your team uses their phones, a QR code posted on equipment that links directly to a new-issue form gets you reports at the point of discovery rather than hours later when people get back to a computer.
+
+The goal is zero friction between "I noticed something wrong" and "there's a record of it." Every additional step — find the spreadsheet, log in, remember who to email — reduces the odds that the report happens.
+
+### Step 2: Use Tickets With Status and Priority
+
+Not every issue is a crisis, and treating them all with equal urgency burns out your maintenance coordinators fast. A structured ticket system lets you triage explicitly:
+
+**Priority levels:**
+- **High** — affects Sunday services or safety; needs resolution within 24–48 hours
+- **Medium** — affects regular operations but has a workaround; 1–2 weeks
+- **Low** — cosmetic or minor; address when bandwidth allows
+
+**Status workflow:**
+- **Backlog** — reported but not yet scheduled
+- **Planning** — scoped, vendor contacted, parts ordered
+- **In Progress** — actively being worked
+- **On Hold** — waiting on parts, vendor availability, or budget approval
+- **Complete** — resolved and verified
+
+The status field is what makes a ticket system different from a to-do list. A to-do list has items. A ticket system has items *with context* — and that context is what makes handoffs possible when the person tracking an issue is unavailable.
+
+### Step 3: Assign Ownership
+
+Every open ticket should have an assignee — one person responsible for driving it to resolution. This doesn't mean they do the work themselves; it means they own the outcome. They're the one who follows up with the vendor, confirms the repair was done correctly, and closes the ticket when it's resolved.
+
+Without ownership, tickets stall in "Planning" or "In Progress" indefinitely. The assignee field converts a tracked issue into an accountable one.
+
+### Step 4: Document the Resolution
+
+When a ticket is closed, capture what was done. This takes two minutes and pays dividends for years:
+
+- What was the root cause?
+- What was repaired or replaced?
+- Which vendor did the work, and at what cost?
+- What should be monitored going forward?
+- Are there related items or preventive steps to schedule?
+
+This documentation is what breaks the cycle of knowledge walking out the door when people leave. It's also what lets you make informed decisions when the same issue surfaces again.
+
+## Preventive Maintenance: Getting Ahead of Failures
+
+Reactive maintenance — fixing things after they break — will always be part of facilities management. But preventive maintenance — addressing known wear patterns before they become failures — is what keeps Sunday morning surprises rare.
+
+### Identify Your High-Stakes Equipment
+
+Start with the equipment where failure causes the most disruption: your main PA system, your primary projectors, your HVAC units, and your livestream setup if you have one. These are the items where a preventive maintenance investment pays for itself most clearly.
+
+For each, identify the manufacturer-recommended maintenance intervals and the most common failure modes. Most professional audio equipment manufacturers publish maintenance guidelines. HVAC manufacturers specify filter replacement intervals and annual service requirements. This information is the foundation of your preventive maintenance calendar.
+
+### Build a Recurring Maintenance Schedule
+
+Once you know what needs regular attention, schedule it. Recurrent maintenance tasks include:
+
+**Monthly:**
+- Replace batteries in wireless microphones (or test and rotate)
+- Clean projector air filters (more frequently in dusty environments)
+- Inspect cables for fraying, especially high-use stage cables
+- Check fire extinguisher pressure gauges
+
+**Quarterly:**
+- Replace HVAC filters (more often if usage is heavy)
+- Clean projector lenses
+- Test all emergency lighting
+- Inspect and clean audio console faders and pots
+- Lubricate door hardware on high-traffic doors
+
+**Annually:**
+- Professional HVAC service (before cooling season)
+- Projector lamp replacement (at or before rated hours)
+- Full PA system inspection by qualified technician
+- Generator service if applicable
+- Elevator inspection and certification
+
+Recurring tickets — set once, generated automatically at each interval — ensure that preventive tasks don't get forgotten even when your team changes.
+
+### Track Equipment Age and Repair History
+
+The most useful thing a maintenance record system gives you over time is the data to make repair-versus-replace decisions confidently. When you can see that a projector is 8 years old, has had three lamp replacements, and has now needed two circuit-board repairs in the past year, the decision to replace rather than repair again becomes obvious.
+
+Without that history, you're always evaluating each repair in isolation. With it, you're managing an asset across its full lifecycle.
+
+## Vendor Management
+
+Most churches work with a rotating cast of vendors and contractors: the AV company that installed your sound system, the HVAC technician who's serviced your units for years, the electrician you call for anything high-voltage, the piano tuner who comes twice a year. Managing these relationships well reduces your maintenance costs and response times significantly.
+
+### Build a Vendor Directory
+
+Keep a record for each vendor that includes:
+- Contact name, phone, and email
+- Service category (AV, HVAC, electrical, plumbing, piano/organ, etc.)
+- Pricing notes (hourly rate, trip charge, emergency rate)
+- Quality notes from past work
+- Lead time for non-emergency calls
+
+When a ticket is created, linking it to the relevant vendor gives you contact information at your fingertips and creates a record of who did the work. Over time, your vendor directory becomes a curated list of trusted contacts rather than a pile of business cards.
+
+### Keep Service Records Per Vendor
+
+When you have a repair history tied to specific vendors, patterns become visible. A vendor whose work leads to repeat tickets for the same issue is telling you something. A vendor who consistently closes tickets cleanly and on time earns more of your business. This data makes your vendor relationships manageable rather than purely relationship-driven.
+
+## Maintenance and Your Ministry Budget
+
+Maintenance budgeting is one of the least glamorous parts of church facilities management — and one of the most important. Under-budgeting for maintenance leads to deferred repairs, which leads to emergency replacements, which blows your budget entirely.
+
+A rough industry guideline for facilities maintenance is 1–3% of asset replacement value per year. For a church with $500,000 in physical assets (building, equipment, vehicles), that suggests a $5,000–$15,000 annual maintenance budget. Most churches spend significantly less — which is why most churches deal with more emergency repairs.
+
+### Separate Planned from Emergency Maintenance
+
+In your maintenance budget, separate line items for planned maintenance (the HVAC service you scheduled in January, the annual PA inspection, recurring supply replacements) and emergency maintenance (the failures you didn't see coming). Planned maintenance costs are predictable and manageable. Emergency maintenance is where your budget gets eaten.
+
+As you build a history of maintenance tickets with cost data, you'll be able to look back at what you actually spent in each category — and project more accurately for next year. Most churches find that improving their preventive maintenance reduces their emergency maintenance spend substantially, because many "emergencies" are actually predictable failures that weren't caught early.
+
+### Track Actual Costs Per Asset
+
+When you link maintenance tickets to specific equipment, you accumulate repair costs per asset automatically. After two or three years of data, you'll have a clear picture of which items cost the most to maintain and when their lifetime repair costs approach replacement cost.
+
+This data changes budget conversations. Instead of "we need to replace the projector" versus "we just fixed it," you have "this projector has cost $1,800 in repairs in three years, and it's due for another repair" — a factual basis for a decision rather than a matter of opinion.
+
+## Getting Your Team On Board
+
+The best maintenance system in the world doesn't work if your team doesn't use it. Two things drive adoption:
+
+**Make reporting easy.** If submitting a maintenance issue takes five minutes, people won't do it unless the problem is serious. If it takes thirty seconds via a QR code scan, they'll report things they'd otherwise let slide. Friction is the enemy of adoption.
+
+**Close the loop.** When someone reports an issue, they should be able to see that it was received, assigned, and eventually resolved. If issues go into a black hole, people stop reporting them. Ticket status visibility — "your report is In Progress, assigned to the facilities coordinator" — creates the trust that keeps the system fed with good data.
+
+The churches that build effective maintenance cultures are the ones where reporting issues feels like helping rather than complaining. That culture starts with a system that takes reports seriously and makes outcomes visible.
+
+## Starting Small
+
+You don't need to implement everything at once. Start with the maintenance category causing the most pain right now — typically your AV equipment or HVAC — and build the habit of logging tickets for that category before expanding.
+
+A maintenance system pays compound dividends: the value of the records you create today grows every year, as history accumulates and patterns become visible. The first year gives you structure. The second gives you comparison data. By year three, you're making decisions based on real information rather than gut feel and faded memory.
+
+Your congregation expects the building and equipment to work. Behind that expectation is a team of people who make it happen. Give them the tools to do it systematically — and the surprises will become rare.
+    `.trim(),
+  },
+
+  {
     slug: 'what-planning-center-cant-do',
     title: "What Planning Center Can't Do: Managing Your Church's Physical Assets",
     description: "Planning Center is excellent for people and events. But it has no inventory features. Here's how to fill that gap without adding complexity.",
