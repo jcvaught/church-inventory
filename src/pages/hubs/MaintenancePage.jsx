@@ -286,6 +286,52 @@ function RichTextarea({ value, onChange, style, placeholder, onKeyDown }) {
     setTimeout(() => el.focus(), 0);
   }
 
+  function handleKeyDown(e) {
+    if (e.key === 'Enter') {
+      const el = taRef.current;
+      const pos = el.selectionStart;
+      const textBefore = value.substring(0, pos);
+      const lineStart = textBefore.lastIndexOf('\n') + 1;
+      const currentLine = textBefore.substring(lineStart);
+      const atLineEnd = pos === value.length || value[pos] === '\n';
+
+      const numMatch = currentLine.match(/^(\d+)\. /);
+      if (currentLine === '• ' && atLineEnd) {
+        // Empty bullet line — exit list
+        e.preventDefault();
+        const newValue = value.substring(0, lineStart) + value.substring(pos);
+        onChange(newValue);
+        setTimeout(() => { el.selectionStart = el.selectionEnd = lineStart; }, 0);
+        return;
+      }
+      if (currentLine.startsWith('• ')) {
+        e.preventDefault();
+        const insert = '\n• ';
+        const newValue = value.substring(0, pos) + insert + value.substring(el.selectionEnd);
+        onChange(newValue);
+        setTimeout(() => { el.selectionStart = el.selectionEnd = pos + insert.length; }, 0);
+        return;
+      }
+      if (numMatch && currentLine === numMatch[0] && atLineEnd) {
+        // Empty numbered line — exit list
+        e.preventDefault();
+        const newValue = value.substring(0, lineStart) + value.substring(pos);
+        onChange(newValue);
+        setTimeout(() => { el.selectionStart = el.selectionEnd = lineStart; }, 0);
+        return;
+      }
+      if (numMatch) {
+        e.preventDefault();
+        const insert = '\n' + (parseInt(numMatch[1]) + 1) + '. ';
+        const newValue = value.substring(0, pos) + insert + value.substring(el.selectionEnd);
+        onChange(newValue);
+        setTimeout(() => { el.selectionStart = el.selectionEnd = pos + insert.length; }, 0);
+        return;
+      }
+    }
+    onKeyDown?.(e);
+  }
+
   const tb = { padding:'3px 9px', borderRadius:6, border:'1px solid '+B.sand, background:B.warmGray, color:B.textMid, fontSize:12, fontFamily:f1, cursor:'pointer', fontWeight:600 };
 
   return (
@@ -294,7 +340,7 @@ function RichTextarea({ value, onChange, style, placeholder, onKeyDown }) {
         <button type="button" onMouseDown={e => { e.preventDefault(); toggleBullet(); }} style={tb}>• List</button>
         <button type="button" onMouseDown={e => { e.preventDefault(); toggleNumbered(); }} style={tb}>1. List</button>
       </div>
-      <textarea ref={taRef} value={value} onChange={e => onChange(e.target.value)} style={style} placeholder={placeholder} onKeyDown={onKeyDown}/>
+      <textarea ref={taRef} value={value} onChange={e => onChange(e.target.value)} style={style} placeholder={placeholder} onKeyDown={handleKeyDown}/>
     </div>
   );
 }
