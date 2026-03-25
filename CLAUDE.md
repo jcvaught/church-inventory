@@ -159,7 +159,7 @@ All church data is namespaced under `churches/{churchId}/`:
   - Hub visibility per user controlled by `allowedHubs[]` on user profile (see Per-User Hub Access).
 - **SEO:** `react-helmet-async` installed; `<HelmetProvider>` wraps the app in `main.jsx`. Reusable `<SEO>` component in `src/components/SEO.jsx` sets `<title>`, `<meta name="description">`, `<link rel="canonical">`, Open Graph tags, Twitter Card tags, and optional JSON-LD via `<script type="application/ld+json">`. Applied to LandingPage (with SoftwareApplication schema), HelpPage, BlogIndex, and BlogPost (with BlogPosting schema). Blog posts use `ogType="article"`. Google Search Console verified via `public/google254ab6f07b8682a3.html`.
 - **AppShell footer (desktop only):** Displays logo, domain, and links to Help Center and Blog. Hidden on mobile (`!isMobile`). Blog link uses `href="/blog"` — works via Vercel catch-all rewrite.
-- **localStorage:** Items page persists `locationFilter` and `ministryFilter` under keys `inv_locationFilter` / `inv_ministryFilter`.
+- **localStorage:** Items page persists `locationFilter`, `ministryFilter`, and `statusFilter` under keys `inv_locationFilter` / `inv_ministryFilter` / `inv_statusFilter`.
 
 ### Item Status Values
 
@@ -264,12 +264,15 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Security audit: fixed missing cert role guard in `handleBulkSave` (PeopleAccessPage) | 2026-03-22 |
 | — | Maintenance Hub UX (user role audit): role-aware subtitle + empty state; ticket number search; checklist add/remove now auto-save | 2026-03-22 |
 | — | Maintenance Hub UX (mobile + comments): mobile Kanban replaced with "Move to:" select on cards; unsaved-changes confirm on modal close; comment edit/delete for own comments; relative timestamps; own-comment styling; Firestore rule updated to allow comment author self-edit/delete | 2026-03-22 |
+| — | Blog post: "Church Equipment Maintenance: A Complete Guide" | 2026-03-24 |
+| — | RichTextarea Enter key list continuation: Enter continues bullet/numbered list; double Enter on empty prefix line exits list; numbered lists auto-increment | 2026-03-24 |
+| — | UX fixes (Opus audit — Maintenance + Inventory hubs): error flash red styling, checklist save error handling, onDragStart boolean fix, comment tap targets, comment placeholder text, bulk location role gate, "Send to Repair" label, role-aware empty state, statusFilter localStorage persistence, search placeholder cleanup, overdue red border persists in bulk select | 2026-03-24 |
 
 ---
 
 ## Future Work (Maintenance Hub — from UX Audit)
 
-These items were identified during a full Maintenance Hub UX audit (2026-03-22) but deferred. Prioritized by impact:
+These items were identified during a full Maintenance Hub UX audit but deferred. Prioritized by impact:
 
 ### Medium Priority
 - **Status filter** — No way to filter by one or more statuses in the filter bar. Especially useful in Kanban view where all 6 columns are always visible.
