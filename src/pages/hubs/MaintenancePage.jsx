@@ -391,8 +391,8 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
                         <span style={{ fontSize:11, color:B.textLight }}>{formatCommentDate(c.createdAt)}{c.updatedAt ? ' · edited' : ''}</span>
                         {canModify && editingId !== c.id && (
                           <div style={{ display:'flex', gap:4 }}>
-                            <button onClick={() => startEdit(c)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:12, color:B.textLight, padding:'0 2px' }} title="Edit">✏️</button>
-                            <button onClick={() => onDelete(c.id)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:12, color:B.textLight, padding:'0 2px' }} title="Delete">🗑️</button>
+                            <button onClick={() => startEdit(c)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:14, color:B.textLight, padding:'6px 8px', minWidth:28, minHeight:28 }} title="Edit">✏️</button>
+                            <button onClick={() => onDelete(c.id)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:14, color:B.textLight, padding:'6px 8px', minWidth:28, minHeight:28 }} title="Delete">🗑️</button>
                           </div>
                         )}
                       </div>
@@ -421,7 +421,7 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
             value={newComment}
             onChange={onChange}
             style={{ ...inp, minHeight:38, resize:'vertical', width:'100%', boxSizing:'border-box' }}
-            placeholder="Add a comment... (Shift+Enter for new line, Enter to post)"
+            placeholder="Add a comment... (Enter to post · Shift+Enter for new line)"
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) { e.preventDefault(); onPost(); } }}
           />
         </div>
@@ -449,7 +449,7 @@ function KanbanColumn({ status, tickets, onTicketClick, onDrop, onStatusChange, 
       <div style={{ overflowY:'auto', maxHeight:isMobile ? 'none' : 'calc(100vh - 380px)', minHeight:80 }}>
         {tickets.length === 0
           ? <div style={{ textAlign:'center', color:B.textLight, fontSize:12, padding:'16px 0', fontStyle:'italic' }}>Empty</div>
-          : tickets.map(t => <TicketCard key={t._docId} ticket={t} onClick={onTicketClick} onDragStart={onDrop ? true : undefined} onStatusChange={onStatusChange} isMobile={isMobile}/>)
+          : tickets.map(t => <TicketCard key={t._docId} ticket={t} onClick={onTicketClick} onDragStart={onDrop || undefined} onStatusChange={onStatusChange} isMobile={isMobile}/>)
         }
       </div>
     </div>
@@ -484,7 +484,7 @@ export function MaintenancePage({ store, userProfile }) {
   const [showEditVendor, setShowEditVendor] = useState(null); // vendor object being edited
   const [showVendors, setShowVendors] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [msg, setMsg] = useState(null);
   const [collapsedStatuses, setCollapsedStatuses] = useState(new Set());
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
@@ -521,7 +521,7 @@ export function MaintenancePage({ store, userProfile }) {
   }, [showDetail?._docId, churchId]);
 
   // ── Helpers ──
-  function flash(text) { setMsg(text); setTimeout(() => setMsg(''), 3000); }
+  function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 3000); }
 
   function switchViewMode(mode) {
     setViewMode(mode);
@@ -612,7 +612,7 @@ export function MaintenancePage({ store, userProfile }) {
         try {
           const urls = await uploadPhotos(docId, photoFiles);
           await updateTicket(docId, { photos: urls });
-        } catch { flash('Photo upload failed — ticket saved without photos.'); }
+        } catch { flash('Photo upload failed — ticket saved without photos.', true); }
       }
       if (ticketForm.tags.length > 0 && addMaintenanceTags) {
         await addMaintenanceTags(ticketForm.tags);
@@ -671,7 +671,7 @@ export function MaintenancePage({ store, userProfile }) {
               assigned_by: userName,
             }, notificationConfig.publicKey);
           }
-        } catch { flash('Ticket saved, but assignment notification email failed — please notify manually.'); }
+        } catch { flash('Ticket saved, but assignment notification email failed — please notify manually.', true); }
       }
 
       // Auto-create next recurring ticket on completion
@@ -824,6 +824,12 @@ export function MaintenancePage({ store, userProfile }) {
     }
   }
 
+  async function handleChecklistUpdate(cl) {
+    try {
+      await updateTicket(showDetail._docId, { checklist: cl });
+    } catch { flash('Checklist save failed — please try again.', true); }
+  }
+
   async function handleDeleteTicket() {
     if (!showDetail?._docId) return;
     if (!window.confirm(`Delete "${showDetail.name}"? This cannot be undone.`)) return;
@@ -920,7 +926,7 @@ export function MaintenancePage({ store, userProfile }) {
       </div>
 
       {msg && (
-        <div style={{ background:B.tealPale, border:'1px solid '+B.teal, borderRadius:10, padding:'10px 16px', marginBottom:16, color:B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}>{msg}</div>
+        <div style={{ background:msg.isError ? B.redPale : B.tealPale, border:'1px solid '+(msg.isError ? '#FECACA' : B.teal), borderRadius:10, padding:'10px 16px', marginBottom:16, color:msg.isError ? B.red : B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}>{msg.text}</div>
       )}
 
       {/* Vendor Directory */}
@@ -1199,13 +1205,13 @@ export function MaintenancePage({ store, userProfile }) {
                       cl[idx] = { ...cl[idx], done: !cl[idx].done };
                       setDetailEdits(d => ({ ...d, checklist: cl }));
                       setShowDetail(prev => ({ ...prev, checklist: cl }));
-                      updateTicket(showDetail._docId, { checklist: cl });
+                      handleChecklistUpdate(cl);
                     }}/>
                     <span style={{ flex:1, fontSize:13, color:item.done ? B.textLight : B.textDark, textDecoration:item.done ? 'line-through' : 'none', fontFamily:f2 }}>{item.text}</span>
                     <button type="button" onClick={() => {
                       const cl = (detailEdits.checklist || []).filter((_, i) => i !== idx);
                       setDetailEdits(d => ({ ...d, checklist: cl }));
-                      updateTicket(showDetail._docId, { checklist: cl });
+                      handleChecklistUpdate(cl);
                     }} style={{ border:'none', background:'none', color:B.textLight, cursor:'pointer', fontSize:18, lineHeight:1, padding:'0 2px' }}>×</button>
                   </div>
                 ))}
@@ -1221,7 +1227,7 @@ export function MaintenancePage({ store, userProfile }) {
                         e.preventDefault();
                         const cl = [...(detailEdits.checklist || []), { id: Date.now().toString(), text: detailChecklistInput.trim(), done: false }];
                         setDetailEdits(d => ({ ...d, checklist: cl }));
-                        updateTicket(showDetail._docId, { checklist: cl });
+                        handleChecklistUpdate(cl);
                         setDetailChecklistInput('');
                         checklistInputRef.current?.focus();
                       }
@@ -1231,7 +1237,7 @@ export function MaintenancePage({ store, userProfile }) {
                     if (!detailChecklistInput.trim()) return;
                     const cl = [...(detailEdits.checklist || []), { id: Date.now().toString(), text: detailChecklistInput.trim(), done: false }];
                     setDetailEdits(d => ({ ...d, checklist: cl }));
-                    updateTicket(showDetail._docId, { checklist: cl });
+                    handleChecklistUpdate(cl);
                     setDetailChecklistInput('');
                     checklistInputRef.current?.focus();
                   }} style={{ ...btnS, padding:'9px 14px', fontSize:13, flexShrink:0 }}>Add</button>

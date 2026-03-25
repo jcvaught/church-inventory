@@ -36,13 +36,14 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   const disposedItems = useMemo(() => items.filter(i => i.status === ITEM_STATUS.DISPOSED), [items]);
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem('inv_statusFilter') || 'all');
   const [locationFilter, setLocationFilter] = useState(() => localStorage.getItem('inv_locationFilter') || 'all');
   const [ministryFilter, setMinistryFilter] = useState(() => localStorage.getItem('inv_ministryFilter') || 'all');
   const [showDisposed, setShowDisposed] = useState(false);
 
   function setLocation(v) { setLocationFilter(v); localStorage.setItem('inv_locationFilter', v); }
   function setMinistry(v) { setMinistryFilter(v); localStorage.setItem('inv_ministryFilter', v); }
+  function setStatus(v) { setStatusFilter(v); localStorage.setItem('inv_statusFilter', v); }
 
   // Role helpers (needed in useEffect dep arrays — must be before any useEffect)
   const isAdmin = userProfile?.role === "admin";
@@ -506,7 +507,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     const acts = [];
     if (item.status === ITEM_STATUS.AVAILABLE) {
       acts.push(<button key="co" onClick={(e)=>{e.stopPropagation();setCoForm({ person:userName, purpose:"", ministry:item.ministry||"", date:today, returnDate:"" });setActiveModal({ type:'checkout', item });}} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Check Out</button>);
-      acts.push(<button key="rep" onClick={(e)=>{e.stopPropagation();setActiveModal({ type:'repair', item });}} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>Repair</button>);
+      acts.push(<button key="rep" onClick={(e)=>{e.stopPropagation();setActiveModal({ type:'repair', item });}} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>Send to Repair</button>);
     }
     if (item.status === ITEM_STATUS.CHECKED_OUT || item.status === ITEM_STATUS.IN_USE) {
       acts.push(<button key="ret" onClick={(e)=>{e.stopPropagation();setActiveModal({ type:'return', item });}} style={{ ...btnP, padding:"6px 14px", fontSize:12, background:B.gold }}>Return</button>);
@@ -533,10 +534,11 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
           padding:isMob?"12px 14px":"14px 18px", borderRadius:12, cursor:"pointer",
           background: selectedIds.has(item._docId) ? B.tealPale : overdue ? B.redPale : B.white,
           border: selectedIds.has(item._docId) ? "1.5px solid "+B.teal : overdue ? "1px solid #FECACA" : "1px solid "+B.sand,
+          borderLeft: overdue ? "4px solid "+B.red : undefined,
           transition:"all 0.15s", flexWrap:"wrap", gap:10
         }}
         onMouseEnter={e=>{ if(!overdue && !selectedIds.has(item._docId)) e.currentTarget.style.borderColor=B.teal; e.currentTarget.style.boxShadow="0 2px 8px rgba(42,125,110,0.08)"; }}
-        onMouseLeave={e=>{ e.currentTarget.style.borderColor=selectedIds.has(item._docId)?B.teal:overdue?"#FECACA":B.sand; e.currentTarget.style.boxShadow="none"; }}
+        onMouseLeave={e=>{ e.currentTarget.style.borderColor=selectedIds.has(item._docId)?B.teal:overdue?"#FECACA":B.sand; if(overdue) e.currentTarget.style.borderLeftColor=B.red; e.currentTarget.style.boxShadow="none"; }}
       >
         {bulkMode && (
           <input type="checkbox" aria-label={`Select ${item.description || 'item'}`} checked={selectedIds.has(item._docId)} onChange={()=>toggleSelect(item._docId)} onClick={e=>e.stopPropagation()} style={{ width:16, height:16, cursor:"pointer", flexShrink:0, accentColor:B.teal }} />
@@ -624,12 +626,12 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
             <input
               ref={searchRef}
               style={{...inp, paddingLeft:36}}
-              placeholder="Search by name or ID... (/ to focus)"
+              placeholder="Search by name or ID..."
               value={search} onChange={e=>setSearch(e.target.value)}
             />
             <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:14, color:B.textLight }}>🔍</span>
           </div>
-          <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{...inp, width:"auto", flex:"0 1 180px"}}>
+          <select value={statusFilter} onChange={e=>setStatus(e.target.value)} style={{...inp, width:"auto", flex:"0 1 180px"}}>
             <option value="all">All Statuses ({counts.all})</option>
             <option value={ITEM_STATUS.AVAILABLE}>Available ({counts[ITEM_STATUS.AVAILABLE]})</option>
             <option value={ITEM_STATUS.CHECKED_OUT}>Checked Out ({counts[ITEM_STATUS.CHECKED_OUT]})</option>
@@ -670,7 +672,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
           {selectedIds.size > 0 && <>
             <button onClick={startBulkCheckout} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>Check Out</button>
             <button onClick={startBulkReturn} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>↩ Return</button>
-            {locations.length > 0 && <button onClick={()=>{setBulkData(d=>({...d,newLoc:''}));setBulkModal('loc');}} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>📍 Location</button>}
+            {locations.length > 0 && (isAdmin || isManager) && <button onClick={()=>{setBulkData(d=>({...d,newLoc:''}));setBulkModal('loc');}} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>📍 Location</button>}
             <button aria-label="Export selected items as CSV" onClick={handleBulkExport} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>⬇ Export</button>
           </>}
           <button onClick={exitBulkMode} style={{ background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", borderRadius:8, color:"#fff", cursor:"pointer", fontSize:12, padding:"6px 12px", fontFamily:f1, fontWeight:600 }}>Cancel</button>
@@ -686,7 +688,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
               {activeItems.length === 0 ? "No items yet" : search ? "No items match your search" : "No items match your filters"}
             </h3>
             <p style={{ color:B.textLight, fontSize:14 }}>
-              {activeItems.length === 0 ? "Add your first inventory item to get started." : search ? "Try a different search term or clear the search." : "Try adjusting your filters."}
+              {activeItems.length === 0 ? ((isAdmin || isManager) ? "Add your first inventory item to get started." : "No items yet. Ask an admin or manager to add inventory.") : search ? "Try a different search term or clear the search." : "Try adjusting your filters."}
             </p>
           </div>
         ) : displayItems.map(item => <ItemRow key={item._docId} item={item} />)}
