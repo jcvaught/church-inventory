@@ -5,6 +5,7 @@ import {
   AreaChart, Area,
 } from 'recharts';
 import { B, f1, f2, inp, btnS } from '../../components/brand/tokens.js';
+import { escapeHtml } from '../../utils/print.js';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { Stat } from '../../components/primitives/Stat.jsx';
 
@@ -563,7 +564,8 @@ function printInsightsReport({ utilization, ministry, financial, churchName }) {
   const finItems = financial.slice(0, 30);
   const minData = ministry;
 
-  win.document.write(`<!DOCTYPE html><html><head><title>Insights Report — ${churchName || 'ChurchOpsHub'}</title>
+  const safeChurchName = escapeHtml(churchName) || 'ChurchOpsHub';
+  win.document.write(`<!DOCTYPE html><html><head><title>Insights Report — ${safeChurchName}</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:Arial,sans-serif;font-size:12px;color:#1B2A4A;padding:32px}
@@ -575,23 +577,23 @@ function printInsightsReport({ utilization, ministry, financial, churchName }) {
     td{padding:7px 8px;border-bottom:1px solid #F2F0EB;font-size:12px}
     @media print{body{padding:16px}}
   </style></head><body>
-  <h1>${churchName || 'ChurchOpsHub'} — Insights Report</h1>
+  <h1>${safeChurchName} — Insights Report</h1>
   <div class="meta">Generated ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
 
   <h2>Item Utilization (Top 20)</h2>
   <table><thead><tr><th>Item</th><th>ID</th><th>Checkouts</th><th>Avg Duration</th></tr></thead><tbody>
-    ${topItems.map(i => `<tr><td>${i.description}</td><td style="font-family:monospace">${i.itemId}</td><td>${i.checkouts}</td><td>${i.avgDays != null ? i.avgDays + ' days' : '—'}</td></tr>`).join('')}
+    ${topItems.map(i => `<tr><td>${escapeHtml(i.description)}</td><td style="font-family:monospace">${escapeHtml(i.itemId)}</td><td>${i.checkouts}</td><td>${i.avgDays != null ? i.avgDays + ' days' : '—'}</td></tr>`).join('')}
   </tbody></table>
 
   <h2>Ministry Breakdown</h2>
   <table><thead><tr><th>Ministry</th><th>Checkouts</th><th>Share</th></tr></thead><tbody>
-    ${(() => { const tot = minData.reduce((s,d)=>s+d.value,0); return minData.map(d => `<tr><td>${d.name}</td><td>${d.value}</td><td>${Math.round(d.value/tot*100)}%</td></tr>`).join(''); })()}
+    ${(() => { const tot = minData.reduce((s,d)=>s+d.value,0); return minData.map(d => `<tr><td>${escapeHtml(d.name)}</td><td>${d.value}</td><td>${Math.round(d.value/tot*100)}%</td></tr>`).join(''); })()}
   </tbody></table>
 
   ${finItems.length > 0 ? `
   <h2>Financial Summary</h2>
   <table><thead><tr><th>Item</th><th>Purchased</th><th>Original Cost</th><th>Est. Value</th></tr></thead><tbody>
-    ${finItems.map(i => `<tr><td>${i.description}</td><td>${i.purchaseDate || '—'}</td><td>${i.purchasePrice != null ? '$' + Number(i.purchasePrice).toLocaleString() : '—'}</td><td>${i.currentValue != null ? '$' + Number(i.currentValue).toLocaleString() : '—'}</td></tr>`).join('')}
+    ${finItems.map(i => `<tr><td>${escapeHtml(i.description)}</td><td>${escapeHtml(i.purchaseDate) || '—'}</td><td>${i.purchasePrice != null ? '$' + Number(i.purchasePrice).toLocaleString() : '—'}</td><td>${i.currentValue != null ? '$' + Number(i.currentValue).toLocaleString() : '—'}</td></tr>`).join('')}
   </tbody></table>` : ''}
   </body></html>`);
   win.document.close();

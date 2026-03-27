@@ -6,6 +6,22 @@ const { getAuth } = require('firebase-admin/auth');
 
 initializeApp();
 
+// Allowed origins for Stripe redirect URLs (successUrl, cancelUrl, returnUrl)
+const ALLOWED_REDIRECT_ORIGINS = [
+  'https://churchopshub.com',
+  'https://www.churchopshub.com',
+  'http://localhost:5173',
+  'http://localhost:4173',
+];
+
+function validateRedirectUrl(url) {
+  try {
+    const origin = new URL(url).origin;
+    if (ALLOWED_REDIRECT_ORIGINS.includes(origin)) return url;
+  } catch (_) { /* fall through */ }
+  return 'https://churchopshub.com';
+}
+
 const STRIPE_SECRET_KEY     = defineSecret('STRIPE_SECRET_KEY');
 const STRIPE_WEBHOOK_SECRET = defineSecret('STRIPE_WEBHOOK_SECRET');
 const ANTHROPIC_API_KEY     = defineSecret('ANTHROPIC_API_KEY');
@@ -152,8 +168,8 @@ exports.createCheckoutSession = onCall(
       line_items: [{ price: priceId, quantity: 1 }],
       metadata: { churchId },
       subscription_data: { metadata: { churchId } },
-      success_url: successUrl,
-      cancel_url: cancelUrl,
+      success_url: validateRedirectUrl(successUrl),
+      cancel_url: validateRedirectUrl(cancelUrl),
     };
     if (existingCustomerId) sessionParams.customer = existingCustomerId;
 
@@ -186,7 +202,7 @@ exports.createPortalSession = onCall(
     const stripe = require('stripe')(STRIPE_SECRET_KEY.value());
     const session = await stripe.billingPortal.sessions.create({
       customer: stripeCustomerId,
-      return_url: returnUrl,
+      return_url: validateRedirectUrl(returnUrl),
     });
     return { url: session.url };
   }
@@ -211,7 +227,7 @@ exports.stripeWebhook = onRequest(
       );
     } catch (err) {
       console.error('Webhook signature verification failed:', err.message);
-      res.status(400).send(`Webhook error: ${err.message}`);
+      res.status(400).send('Invalid webhook signature');
       return;
     }
 

@@ -269,6 +269,20 @@ build: {
 - **Inline tag creation for items**: Add/Edit Item modals now include a "New tag…" input + "+ Add" button below the tag pills, matching the same feature already in supplies. New tags are saved to `settings.tags` and auto-selected. Enter key also triggers add. The `tagOptions.length > 0` gate removed — tag section always visible.
 - **FXCC data migration**: All 61 supply IDs and the single item ID migrated via Firestore REST API to consistent category-prefix scheme: `ENV-001–014` (envelopes), `PPR-001–008` (paper), `MED-001–021` (medical/first aid), `OFF-001–005` (office equipment), `LBL-001–002` (labels), `STA-001–004` (stationery/cards), `CLN-001–004` (cleaning), `GEN-001–003` (general), `STPLR-01` (stapler item).
 
+### ✅ Security Hardening (2026-03-20)
+
+Full security audit findings addressed across all layers.
+
+- **Firestore granular rules** (`firestore.rules`): Replaced catch-all `match /{document=**}` wildcard with explicit per-subcollection rules for all 10+ collections. Key grants: `config/subscription` — client create only at church creation, no client updates (webhook/Admin SDK only); `activityLog` — create-only, no updates/deletes (immutable audit trail); `items`/`supplies` — members can update (checkout/return/usage) but only admins+managers can create/delete; `maintenanceTickets/comments` — any member can add, only admins+managers can edit/delete. Refactored helpers to use a single `userData()` function (one `get()` call per request).
+- **User self-escalation fix** (`firestore.rules`): Profile `create` rule requires `role == 'user'` except church creators who may set `role == 'admin'` only when `churchId == uid + '-church'`. Self-`update` rule blocks changes to `role`, `churchId`, `active`, and `allowedHubs`; only admins in the same church can modify those fields.
+- **Remove `allowedHubs` from registration** (`src/useAuth.js`): Stripped `allowedHubs` parameter from `register` and `registerWithGoogle` — new users can no longer pre-set their own hub access at signup.
+- **XSS fix — HTML escaping in print functions** (`src/utils/print.js`, `src/pages/hubs/InsightsPage.jsx`): Added exported `escapeHtml(str)` helper; applied to all Firestore-derived values interpolated into `document.write()` HTML in `printLabel`, `printInventory`, and `printInsightsReport`.
+- **Security headers** (`vercel.json`): Added `Content-Security-Policy` (self + Google Fonts + Firebase + Stripe + EmailJS), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin` via Vercel `headers` config.
+- **Cloud Functions URL allowlist** (`functions/index.js`): `validateRedirectUrl()` checks `new URL(url).origin` against `ALLOWED_REDIRECT_ORIGINS`; applied to `successUrl`/`cancelUrl` in `createCheckoutSession` and `returnUrl` in `createPortalSession`. Webhook signature failure response changed from `err.message` to generic `'Invalid webhook signature'`.
+- **Supply quantity race condition** (`src/useFirestore.js`): `useSupply` and `restockSupply` now use `runTransaction` to atomically read the current quantity and write the new value, preventing concurrent updates from producing incorrect totals.
+- **Storage rules hardening** (`storage.rules`): Write rule now enforces `request.resource.size < 5 * 1024 * 1024` (5MB max) and `request.resource.contentType.matches('image/.*')` (images only).
+- Rules deployed to Firebase (`firestore:rules,storage`).
+
 ---
 
 ## Public Launch Checklist (All Resolved)
@@ -300,6 +314,8 @@ build: {
 
 ### Security
 
+- ~~**Firestore rules wildcard — any member could write any subcollection**~~ ✅ Fixed (2026-03-20) — wildcard replaced with granular per-subcollection rules; `config/subscription` client-write denied; `activityLog` immutable; role escalation blocked.
+- ~~**User self-escalation via direct Firestore write**~~ ✅ Fixed (2026-03-20) — `create` requires `role == 'user'`; `update` blocks changes to `role`/`churchId`/`active`/`allowedHubs`.
 - ~~**Users Firestore rule leaks cross-church data**~~ ✅ Fixed — reads now require `request.auth.uid == userId || userChurchId() == resource.data.churchId`.
 - ~~**Suggestions UI gate uses wrong email source**~~ ✅ Fixed — `isOwner` now uses `user?.email` from the Firebase Auth object (verified token).
 - ~~**Church code lookup scans entire `churches` collection**~~ ✅ Fixed — replaced full collection scans with `query(collection(db, 'churches'), where('churchCode', '==', ...))`.

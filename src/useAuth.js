@@ -170,7 +170,7 @@ export function useAuth() {
   }, []);
 
   // Register with church code
-  const register = useCallback(async ({ firstName, lastName, email, password, churchCode, allowedHubs }) => {
+  const register = useCallback(async ({ firstName, lastName, email, password, churchCode }) => {
     const userName = (firstName + ' ' + lastName).trim();
     setError(null);
     let cred = null;
@@ -197,7 +197,6 @@ export function useAuth() {
         role: 'user',
         churchId: foundChurchId,
         active: true,
-        ...(allowedHubs != null ? { allowedHubs } : {}),
         createdAt: new Date().toISOString(),
         lastLogin: new Date().toISOString()
       };
@@ -262,7 +261,7 @@ export function useAuth() {
   }, []);
 
   // Register via Google (after Google sign-in if no profile exists)
-  const registerWithGoogle = useCallback(async ({ churchCode, allowedHubs }) => {
+  const registerWithGoogle = useCallback(async ({ churchCode }) => {
     setError(null);
     try {
       if (!auth.currentUser) throw new Error('No Google session found.');
@@ -285,7 +284,6 @@ export function useAuth() {
         role: 'user',
         churchId: foundChurchId,
         active: true,
-        ...(allowedHubs != null ? { allowedHubs } : {}),
         createdAt: new Date().toISOString(),
         lastLogin: new Date().toISOString()
       };
