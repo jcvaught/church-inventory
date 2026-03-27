@@ -461,8 +461,12 @@ function AppShell({ authHook }) {
   const [resentVerify, setResentVerify] = useState(false);
   const store = useFirestore(userProfile.churchId);
   const { subscription, hasHub, canAddUser } = useSubscription(userProfile.churchId);
-  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('item') ? 'inventory' : 'dashboard');
+  const [tab, setTab] = useState(() => {
+    if (new URLSearchParams(window.location.search).get('item')) return 'inventory';
+    return localStorage.getItem('lastTab') || 'dashboard';
+  });
   const [hubKey, setHubKey] = useState(() => localStorage.getItem('lastHub') || null);
+  useEffect(() => { localStorage.setItem('lastTab', tab); }, [tab]);
   const [menuOpen, setMenuOpen] = useState(false);
   const isMobile = useWindowWidth() < 768;
   const [initialItemId] = useState(() => new URLSearchParams(window.location.search).get('item'));
