@@ -15,6 +15,12 @@ function initials(name) {
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
+const ASSIGNEE_COLORS = ['#2A7D6E','#5B6ABF','#C0592B','#7B2D8E','#2E86AB','#D4A843','#C44569','#3D7A4A'];
+function assigneeColor(uid) {
+  let h = 0;
+  for (let i = 0; i < (uid||'').length; i++) h = ((h << 5) - h + uid.charCodeAt(i)) | 0;
+  return ASSIGNEE_COLORS[Math.abs(h) % ASSIGNEE_COLORS.length];
+}
 const PRIORITIES = ['High', 'Medium', 'Low'];
 const RECURRENCE_OPTIONS = [['', 'None'], ['weekly', 'Weekly'], ['biweekly', 'Every 2 weeks'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['annually', 'Annually']];
 const RECURRENCE_LABELS = { weekly:'Weekly', biweekly:'Every 2 wks', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' };
@@ -87,7 +93,7 @@ function TicketCard({ ticket, onClick, onDragStart, onStatusChange, isMobile }) 
         <div style={{ display:'flex', gap:4, alignItems:'center' }}>
           {ticket.assignees?.length > 0
             ? ticket.assignees.slice(0,3).map((a, i) => (
-                <div key={a.uid || i} title={a.name} style={{ width:22, height:22, borderRadius:'50%', background:B.teal, color:B.white, fontSize:9, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:f1 }}>
+                <div key={a.uid || i} title={a.name} style={{ width:22, height:22, borderRadius:'50%', background:assigneeColor(a.uid), color:B.white, fontSize:9, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:f1 }}>
                   {initials(a.name)}
                 </div>
               ))
