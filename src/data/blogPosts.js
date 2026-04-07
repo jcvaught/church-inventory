@@ -422,6 +422,146 @@ Your congregation expects the building and equipment to work. Behind that expect
   },
 
   {
+    slug: 'how-to-do-a-church-physical-audit',
+    title: 'How to Do a Church Physical Audit: A Step-by-Step Guide',
+    description: "A physical audit tells you whether your inventory system matches reality. Here's how to plan, conduct, and follow up on an audit that strengthens accountability and catches problems early.",
+    date: '2026-04-07',
+    keywords: 'church physical audit, church inventory audit, church asset audit, church accountability, church facilities audit',
+    content: `
+## Why Physical Audits Matter More Than You Think
+
+Your inventory system is only as accurate as the last time someone verified it against reality. Equipment gets borrowed and not returned. Items get damaged and not flagged. Supplies get used without being logged. Staff turn over, ministries reorganize, and the mental map of "who has what" quietly diverges from what's actually in the system.
+
+A physical audit is how you close that gap. It's the process of walking your spaces, checking items against your records, and reconciling what the system says with what actually exists. Done well, a physical audit surfaces missing items before they're forgotten permanently, catches condition problems before they become expensive repairs, and gives your leadership a verified snapshot of the church's physical assets.
+
+For churches with insurance riders on equipment, audits also serve a compliance function: a current, reconciled inventory is the foundation of any insurance claim.
+
+## Before You Start: What a Good Audit Requires
+
+An audit is only as useful as the preparation behind it. Three things need to be in place before you conduct one.
+
+### A Reasonably Complete Inventory System
+
+You can't audit what isn't recorded. If your inventory system is missing large categories of equipment or has many items without locations assigned, the audit will surface gaps but won't be able to close them — you'll spend your audit time adding new records rather than verifying existing ones. Before scheduling a full audit, spend a few hours making sure your system is at least 80% complete for the spaces you plan to cover.
+
+### Defined Scope and Location Breakdown
+
+A church with multiple buildings and dozens of storage areas can't be audited in one pass. Break the scope into logical units: the main sanctuary, the AV room, the children's wing, the kitchen, the storage trailer. Each unit should be small enough to be completed by one person or team in one session.
+
+For each location, know what your system records as being there. This is your starting checklist — the items you expect to find.
+
+### Assigned Auditors
+
+Assign a specific person or pair to each location. Auditors should be familiar enough with the space to know what belongs there and what doesn't. Your AV director is the right person to audit the sound booth. Your children's ministry coordinator is the right person for the children's wing. People who know the space will spot anomalies that a generic volunteer would miss.
+
+## Step 1: Generate Your Audit Checklist
+
+Before anyone walks into a room, produce a checklist of everything the system records in that location. For each item, include:
+
+- **Item name and description** — enough detail to identify it unambiguously
+- **Item ID or QR code** — so the auditor can pull it up in the system if needed
+- **Recorded status** — what the system currently says (Available, Checked Out, Under Repair, etc.)
+- **A notes field** — where the auditor captures what they actually find
+
+In a digital audit, this checklist lives in your inventory software. The auditor pulls up the location filter on their phone and works through the list item by item. In a paper-based audit, you print the list and reconcile it manually afterward. Digital is faster and reduces data entry errors — but either works if your team is consistent about following through.
+
+## Step 2: Walk the Space Systematically
+
+Systematic is the key word. It's easy to do a casual scan of a room and feel like you've checked everything — and miss a cabinet, a back shelf, or the equipment that got shoved behind the stage. A systematic audit has a defined path: top-to-bottom or left-to-right, every shelf, every drawer, every corner.
+
+For each item you find:
+
+**If it matches a checklist record:** Mark it as found. Note any condition issues — damage, unusual wear, missing accessories, anything that wasn't in the system record.
+
+**If it's not on the checklist:** It either belongs in a different location in the system, isn't recorded at all, or is something that arrived since the last update. Flag it as an "unexpected item" and record a description, photo, and location. You'll resolve it during follow-up.
+
+**If a checklist item isn't found:** It could be checked out (verify against the system), stored elsewhere, or genuinely missing. Flag it as "not found" with whatever context you have. Don't close the ticket until you've verified through the system whether it should be present.
+
+## Step 3: Record Condition for Everything
+
+The audit is your best opportunity to update condition records for items you might not handle regularly. For each item found, record:
+
+- **Condition:** Good, Fair, Poor — or a simple pass/fail against a working condition test if you can do a quick check
+- **Visible issues:** Note anything that needs attention, even if it's minor (a fraying cable, a cracked housing, a sticky fader)
+- **Accessories present:** If a camera normally ships with a case and two batteries, are all three parts there?
+- **Approximate age if unknown:** For items that have been in the system for years without a purchase date, a rough age estimate helps inform replacement planning
+
+Items flagged with condition issues don't need to be fully resolved during the audit. They need to be recorded — so that maintenance tickets can be created and prioritized in follow-up.
+
+## Step 4: Document Discrepancies
+
+At the end of each location audit, you'll have three categories of findings:
+
+1. **Items found as expected** — system matches reality; no action needed beyond condition notes
+2. **Items found with condition issues** — system record needs updating; maintenance ticket may be needed
+3. **Discrepancies** — either items that are missing, items that are in the wrong location, or items that aren't in the system at all
+
+Discrepancies are the most important output of the audit. Record each one with as much context as you can:
+
+- What is the item?
+- What does the system say should be there?
+- What did you actually find?
+- Any context that might explain the gap? (Recent event, ministry using the item, visible damage suggesting disposal?)
+
+Don't try to resolve discrepancies on the spot. Record them and resolve them systematically in follow-up. Trying to investigate missing items in the middle of an audit slows you down and creates confusion about what's been checked and what hasn't.
+
+## Step 5: Follow Up on Every Discrepancy
+
+The follow-up phase is where most informal audits fall apart. The audit happens, a list of discrepancies is generated, and then that list sits in someone's email until it's forgotten. Don't let this happen.
+
+Within a few days of completing the audit, work through each discrepancy:
+
+**Missing items:** Check checkout records — is it legitimately out with someone? If so, confirm with the assignee and note it. If not, make a reasonable effort to locate it (check other storage areas, ask ministry leaders). If it's truly missing after investigation, update the status to reflect that and document what's known.
+
+**Items not in the system:** Add them. Include a photo, assign a location, record condition. Trace their acquisition if possible.
+
+**Items in the wrong location:** Update the location in the system. No further action needed unless the item is the kind of thing that frequently wanders.
+
+**Condition issues:** Create maintenance tickets for anything that needs attention. Link the ticket to the equipment record. Assign it and prioritize it against your existing maintenance queue.
+
+After follow-up, archive the audit results: who conducted it, when, what locations were covered, how many items were checked, and how many discrepancies were found and resolved. This record is valuable both for accountability and for benchmarking — you want to be able to see whether your discrepancy count is improving over time.
+
+## How Often Should You Audit?
+
+There's no universal right answer, but here are reasonable starting points based on church size and asset value:
+
+**Quarterly:** High-value or high-turnover areas — AV equipment, instruments, vehicles. These are the items most likely to be borrowed, damaged, or quietly degraded. A light quarterly check (verify location, do a condition spot-check) keeps the system accurate without being burdensome.
+
+**Semiannually:** General equipment across all locations. A full location-by-location audit twice a year is realistic for most churches and captures most drift before it becomes significant.
+
+**Annually:** A complete inventory audit, including supplies. Once a year, every item in the system gets verified. This is also the right time to review your list for items that should be marked as disposed, retired, or permanently assigned.
+
+**After major events:** Retreats, community dinners, off-site events — any situation where equipment traveled out of its normal location. A quick check-back audit after these events catches the items that didn't make it home before they're forgotten.
+
+## The Difference Between an Audit and a Spot Check
+
+A formal audit is a deliberate, documented process: defined scope, assigned auditors, reconciliation of every item in a location, follow-up on discrepancies, archived results. It's a managed project with a clear output.
+
+A spot check is something different: a quick walk through a specific space to verify a few items, confirm that something returned correctly, or check on the status of equipment you used recently. Spot checks are informal and happen continuously. They're not a substitute for formal audits — but they catch things between audits and keep people in the habit of physical accountability.
+
+Both matter. A church that only relies on formal audits will have long gaps where inventory drift goes undetected. A church that only does informal spot checks never builds the comprehensive picture that a full audit provides. The cadence that works is regular formal audits supplemented by the informal checks that happen naturally when your team is engaged with the equipment.
+
+## Auditing Supplies Alongside Equipment
+
+Equipment audits and supply audits share the same method but have different outputs. For supplies, you're not checking individual items — you're recording quantities. Walk through your supply storage, count what's there, and compare against your system's recorded quantities.
+
+The goal isn't perfect accuracy to the unit. It's catching the categories that have diverged significantly — the paper towel supply your system says has 12 rolls but actually has 2, the communion cup inventory that reads 500 but is nearly empty. These gaps are what trigger reorders and what eventually become Sunday morning crises if they're not caught.
+
+Run your supply audit on the same schedule as your equipment audit, in the same pass through each location. It takes a fraction of the additional time and catches a category of problem that equipment-only audits miss entirely.
+
+## Building a Culture of Accountability
+
+The practical benefit of regular auditing — accurate records, caught discrepancies, current condition data — is significant. But the cultural benefit is at least as important.
+
+When a team knows that equipment gets audited regularly, the behavior around that equipment changes. Returning items properly is normalized because it's checked. Reporting condition issues is expected because they'll be found anyway. The checkout and return habits that keep an inventory system accurate are reinforced by the knowledge that the system gets verified.
+
+A church that audits regularly doesn't just have more accurate records. It has a team culture where stewardship of physical assets is taken seriously — and that culture is what makes the records accurate in the first place.
+
+Start with one location, run one complete audit cycle including follow-up, and archive the results. The first audit is the hardest because the data is furthest from reality. Every subsequent one is easier — because the gap between system and reality keeps shrinking.
+    `.trim(),
+  },
+
+  {
     slug: 'what-planning-center-cant-do',
     title: "What Planning Center Can't Do: Managing Your Church's Physical Assets",
     description: "Planning Center is excellent for people and events. But it has no inventory features. Here's how to fill that gap without adding complexity.",
