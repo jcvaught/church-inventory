@@ -562,6 +562,154 @@ Start with one location, run one complete audit cycle including follow-up, and a
   },
 
   {
+    slug: 'church-facilities-manager-tracking',
+    title: '5 Things Every Church Facilities Manager Needs to Track',
+    description: "Church facilities managers carry more operational knowledge in their heads than any system should require. Here are the five categories that belong in a real tracking system — and why each one matters.",
+    date: '2026-04-09',
+    keywords: 'church facilities manager, church facilities tracking, church building management, church property management, church asset tracking',
+    content: `
+## The Facilities Manager's Invisible Problem
+
+Church facilities managers are responsible for an enormous amount — the building, the equipment, the grounds, the setup and teardown for dozens of events each year, the repairs that happen on a deadline of "before Sunday." But the hardest part of the job isn't any individual task. It's the information problem: knowing, at any given moment, where everything is, what condition it's in, what needs attention, and what's running low.
+
+Most facilities managers solve this problem with a combination of mental memory, scattered spreadsheets, paper logs, and institutional knowledge that lives in their head. It works — until it doesn't. When they're out sick, on vacation, or leave the role, the knowledge gap becomes an operational crisis. And even when everything is running smoothly, the mental overhead of tracking everything informally is a tax on every decision.
+
+Here's what every church facilities manager actually needs to track — and why each one matters.
+
+## 1. Equipment Inventory — What You Own, Where It Is, and Its Condition
+
+The foundation of facilities management is knowing what you have. This sounds obvious, but a surprising number of churches can't answer basic questions about their physical assets: How many projectors do we own? Where are the spare microphone batteries? Is that PA system available for the retreat, or is it already claimed by the worship team?
+
+Without a maintained equipment inventory, these questions require tracking down the right person, searching storage rooms, or guessing. With one, they're answered in seconds.
+
+A good inventory record for each item includes the item name and description, its assigned location, its current status (Available, Checked Out, Under Repair), a photo, and any relevant notes about condition or quirks. The location field is particularly important: equipment that's not in its assigned location is equipment that will be treated as missing — borrowed, replaced, or sourced from somewhere else — until someone stumbles across it.
+
+Update the inventory when items arrive, when they're retired, and when their status changes. The more current the data, the more useful it is at the moment it's needed.
+
+## 2. Maintenance Tickets — Open Issues, Assigned Owners, and Resolution History
+
+Something is always in need of repair. In a building used as intensively as most churches — multiple services per week, events most evenings, youth groups, classes, rentals — wear accumulates fast. The HVAC filter is due. The stage monitor is intermittent. The nursery door latch is sticking. The projector lamp hours are at 90%.
+
+The problem isn't that these issues exist. The problem is when they exist in someone's head rather than a system.
+
+A maintenance ticket for each open issue gives it a status, an assigned owner, a priority, and a history. Status tells you what's been done and what's next — Backlog, In Progress, On Hold, Complete. An assigned owner means someone is accountable for driving it to resolution, not just aware that it exists. Priority ensures that the stage monitor failure gets fixed before Sunday and the sticky door latch gets scheduled appropriately.
+
+The resolution history is what most informal systems miss entirely. When a repair is resolved, the notes from that repair — what failed, who fixed it, what was replaced, what the cost was — are the data you need to make the next decision about that equipment. Without it, every repair is evaluated in isolation. With it, you're managing equipment across its full lifecycle.
+
+## 3. Supply Levels — What You Have, What You Need, and When to Reorder
+
+Facilities management includes consumables: cleaning supplies, light bulbs, batteries, HVAC filters, communion elements, paper, printer ink, first aid kit replenishments. These items don't have the drama of a broken projector, but running out of them at the wrong moment — no batteries for the wireless mics on Sunday morning, no filters when the HVAC technician arrives — creates its own operational chaos.
+
+Tracking supply quantities in the same system as your equipment creates a single place to check before an event. It also makes reorder patterns visible over time: how many batteries do you actually use in a month? How quickly does your cleaning supply inventory turn over during event season versus quieter stretches?
+
+The goal isn't precision inventory management down to the unit. It's catching the "we're almost out" situation before it becomes the "we're completely out" crisis. A system that shows a category of supply getting low — and flags it for reorder — prevents the Sunday morning scramble.
+
+## 4. Reservations and Equipment Usage — Who Has What, and When
+
+When multiple ministries share equipment — and they always do — conflicts happen. The worship team needs the PA for rehearsal. The youth group needs it for their Friday event. The outreach committee reserved it for Saturday's community dinner. Without a reservation system, the resolution is whoever asks first, whoever is most persistent, or whoever walks into the storage room and takes it.
+
+A reservation system creates visibility into equipment availability. Ministry leaders can see whether an item is available before they plan around it. When conflicts arise, they're surfaced before they become last-minute crises. And when equipment is returned after an event, a checkout record makes it easy to verify that it came back.
+
+Usage data accumulates over time into something genuinely useful: which items are in highest demand, which ministries are the heaviest users, and where your supply of key equipment is insufficient relative to demand. This data makes the case for purchases and helps prioritize what to invest in when budget is limited.
+
+## 5. Access and Compliance Records — Keys, Background Checks, and Certifications
+
+Facilities managers are often responsible for more than the building's physical contents — they're responsible for who has access to it. Key assignments, access codes, background check status for staff and regular volunteers, certifications for equipment operators — these are the compliance records that protect both the people in your building and the organization itself.
+
+Access records have a way of drifting without a system. A volunteer is given a key for an event and never returns it. A background check was completed three years ago but hasn't been renewed. A certified forklift operator's certification expired and no one noticed. These gaps aren't usually the result of negligence — they're the result of a process that depends on memory and manual follow-up rather than a system that tracks expiry dates and surfaces renewals proactively.
+
+Maintaining a centralized record of who has access to what — keys issued, codes assigned, background checks with expiry dates, certifications with renewal dates — converts access management from a series of one-off decisions into a tracked, auditable process.
+
+## One System Instead of Five
+
+Most facilities managers who are tracking all five of these categories informally are using five different tools: a spreadsheet for inventory, a whiteboard for maintenance, email for reservations, a closet shelf for supplies, and their memory for access records. The overhead of maintaining five separate systems — and the gaps that appear at the seams between them — is what makes the job harder than it needs to be.
+
+ChurchOpsHub brings all five into a single system designed for the way churches actually operate. The core inventory module is free with no time limit. The Maintenance Hub, Coordination Hub, and People Access Hub extend it with the features that make each category of tracking practical for a real facilities team rather than an administrative burden.
+
+Start with your inventory. Add your highest-value and most-borrowed items first. Once that habit is established, the other categories layer on naturally.
+    `.trim(),
+  },
+
+  {
+    slug: 'church-volunteer-equipment-accountability',
+    title: 'Church Volunteer Equipment Accountability: Best Practices',
+    description: "Volunteers borrow equipment with the best intentions — and return it inconsistently. Here's how to build accountability that protects your assets without treating your volunteers like suspects.",
+    date: '2026-04-09',
+    keywords: 'church volunteer accountability, church equipment checkout, church volunteer equipment policy, church inventory accountability',
+    content: `
+## The Volunteer Accountability Gap
+
+Volunteers are the backbone of church operations. They run sound, set up chairs, lead children's ministry, manage hospitality, and do dozens of other tasks that would otherwise require paid staff. But volunteers create a specific accountability challenge that paid staff don't: they're often part-time, rotating, not always present for the follow-up, and — critically — they expect a relationship of trust rather than oversight.
+
+This creates a real tension around equipment. You want to trust your volunteers, and you should. But trust without any system behind it means microphones don't get returned to their cases, cables disappear, and no one is sure who had the camera last. The result isn't malicious — it's structural. When there's no system for accountability, equipment gets borrowed informally, returned inconsistently, and conditions deteriorate in ways that don't get reported.
+
+The solution isn't more suspicion. It's better systems.
+
+## Why Informal Accountability Fails
+
+In most churches, volunteer equipment accountability works like this: a volunteer needs an item, they grab it, they use it, and they return it — or they don't. There's usually no formal checkout, no condition check, no defined place it needs to come back to by a specific time.
+
+When this system works, it works because the volunteers are reliable, the equipment is low-stakes, and the same people handle the same things consistently enough that informal expectations get established. When it breaks down, it's usually because of one of three things.
+
+New volunteers who don't know the unwritten rules. High-turnover seasons — summer, back to school, Christmas — when unfamiliar faces are handling equipment for the first time and the informal knowledge hasn't transferred.
+
+Equipment that moves between ministries. When the youth group borrows the main sanctuary's PA system for an off-site retreat, the usual informal accountability doesn't travel with it.
+
+High-value or hard-to-replace items. The informal system that works fine for folding tables doesn't work for a $3,000 camera or a custom-built stage piece.
+
+## Best Practice 1: Make Checkout as Easy as Possible
+
+The biggest predictor of whether volunteers use a checkout system is how much friction it creates. A system that requires logging into software, filling out a multi-field form, and waiting for approval will be skipped. A system where the volunteer scans a QR code on the item and taps their name takes ten seconds.
+
+The checkout process should be designed with the least tech-savvy, most time-pressed volunteer in mind. If it works easily for them, it works for everyone.
+
+For high-value or frequently borrowed items, put a physical QR code label directly on the item. When a volunteer picks it up, scanning the code brings them straight to the checkout screen. Return is equally simple: scan again, confirm the return.
+
+Low-stakes consumables — pens, general supplies, basic materials — don't need individual checkout. Reserve the checkout process for items where accountability actually matters: instruments, electronics, tools, projection equipment, vehicles.
+
+## Best Practice 2: Assign Clear Home Locations for Everything
+
+Equipment that doesn't have a defined home has a way of ending up everywhere except where it should be. When items have assigned locations — and those locations are labeled — returning them correctly is the obvious move rather than an extra step.
+
+Label storage locations clearly. Not just "AV Closet" but a specific shelf or bin for each category of item. When a volunteer returns a wireless microphone transmitter, the labeled slot in the charging rack is an obvious destination. Without it, it ends up in a drawer, on a shelf somewhere, or in the bag with other equipment it doesn't belong with.
+
+Defined home locations also make inventory checks faster. When everything has a place, a five-minute walk confirms that everything is where it should be. Without defined locations, you're doing a full search every time something can't be found.
+
+## Best Practice 3: Set Explicit Return Expectations
+
+Volunteers often don't return items promptly because no one told them promptly was expected. "Please return the camera by end of the event" is more effective than assuming they'll know. "Please return the tablecloths to the closet near the main entrance, folded, before you leave" is more effective than "please return the tablecloths."
+
+Specific expectations remove the guesswork. When a checkout is created for a reservation — a volunteer checking out the video camera for the Sunday service — include the expected return time in the checkout. A gentle reminder when that time passes converts the passive checkout record into an active accountability mechanism.
+
+For recurring volunteers handling the same equipment each week, this becomes habit quickly. The expectation gets set once and becomes part of how they think about that equipment.
+
+## Best Practice 4: Document Condition at Checkout and Return
+
+The moment accountability breaks down most often is when equipment comes back damaged. Without a pre-checkout condition record, there's no baseline to compare against — and the conversation becomes a he-said-she-said situation that no one wants to have.
+
+A quick condition note at checkout — "working, no visible damage, full battery" — and at return creates the baseline that protects both the church and the volunteer. If something is damaged, the record shows when the damage occurred. If something was already damaged before checkout, the volunteer isn't blamed for it.
+
+This doesn't need to be elaborate. A photo at checkout and return is enough for high-value items. For most equipment, a brief text note and a status rating (Good / Fair / Poor) is sufficient.
+
+## Best Practice 5: Build a Culture of Stewardship, Not Surveillance
+
+The goal of volunteer equipment accountability is not to catch people. It's to create the shared understanding that these items — purchased with the congregation's generosity — deserve to be cared for and returned properly. When that framing is genuine, volunteers don't experience the checkout process as distrust. They experience it as a system that protects everyone.
+
+Communicate this framing explicitly. When you introduce a checkout system to your volunteer team, explain why: "We want to make sure equipment is available when you need it, that we know where things are, and that we can catch and fix problems before they become bigger ones. This is how we take care of what we've been given." Most volunteers respond positively to that framing.
+
+Recognize volunteers who handle equipment well — the ones who always return things in good condition, who report issues proactively, who go out of their way to make sure the next person has what they need. Accountability cultures are sustained by positive examples, not just rules.
+
+## Getting the System in Place
+
+You don't need a perfect system before you start. Pick the five to ten items that matter most — the equipment that's hardest to replace, most frequently borrowed, or most commonly the source of confusion — and build your accountability process around those first.
+
+Label them. Create their records. Assign home locations. Set up a simple checkout process. Run it for a few months and see what breaks down in practice. Most accountability gaps are predictable once you're running the process: the checkout step that gets skipped, the return deadline that no one remembers, the condition check that's too cumbersome for the time available.
+
+Adjust based on what you see, and expand to lower-stakes equipment as the habits solidify. A volunteer accountability culture isn't built in a single policy announcement — it's built through consistent practice and a system that makes doing the right thing easier than not doing it.
+    `.trim(),
+  },
+
+  {
     slug: 'what-planning-center-cant-do',
     title: "What Planning Center Can't Do: Managing Your Church's Physical Assets",
     description: "Planning Center is excellent for people and events. But it has no inventory features. Here's how to fill that gap without adding complexity.",
