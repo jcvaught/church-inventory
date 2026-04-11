@@ -21,7 +21,7 @@ const ACTION_LABELS = {
 };
 
 export function AccountabilityPage({ store, userProfile }) {
-  const _isMobile = useContext(MobileCtx);
+  const isMobile = useContext(MobileCtx);
   const { items, activityLog, audits, addAudit, settings } = store;
 
   // Audit flow
@@ -172,7 +172,7 @@ export function AccountabilityPage({ store, userProfile }) {
 
         {/* Progress bar */}
         <div style={{ background:B.sand, borderRadius:99, height:8, marginBottom:24, overflow:'hidden' }}>
-          <div style={{ height:'100%', borderRadius:99, background:B.teal, transition:'width 0.3s',
+          <div style={{ height:'100%', borderRadius:99, background:B.teal, transition:'width 0.3s ease-out',
             width: `${auditItems.length ? (confirmedCount / auditItems.length) * 100 : 0}%` }} />
         </div>
 
@@ -427,9 +427,9 @@ export function AccountabilityPage({ store, userProfile }) {
               <p style={{ color:B.textLight, fontSize:13, textAlign:'center', padding:'20px 0' }}>No activity recorded for this item.</p>
             ) : (
               <div style={{ position:'relative' }}>
-                <div style={{ position:'absolute', left:15, top:0, bottom:0, width:2, background:B.sand }} />
+                <div style={{ position:'absolute', left: isMobile ? 8 : 15, top:0, bottom:0, width:2, background:B.sand }} />
                 {chainHistory.map((log, i) => (
-                  <div key={i} style={{ display:'flex', gap:16, marginBottom:16, paddingLeft:8 }}>
+                  <div key={i} style={{ display:'flex', gap: isMobile ? 10 : 16, marginBottom:16, paddingLeft: isMobile ? 4 : 8 }}>
                     <div style={{ width:16, height:16, borderRadius:'50%', background:B.teal, border:'2px solid '+B.white, flexShrink:0, marginTop:3, position:'relative', zIndex:1 }} />
                     <div>
                       <div style={{ fontFamily:f1, fontWeight:600, fontSize:13, color:B.navy }}>

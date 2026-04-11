@@ -261,7 +261,7 @@ export function CoordinationPage({ store, userProfile }) {
                         </div>
                       );
                     })}
-                    {totalCount > 5 && <div style={{ fontSize: 12, color: B.textLight, marginTop: 4 }}>+{totalCount - 5} more items</div>}
+                    {totalCount > 5 && <div style={{ fontSize: 11, color: B.teal, fontWeight: 600, marginTop: 4, display: 'inline-block', background: B.tealPale, borderRadius: 10, padding: '2px 8px' }}>+{totalCount - 5} more</div>}
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 4, borderTop: '1px solid ' + B.sand }}>
@@ -424,7 +424,8 @@ export function CoordinationPage({ store, userProfile }) {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
               <FF label="Person *">
-                <input style={inp} value={coForm.person} onChange={e => setCoForm(f => ({ ...f, person: e.target.value }))} placeholder="Who is checking out?" />
+                <input style={{ ...inp, borderColor: !coForm.person.trim() ? B.red : undefined }} value={coForm.person} onChange={e => setCoForm(f => ({ ...f, person: e.target.value }))} placeholder="Who is checking out?" />
+                {!coForm.person.trim() && <div style={{ fontSize: 12, color: B.red, marginTop: 4 }}>Person is required</div>}
               </FF>
               <FF label="Ministry">
                 <select style={{ ...inp, cursor: 'pointer' }} value={coForm.ministry} onChange={e => setCoForm(f => ({ ...f, ministry: e.target.value }))}>
@@ -437,7 +438,8 @@ export function CoordinationPage({ store, userProfile }) {
               </FF>
               <div />
               <FF label="Date *">
-                <input type="date" style={inp} value={coForm.date} onChange={e => setCoForm(f => ({ ...f, date: e.target.value }))} />
+                <input type="date" style={{ ...inp, borderColor: !coForm.date ? B.red : undefined }} value={coForm.date} onChange={e => setCoForm(f => ({ ...f, date: e.target.value }))} />
+                {!coForm.date && <div style={{ fontSize: 12, color: B.red, marginTop: 4 }}>Date is required</div>}
               </FF>
               <FF label="Expected Return">
                 <input type="date" style={inp} value={coForm.returnDate} onChange={e => setCoForm(f => ({ ...f, returnDate: e.target.value }))} />

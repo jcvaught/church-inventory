@@ -40,7 +40,7 @@ function renderContent(markdown) {
     } else {
       elements.push(
         <p key={key++} style={{
-          fontSize: 16, color: B.textMid, margin: '0 0 18px', lineHeight: 1.75,
+          fontSize: 16, color: B.textMid, margin: '0 0 18px', lineHeight: 1.75, wordBreak: 'break-word',
         }}>
           {line}
         </p>

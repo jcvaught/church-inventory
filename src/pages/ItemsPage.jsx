@@ -591,13 +591,13 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
 
       {/* Public Requests Panel — admin only */}
       {isAdmin && publicRequests?.length > 0 && (
-        <div style={{ background:"#FFFBEB", border:"1px solid #FDE68A", borderRadius:14, padding:"16px 20px", marginBottom:16 }}>
-          <div style={{ fontFamily:f1, fontSize:15, fontWeight:700, color:"#92400E", marginBottom:12 }}>
+        <div style={{ background:B.goldLight, border:"1px solid "+B.gold, borderRadius:14, padding:"16px 20px", marginBottom:16 }}>
+          <div style={{ fontFamily:f1, fontSize:15, fontWeight:700, color:B.navy, marginBottom:12 }}>
             📥 Item Requests ({publicRequests.length})
           </div>
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
             {publicRequests.map(req => (
-              <div key={req._docId} style={{ background:B.white, borderRadius:10, padding:"12px 16px", border:"1px solid #FDE68A", display:"flex", alignItems:"flex-start", gap:12, flexWrap:"wrap" }}>
+              <div key={req._docId} style={{ background:B.white, borderRadius:10, padding:"12px 16px", border:"1px solid "+B.gold, display:"flex", alignItems:"flex-start", gap:12, flexWrap:"wrap" }}>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontWeight:600, fontSize:14, color:B.navy }}>{req.itemDescription}</div>
                   <div style={{ fontSize:12, color:B.textMid, marginTop:4 }}>
@@ -606,7 +606,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
                     {req.phone && <> · {req.phone}</>}
                     {req.dateNeeded && <> · Needed by: {req.dateNeeded}</>}
                     {req.urgency && req.urgency !== 'Low' && (
-                      <span style={{ marginLeft:6, padding:"1px 8px", borderRadius:20, background:req.urgency==='High'?B.redPale:"#FEF3C7", color:req.urgency==='High'?B.red:"#92400E", fontWeight:600, fontSize:11 }}>{req.urgency}</span>
+                      <span style={{ marginLeft:6, padding:"1px 8px", borderRadius:20, background:req.urgency==='High'?B.redPale:B.goldLight, color:req.urgency==='High'?B.red:B.navy, fontWeight:600, fontSize:11 }}>{req.urgency}</span>
                     )}
                   </div>
                   {req.notes && <div style={{ fontSize:12, color:B.textLight, marginTop:4 }}>{req.notes}</div>}

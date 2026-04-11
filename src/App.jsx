@@ -46,6 +46,7 @@ class PageErrorBoundary extends Component {
 
 function AuthScreen({ authHook, initialMode = 'login', onBack }) {
   const { login, loginWithGoogle, register, registerWithGoogle, createChurch, resetPassword, error, setError } = authHook;
+  const isMobile = useWindowWidth() < 768;
   const [inviteData] = useState(() => {
     const p = new URLSearchParams(window.location.search);
     const code = p.get('invite');
@@ -216,7 +217,7 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
             <div style={{ flex:1, height:1, background:B.sand }}/><span style={{ fontSize:12, color:B.textLight, fontFamily:f1 }}>OR</span><div style={{ flex:1, height:1, background:B.sand }}/>
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+          <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr", gap:12 }}>
             <FF label="First Name"><input style={inp} value={form.firstName} onChange={e=>u("firstName",e.target.value)} placeholder="John"/></FF>
             <FF label="Last Name"><input style={inp} value={form.lastName} onChange={e=>u("lastName",e.target.value)} placeholder="Smith"/></FF>
           </div>
@@ -267,7 +268,7 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
           <FF label="Church Name"><input style={inp} value={form.churchName} onChange={e=>u("churchName",e.target.value)} placeholder="e.g. Fairfax Church of Christ"/></FF>
           <FF label="Church Code (your team will use this to join)"><input style={{...inp, fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase"}} value={form.churchCode} onChange={e=>u("churchCode",e.target.value)} placeholder="e.g. FXCC-2026"/></FF>
           <div style={{ height:1, background:B.sand, margin:"8px 0 16px" }}/>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+          <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr", gap:12 }}>
             <FF label="First Name"><input style={inp} value={form.firstName} onChange={e=>u("firstName",e.target.value)} placeholder="John"/></FF>
             <FF label="Last Name"><input style={inp} value={form.lastName} onChange={e=>u("lastName",e.target.value)} placeholder="Smith"/></FF>
           </div>

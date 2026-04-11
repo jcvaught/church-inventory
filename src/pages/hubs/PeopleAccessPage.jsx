@@ -893,7 +893,7 @@ export function PeopleAccessPage({ store, userProfile }) {
                 </div>
                 {bulkResult.skipped.length > 0 && (
                   <div style={{ fontSize: 12, color: '#92400E', fontFamily: f2, marginTop: 4 }}>
-                    Not found: {bulkResult.skipped.join(', ')}
+                    Not found: {bulkResult.skipped.slice(0, 5).join(', ')}{bulkResult.skipped.length > 5 ? ` +${bulkResult.skipped.length - 5} more` : ''}
                   </div>
                 )}
               </div>

@@ -302,8 +302,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           <div>
             <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Role</div>
             <span style={{ padding:"3px 10px", borderRadius:20, fontSize:13, fontWeight:600, fontFamily:f1,
-              background: isAdmin ? B.goldLight : isManager ? "#EDF2FF" : B.tealPale,
-              color: isAdmin ? "#96750E" : isManager ? "#3730A3" : B.teal }}>
+              background: isAdmin ? B.goldLight : isManager ? B.tealPale : B.warmGray,
+              color: isAdmin ? "#96750E" : isManager ? B.teal : B.textMid }}>
               {userProfile?.role || "user"}
             </span>
           </div>
@@ -312,7 +312,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
               <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Managed Ministries</div>
               <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 {managedMinistries.map(m => (
-                  <span key={m} style={{ padding:"2px 10px", borderRadius:20, background:"#EDF2FF", color:"#3730A3", fontSize:12, fontWeight:600, fontFamily:f1 }}>{m}</span>
+                  <span key={m} style={{ padding:"2px 10px", borderRadius:20, background:B.tealPale, color:B.teal, fontSize:12, fontWeight:600, fontFamily:f1 }}>{m}</span>
                 ))}
               </div>
             </div>
@@ -490,8 +490,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                       <div style={{ fontWeight:600, fontSize:14, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                         {u.name}
                         <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, fontFamily:f1,
-                          background: u.role==="admin"?B.goldLight:u.role==="manager"?"#EDF2FF":B.tealPale,
-                          color: u.role==="admin"?"#96750E":u.role==="manager"?"#3730A3":B.teal }}>{u.role}</span>
+                          background: u.role==="admin"?B.goldLight:u.role==="manager"?B.tealPale:B.warmGray,
+                          color: u.role==="admin"?"#96750E":u.role==="manager"?B.teal:B.textMid }}>{u.role}</span>
                         {!u.active && <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background:B.redPale, color:B.red }}>Inactive</span>}
                         {getUserComplianceBadge(u.id) && (
                           <span title="Has compliance records requiring attention" style={{ fontSize:14, lineHeight:1 }}>{getUserComplianceBadge(u.id)}</span>
@@ -896,9 +896,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
       {/* Delete Account Modal */}
       <Modal open={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Delete Your Account">
         {isAdmin && (
-          <div style={{ background:"#FFF4F2", border:"1px solid #FECDCA", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
+          <div style={{ background:B.redPale, border:"1px solid #FECDCA", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
             <p style={{ margin:"0 0 6px", fontWeight:700, fontFamily:f1, fontSize:13, color:B.red }}>Admin Account Warning</p>
-            <p style={{ margin:0, fontSize:13, color:"#7A2020", lineHeight:1.5 }}>
+            <p style={{ margin:0, fontSize:13, color:B.red, lineHeight:1.5 }}>
               You are the admin for this church. Deleting your account will remove your profile and login access, but your church's inventory, team members, and data will remain in the system unmanaged. If you want all church data permanently deleted, email us at <a href="mailto:churchopshub@gmail.com" style={{ color:B.red }}>churchopshub@gmail.com</a> after deleting your account.
             </p>
           </div>
