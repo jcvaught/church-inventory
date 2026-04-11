@@ -546,7 +546,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
         <div style={{ display:"flex", alignItems:"center", gap:12, flex:1, minWidth:0 }}>
           <div style={{ width:38, height:38, borderRadius:10, background:B.tealPale, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>📋</div>
           <div style={{ minWidth:0 }}>
-            <div style={{ fontWeight:600, fontSize:14, color:B.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.description || "Unnamed"}</div>
+            <div title={item.description || "Unnamed"} style={{ fontWeight:600, fontSize:14, color:B.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.description || "Unnamed"}</div>
             <div style={{ fontSize:12, color:B.textLight, display:"flex", gap:8, flexWrap:"wrap", marginTop:2 }}>
               <span style={{ fontFamily:"monospace", letterSpacing:1 }}>{item.itemId}</span>
               {item.location && !isMob && <span>📍 {item.location}</span>}

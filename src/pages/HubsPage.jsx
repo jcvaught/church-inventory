@@ -137,6 +137,8 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, userCa
               }}
               onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 6px 24px rgba(27,42,74,0.12)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
               onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
+              onFocus={e => { e.currentTarget.style.boxShadow = '0 6px 24px rgba(27,42,74,0.12)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+              onBlur={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
             >
               {/* Status badge */}
               <div style={{ position: 'absolute', top: 14, right: 14 }}>

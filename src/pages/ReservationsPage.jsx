@@ -443,7 +443,7 @@ export function ReservationsPage({ store, userProfile }) {
                 <button onClick={()=>{ if (window.confirm("Cancel this reservation request?")) handleCancel(r); }} disabled={saving} style={{ ...btnS, color:B.red, borderColor:"#FECACA" }}>Cancel Request</button>
               )}
               {r.status === RES_STATUS.PENDING && canApproveReservation(r) && <>
-                <button onClick={()=>handleDeny(r)} disabled={saving} style={btnD}>Deny</button>
+                <button onClick={()=>{ if (window.confirm("Deny this reservation request?")) handleDeny(r); }} disabled={saving} style={btnD}>Deny</button>
                 <button onClick={()=>handleApprove(r)} disabled={saving} style={btnP}>Approve</button>
               </>}
               {r.status === RES_STATUS.APPROVED && canApproveReservation(r) && (
