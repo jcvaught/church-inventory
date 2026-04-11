@@ -486,6 +486,7 @@ export function MaintenancePage({ store, userProfile }) {
   const [filterPriority, setFilterPriority] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterMyTickets, setFilterMyTickets] = useState(false);
+  const [filterAssignee, setFilterAssignee] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
   const [showAddVendor, setShowAddVendor] = useState(false);
@@ -505,6 +506,7 @@ export function MaintenancePage({ store, userProfile }) {
   const [sortBy, setSortBy] = useState(() => localStorage.getItem('maint_sortBy') || 'createdDesc');
   const [detailChecklistInput, setDetailChecklistInput] = useState('');
   const checklistInputRef = useRef();
+  const dragChecklistIdx = useRef(null);
 
   // Comments
   const [comments, setComments] = useState([]);
@@ -535,6 +537,11 @@ export function MaintenancePage({ store, userProfile }) {
     setViewMode(mode);
     localStorage.setItem('maint_viewMode', mode);
   }
+
+  // Auto-switch to list view on mobile (don't persist — desktop preference preserved)
+  useEffect(() => {
+    if (isMobile && viewMode === 'kanban') setViewMode('list');
+  }, [isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function openDetail(ticket) {
     const edits = {
@@ -747,6 +754,8 @@ export function MaintenancePage({ store, userProfile }) {
       const updatedPhotos = [...(showDetail.photos || []), ...newUrls];
       await updateTicket(showDetail._docId, { photos: updatedPhotos });
       setShowDetail(prev => ({ ...prev, photos: updatedPhotos }));
+    } catch {
+      flash('Photo upload failed. Please try again.', true);
     } finally {
       setUploadingPhotos(false);
     }
@@ -875,10 +884,11 @@ export function MaintenancePage({ store, userProfile }) {
       if (filterPriority && t.priority !== filterPriority) return false;
       if (filterStatus && t.status !== filterStatus) return false;
       if (filterMyTickets && !t.assignees?.some(a => a.uid === userId)) return false;
+      if (filterAssignee && !t.assignees?.some(a => a.uid === filterAssignee)) return false;
       if (search && !t.name?.toLowerCase().includes(search) && !t.description?.toLowerCase().includes(search) && !t.tags?.some(tag => tag.includes(search)) && !t.ticketNumber?.toLowerCase().includes(search)) return false;
       return true;
     });
-  }, [maintenanceTickets, filterSearch, filterPriority, filterStatus, filterMyTickets, userId]);
+  }, [maintenanceTickets, filterSearch, filterPriority, filterStatus, filterMyTickets, filterAssignee, userId]);
 
   const sortedTickets = useMemo(() => {
     const sorted = [...filteredTickets];
@@ -990,6 +1000,10 @@ export function MaintenancePage({ store, userProfile }) {
           <option value="">All statuses</option>
           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+        <select style={{ ...inp, width:'auto', cursor:'pointer' }} value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}>
+          <option value="">All assignees</option>
+          {users.filter(u => u.active !== false).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
         <button
           type="button"
           onClick={() => setFilterMyTickets(v => !v)}
@@ -997,8 +1011,8 @@ export function MaintenancePage({ store, userProfile }) {
         >
           My tickets
         </button>
-        {(filterSearch || filterPriority || filterStatus || filterMyTickets) && (
-          <button type="button" onClick={() => { setFilterSearch(''); setFilterPriority(''); setFilterStatus(''); setFilterMyTickets(false); }} style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, cursor:'pointer' }}>Clear</button>
+        {(filterSearch || filterPriority || filterStatus || filterAssignee || filterMyTickets) && (
+          <button type="button" onClick={() => { setFilterSearch(''); setFilterPriority(''); setFilterStatus(''); setFilterAssignee(''); setFilterMyTickets(false); }} style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, cursor:'pointer' }}>Clear</button>
         )}
       </div>
 
@@ -1223,7 +1237,24 @@ export function MaintenancePage({ store, userProfile }) {
                   <div style={{ fontSize:13, color:B.textLight, marginBottom:8, fontFamily:f2 }}>No checklist items yet.</div>
                 )}
                 {(detailEdits.checklist || []).map((item, idx) => (
-                  <div key={item.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderBottom:'1px solid '+B.sand }}>
+                  <div
+                    key={item.id}
+                    draggable
+                    onDragStart={() => { dragChecklistIdx.current = idx; }}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={() => {
+                      const from = dragChecklistIdx.current;
+                      if (from === null || from === idx) return;
+                      const cl = [...(detailEdits.checklist || [])];
+                      const [moved] = cl.splice(from, 1);
+                      cl.splice(idx, 0, moved);
+                      dragChecklistIdx.current = null;
+                      setDetailEdits(d => ({ ...d, checklist: cl }));
+                      handleChecklistUpdate(cl);
+                    }}
+                    style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderBottom:'1px solid '+B.sand, cursor:'grab' }}
+                  >
+                    <span style={{ color:B.textLight, fontSize:14, flexShrink:0, cursor:'grab' }}>⠿</span>
                     <input type="checkbox" checked={item.done} style={{ flexShrink:0, width:16, height:16, cursor:'pointer' }} onChange={() => {
                       const cl = [...(detailEdits.checklist || [])];
                       cl[idx] = { ...cl[idx], done: !cl[idx].done };
