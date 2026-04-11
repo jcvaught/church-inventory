@@ -269,6 +269,7 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | UX fixes (Opus audit — Maintenance + Inventory hubs): error flash red styling, checklist save error handling, onDragStart boolean fix, comment tap targets, comment placeholder text, bulk location role gate, "Send to Repair" label, role-aware empty state, statusFilter localStorage persistence, search placeholder cleanup, overdue red border persists in bulk select | 2026-03-24 |
 | — | Assignee color differentiation on Maintenance Kanban cards: deterministic hash of uid mapped to 8-color palette; same person always gets same color | 2026-04-04 |
 | — | Blog post: "How to Do a Church Physical Audit: A Step-by-Step Guide" | 2026-04-07 |
+| — | UI polish: confirm on deny, hub card focus, item name tooltip, auth form mobile, brand token cleanup, CoordinationPage required-field errors + badge, COC timeline mobile, skipped names truncation, BlogPost word-break | 2026-04-09 |
 | — | Blog post: "5 Things Every Church Facilities Manager Needs to Track" | 2026-04-09 |
 | — | Blog post: "Church Volunteer Equipment Accountability: Best Practices" | 2026-04-09 |
 
