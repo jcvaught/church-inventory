@@ -6,6 +6,7 @@ import { MobileCtx } from '../../hooks/useMobile.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
+import { Spinner } from '../../components/primitives/Spinner.jsx';
 import { resizeImageForUpload } from '../../utils/imageResize.js';
 
 const STATUSES = ['Backlog', 'Planning', 'In Progress', 'On Hold', 'Complete', 'Cancelled'];
@@ -466,7 +467,7 @@ const getEmptyTicket = () => ({ name:'', description:'', priority:'Medium', tags
 const getEmptyVendor = () => ({ name:'', phone:'', email:'', specialty:'', notes:'' });
 
 export function MaintenancePage({ store, userProfile }) {
-  const { items, maintenanceTickets, vendors, users, settings, notificationConfig, addTicket, updateTicket, deleteTicket, addTicketComment, updateTicketComment, deleteTicketComment, addMaintenanceTags, addVendor, updateVendor, deleteVendor } = store;
+  const { items, maintenanceTickets, vendors, users, settings, notificationConfig, loading, addTicket, updateTicket, deleteTicket, addTicketComment, updateTicketComment, deleteTicketComment, addMaintenanceTags, addVendor, updateVendor, deleteVendor } = store;
   const isMobile = useContext(MobileCtx);
 
   const userId = userProfile?.id || userProfile?.uid;
@@ -483,6 +484,7 @@ export function MaintenancePage({ store, userProfile }) {
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('maint_viewMode') || 'kanban');
   const [filterSearch, setFilterSearch] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
   const [filterMyTickets, setFilterMyTickets] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
@@ -527,7 +529,7 @@ export function MaintenancePage({ store, userProfile }) {
   }, [showDetail?._docId, churchId]);
 
   // ── Helpers ──
-  function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 3000); }
+  function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
 
   function switchViewMode(mode) {
     setViewMode(mode);
@@ -797,6 +799,10 @@ export function MaintenancePage({ store, userProfile }) {
   async function handleDrop(docId, newStatus) {
     const ticket = maintenanceTickets.find(t => t._docId === docId);
     if (!ticket || ticket.status === newStatus) return;
+    if (newStatus === 'Complete' || newStatus === 'Cancelled') {
+      const extra = newStatus === 'Complete' && ticket.recurrence ? ' A new recurring ticket will be created.' : '';
+      if (!window.confirm(`Move "${ticket.name}" to ${newStatus}?${extra}`)) return;
+    }
     const wasComplete = ticket.status === 'Complete';
     const isNowComplete = newStatus === 'Complete';
     await updateTicket(docId, {
@@ -867,11 +873,12 @@ export function MaintenancePage({ store, userProfile }) {
     const search = filterSearch.toLowerCase();
     return maintenanceTickets.filter(t => {
       if (filterPriority && t.priority !== filterPriority) return false;
+      if (filterStatus && t.status !== filterStatus) return false;
       if (filterMyTickets && !t.assignees?.some(a => a.uid === userId)) return false;
       if (search && !t.name?.toLowerCase().includes(search) && !t.description?.toLowerCase().includes(search) && !t.tags?.some(tag => tag.includes(search)) && !t.ticketNumber?.toLowerCase().includes(search)) return false;
       return true;
     });
-  }, [maintenanceTickets, filterSearch, filterPriority, filterMyTickets, userId]);
+  }, [maintenanceTickets, filterSearch, filterPriority, filterStatus, filterMyTickets, userId]);
 
   const sortedTickets = useMemo(() => {
     const sorted = [...filteredTickets];
@@ -979,6 +986,10 @@ export function MaintenancePage({ store, userProfile }) {
           <option value="">All priorities</option>
           {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
+        <select style={{ ...inp, width:'auto', cursor:'pointer' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+          <option value="">All statuses</option>
+          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
         <button
           type="button"
           onClick={() => setFilterMyTickets(v => !v)}
@@ -986,8 +997,8 @@ export function MaintenancePage({ store, userProfile }) {
         >
           My tickets
         </button>
-        {(filterSearch || filterPriority || filterMyTickets) && (
-          <button type="button" onClick={() => { setFilterSearch(''); setFilterPriority(''); setFilterMyTickets(false); }} style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, cursor:'pointer' }}>Clear</button>
+        {(filterSearch || filterPriority || filterStatus || filterMyTickets) && (
+          <button type="button" onClick={() => { setFilterSearch(''); setFilterPriority(''); setFilterStatus(''); setFilterMyTickets(false); }} style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, cursor:'pointer' }}>Clear</button>
         )}
       </div>
 
@@ -1014,8 +1025,15 @@ export function MaintenancePage({ store, userProfile }) {
         </span>
       </div>
 
+      {/* Empty state — loading */}
+      {maintenanceTickets.length === 0 && loading && (
+        <div style={{ background:B.white, borderRadius:18, padding:'48px 32px', border:'1px solid '+B.sand, textAlign:'center' }}>
+          <Spinner/>
+        </div>
+      )}
+
       {/* Empty state — no tickets at all */}
-      {maintenanceTickets.length === 0 && (
+      {maintenanceTickets.length === 0 && !loading && (
         <div style={{ background:B.white, borderRadius:18, padding:'48px 32px', border:'1px solid '+B.sand, textAlign:'center' }}>
           <div style={{ fontSize:48, marginBottom:16 }}>🔧</div>
           <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 8px', fontSize:18 }}>No maintenance tickets yet</h3>
@@ -1161,11 +1179,11 @@ export function MaintenancePage({ store, userProfile }) {
                 <input style={inp} type="date" value={detailEdits.dueDate} onChange={e => setDetailEdits(d => ({ ...d, dueDate:e.target.value }))}/>
               </FF>
               <FF label="Actual Cost ($)">
-                <input style={inp} type="number" min="0" step="0.01" value={detailEdits.actualCost} onChange={e => setDetailEdits(d => ({ ...d, actualCost:e.target.value }))} placeholder="0.00"/>
+                <input style={inp} type="number" min="0" step="0.01" value={detailEdits.actualCost} onChange={e => setDetailEdits(d => ({ ...d, actualCost:e.target.value }))} placeholder="0.00" disabled={!canOperate}/>
               </FF>
               <div style={isMobile ? { gridColumn:'1 / -1' } : {}}>
                 <FF label="Recurrence">
-                  <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.recurrence} onChange={e => setDetailEdits(d => ({ ...d, recurrence:e.target.value }))}>
+                  <select style={{ ...inp, cursor: canOperate ? 'pointer' : 'default' }} value={detailEdits.recurrence} onChange={e => setDetailEdits(d => ({ ...d, recurrence:e.target.value }))} disabled={!canOperate}>
                     {RECURRENCE_OPTIONS.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
                   </select>
                 </FF>
@@ -1178,7 +1196,7 @@ export function MaintenancePage({ store, userProfile }) {
               <AssigneeSelect assignees={detailEdits.assignees || []} onChange={assignees => setDetailEdits(d => ({ ...d, assignees }))} users={users} currentUserId={userId} currentUserName={userName}/>
             </FF>
             <FF label="Linked Equipment">
-              <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.linkedItemDocId} onChange={e => setDetailEdits(d => ({ ...d, linkedItemDocId:e.target.value }))}>
+              <select style={{ ...inp, cursor: canOperate ? 'pointer' : 'default' }} value={detailEdits.linkedItemDocId} onChange={e => setDetailEdits(d => ({ ...d, linkedItemDocId:e.target.value }))} disabled={!canOperate}>
                 <option value="">— None —</option>
                 {activeItems.map(i => <option key={i._docId} value={i._docId}>{i.description} ({i.itemId})</option>)}
               </select>
@@ -1186,14 +1204,14 @@ export function MaintenancePage({ store, userProfile }) {
             <div style={{ display:'grid', gridTemplateColumns:vendors.length > 0 ? '1fr 1fr' : '1fr', gap:12 }}>
               {vendors.length > 0 && (
                 <FF label="Vendor">
-                  <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.vendorId} onChange={e => setDetailEdits(d => ({ ...d, vendorId:e.target.value }))}>
+                  <select style={{ ...inp, cursor: canOperate ? 'pointer' : 'default' }} value={detailEdits.vendorId} onChange={e => setDetailEdits(d => ({ ...d, vendorId:e.target.value }))} disabled={!canOperate}>
                     <option value="">— None —</option>
                     {vendors.map(v => <option key={v._docId} value={v._docId}>{v.name}{v.specialty ? ' — '+v.specialty : ''}</option>)}
                   </select>
                 </FF>
               )}
               <FF label="Estimated Cost ($)">
-                <input style={inp} type="number" min="0" step="0.01" value={detailEdits.estimatedCost} onChange={e => setDetailEdits(d => ({ ...d, estimatedCost:e.target.value }))} placeholder="0.00"/>
+                <input style={inp} type="number" min="0" step="0.01" value={detailEdits.estimatedCost} onChange={e => setDetailEdits(d => ({ ...d, estimatedCost:e.target.value }))} placeholder="0.00" disabled={!canOperate}/>
               </FF>
             </div>
             <FF label="Notes">

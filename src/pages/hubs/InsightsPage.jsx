@@ -521,10 +521,10 @@ function LocationSection({ items, supplies, settings, isMobile }) {
               : <SimpleTable
                   headers={['ID', 'Description', 'Status', 'Ministry']}
                   rows={locItems.map(i => [
-                    <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{i.itemId}</span>,
+                    <span key="id" style={{ fontFamily: 'monospace', fontSize: 12 }}>{i.itemId}</span>,
                     i.description,
-                    <span style={{ color: i.status === 'Available' ? B.teal : i.status === 'Checked Out' ? B.gold : B.textMid, fontWeight: 600, fontSize: 12 }}>{i.status}</span>,
-                    i.ministry || <span style={{ color: B.textLight }}>—</span>,
+                    <span key="status" style={{ color: i.status === 'Available' ? B.teal : i.status === 'Checked Out' ? B.gold : B.textMid, fontWeight: 600, fontSize: 12 }}>{i.status}</span>,
+                    i.ministry || <span key="ministry" style={{ color: B.textLight }}>—</span>,
                   ])}
                 />
             }
@@ -539,11 +539,11 @@ function LocationSection({ items, supplies, settings, isMobile }) {
               : <SimpleTable
                   headers={['ID', 'Description', 'In Stock', 'Min', 'Ministry']}
                   rows={locSupplies.map(s => [
-                    <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{s.supplyId}</span>,
+                    <span key="id" style={{ fontFamily: 'monospace', fontSize: 12 }}>{s.supplyId}</span>,
                     s.description,
-                    <span style={{ color: s.quantity <= s.minQuantity ? B.red : B.teal, fontWeight: 600 }}>{s.quantity} {s.unit || ''}</span>,
+                    <span key="qty" style={{ color: s.quantity <= s.minQuantity ? B.red : B.teal, fontWeight: 600 }}>{s.quantity} {s.unit || ''}</span>,
                     s.minQuantity || '—',
-                    s.ministry || <span style={{ color: B.textLight }}>—</span>,
+                    s.ministry || <span key="ministry" style={{ color: B.textLight }}>—</span>,
                   ])}
                 />
             }
