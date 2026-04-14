@@ -969,12 +969,6 @@ export function TasksPage({ store, userProfile }) {
     return sorted;
   }, [filteredTasks, sortBy]);
 
-  // Kanban columns: High priority always floats to top within each column.
-  // Stable sort preserves sortedTasks order as tiebreaker.
-  const kanbanTasks = useMemo(() => {
-    const order = { High:0, Medium:1, Low:2 };
-    return [...sortedTasks].sort((a, b) => (order[a.priority] ?? 1) - (order[b.priority] ?? 1));
-  }, [sortedTasks]);
 
   // Whether current user can edit visibility on the detail task
   const canEditVisibility = showDetail && (showDetail.createdBy === userId || canOperate);
@@ -1107,7 +1101,7 @@ export function TasksPage({ store, userProfile }) {
       {viewMode === 'kanban' && visibleTasks.length > 0 && (
         <div style={{ display:'flex', gap:12, overflowX:isMobile ? 'hidden' : 'auto', flexDirection:isMobile ? 'column' : 'row', paddingBottom:8, alignItems:'flex-start' }}>
           {STATUSES.map(status => (
-            <KanbanColumn key={status} status={status} tasks={kanbanTasks.filter(t => t.status === status)} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile}/>
+            <KanbanColumn key={status} status={status} tasks={sortedTasks.filter(t => t.status === status)} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile}/>
           ))}
         </div>
       )}
