@@ -49,7 +49,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [billingError, setBillingError] = useState("");
   const [inviteHubsInitialized, setInviteHubsInitialized] = useState(false);
 
-  const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub', people_access: 'People Access Hub' };
+  const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub', people_access: 'People Access Hub', tasks: 'Tasks Hub' };
   const churchHubs = subscription?.grandfathered || subscription?.plan === 'all_in'
     ? Object.keys(HUB_LABELS)
     : (subscription?.hubs || []);
@@ -842,7 +842,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                 </div>
               </div>
               <p style={{ color:"rgba(255,255,255,0.65)", fontSize:13, margin:"0 0 14px", lineHeight:1.5 }}>
-                All 5 hubs + unlimited team members. Save $16/mo vs. buying separately.
+                All 6 hubs + unlimited team members. Save $23/mo vs. buying individually.
               </p>
               <button onClick={() => handleCheckout('all_in')} style={{ ...btnP, width:"100%", background:B.teal, fontSize:13 }}>
                 Subscribe — $29/mo
@@ -856,6 +856,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
               { key:'insights',       label:'Insights Hub',       price:'$7/mo',  desc:'Utilization charts, ministry & financial analytics.' },
               { key:'coordination',   label:'Coordination Hub',   price:'$7/mo',  desc:'Checkout bundles & email notifications.' },
               { key:'accountability', label:'Accountability Hub', price:'$5/mo',  desc:'Physical audits, chain of custody, insurance export.' },
+              { key:'tasks',          label:'Tasks Hub',          price:'$7/mo',  desc:'Kanban task board for general church admin tasks.' },
             ].filter(h => !(subscription?.hubs || []).includes(h.key) && subscription?.plan !== 'all_in' && !subscription?.grandfathered)
              .map(h => (
               <div key={h.key} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px", borderRadius:10, border:"1px solid "+B.sand, marginBottom:8, gap:12, flexWrap:"wrap" }}>

@@ -7,6 +7,7 @@ import { MaintenancePage } from './hubs/MaintenancePage.jsx';
 import { CoordinationPage } from './hubs/CoordinationPage.jsx';
 import { AccountabilityPage } from './hubs/AccountabilityPage.jsx';
 import { PeopleAccessPage } from './hubs/PeopleAccessPage.jsx';
+import { TasksPage } from './hubs/TasksPage.jsx';
 
 const HUB_DEFS = [
   {
@@ -49,6 +50,14 @@ const HUB_DEFS = [
     color: '#DC2626',
     desc: 'Track background checks, key assignments, certifications, and custom compliance milestones.',
   },
+  {
+    key: 'tasks',
+    label: 'Tasks Hub',
+    icon: '✅',
+    price: '$7/mo',
+    color: '#059669',
+    desc: 'Kanban task board for church admin — assign, track, and share tasks with your team.',
+  },
 ];
 
 const UPGRADE_DESCRIPTIONS = {
@@ -57,10 +66,11 @@ const UPGRADE_DESCRIPTIONS = {
   coordination: 'Checkout bundles and email notifications for your team.',
   accountability: 'Physical audits, chain of custody reports, and insurance-ready inventory exports.',
   people_access: 'Track who has background checks, key assignments, certifications, and custom compliance milestones — dates only, never results.',
+  tasks: 'A general-purpose Kanban task board — assign tasks, set priorities, track progress, and control who sees what.',
 };
 
 const UPGRADE_PRICES = {
-  insights: '$7', maintenance: '$7', coordination: '$7', accountability: '$5', people_access: '$7',
+  insights: '$7', maintenance: '$7', coordination: '$7', accountability: '$5', people_access: '$7', tasks: '$7',
 };
 
 function HubContent({ hubKey, store, userProfile }) {
@@ -69,6 +79,7 @@ function HubContent({ hubKey, store, userProfile }) {
   if (hubKey === 'coordination') return <CoordinationPage store={store} userProfile={userProfile} />;
   if (hubKey === 'accountability') return <AccountabilityPage store={store} userProfile={userProfile} />;
   if (hubKey === 'people_access') return <PeopleAccessPage store={store} userProfile={userProfile} />;
+  if (hubKey === 'tasks') return <TasksPage store={store} userProfile={userProfile} />;
   return null;
 }
 
@@ -166,7 +177,7 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, userCa
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, fontFamily: f1, marginBottom: 4 }}>✨ All-In Bundle</div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', fontFamily: f2 }}>
-              All 5 hubs for $29/mo — save over 30% vs. buying individually.
+              All 6 hubs for $29/mo — save over 30% vs. buying individually.
             </div>
           </div>
           <button onClick={() => { onGoToSettings?.(); }}

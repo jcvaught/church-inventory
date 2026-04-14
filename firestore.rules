@@ -96,6 +96,20 @@ service cloud.firestore {
       allow update, delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && request.auth.uid == resource.data.authorId);
     }
 
+    // ── Tasks ─────────────────────────────────────────────────────────────────
+    match /churches/{churchId}/tasks/{docId} {
+      allow read:           if isMember(churchId);
+      allow create, update: if isMember(churchId);
+      allow delete:         if isChurchAdminOrManager(churchId);
+    }
+
+    // ── Task comments — any member can add; authors can edit/delete own; admins+mgrs can edit/delete any ─────
+    match /churches/{churchId}/tasks/{taskId}/comments/{commentId} {
+      allow read:           if isMember(churchId);
+      allow create:         if isMember(churchId);
+      allow update, delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && request.auth.uid == resource.data.authorId);
+    }
+
     // ── Vendors ───────────────────────────────────────────────────────────────
     match /churches/{churchId}/vendors/{docId} {
       allow read:  if isMember(churchId);

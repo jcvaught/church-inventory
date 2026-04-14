@@ -21,6 +21,7 @@ export function useFirestore(churchId) {
   const [publicRequests, setPublicRequests] = useState([]);
   const [accessPeople, setAccessPeople] = useState([]);
   const [accessRecords, setAccessRecords] = useState([]);
+  const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const clearError = useCallback(() => setError(null), []);
@@ -41,7 +42,7 @@ export function useFirestore(churchId) {
     if (!churchId) return;
     const unsubs = [];
     let loaded = 0;
-    const totalSubs = 15;
+    const totalSubs = 16;
     const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
     // Config
@@ -137,6 +138,14 @@ export function useFirestore(churchId) {
     // Access Records
     unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'accessRecords'), orderBy('createdAt', 'desc')), (snap) => {
       setAccessRecords(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
+      checkDone();
+    }, (err) => { handleErr(err); checkDone(); }));
+
+    // Tasks
+    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'tasks'), (snap) => {
+      const t = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+      t.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      setTasks(t);
       checkDone();
     }, (err) => { handleErr(err); checkDone(); }));
 
@@ -458,6 +467,81 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
+  // ── Tasks ──
+  const addTask = useCallback(async (task, userId, userName) => {
+    try {
+      let taskNumber;
+      const configRef = doc(db, 'churches', churchId, 'config', 'main');
+      await runTransaction(db, async (t) => {
+        const configSnap = await t.get(configRef);
+        const maxNum = (configSnap.data()?.maxTaskNumber || 0) + 1;
+        taskNumber = 'TSK-' + String(maxNum).padStart(3, '0');
+        t.update(configRef, { maxTaskNumber: maxNum });
+      });
+      const ref = await addDoc(collection(db, 'churches', churchId, 'tasks'), {
+        ...task,
+        taskNumber,
+        createdBy: userId,
+        createdByName: userName,
+        status: task.status || 'Backlog',
+        visibility: task.visibility || 'team',
+        sharedWith: task.sharedWith || [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        completedAt: null
+      });
+      await logActivity('add_task', taskNumber, userId, userName, { name: task.name, priority: task.priority });
+      return ref.id;
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const updateTask = useCallback(async (docId, updates) => {
+    try {
+      const data = { ...updates, updatedAt: new Date().toISOString() };
+      if (updates.status === 'Complete' && !updates.completedAt) {
+        data.completedAt = new Date().toISOString();
+      }
+      await updateDoc(doc(db, 'churches', churchId, 'tasks', docId), data);
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const deleteTask = useCallback(async (docId) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'tasks', docId));
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const addTaskComment = useCallback(async (taskId, text, authorId, authorName) => {
+    try {
+      await addDoc(collection(db, 'churches', churchId, 'tasks', taskId, 'comments'), {
+        text, authorId, authorName, createdAt: new Date().toISOString()
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const updateTaskComment = useCallback(async (taskId, commentId, text) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'tasks', taskId, 'comments', commentId), {
+        text, updatedAt: new Date().toISOString()
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const deleteTaskComment = useCallback(async (taskId, commentId) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'tasks', taskId, 'comments', commentId));
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const addTaskTags = useCallback(async (tags) => {
+    if (!tags.length) return;
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'config', 'settings'), {
+        taskTags: arrayUnion(...tags)
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
   // ── Bundles ──
   const addBundle = useCallback(async (bundle, userId, userName) => {
     try {
@@ -661,7 +745,7 @@ export function useFirestore(churchId) {
 
   return {
     config, settings, items, supplies, activityLog, reservations, users,
-    maintenanceTickets, vendors, bundles, notificationConfig, audits,
+    maintenanceTickets, vendors, bundles, notificationConfig, audits, tasks,
     loading, error,
     updateSettings, updateConfig,
     addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem,
@@ -681,6 +765,7 @@ export function useFirestore(churchId) {
     linkAccessPerson, unlinkAccessPerson,
     addAccessRecord, updateAccessRecord, deleteAccessRecord,
     addPeopleAccessRequirement, removePeopleAccessRequirement,
+    addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags,
     clearError
   };
 }

@@ -13,7 +13,7 @@ npm run lint:fix  # ESLint with auto-fix
 npm run analyze   # Build + open bundle size visualizer in browser (dist/bundle-stats.html)
 ```
 
-**Run `npm run build` and fix any errors before pushing.** Run `npm run lint` regularly — the baseline is 0 errors, 47 intentional `exhaustive-deps` warnings. Any new errors should be fixed before committing.
+**Run `npm run build` and fix any errors before pushing.** Run `npm run lint` regularly — the baseline is 0 errors, 66 intentional `exhaustive-deps` warnings. Any new errors should be fixed before committing.
 
 ### Deployment
 
@@ -66,7 +66,8 @@ src/
 │       ├── InsightsPage.jsx        ← Insights Hub (Phase 4): utilization, ministry, seasonal, financial, supply analytics (Recharts)
 │       ├── CoordinationPage.jsx    ← Coordination Hub (Phase 6): checkout bundles, email notification settings
 │       ├── AccountabilityPage.jsx  ← Accountability Hub (Phase 7): physical audits, chain of custody, insurance export
-│       └── PeopleAccessPage.jsx    ← People Access Hub: background checks, key assignments, certifications, custom compliance milestones; bulk entry modal; link/unlink to user accounts
+│       ├── PeopleAccessPage.jsx    ← People Access Hub: background checks, key assignments, certifications, custom compliance milestones; bulk entry modal; link/unlink to user accounts
+│       └── TasksPage.jsx           ← Tasks Hub: general-purpose Kanban task board; visibility control (team/private/shared); assignees; comments; recurrence; TSK-### numbering
 ├── utils/
 │   ├── csv.js                 ← exportItemsCSV, exportSuppliesCSV, exportReservationsCSV, exportAccessRecordsCSV
 │   ├── print.js               ← printLabel, printInventory
@@ -112,6 +113,8 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/maintenanceTickets/{id}/comments` | Comment subcollection: `text`, `authorId`, `authorName`, `createdAt`, `updatedAt` (set on edit) |
 | `churches/{churchId}/vendors` | Maintenance Hub: vendor/contractor directory |
 | `churches/{churchId}/config/settings.maintenanceTags` | `string[]` — tag autocomplete for maintenance tickets; new tags added via `arrayUnion` |
+| `churches/{churchId}/tasks` | Tasks Hub: general admin tasks; fields: `taskNumber` (TSK-###), `name`, `description`, `priority`, `status`, `tags[]`, `dueDate`, `recurrence`, `assignees[{uid,name}]`, `checklist[{id,text,done}]`, `photos[]`, `notes`, `visibility` (team/private/shared), `sharedWith[{uid,name}]`, `createdBy`, `createdByName`, `createdAt`, `updatedAt`, `completedAt` |
+| `churches/{churchId}/tasks/{id}/comments` | Task comment subcollection: `text`, `authorId`, `authorName`, `createdAt`, `updatedAt` |
 | `churches/{churchId}/bundles` | Coordination Hub: checkout bundles; fields: `name`, `description`, `items[{docId,itemId,description,location}]`, `createdBy`, `createdByName`, `createdAt` |
 | `churches/{churchId}/config/notifications` | Coordination Hub: EmailJS config; fields: `enabled`, `serviceId`, `publicKey`, `templateApproved`, `templateDenied`, `templateAssigned` (maintenance ticket assignment notification) |
 | `churches/{churchId}/audits` | Accountability Hub: physical audit records; fields: `location`, `conductedBy`, `conductedByName`, `startedAt`, `completedAt`, `status`, `itemsChecked`, `discrepancyCount`, `items[{docId,itemId,description,currentStatus,auditResult,condition,notes}]`, `discrepancies[]`, `createdAt` |
@@ -143,7 +146,7 @@ All church data is namespaced under `churches/{churchId}/`:
 - Two font families: `f1 = 'Outfit'` (headings/UI), `f2 = 'Source Sans 3'` (body text) — loaded from Google Fonts at runtime.
 - Shared style objects: `inp` (inputs), `btnP` (primary button), `btnS` (secondary), `btnD` (danger) — all from `src/components/brand/tokens.js`.
 - Reusable primitives in `src/components/primitives/`: `Modal`, `FF` (form field wrapper), `Badge` (status pill), `Stat` (dashboard stat card), `Spinner`, `UpgradeGate`.
-- Tab keys: `dashboard`, `inventory`, `supplies`, `reservations`, `log`, `hubs`, `settings`. All paid hubs are accessed via the `hubs` tab through `HubsPage`. Hub picker shows cards for all 5 hubs (Insights, Maintenance, Coordination, Accountability, People Access) — active hubs show "Open →", inactive show price and upgrade CTA. Clicking a hub sets `hubKey` (stored in `localStorage` as `lastHub`) and renders the hub with a `← All Hubs` breadcrumb. Clicking "Hubs" nav tab while already on hubs resets to the picker.
+- Tab keys: `dashboard`, `inventory`, `supplies`, `reservations`, `log`, `hubs`, `settings`. All paid hubs are accessed via the `hubs` tab through `HubsPage`. Hub picker shows cards for all 6 hubs (Insights, Maintenance, Coordination, Accountability, People Access, Tasks) — active hubs show "Open →", inactive show price and upgrade CTA. Clicking a hub sets `hubKey` (stored in `localStorage` as `lastHub`) and renders the hub with a `← All Hubs` breadcrumb. Clicking "Hubs" nav tab while already on hubs resets to the picker.
 - `MobileCtx` React context + `useWindowWidth()` hook in `src/hooks/useMobile.js`. Components read `useContext(MobileCtx)` — no prop drilling needed. Breakpoint is 768px.
 - Mobile: tabs hidden, bottom nav bar fixed at bottom, modals slide up from bottom.
 - **Routing:** No router library. `App.jsx` checks `window.location.pathname` first (`/blog` → BlogIndex, `/blog/:slug` → BlogPost), then query params (`?request=` → PublicRequestPage, `?help` → HelpPage, `?signup`/`?invite` → AuthScreen), then auth state (unauthenticated → LandingPage, authenticated → AppShell).
@@ -181,8 +184,9 @@ Everything existing stays free. 10 team members per church included.
 | **Maintenance Hub** | $7/mo | ✅ Done — Phase 3 |
 | **Coordination Hub** | $7/mo | ✅ Done — Phase 6 |
 | **Accountability Hub** | $5/mo | ✅ Done — Phase 7 |
-| **All-In Bundle** | $29/mo | ✅ Done — Phase 8 |
+| **All-In Bundle** | $29/mo (6 hubs) | ✅ Done — Phase 8 |
 | **People Access Hub** | $7/mo | ✅ Done |
+| **Tasks Hub** | $7/mo | ✅ Done |
 
 ### Grandfathering
 Existing churches at launch: 12 months Founder status (unlimited users, all hubs).
@@ -272,6 +276,7 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | UI polish: confirm on deny, hub card focus, item name tooltip, auth form mobile, brand token cleanup, CoordinationPage required-field errors + badge, COC timeline mobile, skipped names truncation, BlogPost word-break | 2026-04-09 |
 | — | Blog post: "5 Things Every Church Facilities Manager Needs to Track" | 2026-04-09 |
 | — | Blog post: "Church Volunteer Equipment Accountability: Best Practices" | 2026-04-09 |
+| — | Tasks Hub: general-purpose Kanban task board with visibility control (team/private/shared), assignees, comments, recurrence, TSK-### numbering | 2026-04-14 |
 
 ---
 
