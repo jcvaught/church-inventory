@@ -312,7 +312,7 @@ function PhotoGrid({ photos = [], onAdd, onRemove, uploading }) {
   );
 }
 
-function RichTextarea({ value, onChange, style, placeholder, onKeyDown }) {
+function RichTextarea({ value, onChange, style, placeholder, onKeyDown, label }) {
   const taRef = useRef();
 
   function getLineRange(selStart, selEnd) {
@@ -400,12 +400,23 @@ function RichTextarea({ value, onChange, style, placeholder, onKeyDown }) {
 
   const tb = { padding:'3px 9px', borderRadius:6, border:'1px solid '+B.sand, background:B.warmGray, color:B.textMid, fontSize:12, fontFamily:f1, cursor:'pointer', fontWeight:600 };
 
+  const buttons = (
+    <>
+      <button type="button" onMouseDown={e => { e.preventDefault(); toggleBullet(); }} style={tb}>• List</button>
+      <button type="button" onMouseDown={e => { e.preventDefault(); toggleNumbered(); }} style={tb}>1. List</button>
+    </>
+  );
+
   return (
-    <div>
-      <div style={{ display:'flex', gap:4, marginBottom:4 }}>
-        <button type="button" onMouseDown={e => { e.preventDefault(); toggleBullet(); }} style={tb}>• List</button>
-        <button type="button" onMouseDown={e => { e.preventDefault(); toggleNumbered(); }} style={tb}>1. List</button>
-      </div>
+    <div style={label ? { marginBottom:16 } : {}}>
+      {label ? (
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+          <label style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1 }}>{label}</label>
+          <div style={{ display:'flex', gap:4 }}>{buttons}</div>
+        </div>
+      ) : (
+        <div style={{ display:'flex', gap:4, marginBottom:4 }}>{buttons}</div>
+      )}
       <textarea ref={taRef} value={value} onChange={e => onChange(e.target.value)} style={style} placeholder={placeholder} onKeyDown={handleKeyDown}/>
     </div>
   );
@@ -1135,9 +1146,7 @@ export function TasksPage({ store, userProfile }) {
         <FF label="Task Name *">
           <input style={inp} value={taskForm.name} onChange={e => setTaskForm(f => ({ ...f, name:e.target.value }))} placeholder="Short descriptive name..."/>
         </FF>
-        <FF label="Description">
-          <RichTextarea style={{ ...inp, minHeight:72, resize:'vertical' }} value={taskForm.description} onChange={v => setTaskForm(f => ({ ...f, description:v }))} placeholder="Full details of the task..."/>
-        </FF>
+        <RichTextarea label="Description" style={{ ...inp, minHeight:72, resize:'vertical' }} value={taskForm.description} onChange={v => setTaskForm(f => ({ ...f, description:v }))} placeholder="Full details of the task..."/>
         <div style={{ display:'grid', gridTemplateColumns:isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap:12 }}>
           <FF label="Priority">
             <select style={{ ...inp, cursor:'pointer' }} value={taskForm.priority} onChange={e => setTaskForm(f => ({ ...f, priority:e.target.value }))}>
@@ -1174,9 +1183,7 @@ export function TasksPage({ store, userProfile }) {
         <FF label="Photos">
           <PhotoGrid photos={photoPreviews} onAdd={handlePhotoSelect} onRemove={handlePreviewRemove} uploading={false}/>
         </FF>
-        <FF label="Notes">
-          <RichTextarea style={{ ...inp, minHeight:52, resize:'vertical' }} value={taskForm.notes} onChange={v => setTaskForm(f => ({ ...f, notes:v }))} placeholder="Additional notes..."/>
-        </FF>
+        <RichTextarea label="Notes" style={{ ...inp, minHeight:52, resize:'vertical' }} value={taskForm.notes} onChange={v => setTaskForm(f => ({ ...f, notes:v }))} placeholder="Additional notes..."/>
         <button onClick={handleAddTask} disabled={saving || !taskForm.name.trim()} style={{ ...btnP, width:'100%', opacity:(saving || !taskForm.name.trim()) ? .5 : 1, marginTop:4 }}>
           {saving ? 'Creating...' : 'Create Task'}
         </button>
@@ -1201,9 +1208,7 @@ export function TasksPage({ store, userProfile }) {
             <FF label="Name">
               <input style={inp} value={detailEdits.name} onChange={e => setDetailEdits(d => ({ ...d, name:e.target.value }))}/>
             </FF>
-            <FF label="Description">
-              <RichTextarea style={{ ...inp, minHeight:72, resize:'vertical' }} value={detailEdits.description} onChange={v => setDetailEdits(d => ({ ...d, description:v }))} placeholder="Full details..."/>
-            </FF>
+            <RichTextarea label="Description" style={{ ...inp, minHeight:72, resize:'vertical' }} value={detailEdits.description} onChange={v => setDetailEdits(d => ({ ...d, description:v }))} placeholder="Full details..."/>
             <div style={{ display:'grid', gridTemplateColumns:isMobile ? '1fr 1fr' : '1fr 1fr', gap:12 }}>
               <FF label="Due Date">
                 <input style={inp} type="date" value={detailEdits.dueDate} onChange={e => setDetailEdits(d => ({ ...d, dueDate:e.target.value }))}/>
@@ -1234,9 +1239,7 @@ export function TasksPage({ store, userProfile }) {
                 <SharedWithSelect sharedWith={detailEdits.sharedWith || []} onChange={sharedWith => setDetailEdits(d => ({ ...d, sharedWith }))} users={taskHubUsers} assignees={detailEdits.assignees || []} currentUserId={userId}/>
               </FF>
             )}
-            <FF label="Notes">
-              <RichTextarea style={{ ...inp, minHeight:52, resize:'vertical' }} value={detailEdits.notes} onChange={v => setDetailEdits(d => ({ ...d, notes:v }))} placeholder="Additional notes..."/>
-            </FF>
+            <RichTextarea label="Notes" style={{ ...inp, minHeight:52, resize:'vertical' }} value={detailEdits.notes} onChange={v => setDetailEdits(d => ({ ...d, notes:v }))} placeholder="Additional notes..."/>
             <FF label="Checklist">
               <div style={{ border:'1px dashed '+B.sand, borderRadius:10, padding:'12px 14px' }}>
                 {(detailEdits.checklist || []).length === 0 && (
