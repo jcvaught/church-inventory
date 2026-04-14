@@ -537,6 +537,17 @@ export function TasksPage({ store, userProfile }) {
 
   const taskTags = settings?.taskTags || [];
 
+  // ── Filter users to those with Tasks Hub access ──
+  const taskHubUsers = useMemo(() =>
+    (users || []).filter(u => {
+      if (u.active === false) return false;
+      if (u.role === 'admin') return true;
+      const allowed = u.allowedHubs;
+      if (allowed == null) return true;
+      return allowed.includes('tasks');
+    }),
+  [users]);
+
   // ── Visibility filter — applied before any rendering ──
   const visibleTasks = useMemo(() => (tasks || []).filter(t => {
     if (t.visibility === 'team' || !t.visibility) return true;
@@ -973,7 +984,7 @@ export function TasksPage({ store, userProfile }) {
         </select>
         <select style={{ ...inp, width:'auto', cursor:'pointer' }} value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}>
           <option value="">All assignees</option>
-          {users.filter(u => u.active !== false).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          {taskHubUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
         <button
           type="button"
@@ -1105,14 +1116,14 @@ export function TasksPage({ store, userProfile }) {
           <TagInput tags={taskForm.tags} onChange={tags => setTaskForm(f => ({ ...f, tags }))} suggestions={taskTags}/>
         </FF>
         <FF label="Assignees">
-          <AssigneeSelect assignees={taskForm.assignees} onChange={assignees => setTaskForm(f => ({ ...f, assignees }))} users={users} currentUserId={userId} currentUserName={userName}/>
+          <AssigneeSelect assignees={taskForm.assignees} onChange={assignees => setTaskForm(f => ({ ...f, assignees }))} users={taskHubUsers} currentUserId={userId} currentUserName={userName}/>
         </FF>
         <FF label="Visibility">
           <VisibilitySelect visibility={taskForm.visibility} onChange={v => setTaskForm(f => ({ ...f, visibility:v, sharedWith: v !== 'shared' ? [] : f.sharedWith })) } canEdit={true}/>
         </FF>
         {taskForm.visibility === 'shared' && (
           <FF label="Share With">
-            <SharedWithSelect sharedWith={taskForm.sharedWith} onChange={sharedWith => setTaskForm(f => ({ ...f, sharedWith }))} users={users} assignees={taskForm.assignees} currentUserId={userId}/>
+            <SharedWithSelect sharedWith={taskForm.sharedWith} onChange={sharedWith => setTaskForm(f => ({ ...f, sharedWith }))} users={taskHubUsers} assignees={taskForm.assignees} currentUserId={userId}/>
           </FF>
         )}
         <FF label="Photos">
@@ -1162,7 +1173,7 @@ export function TasksPage({ store, userProfile }) {
               <TagInput tags={detailEdits.tags || []} onChange={tags => setDetailEdits(d => ({ ...d, tags }))} suggestions={taskTags}/>
             </FF>
             <FF label="Assignees">
-              <AssigneeSelect assignees={detailEdits.assignees || []} onChange={assignees => setDetailEdits(d => ({ ...d, assignees }))} users={users} currentUserId={userId} currentUserName={userName}/>
+              <AssigneeSelect assignees={detailEdits.assignees || []} onChange={assignees => setDetailEdits(d => ({ ...d, assignees }))} users={taskHubUsers} currentUserId={userId} currentUserName={userName}/>
             </FF>
             <FF label="Visibility">
               <VisibilitySelect
@@ -1173,7 +1184,7 @@ export function TasksPage({ store, userProfile }) {
             </FF>
             {detailEdits.visibility === 'shared' && canEditVisibility && (
               <FF label="Share With">
-                <SharedWithSelect sharedWith={detailEdits.sharedWith || []} onChange={sharedWith => setDetailEdits(d => ({ ...d, sharedWith }))} users={users} assignees={detailEdits.assignees || []} currentUserId={userId}/>
+                <SharedWithSelect sharedWith={detailEdits.sharedWith || []} onChange={sharedWith => setDetailEdits(d => ({ ...d, sharedWith }))} users={taskHubUsers} assignees={detailEdits.assignees || []} currentUserId={userId}/>
               </FF>
             )}
             <FF label="Notes">
