@@ -608,11 +608,16 @@ export function HelpPage({ onBack }) {
               <P>Each task has a <strong>Visibility</strong> setting that controls who can see it:</P>
               <UL items={[
                 'Team — visible to everyone with Tasks Hub access (default)',
-                'Private — visible only to you (and admins)',
+                'Private — visible only to you. Even admins cannot see private tasks.',
                 'Shared — visible to you plus specific people you choose',
               ]} />
               <P>Assignees always see their tasks regardless of visibility. Cards show a 🔒 icon for private tasks and 👥 for shared tasks.</P>
               <Tip>Use Private for your own to-do items, Shared for tasks you're collaborating on with one other person, and Team for anything the whole staff should see.</Tip>
+            </Accordion>
+
+            <Accordion title="Task defaults">
+              <P>Click the <strong>⚙ Defaults</strong> button (next to the view toggle) to set your personal defaults for new tasks. You can choose a default visibility and a default share-with list so you don't have to re-select them every time you create a task.</P>
+              <Tip>If you almost always share tasks with the same person, save them as your default share-with. They'll be pre-filled whenever you open the New Task form.</Tip>
             </Accordion>
 
             <Accordion title="Recurring tasks">
