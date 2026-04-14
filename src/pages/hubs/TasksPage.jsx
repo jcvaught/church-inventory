@@ -525,7 +525,7 @@ function KanbanColumn({ status, tasks, onTaskClick, onDrop, onStatusChange, isMo
 const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[] });
 
 export function TasksPage({ store, userProfile }) {
-  const { tasks, users, settings, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags } = store;
+  const { tasks, users, settings, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser } = store;
   const isMobile = useContext(MobileCtx);
 
   const userId = userProfile?.id || userProfile?.uid;
@@ -572,6 +572,18 @@ export function TasksPage({ store, userProfile }) {
   const [collapsedStatuses, setCollapsedStatuses] = useState(new Set());
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
+  // ── Task defaults (per-user, persisted to users/{uid}) ──
+  const [taskDefaults, setTaskDefaults] = useState(() => ({
+    visibility: userProfile?.taskDefaultVisibility || 'team',
+    sharedWith: userProfile?.taskDefaultSharedWith || [],
+  }));
+  const [showDefaultsModal, setShowDefaultsModal] = useState(false);
+  const [defaultsForm, setDefaultsForm] = useState(() => ({
+    visibility: userProfile?.taskDefaultVisibility || 'team',
+    sharedWith: userProfile?.taskDefaultSharedWith || [],
+  }));
+  const [savingDefaults, setSavingDefaults] = useState(false);
+
   const [taskForm, setTaskForm] = useState(getEmptyTask);
   const [photoFiles, setPhotoFiles] = useState([]);
   const [photoPreviews, setPhotoPreviews] = useState([]);
@@ -606,6 +618,23 @@ export function TasksPage({ store, userProfile }) {
 
   // ── Helpers ──
   function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
+
+  async function handleSaveDefaults() {
+    setSavingDefaults(true);
+    try {
+      await updateUser(userId, {
+        taskDefaultVisibility: defaultsForm.visibility,
+        taskDefaultSharedWith: defaultsForm.sharedWith,
+      });
+      setTaskDefaults({ ...defaultsForm });
+      setShowDefaultsModal(false);
+      flash('Task defaults saved.');
+    } catch {
+      flash('Failed to save defaults.', true);
+    } finally {
+      setSavingDefaults(false);
+    }
+  }
 
   function switchViewMode(mode) {
     setViewMode(mode);
@@ -941,7 +970,7 @@ export function TasksPage({ store, userProfile }) {
           <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:'0 0 2px' }}>Tasks Hub</h2>
           <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Track and manage church admin tasks</p>
         </div>
-        <button onClick={() => { setTaskForm(getEmptyTask()); setPhotoFiles([]); setPhotoPreviews([]); setShowAdd(true); }} style={btnP}>
+        <button onClick={() => { setTaskForm({ ...getEmptyTask(), visibility: taskDefaults.visibility, sharedWith: [...taskDefaults.sharedWith] }); setPhotoFiles([]); setPhotoPreviews([]); setShowAdd(true); }} style={btnP}>
           + New Task
         </button>
       </div>
@@ -1016,6 +1045,13 @@ export function TasksPage({ store, userProfile }) {
             <option value="dueDate">Due date</option>
           </select>
         </div>
+        <button
+          type="button"
+          onClick={() => { setDefaultsForm({ ...taskDefaults }); setShowDefaultsModal(true); }}
+          style={{ padding:'7px 14px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:500, display:'flex', alignItems:'center', gap:5 }}
+        >
+          ⚙ Defaults
+        </button>
         <span style={{ color:B.textLight, fontSize:13, marginLeft:'auto' }}>
           {filteredTasks.length}{filteredTasks.length !== visibleTasks.length ? ` of ${visibleTasks.length}` : ''} task{visibleTasks.length !== 1 ? 's' : ''}
         </span>
@@ -1285,6 +1321,37 @@ export function TasksPage({ store, userProfile }) {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* ═══ TASK DEFAULTS MODAL ═══ */}
+      <Modal open={showDefaultsModal} onClose={() => setShowDefaultsModal(false)} title="My Task Defaults">
+        <p style={{ fontSize:13, color:B.textMid, margin:'0 0 16px' }}>
+          New tasks you create will start with these settings. You can always override them per task.
+        </p>
+        <FF label="Default Visibility">
+          <VisibilitySelect
+            visibility={defaultsForm.visibility}
+            onChange={v => setDefaultsForm(f => ({ ...f, visibility:v, sharedWith: v !== 'shared' ? [] : f.sharedWith }))}
+            canEdit={true}
+          />
+        </FF>
+        {defaultsForm.visibility === 'shared' && (
+          <FF label="Default Share With">
+            <SharedWithSelect
+              sharedWith={defaultsForm.sharedWith}
+              onChange={sharedWith => setDefaultsForm(f => ({ ...f, sharedWith }))}
+              users={taskHubUsers}
+              assignees={[]}
+              currentUserId={userId}
+            />
+          </FF>
+        )}
+        <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:8 }}>
+          <button onClick={() => setShowDefaultsModal(false)} style={btnS}>Cancel</button>
+          <button onClick={handleSaveDefaults} disabled={savingDefaults} style={{ ...btnP, opacity:savingDefaults ? .5 : 1 }}>
+            {savingDefaults ? 'Saving...' : 'Save Defaults'}
+          </button>
+        </div>
       </Modal>
     </div>
   );
