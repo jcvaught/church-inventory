@@ -549,14 +549,14 @@ export function TasksPage({ store, userProfile }) {
   [users]);
 
   // ── Visibility filter — applied before any rendering ──
+  // Private/shared tasks are truly private: no admin override.
   const visibleTasks = useMemo(() => (tasks || []).filter(t => {
     if (t.visibility === 'team' || !t.visibility) return true;
     if (t.createdBy === userId) return true;
     if (t.assignees?.some(a => a.uid === userId)) return true;
     if (t.visibility === 'shared' && t.sharedWith?.some(s => s.uid === userId)) return true;
-    if (isAdmin) return true;
     return false;
-  }), [tasks, userId, isAdmin]);
+  }), [tasks, userId]);
 
   // ── State ──
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('tasks_viewMode') || 'kanban');
