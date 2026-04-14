@@ -1158,12 +1158,14 @@ export function TasksPage({ store, userProfile }) {
         <FF label="Tags">
           <TagInput tags={taskForm.tags} onChange={tags => setTaskForm(f => ({ ...f, tags }))} suggestions={taskTags}/>
         </FF>
-        <FF label="Assignees">
-          <AssigneeSelect assignees={taskForm.assignees} onChange={assignees => setTaskForm(f => ({ ...f, assignees }))} users={taskHubUsers} currentUserId={userId} currentUserName={userName}/>
-        </FF>
-        <FF label="Visibility">
-          <VisibilitySelect visibility={taskForm.visibility} onChange={v => setTaskForm(f => ({ ...f, visibility:v, sharedWith: v !== 'shared' ? [] : f.sharedWith })) } canEdit={true}/>
-        </FF>
+        <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
+          <FF label="Assignees">
+            <AssigneeSelect assignees={taskForm.assignees} onChange={assignees => setTaskForm(f => ({ ...f, assignees }))} users={taskHubUsers} currentUserId={userId} currentUserName={userName}/>
+          </FF>
+          <FF label="Visibility">
+            <VisibilitySelect visibility={taskForm.visibility} onChange={v => setTaskForm(f => ({ ...f, visibility:v, sharedWith: v !== 'shared' ? [] : f.sharedWith })) } canEdit={true}/>
+          </FF>
+        </div>
         {taskForm.visibility === 'shared' && (
           <FF label="Share With">
             <SharedWithSelect sharedWith={taskForm.sharedWith} onChange={sharedWith => setTaskForm(f => ({ ...f, sharedWith }))} users={taskHubUsers} assignees={taskForm.assignees} currentUserId={userId}/>
@@ -1215,16 +1217,18 @@ export function TasksPage({ store, userProfile }) {
             <FF label="Tags">
               <TagInput tags={detailEdits.tags || []} onChange={tags => setDetailEdits(d => ({ ...d, tags }))} suggestions={taskTags}/>
             </FF>
-            <FF label="Assignees">
-              <AssigneeSelect assignees={detailEdits.assignees || []} onChange={assignees => setDetailEdits(d => ({ ...d, assignees }))} users={taskHubUsers} currentUserId={userId} currentUserName={userName}/>
-            </FF>
-            <FF label="Visibility">
-              <VisibilitySelect
-                visibility={detailEdits.visibility || 'team'}
-                onChange={v => setDetailEdits(d => ({ ...d, visibility:v, sharedWith: v !== 'shared' ? [] : d.sharedWith }))}
-                canEdit={canEditVisibility}
-              />
-            </FF>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
+              <FF label="Assignees">
+                <AssigneeSelect assignees={detailEdits.assignees || []} onChange={assignees => setDetailEdits(d => ({ ...d, assignees }))} users={taskHubUsers} currentUserId={userId} currentUserName={userName}/>
+              </FF>
+              <FF label="Visibility">
+                <VisibilitySelect
+                  visibility={detailEdits.visibility || 'team'}
+                  onChange={v => setDetailEdits(d => ({ ...d, visibility:v, sharedWith: v !== 'shared' ? [] : d.sharedWith }))}
+                  canEdit={canEditVisibility}
+                />
+              </FF>
+            </div>
             {detailEdits.visibility === 'shared' && canEditVisibility && (
               <FF label="Share With">
                 <SharedWithSelect sharedWith={detailEdits.sharedWith || []} onChange={sharedWith => setDetailEdits(d => ({ ...d, sharedWith }))} users={taskHubUsers} assignees={detailEdits.assignees || []} currentUserId={userId}/>
