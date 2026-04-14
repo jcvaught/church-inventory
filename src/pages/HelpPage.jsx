@@ -14,6 +14,7 @@ const SECTIONS = [
   { id: 'insights',        label: 'Insights Hub' },
   { id: 'coordination',    label: 'Coordination Hub' },
   { id: 'accountability',  label: 'Accountability Hub' },
+  { id: 'tasks',           label: 'Tasks Hub' },
   { id: 'team',            label: 'Team Hub' },
   { id: 'settings',        label: 'Settings & Billing' },
   { id: 'faq',             label: 'FAQ' },
@@ -552,7 +553,7 @@ export function HelpPage({ onBack }) {
                 'Ticket Assigned template ID — sent when someone is assigned to a maintenance ticket (optional)',
               ]} />
               <P>Use the <strong>Send Test</strong> button to verify the connection before going live.</P>
-              <Tip>The Ticket Assigned template receives these variables: to_email, to_name, ticket_name, ticket_number, priority, due_date, assigned_by.</Tip>
+              <Tip>The Ticket/Task Assigned template receives these variables: to_email, to_name, ticket_name, ticket_number, priority, due_date, assigned_by.</Tip>
               <Note>EmailJS is a free third-party service. You'll need a free account at emailjs.com to get these credentials.</Note>
             </Accordion>
           </Section>
@@ -579,6 +580,57 @@ export function HelpPage({ onBack }) {
 
             <Accordion title="Insurance CSV export">
               <P>Export a CSV of all active items with their financial fields (purchase date, price, estimated value, warranty) — formatted for insurance reporting. Accessible from the Accountability Hub header.</P>
+            </Accordion>
+          </Section>
+
+          {/* ──────────────────────────────────── */}
+          {/* TASKS HUB                            */}
+          {/* ──────────────────────────────────── */}
+          <Section id="tasks" icon="✅" title="Tasks Hub" badge="$7/mo">
+            <P>A general-purpose Kanban task board for church admin work — assign tasks, track progress, and control who sees what.</P>
+
+            <Accordion title="Creating a task" defaultOpen>
+              <P>Click <strong>+ New Task</strong>. Fields include:</P>
+              <UL items={[
+                'Name and description',
+                'Priority — High, Medium, or Low',
+                'Due date',
+                'Recurrence — set a task to repeat (Weekly, Every 2 weeks, Monthly, Quarterly, Annually)',
+                'Assignees — one or more team members',
+                'Tags — searchable labels',
+                'Visibility — Team, Private, or Shared (see below)',
+                'Photos and notes',
+              ]} />
+              <P>Tasks are auto-numbered (TSK-001, TSK-002, …). Status starts at Backlog and moves through: Backlog → Planning → In Progress → On Hold → Complete → Cancelled.</P>
+            </Accordion>
+
+            <Accordion title="Visibility control">
+              <P>Each task has a <strong>Visibility</strong> setting that controls who can see it:</P>
+              <UL items={[
+                'Team — visible to everyone with Tasks Hub access (default)',
+                'Private — visible only to you (and admins)',
+                'Shared — visible to you plus specific people you choose',
+              ]} />
+              <P>Assignees always see their tasks regardless of visibility. Cards show a 🔒 icon for private tasks and 👥 for shared tasks.</P>
+              <Tip>Use Private for your own to-do items, Shared for tasks you're collaborating on with one other person, and Team for anything the whole staff should see.</Tip>
+            </Accordion>
+
+            <Accordion title="Recurring tasks">
+              <P>Set a recurrence on any task. When you mark a recurring task <strong>Complete</strong>, the app automatically creates the next task with all the same fields and the next due date calculated forward.</P>
+              <Tip>Use recurring tasks for things like weekly bulletin prep, monthly board reports, or quarterly budget reviews.</Tip>
+            </Accordion>
+
+            <Accordion title="Checklist sub-tasks">
+              <P>Open a task and scroll to <strong>Checklist</strong>. Type an item and press Enter (or click Add) to add it. Check items off as you work. The card shows your progress (e.g. ✓ 3/5) at a glance. Checklist items carry over when a recurring task auto-creates, with done state reset.</P>
+            </Accordion>
+
+            <Accordion title="Kanban and list views">
+              <P>Switch between <strong>Kanban</strong> (column per status) and <strong>List</strong> (grouped by status, collapsible). Drag cards between Kanban columns to update status. On mobile, use the <strong>Move to:</strong> dropdown on each card.</P>
+              <P>Filter by priority, status, assignee, or toggle <strong>My tasks</strong> to see only tasks assigned to you.</P>
+            </Accordion>
+
+            <Accordion title="Comments and photos">
+              <P>Open a task to add comments (real-time thread) and photos. Comments support bullet and numbered lists. You can edit or delete your own comments; admins and managers can edit or delete any comment.</P>
             </Accordion>
           </Section>
 
@@ -668,7 +720,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="What is the All-In Bundle?">
-              <P>The All-In Bundle ($29/mo) includes all five paid hubs — Maintenance, Insights, Coordination, Accountability, and Team (unlimited users) — at a significant discount versus subscribing individually.</P>
+              <P>The All-In Bundle ($29/mo) includes all six paid hubs — Maintenance, Insights, Coordination, Accountability, Tasks, and Team (unlimited users) — at a significant discount versus subscribing individually.</P>
             </Accordion>
 
             <Accordion title="What if someone added something to the wrong list — items vs. supplies?">

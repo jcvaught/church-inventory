@@ -16,6 +16,8 @@ const HUBS = [
   { icon: '📊', name: 'Insights Hub', price: '$7/mo', desc: 'Utilization charts, ministry breakdowns, seasonal trends, and depreciation tracking.' },
   { icon: '🤝', name: 'Coordination Hub', price: '$7/mo', desc: 'Checkout bundles, bulk reservations, and email notifications for your team.' },
   { icon: '✅', name: 'Accountability Hub', price: '$5/mo', desc: 'Physical audits by location, chain of custody timelines, and insurance-ready CSV exports.' },
+  { icon: '✅', name: 'Tasks Hub', price: '$7/mo', desc: 'Kanban task board for church admin — assign tasks, set visibility (private or shared), and track progress.' },
+  { icon: '🔑', name: 'People Access Hub', price: '$7/mo', desc: 'Track background checks, key assignments, certifications, and custom compliance milestones.' },
   { icon: '👤', name: 'Team Hub', price: '$9–$19/mo', desc: 'Expand beyond 10 members with role-based hub access and ministry assignments.' },
 ];
 
