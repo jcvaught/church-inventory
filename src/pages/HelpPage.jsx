@@ -163,12 +163,36 @@ export function HelpPage({ onBack }) {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const faqJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: [
+      { '@type': 'Question', name: 'Is my data isolated from other churches?',
+        acceptedAnswer: { '@type': 'Answer', text: 'Yes. Every church\'s data is stored under a unique church ID in Firestore. Security rules prevent any cross-church access — even if someone knows your church code, they cannot read your data without being an authenticated member of your church.' } },
+      { '@type': 'Question', name: 'What happens if I cancel a paid hub?',
+        acceptedAnswer: { '@type': 'Answer', text: 'The hub remains active until the end of your current billing period. After that, the hub tab shows a locked state and your data is preserved — it\'s just inaccessible until you resubscribe.' } },
+      { '@type': 'Question', name: 'Can I use ChurchOpsHub on mobile?',
+        acceptedAnswer: { '@type': 'Answer', text: 'Yes. The app is a progressive web app (PWA) optimized for both desktop and mobile. On mobile, navigation moves to a bottom bar and modals slide up from the bottom. You can also install it to your home screen from your browser\'s share menu.' } },
+      { '@type': 'Question', name: 'How do QR codes work?',
+        acceptedAnswer: { '@type': 'Answer', text: 'QR codes are generated locally (no external service) from each item\'s Item ID. They link directly to your app with a ?item=ITEM_ID URL parameter. Anyone with a login can scan and jump straight to that item\'s detail view using the Scan button in the top nav.' } },
+      { '@type': 'Question', name: 'How many items can I add?',
+        acceptedAnswer: { '@type': 'Answer', text: 'There is no limit on items or supplies on any plan. Limits only apply to team member count: 10 on the free plan, 25 or unlimited on Team Hub plans.' } },
+      { '@type': 'Question', name: 'Can I export my data?',
+        acceptedAnswer: { '@type': 'Answer', text: 'Yes. Inventory, supplies, reservations, and the activity log all have CSV export options. The Accountability Hub also offers an insurance-ready CSV with financial fields.' } },
+      { '@type': 'Question', name: 'What is the All-In Bundle?',
+        acceptedAnswer: { '@type': 'Answer', text: 'The All-In Bundle ($29/mo) includes all six paid hubs — Maintenance, Insights, Coordination, Accountability, Tasks, and Team (unlimited users) — at a significant discount versus subscribing individually.' } },
+      { '@type': 'Question', name: 'How do I report a bug or request a feature?',
+        acceptedAnswer: { '@type': 'Answer', text: 'Use the Suggest a Feature / Report a Bug button in Settings. Your feedback goes directly to us and is reviewed regularly.' } },
+    ],
+  };
+
   return (
     <div style={{ fontFamily: f2, color: B.textDark, background: B.cream, minHeight: '100vh' }}>
       <SEO
         title="Help Center — ChurchOpsHub"
         description="Find answers about ChurchOpsHub church inventory management. Guides for inventory, supplies, reservations, maintenance, and more."
         canonical="/?help"
+        jsonLd={faqJsonLd}
       />
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet" />
 

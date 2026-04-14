@@ -85,6 +85,7 @@ export function BlogPost({ slug, onGetStarted }) {
     '@type': 'BlogPosting',
     headline: post.title,
     description: post.description,
+    articleBody: post.content,
     datePublished: post.date,
     author: { '@type': 'Organization', name: 'ChurchOpsHub' },
     publisher: { '@type': 'Organization', name: 'ChurchOpsHub', url: 'https://churchopshub.com' },
