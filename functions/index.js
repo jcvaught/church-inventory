@@ -35,7 +35,7 @@ const PRICE_IDS = {
   insights:       'price_1TB2E6F12bDL8YA734z4Q64M',
   coordination:   'price_1TB2E2F12bDL8YA7a0VFGB6C',
   accountability: 'price_1TB2E3F12bDL8YA7hGRIALZb',
-  tasks:          'price_TASKS_TODO',  // TODO: replace with real Stripe price ID
+  tasks:          'price_1TM9kcF12bDL8YA7m3otofk2',
   team_25:        'price_1TB2E4F12bDL8YA7LLFr3xnL',
   team_unlimited: 'price_1TB2E3F12bDL8YA7P3a9xTVV',
   all_in:         'price_1TB2E7F12bDL8YA782etfOOQ',
