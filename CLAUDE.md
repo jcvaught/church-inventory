@@ -113,7 +113,7 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/maintenanceTickets/{id}/comments` | Comment subcollection: `text`, `authorId`, `authorName`, `createdAt`, `updatedAt` (set on edit) |
 | `churches/{churchId}/vendors` | Maintenance Hub: vendor/contractor directory |
 | `churches/{churchId}/config/settings.maintenanceTags` | `string[]` — tag autocomplete for maintenance tickets; new tags added via `arrayUnion` |
-| `churches/{churchId}/tasks` | Tasks Hub: general admin tasks; fields: `taskNumber` (TSK-###), `name`, `description`, `priority`, `status`, `tags[]`, `dueDate`, `recurrence`, `assignees[{uid,name}]`, `checklist[{id,text,done}]`, `photos[]`, `notes`, `visibility` (team/private/shared), `sharedWith[{uid,name}]`, `createdBy`, `createdByName`, `createdAt`, `updatedAt`, `completedAt` |
+| `churches/{churchId}/tasks` | Tasks Hub: general admin tasks; fields: `taskNumber` (TSK-###), `name`, `description`, `priority`, `status`, `tags[]`, `dueDate`, `recurrence`, `assignees[{uid,name}]`, `checklist[{id,text,done}]`, `photos[]`, `notes`, `visibility` (team/private/shared), `sharedWith[{uid,name}]`, `createdBy`, `createdByName`, `createdAt`, `updatedAt`, `completedAt`; **Firestore read rule**: `private` tasks blocked server-side for non-creators; `shared` visibility is client-side only (Firestore rules can't iterate nested object arrays to check `sharedWith[].uid`); creator can delete own tasks |
 | `churches/{churchId}/tasks/{id}/comments` | Task comment subcollection: `text`, `authorId`, `authorName`, `createdAt`, `updatedAt` |
 | `churches/{churchId}/bundles` | Coordination Hub: checkout bundles; fields: `name`, `description`, `items[{docId,itemId,description,location}]`, `createdBy`, `createdByName`, `createdAt` |
 | `churches/{churchId}/config/notifications` | Coordination Hub: EmailJS config; fields: `enabled`, `serviceId`, `publicKey`, `templateApproved`, `templateDenied`, `templateAssigned` (maintenance ticket assignment notification) |
@@ -278,6 +278,7 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Blog post: "Church Volunteer Equipment Accountability: Best Practices" | 2026-04-09 |
 | — | Tasks Hub: general-purpose Kanban task board with visibility control (team/private/shared), assignees, comments, recurrence, TSK-### numbering | 2026-04-14 |
 | — | Tasks Hub: assignees filtered to Tasks Hub-access users only; per-user task defaults (⚙ Defaults button → default visibility + default share-with list, saved to users/{uid}); private tasks truly private (admin override removed); High priority pinned to top of each Kanban column | 2026-04-14 |
+| — | Tasks Hub: Opus review — security (private tasks enforced server-side in Firestore rules; creator delete allowed), bugs (calculateNextDue month-end rollover, isDetailDirty checklist, checklist Cancel flow, addTask silent failure, photo URL memory leak), refactor (createNextRecurringTask shared helper), a11y (TaskCard role/tabIndex/aria-label, mobile status select aria-label, comment button aria-label), performance (React.memo on TaskCard + KanbanColumn, useMemo for stats) | 2026-04-15 |
 
 ---
 
