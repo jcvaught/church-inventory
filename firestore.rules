@@ -97,10 +97,18 @@ service cloud.firestore {
     }
 
     // ── Tasks ─────────────────────────────────────────────────────────────────
+    // Private tasks are only readable by their creator.
+    // Shared/team tasks are readable by all members (shared-with enforcement is client-side,
+    // as Firestore rules cannot iterate object arrays to check nested uid fields).
     match /churches/{churchId}/tasks/{docId} {
-      allow read:           if isMember(churchId);
+      allow read: if isMember(churchId) && (
+        !resource.data.keys().hasAny(['visibility']) ||
+        resource.data.visibility == 'team' ||
+        resource.data.visibility == 'shared' ||
+        resource.data.createdBy == request.auth.uid
+      );
       allow create, update: if isMember(churchId);
-      allow delete:         if isChurchAdminOrManager(churchId);
+      allow delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && resource.data.createdBy == request.auth.uid);
     }
 
     // ── Task comments — any member can add; authors can edit/delete own; admins+mgrs can edit/delete any ─────

@@ -32,14 +32,18 @@ function calculateNextDue(dueDate, recurrence) {
   else if (recurrence === 'biweekly') base.setDate(base.getDate() + 14);
   else if (recurrence === 'monthly') {
     const day = base.getDate();
-    base.setMonth(base.getMonth() + 1);
+    const targetMonth = base.getMonth() + 1;
+    base.setDate(1);
+    base.setMonth(targetMonth);
     const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
-    if (base.getDate() !== day) base.setDate(lastDay);
+    base.setDate(Math.min(day, lastDay));
   } else if (recurrence === 'quarterly') {
     const day = base.getDate();
-    base.setMonth(base.getMonth() + 3);
+    const targetMonth = base.getMonth() + 3;
+    base.setDate(1);
+    base.setMonth(targetMonth);
     const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
-    if (base.getDate() !== day) base.setDate(lastDay);
+    base.setDate(Math.min(day, lastDay));
   }
   else if (recurrence === 'annually') base.setFullYear(base.getFullYear() + 1);
   return base.toISOString().slice(0, 10);
@@ -685,6 +689,7 @@ export function TasksPage({ store, userProfile }) {
     if (JSON.stringify(detailEdits.tags) !== JSON.stringify(detailSnapshot.tags)) return true;
     if (JSON.stringify(detailEdits.assignees) !== JSON.stringify(detailSnapshot.assignees)) return true;
     if (JSON.stringify(detailEdits.sharedWith) !== JSON.stringify(detailSnapshot.sharedWith)) return true;
+    if (JSON.stringify(detailEdits.checklist) !== JSON.stringify(detailSnapshot.checklist)) return true;
     return false;
   }
 
@@ -710,6 +715,25 @@ export function TasksPage({ store, userProfile }) {
   }
 
   // ── Handlers ──
+  async function createNextRecurringTask(source) {
+    const nextDue = calculateNextDue(source.dueDate, source.recurrence);
+    await addTask({
+      name: source.name,
+      description: source.description,
+      priority: source.priority,
+      tags: source.tags || [],
+      dueDate: nextDue,
+      recurrence: source.recurrence,
+      assignees: source.assignees || [],
+      checklist: (source.checklist || []).map(c => ({ ...c, done: false })),
+      notes: source.notes || null,
+      photos: [],
+      visibility: source.visibility || 'team',
+      sharedWith: source.visibility === 'shared' ? (source.sharedWith || []) : [],
+      completedAt: null,
+    }, userId, userName);
+  }
+
   async function handleAddTask() {
     if (!taskForm.name.trim()) return;
     setSaving(true);
@@ -742,8 +766,11 @@ export function TasksPage({ store, userProfile }) {
       setShowAdd(false);
       setTaskForm(getEmptyTask());
       setPhotoFiles([]);
+      photoPreviews.forEach(u => URL.revokeObjectURL(u));
       setPhotoPreviews([]);
       flash('Task created!');
+    } catch {
+      flash('Failed to create task. Please try again.', true);
     } finally {
       setSaving(false);
     }
@@ -790,22 +817,7 @@ export function TasksPage({ store, userProfile }) {
 
       // Auto-create next recurring task on completion
       if (isNowComplete && !wasComplete && detailEdits.recurrence) {
-        const nextDue = calculateNextDue(detailEdits.dueDate, detailEdits.recurrence);
-        await addTask({
-          name: detailEdits.name,
-          description: detailEdits.description,
-          priority: detailEdits.priority,
-          tags: detailEdits.tags || [],
-          dueDate: nextDue,
-          recurrence: detailEdits.recurrence,
-          assignees: detailEdits.assignees || [],
-          checklist: (detailEdits.checklist || []).map(c => ({ ...c, done: false })),
-          notes: detailEdits.notes || null,
-          photos: [],
-          visibility: detailEdits.visibility || 'team',
-          sharedWith: detailEdits.visibility === 'shared' ? (detailEdits.sharedWith || []) : [],
-          completedAt: null,
-        }, userId, userName);
+        await createNextRecurringTask(detailEdits);
       }
 
       setShowDetail(null);
@@ -868,6 +880,7 @@ export function TasksPage({ store, userProfile }) {
   }
 
   function handlePreviewRemove(index) {
+    URL.revokeObjectURL(photoPreviews[index]);
     setPhotoFiles(prev => prev.filter((_, i) => i !== index));
     setPhotoPreviews(prev => prev.filter((_, i) => i !== index));
   }
@@ -886,22 +899,7 @@ export function TasksPage({ store, userProfile }) {
       completedAt: isNowComplete && !wasComplete ? new Date().toISOString() : (isNowComplete ? task.completedAt : null),
     });
     if (isNowComplete && !wasComplete && task.recurrence) {
-      const nextDue = calculateNextDue(task.dueDate, task.recurrence);
-      await addTask({
-        name: task.name,
-        description: task.description,
-        priority: task.priority,
-        tags: task.tags || [],
-        dueDate: nextDue,
-        recurrence: task.recurrence,
-        assignees: task.assignees || [],
-        checklist: (task.checklist || []).map(c => ({ ...c, done: false })),
-        notes: task.notes || null,
-        photos: [],
-        visibility: task.visibility || 'team',
-        sharedWith: task.visibility === 'shared' ? (task.sharedWith || []) : [],
-        completedAt: null,
-      }, userId, userName);
+      await createNextRecurringTask(task);
       flash('Task completed — next recurring task created!');
     }
   }
@@ -909,6 +907,7 @@ export function TasksPage({ store, userProfile }) {
   async function handleChecklistUpdate(cl) {
     try {
       await updateTask(showDetail._docId, { checklist: cl });
+      setDetailSnapshot(s => ({ ...s, checklist: cl }));
     } catch { flash('Checklist save failed — please try again.', true); }
   }
 
@@ -1136,7 +1135,7 @@ export function TasksPage({ store, userProfile }) {
       )}
 
       {/* ═══ ADD TASK MODAL ═══ */}
-      <Modal open={showAdd} onClose={() => { setShowAdd(false); setPhotoFiles([]); setPhotoPreviews([]); }} title="New Task" wide>
+      <Modal open={showAdd} onClose={() => { setShowAdd(false); setPhotoFiles([]); photoPreviews.forEach(u => URL.revokeObjectURL(u)); setPhotoPreviews([]); }} title="New Task" wide>
         <FF label="Task Name *">
           <input style={inp} value={taskForm.name} onChange={e => setTaskForm(f => ({ ...f, name:e.target.value }))} placeholder="Short descriptive name..."/>
         </FF>
@@ -1308,7 +1307,7 @@ export function TasksPage({ store, userProfile }) {
                 {showDetail.completedAt && <> · Completed {showDetail.completedAt.split('T')[0]}</>}
               </div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                {canOperate && <button onClick={handleDeleteTask} style={{ ...btnD, fontSize:13, padding:'9px 14px' }}>Delete</button>}
+                {(canOperate || showDetail.createdBy === userId) && <button onClick={handleDeleteTask} style={{ ...btnD, fontSize:13, padding:'9px 14px' }}>Delete</button>}
                 <button onClick={closeDetail} style={btnS}>Cancel</button>
                 <button onClick={handleUpdateTask} disabled={saving || !detailEdits.name?.trim()} style={{ ...btnP, opacity:(saving || !detailEdits.name?.trim()) ? .5 : 1 }}>
                   {saving ? 'Saving...' : 'Save Changes'}
