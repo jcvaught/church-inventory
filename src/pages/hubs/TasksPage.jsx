@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useRef, useMemo, memo } from 'react';
-import { collection, onSnapshot, query as fsQuery, orderBy } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query as fsQuery, orderBy } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../firebase.js';
 import { MobileCtx } from '../../hooks/useMobile.js';
@@ -609,10 +609,12 @@ export function TasksPage({ store, userProfile }) {
   const [photoPreviews, setPhotoPreviews] = useState([]);
   const [detailEdits, setDetailEdits] = useState({});
   const [detailSnapshot, setDetailSnapshot] = useState({});
+  const [remoteUpdate, setRemoteUpdate] = useState(null);
   const [sortBy, setSortBy] = useState(() => localStorage.getItem('tasks_sortBy') || 'createdDesc');
   const [detailChecklistInput, setDetailChecklistInput] = useState('');
   const checklistInputRef = useRef();
   const dragChecklistIdx = useRef(null);
+  const isDirtyRef = useRef(false);
 
   // Comments
   const [comments, setComments] = useState([]);
@@ -635,6 +637,46 @@ export function TasksPage({ store, userProfile }) {
     }, () => setCommentsLoading(false));
     return unsub;
   }, [showDetail?._docId, churchId]);
+
+  // Task document real-time subscription — keeps detail modal in sync with concurrent edits
+  useEffect(() => {
+    if (!showDetail?._docId || !churchId) { setRemoteUpdate(null); return; }
+    setRemoteUpdate(null);
+    const initialRef = { current: true };
+    const unsub = onSnapshot(
+      doc(db, 'churches', churchId, 'tasks', showDetail._docId),
+      snap => {
+        if (!snap.exists()) return;
+        if (initialRef.current) { initialRef.current = false; return; } // skip first fire
+        const remote = { _docId: snap.id, ...snap.data() };
+        if (isDirtyRef.current) {
+          // User has unsaved edits — surface conflict banner
+          setRemoteUpdate(remote);
+        } else {
+          // No unsaved edits — silently apply remote state
+          setShowDetail(remote);
+          const edits = taskToEdits(remote);
+          setDetailEdits(edits);
+          setDetailSnapshot(edits);
+        }
+      }
+    );
+    return () => { unsub(); setRemoteUpdate(null); };
+  }, [showDetail?._docId, churchId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Dirty-state tracking ──
+  const isDetailDirtyNow = useMemo(() => {
+    const fields = ['name', 'description', 'status', 'priority', 'dueDate', 'recurrence', 'visibility', 'notes'];
+    if (fields.some(f => (detailEdits[f] ?? '') !== (detailSnapshot[f] ?? ''))) return true;
+    if (JSON.stringify(detailEdits.tags) !== JSON.stringify(detailSnapshot.tags)) return true;
+    if (JSON.stringify(detailEdits.assignees) !== JSON.stringify(detailSnapshot.assignees)) return true;
+    if (JSON.stringify(detailEdits.sharedWith) !== JSON.stringify(detailSnapshot.sharedWith)) return true;
+    if (JSON.stringify(detailEdits.checklist) !== JSON.stringify(detailSnapshot.checklist)) return true;
+    return false;
+  }, [detailEdits, detailSnapshot]);
+
+  // Keep isDirtyRef current so async snapshot callbacks can read it without stale closures
+  useEffect(() => { isDirtyRef.current = isDetailDirtyNow; }, [isDetailDirtyNow]);
 
   // ── Helpers ──
   function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
@@ -666,8 +708,8 @@ export function TasksPage({ store, userProfile }) {
     if (isMobile && viewMode === 'kanban') setViewMode('list');
   }, [isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function openDetail(task) {
-    const edits = {
+  function taskToEdits(task) {
+    return {
       name: task.name || '',
       description: task.description || '',
       status: task.status || 'Backlog',
@@ -681,25 +723,20 @@ export function TasksPage({ store, userProfile }) {
       notes: task.notes || '',
       checklist: task.checklist || [],
     };
+  }
+
+  function openDetail(task) {
+    const edits = taskToEdits(task);
     setShowDetail(task);
     setDetailEdits(edits);
     setDetailSnapshot(edits);
+    setRemoteUpdate(null);
     setNewComment('');
     setDetailChecklistInput('');
   }
 
-  function isDetailDirty() {
-    const fields = ['name', 'description', 'status', 'priority', 'dueDate', 'recurrence', 'visibility', 'notes'];
-    if (fields.some(f => (detailEdits[f] ?? '') !== (detailSnapshot[f] ?? ''))) return true;
-    if (JSON.stringify(detailEdits.tags) !== JSON.stringify(detailSnapshot.tags)) return true;
-    if (JSON.stringify(detailEdits.assignees) !== JSON.stringify(detailSnapshot.assignees)) return true;
-    if (JSON.stringify(detailEdits.sharedWith) !== JSON.stringify(detailSnapshot.sharedWith)) return true;
-    if (JSON.stringify(detailEdits.checklist) !== JSON.stringify(detailSnapshot.checklist)) return true;
-    return false;
-  }
-
   function closeDetail() {
-    if (isDetailDirty() && !window.confirm('You have unsaved changes. Close without saving?')) return;
+    if (isDetailDirtyNow && !window.confirm('You have unsaved changes. Close without saving?')) return;
     setShowDetail(null);
     setDetailEdits({});
     setDetailSnapshot({});
@@ -1195,6 +1232,15 @@ export function TasksPage({ store, userProfile }) {
       <Modal open={!!showDetail} onClose={closeDetail} title={(showDetail?.taskNumber || '') + (showDetail?.name ? ' — ' + showDetail.name.slice(0, 40) : '')} wide>
         {showDetail && (
           <div>
+            {remoteUpdate && (
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, padding:'10px 14px', borderRadius:8, background:'#FEF3E8', border:'1px solid #F59E42', marginBottom:14 }}>
+                <span style={{ fontSize:13, color:'#7A4A10', fontFamily:f2 }}>This task was updated by another team member.</span>
+                <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                  <button type="button" style={{ ...btnP, padding:'4px 12px', fontSize:12 }} onClick={() => { if (isDetailDirtyNow && !window.confirm('Reload will discard your unsaved changes. Continue?')) return; openDetail(remoteUpdate); }}>Reload</button>
+                  <button type="button" style={{ ...btnS, padding:'4px 12px', fontSize:12 }} onClick={() => setRemoteUpdate(null)}>Dismiss</button>
+                </div>
+              </div>
+            )}
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
               <FF label="Status">
                 <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.status} onChange={e => setDetailEdits(d => ({ ...d, status:e.target.value }))}>
