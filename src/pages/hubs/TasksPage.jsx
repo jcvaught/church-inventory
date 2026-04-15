@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, useRef, useMemo } from 'react';
+import { useState, useEffect, useContext, useRef, useMemo, memo } from 'react';
 import { collection, onSnapshot, query as fsQuery, orderBy } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../firebase.js';
@@ -82,15 +82,19 @@ function _StatusBadge({ status }) {
   );
 }
 
-function TaskCard({ task, onClick, onDragStart, onStatusChange, isMobile }) {
+const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusChange, isMobile }) {
   const sc = statusColors[task.status] || statusColors['Backlog'];
   const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'Complete' && task.status !== 'Cancelled';
   const visIcon = task.visibility === 'private' ? '🔒' : task.visibility === 'shared' ? '👥' : null;
   return (
     <div
+      role="button"
+      tabIndex={0}
       draggable={!isMobile && !!onDragStart}
       onDragStart={!isMobile && onDragStart ? e => { e.dataTransfer.setData('taskDocId', task._docId); e.dataTransfer.effectAllowed = 'move'; } : undefined}
       onClick={() => onClick(task)}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(task); } }}
+      aria-label={`${task.taskNumber ? task.taskNumber + ': ' : ''}${task.name}${isOverdue ? ' (overdue)' : ''}`}
       style={{ background:B.white, borderRadius:12, padding:'14px 16px', border:'1px solid '+B.sand, cursor: !isMobile && onDragStart ? 'grab' : 'pointer', borderLeft:'4px solid '+sc.dot, boxShadow:'0 1px 3px rgba(27,42,74,0.06)', marginBottom:8, transition:'box-shadow 0.15s' }}
       onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(27,42,74,0.12)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 3px rgba(27,42,74,0.06)'}
@@ -144,6 +148,7 @@ function TaskCard({ task, onClick, onDragStart, onStatusChange, isMobile }) {
         <div onClick={e => e.stopPropagation()} style={{ marginTop:10, borderTop:'1px solid '+B.sand, paddingTop:8, display:'flex', alignItems:'center', gap:8 }}>
           <span style={{ fontSize:11, color:B.textLight, fontFamily:f1, fontWeight:600, flexShrink:0 }}>Move to:</span>
           <select
+            aria-label={`Move "${task.name}" to status`}
             value={task.status}
             onChange={e => onStatusChange(task, e.target.value)}
             style={{ flex:1, fontSize:12, borderRadius:8, border:'1px solid '+B.sand, padding:'4px 8px', fontFamily:f1, color:B.navy, background:B.white }}
@@ -154,7 +159,7 @@ function TaskCard({ task, onClick, onDragStart, onStatusChange, isMobile }) {
       )}
     </div>
   );
-}
+});
 
 function TagInput({ tags = [], onChange, suggestions = [] }) {
   const [inputVal, setInputVal] = useState('');
@@ -472,8 +477,8 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
                         <span style={{ fontSize:11, color:B.textLight }}>{formatCommentDate(c.createdAt)}{c.updatedAt ? ' · edited' : ''}</span>
                         {canModify && editingId !== c.id && (
                           <div style={{ display:'flex', gap:4 }}>
-                            <button onClick={() => startEdit(c)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:14, color:B.textLight, padding:'6px 8px', minWidth:28, minHeight:28 }} title="Edit">✏️</button>
-                            <button onClick={() => onDelete(c.id)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:14, color:B.textLight, padding:'6px 8px', minWidth:28, minHeight:28 }} title="Delete">🗑️</button>
+                            <button onClick={() => startEdit(c)} aria-label="Edit comment" style={{ border:'none', background:'none', cursor:'pointer', fontSize:14, color:B.textLight, padding:'6px 8px', minWidth:28, minHeight:28 }}>✏️</button>
+                            <button onClick={() => onDelete(c.id)} aria-label="Delete comment" style={{ border:'none', background:'none', cursor:'pointer', fontSize:14, color:B.textLight, padding:'6px 8px', minWidth:28, minHeight:28 }}>🗑️</button>
                           </div>
                         )}
                       </div>
@@ -512,7 +517,7 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
   );
 }
 
-function KanbanColumn({ status, tasks, onTaskClick, onDrop, onStatusChange, isMobile }) {
+const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, onDrop, onStatusChange, isMobile }) {
   const sc = statusColors[status] || statusColors['Backlog'];
   const [dragOver, setDragOver] = useState(false);
   return (
@@ -535,7 +540,7 @@ function KanbanColumn({ status, tasks, onTaskClick, onDrop, onStatusChange, isMo
       </div>
     </div>
   );
-}
+});
 
 const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[] });
 
@@ -930,12 +935,16 @@ export function TasksPage({ store, userProfile }) {
   }
 
   // ── Stats ──
-  const thisMonthStart = new Date().toISOString().slice(0, 7) + '-01';
-  const today = new Date();
-  const openCount = visibleTasks.filter(t => t.status !== 'Complete' && t.status !== 'Cancelled').length;
-  const inProgressCount = visibleTasks.filter(t => t.status === 'In Progress').length;
-  const completedThisMonth = visibleTasks.filter(t => t.status === 'Complete' && (t.completedAt || '').slice(0, 10) >= thisMonthStart).length;
-  const overdueCount = visibleTasks.filter(t => t.dueDate && new Date(t.dueDate) < today && t.status !== 'Complete' && t.status !== 'Cancelled').length;
+  const { openCount, inProgressCount, completedThisMonth, overdueCount } = useMemo(() => {
+    const thisMonthStart = new Date().toISOString().slice(0, 7) + '-01';
+    const today = new Date();
+    return {
+      openCount:           visibleTasks.filter(t => t.status !== 'Complete' && t.status !== 'Cancelled').length,
+      inProgressCount:     visibleTasks.filter(t => t.status === 'In Progress').length,
+      completedThisMonth:  visibleTasks.filter(t => t.status === 'Complete' && (t.completedAt || '').slice(0, 10) >= thisMonthStart).length,
+      overdueCount:        visibleTasks.filter(t => t.dueDate && new Date(t.dueDate) < today && t.status !== 'Complete' && t.status !== 'Cancelled').length,
+    };
+  }, [visibleTasks]);
 
   // ── Filtered tasks ──
   const filteredTasks = useMemo(() => {
