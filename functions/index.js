@@ -4,6 +4,9 @@ const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 
+let sgMail;
+try { sgMail = require('@sendgrid/mail'); } catch { sgMail = null; }
+
 initializeApp();
 
 // Allowed origins for Stripe redirect URLs (successUrl, cancelUrl, returnUrl)
@@ -321,3 +324,137 @@ exports.stripeWebhook = onRequest(
     res.sendStatus(200);
   }
 );
+
+// ── Email helpers ─────────────────────────────────────────────────────────
+function escapeHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function initSendGrid() {
+  const apiKey = process.env.SENDGRID_API_KEY;
+  if (!apiKey || !sgMail) return false;
+  sgMail.setApiKey(apiKey);
+  return true;
+}
+
+const FROM = { email: 'churchopshub@gmail.com', name: 'ChurchOpsHub' };
+
+// ── sendReservationEmail ──────────────────────────────────────────────────
+// Called from client when a reservation is approved or denied.
+// data: { toEmail, toName, churchName, eventName, resourceDesc, eventDate, actionBy, status }
+exports.sendReservationEmail = onCall({ cors: true }, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  if (!initSendGrid()) return { sent: false };
+
+  const { toEmail, toName, churchName, eventName, resourceDesc, eventDate, actionBy, status } = req.data;
+  if (!toEmail) return { sent: false };
+
+  const approved = status === 'approved';
+  const safeName = escapeHtml(toName);
+  const safeEvent = escapeHtml(eventName);
+  const safeResource = escapeHtml(resourceDesc);
+  const safeChurch = escapeHtml(churchName);
+  const safeActionBy = escapeHtml(actionBy);
+
+  const subject = approved
+    ? `Reservation Approved — ${eventName}`
+    : `Reservation Denied — ${eventName}`;
+
+  const html = `<p>Hi ${safeName},</p>
+<p>Your reservation request has been <strong>${approved ? 'approved ✅' : 'denied ❌'}</strong>.</p>
+<table style="border-collapse:collapse;margin:12px 0">
+  <tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">Event</td><td style="font-size:14px"><strong>${safeEvent}</strong></td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">Resource</td><td style="font-size:14px">${safeResource}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">Date</td><td style="font-size:14px">${escapeHtml(eventDate)}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">${approved ? 'Approved' : 'Denied'} by</td><td style="font-size:14px">${safeActionBy}</td></tr>
+</table>
+<p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`;
+
+  const text = `Hi ${toName},\n\nYour reservation for "${eventName}" (${resourceDesc}) on ${eventDate} has been ${status} by ${actionBy}.\n\n— ${churchName}`;
+
+  await sgMail.send({ to: toEmail, from: FROM, subject, html, text });
+  return { sent: true };
+});
+
+// ── sendTicketAssignedEmail ───────────────────────────────────────────────
+// Called from client when a maintenance ticket is assigned to someone.
+// data: { toEmail, toName, churchName, ticketNumber, ticketName, assignedBy }
+exports.sendTicketAssignedEmail = onCall({ cors: true }, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  if (!initSendGrid()) return { sent: false };
+
+  const { toEmail, toName, churchName, ticketNumber, ticketName, assignedBy } = req.data;
+  if (!toEmail) return { sent: false };
+
+  const safeName = escapeHtml(toName);
+  const safeTicket = escapeHtml(ticketName);
+  const safeNumber = escapeHtml(ticketNumber);
+  const safeChurch = escapeHtml(churchName);
+  const safeAssignedBy = escapeHtml(assignedBy);
+
+  const subject = `Maintenance Ticket Assigned — ${ticketNumber}`;
+  const html = `<p>Hi ${safeName},</p>
+<p>You've been assigned a maintenance ticket by <strong>${safeAssignedBy}</strong>.</p>
+<table style="border-collapse:collapse;margin:12px 0">
+  <tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">Ticket</td><td style="font-size:14px"><strong>${safeNumber}</strong></td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">Description</td><td style="font-size:14px">${safeTicket}</td></tr>
+</table>
+<p><a href="https://churchopshub.com">Log in to ChurchOpsHub</a> to view and update the ticket.</p>
+<p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`;
+
+  const text = `Hi ${toName},\n\nYou've been assigned maintenance ticket ${ticketNumber}: "${ticketName}" by ${assignedBy}.\n\nLog in at churchopshub.com to view it.\n\n— ${churchName}`;
+
+  await sgMail.send({ to: toEmail, from: FROM, subject, html, text });
+  return { sent: true };
+});
+
+// ── sendJobAnnouncementEmails ─────────────────────────────────────────────
+// Called from client when a Job Hub announcement is posted.
+// data: { churchId, title, body, postedBy }
+// Fetches all active users with job hub access server-side and emails them.
+exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  if (!initSendGrid()) return { sent: 0 };
+
+  const { churchId, title, body, postedBy } = req.data;
+  if (!churchId || !title) return { sent: 0 };
+
+  const db = getFirestore();
+  const [churchSnap, usersSnap] = await Promise.all([
+    db.doc(`churches/${churchId}/config/main`).get(),
+    db.collection('users').where('churchId', '==', churchId).where('active', '!=', false).get(),
+  ]);
+
+  const churchName = churchSnap.data()?.churchName || 'Your Church';
+  const recipients = usersSnap.docs
+    .map(d => ({ ...d.data(), uid: d.id }))
+    .filter(u => u.email && (!u.allowedHubs || u.allowedHubs.includes('jobs')));
+
+  if (recipients.length === 0) return { sent: 0 };
+
+  const safeTitle = escapeHtml(title);
+  const safeBody = escapeHtml(body).replace(/\n/g, '<br>');
+  const safePostedBy = escapeHtml(postedBy);
+  const safeChurch = escapeHtml(churchName);
+  const subject = `📢 ${title} — ${churchName}`;
+
+  const results = await Promise.allSettled(recipients.map(u =>
+    sgMail.send({
+      to: u.email,
+      from: FROM,
+      subject,
+      html: `<p>Hi ${escapeHtml(u.name || 'there')},</p>
+<p><strong>${safePostedBy}</strong> posted a new Job Hub announcement:</p>
+<div style="background:#f5f5f5;border-left:4px solid #0D9488;padding:12px 16px;margin:12px 0;border-radius:4px">
+  <p style="font-weight:700;margin:0 0 8px;font-size:15px">${safeTitle}</p>
+  <p style="margin:0;font-size:14px;line-height:1.6">${safeBody}</p>
+</div>
+<p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to view all announcements.</p>
+<p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`,
+      text: `Hi ${u.name || 'there'},\n\n${postedBy} posted a new announcement:\n\n${title}\n\n${body}\n\n— ${churchName}`,
+    })
+  ));
+
+  const sent = results.filter(r => r.status === 'fulfilled').length;
+  return { sent };
+});

@@ -1,4 +1,5 @@
 import { useState, useMemo, useContext } from 'react';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
@@ -82,27 +83,10 @@ export function JobsPage({ store, userProfile }) {
     else { setMsg(text); setTimeout(() => setMsg(''), 3000); }
   }
 
-  async function sendAnnouncementEmails(title, body) {
-    const nc = notificationConfig || {};
-    if (!nc.enabled || !nc.serviceId || !nc.publicKey || !nc.templateJobAnnouncement) return;
-    const churchName = config?.churchName || '';
-    const recipients = (users || []).filter(u =>
-      u.active !== false && u.email && (!u.allowedHubs || u.allowedHubs.includes('jobs'))
-    );
-    if (recipients.length === 0) return;
-    try {
-      const emailjs = await import('@emailjs/browser');
-      await Promise.allSettled(recipients.map(u =>
-        emailjs.send(nc.serviceId, nc.templateJobAnnouncement, {
-          to_email: u.email,
-          to_name: u.name || '',
-          announcement_title: title,
-          announcement_body: body,
-          posted_by: userName,
-          church_name: churchName,
-        }, { publicKey: nc.publicKey })
-      ));
-    } catch { /* silent — email failure shouldn't block announcement */ }
+  function sendAnnouncementEmails(title, body) {
+    if (!(notificationConfig?.enabled)) return;
+    const fn = httpsCallable(getFunctions(), 'sendJobAnnouncementEmails');
+    fn({ churchId: userProfile?.churchId, title, body, postedBy: userName }).catch(() => {});
   }
 
   // ── Derived state ──

@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext, useRef, useMemo, memo } from 'react';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, doc, onSnapshot, query as fsQuery, orderBy } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../firebase.js';
@@ -838,23 +839,13 @@ export function TasksPage({ store, userProfile }) {
       // Email newly added assignees
       const oldAssigneeUids = new Set((showDetail.assignees || []).map(a => a.uid));
       const newlyAdded = (detailEdits.assignees || []).filter(a => a.uid !== userId && !oldAssigneeUids.has(a.uid));
-      if (newlyAdded.length > 0 && notificationConfig?.enabled && notificationConfig?.templateAssigned && notificationConfig?.serviceId && notificationConfig?.publicKey) {
-        try {
-          const emailjs = await import('@emailjs/browser');
-          for (const assignee of newlyAdded) {
-            const assigneeUser = users.find(u => u.id === assignee.uid);
-            if (!assigneeUser?.email) continue;
-            await emailjs.send(notificationConfig.serviceId, notificationConfig.templateAssigned, {
-              to_email: assigneeUser.email,
-              to_name: assignee.name,
-              ticket_name: detailEdits.name,
-              ticket_number: showDetail.taskNumber,
-              priority: detailEdits.priority,
-              due_date: detailEdits.dueDate || 'Not set',
-              assigned_by: userName,
-            }, notificationConfig.publicKey);
-          }
-        } catch { flash('Task saved, but assignment notification email failed — please notify manually.', true); }
+      if (newlyAdded.length > 0 && notificationConfig?.enabled) {
+        const fn = httpsCallable(getFunctions(), 'sendTicketAssignedEmail');
+        for (const assignee of newlyAdded) {
+          const assigneeUser = users.find(u => u.id === assignee.uid);
+          if (!assigneeUser?.email) continue;
+          fn({ toEmail: assigneeUser.email, toName: assignee.name, churchName: config?.churchName || '', ticketNumber: showDetail.taskNumber, ticketName: detailEdits.name, assignedBy: userName }).catch(() => {});
+        }
       }
 
       // Auto-create next recurring task on completion

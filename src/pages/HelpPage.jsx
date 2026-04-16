@@ -568,17 +568,14 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Email notifications">
-              <P>Connect EmailJS to send automatic emails for reservation decisions and maintenance assignments. Go to Coordination Hub → Notification Settings and enter your:</P>
+              <P>Enable automatic email notifications from Coordination Hub → Email Notifications → Configure. When enabled, emails are sent automatically for:</P>
               <UL items={[
-                'EmailJS Service ID',
-                'Public Key',
-                'Approved template ID — sent when a reservation is approved',
-                'Denied template ID — sent when a reservation is denied',
-                'Ticket Assigned template ID — sent when someone is assigned to a maintenance ticket (optional)',
+                'Reservation approved — requester is notified when their request is approved',
+                'Reservation denied — requester is notified when their request is denied',
+                'Ticket assigned — team member is notified when assigned to a maintenance or task ticket',
+                'Job announcement — all Job Hub users are notified when a new announcement is posted',
               ]} />
-              <P>Use the <strong>Send Test</strong> button to verify the connection before going live.</P>
-              <Tip>The Ticket/Task Assigned template receives these variables: to_email, to_name, ticket_name, ticket_number, priority, due_date, assigned_by.</Tip>
-              <Note>EmailJS is a free third-party service. You'll need a free account at emailjs.com to get these credentials.</Note>
+              <P>Emails are sent via SendGrid from <strong>churchopshub@gmail.com</strong>. No additional configuration is needed beyond toggling notifications on.</P>
             </Accordion>
           </Section>
 

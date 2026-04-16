@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
@@ -60,18 +61,12 @@ export function ReservationsPage({ store, userProfile }) {
     [reservations, statusFilter]
   );
 
-  async function sendNotificationEmail(templateId, requesterEmail, requesterName, params) {
-    const nc = notificationConfig || {};
-    if (!nc.enabled || !nc.serviceId || !nc.publicKey || !templateId || !requesterEmail) return;
+  async function sendReservationEmail(requesterEmail, requesterName, status, params) {
+    if (!(notificationConfig?.enabled) || !requesterEmail) return;
     try {
-      const emailjs = await import('@emailjs/browser');
-      await emailjs.send(nc.serviceId, templateId, {
-        to_email: requesterEmail,
-        to_name: requesterName,
-        church_name: config?.churchName || '',
-        ...params,
-      }, { publicKey: nc.publicKey });
-    } catch { flash('Action saved, but notification email failed — please notify manually.'); }
+      const fn = httpsCallable(getFunctions(), 'sendReservationEmail');
+      await fn({ toEmail: requesterEmail, toName: requesterName, status, churchName: config?.churchName || '', ...params });
+    } catch { /* non-blocking */ }
   }
 
   function generateRecurrenceDates(startDate, returnDate, freq, endDate) {
@@ -187,9 +182,9 @@ export function ReservationsPage({ store, userProfile }) {
     await updateReservation(res._docId, { status:RES_STATUS.APPROVED, approvedBy:userId, approvedByName:userName, approvedAt:new Date().toISOString() });
     await logActivity("reservation_approved", res.itemId || res.roomDocId, userId, userName, { eventName:res.eventName, requestedBy:res.requestedByName });
     const requester = (users||[]).find(u => u.id === res.requestedBy);
-    sendNotificationEmail(notificationConfig?.templateApproved, requester?.email, res.requestedByName, {
-      event_name: res.eventName, item_desc: res.itemDesc || res.roomName || '',
-      event_date: formatDate(res.eventDate), action_by: userName, status: 'approved',
+    sendReservationEmail(requester?.email, res.requestedByName, 'approved', {
+      eventName: res.eventName, resourceDesc: res.itemDesc || res.roomName || '',
+      eventDate: formatDate(res.eventDate), actionBy: userName,
     });
     flash("Reservation approved!");
     setShowDetail(null);
@@ -201,9 +196,9 @@ export function ReservationsPage({ store, userProfile }) {
     await updateReservation(res._docId, { status:RES_STATUS.DENIED, deniedBy:userId, deniedByName:userName, deniedAt:new Date().toISOString() });
     await logActivity("reservation_denied", res.itemId || res.roomDocId, userId, userName, { eventName:res.eventName, requestedBy:res.requestedByName });
     const requester = (users||[]).find(u => u.id === res.requestedBy);
-    sendNotificationEmail(notificationConfig?.templateDenied, requester?.email, res.requestedByName, {
-      event_name: res.eventName, item_desc: res.itemDesc || res.roomName || '',
-      event_date: formatDate(res.eventDate), action_by: userName, status: 'denied',
+    sendReservationEmail(requester?.email, res.requestedByName, 'denied', {
+      eventName: res.eventName, resourceDesc: res.itemDesc || res.roomName || '',
+      eventDate: formatDate(res.eventDate), actionBy: userName,
     });
     flash("Reservation denied.");
     setShowDetail(null);

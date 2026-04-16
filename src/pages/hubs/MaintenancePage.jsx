@@ -1,6 +1,7 @@
 import { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { collection, onSnapshot, query as fsQuery, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db, storage } from '../../firebase.js';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
@@ -805,23 +806,13 @@ export function MaintenancePage({ store, userProfile }) {
       // Email newly added assignees
       const oldAssigneeUids = new Set((showDetail.assignees || []).map(a => a.uid));
       const newlyAdded = (detailEdits.assignees || []).filter(a => a.uid !== userId && !oldAssigneeUids.has(a.uid));
-      if (newlyAdded.length > 0 && notificationConfig?.enabled && notificationConfig?.templateAssigned && notificationConfig?.serviceId && notificationConfig?.publicKey) {
-        try {
-          const emailjs = await import('@emailjs/browser');
-          for (const assignee of newlyAdded) {
-            const assigneeUser = users.find(u => u.id === assignee.uid);
-            if (!assigneeUser?.email) continue;
-            await emailjs.send(notificationConfig.serviceId, notificationConfig.templateAssigned, {
-              to_email: assigneeUser.email,
-              to_name: assignee.name,
-              ticket_name: detailEdits.name,
-              ticket_number: showDetail.ticketNumber,
-              priority: detailEdits.priority,
-              due_date: detailEdits.dueDate || 'Not set',
-              assigned_by: userName,
-            }, notificationConfig.publicKey);
-          }
-        } catch { flash('Ticket saved, but assignment notification email failed — please notify manually.', true); }
+      if (newlyAdded.length > 0 && notificationConfig?.enabled) {
+        const fn = httpsCallable(getFunctions(), 'sendTicketAssignedEmail');
+        for (const assignee of newlyAdded) {
+          const assigneeUser = users.find(u => u.id === assignee.uid);
+          if (!assigneeUser?.email) continue;
+          fn({ toEmail: assigneeUser.email, toName: assignee.name, churchName: config?.churchName || '', ticketNumber: showDetail.ticketNumber, ticketName: detailEdits.name, assignedBy: userName }).catch(() => {});
+        }
       }
 
       // Auto-create next recurring ticket on completion

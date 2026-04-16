@@ -40,7 +40,6 @@ export function CoordinationPage({ store, userProfile }) {
   // ── Notification form state ──
   const [notifForm, setNotifForm] = useState(null);
   const [savingNotif, setSavingNotif] = useState(false);
-  const [testingNotif, setTestingNotif] = useState(false);
 
   // ── Bundle helpers ──
   function openCreateBundle() {
@@ -133,49 +132,16 @@ export function CoordinationPage({ store, userProfile }) {
 
   // ── Notification helpers ──
   function openNotifEdit() {
-    setNotifForm({
-      enabled: notificationConfig?.enabled || false,
-      serviceId: notificationConfig?.serviceId || '',
-      publicKey: notificationConfig?.publicKey || '',
-      templateApproved: notificationConfig?.templateApproved || '',
-      templateDenied: notificationConfig?.templateDenied || '',
-      templateAssigned: notificationConfig?.templateAssigned || '',
-      templateJobAnnouncement: notificationConfig?.templateJobAnnouncement || '',
-    });
+    setNotifForm({ enabled: notificationConfig?.enabled || false });
   }
 
   async function handleSaveNotif() {
     if (!notifForm) return;
     setSavingNotif(true);
-    await updateNotificationConfig(notifForm);
+    await updateNotificationConfig({ ...notificationConfig, enabled: notifForm.enabled });
     setNotifForm(null);
     flash('Notification settings saved!');
     setSavingNotif(false);
-  }
-
-  async function handleTestNotif() {
-    if (!notifForm?.serviceId || !notifForm?.publicKey || !notifForm?.templateApproved) {
-      flash('Fill in Service ID, Public Key, and Approved template ID first.');
-      return;
-    }
-    setTestingNotif(true);
-    try {
-      const emailjs = await import('@emailjs/browser');
-      await emailjs.send(notifForm.serviceId, notifForm.templateApproved, {
-        to_email: userProfile?.email || '',
-        to_name: userName,
-        event_name: 'Test Event',
-        item_desc: 'Test Item',
-        event_date: today,
-        action_by: userName,
-        church_name: config?.churchName || '',
-        status: 'approved',
-      }, { publicKey: notifForm.publicKey });
-      flash('Test email sent! Check your inbox.');
-    } catch (e) {
-      flash('EmailJS error: ' + (e?.text || e?.message || 'Unknown error'));
-    }
-    setTestingNotif(false);
   }
 
   // ── Derived ──
@@ -189,7 +155,7 @@ export function CoordinationPage({ store, userProfile }) {
     );
   }, [activeItems, bundleItemSearch]);
 
-  const notifActive = notificationConfig?.enabled && notificationConfig?.serviceId && notificationConfig?.publicKey;
+  const notifActive = notificationConfig?.enabled;
 
   return (
     <div>
@@ -289,48 +255,21 @@ export function CoordinationPage({ store, userProfile }) {
         <div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 16 }}>
             <h3 style={{ fontFamily: f1, fontSize: 16, fontWeight: 700, color: B.navy, margin: 0 }}>Email Notifications</h3>
-            <span style={{ fontSize: 13, color: B.textLight }}>Powered by EmailJS — free tier sends 200 emails/month</span>
+            <span style={{ fontSize: 13, color: B.textLight }}>Powered by SendGrid — reservation approvals, denials, ticket assignments, and job announcements</span>
           </div>
 
           <div style={{ background: B.white, borderRadius: 14, padding: 24, border: '1px solid ' + B.sand }}>
             {notifForm ? (
               <div>
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14, marginBottom: 14 }}>
-                  <FF label="EmailJS Service ID">
-                    <input style={inp} value={notifForm.serviceId} onChange={e => setNotifForm(f => ({ ...f, serviceId: e.target.value }))} placeholder="service_xxxxxxx" />
-                  </FF>
-                  <FF label="EmailJS Public Key">
-                    <input style={inp} value={notifForm.publicKey} onChange={e => setNotifForm(f => ({ ...f, publicKey: e.target.value }))} placeholder="xxxxxxxxxxxxxxxxxxxx" />
-                  </FF>
-                  <FF label="Template ID — Approved">
-                    <input style={inp} value={notifForm.templateApproved} onChange={e => setNotifForm(f => ({ ...f, templateApproved: e.target.value }))} placeholder="template_xxxxxxx" />
-                  </FF>
-                  <FF label="Template ID — Denied">
-                    <input style={inp} value={notifForm.templateDenied} onChange={e => setNotifForm(f => ({ ...f, templateDenied: e.target.value }))} placeholder="template_xxxxxxx" />
-                  </FF>
-                  <FF label="Template ID — Ticket Assigned (Maintenance)">
-                    <input style={inp} value={notifForm.templateAssigned} onChange={e => setNotifForm(f => ({ ...f, templateAssigned: e.target.value }))} placeholder="template_xxxxxxx" />
-                  </FF>
-                  <FF label="Template ID — Job Hub Announcement">
-                    <input style={inp} value={notifForm.templateJobAnnouncement} onChange={e => setNotifForm(f => ({ ...f, templateJobAnnouncement: e.target.value }))} placeholder="template_xxxxxxx" />
-                  </FF>
-                </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, cursor: 'pointer' }}>
                   <input type="checkbox" checked={notifForm.enabled} onChange={e => setNotifForm(f => ({ ...f, enabled: e.target.checked }))} style={{ width: 16, height: 16, cursor: 'pointer' }} />
-                  <span style={{ fontSize: 14, color: B.textDark }}>Enable automatic emails on reservation approve/deny</span>
+                  <span style={{ fontSize: 14, color: B.textDark }}>Enable automatic email notifications</span>
                 </label>
-                <div style={{ background: B.warmGray, borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 12, color: B.textMid, lineHeight: 1.7, fontFamily: 'monospace' }}>
-                  <div style={{ fontFamily: f1, fontSize: 12, fontWeight: 600, color: B.textDark, marginBottom: 6 }}>Reservation template variables:</div>
-                  {'{{to_email}}  {{to_name}}  {{event_name}}  {{item_desc}}'}<br />
-                  {'{{event_date}}  {{action_by}}  {{church_name}}  {{status}}'}<br /><br />
-                  <div style={{ fontFamily: f1, fontSize: 12, fontWeight: 600, color: B.textDark, marginBottom: 4, marginTop: 4 }}>Job announcement template variables:</div>
-                  {'{{to_email}}  {{to_name}}  {{announcement_title}}  {{announcement_body}}  {{posted_by}}  {{church_name}}'}
+                <div style={{ fontSize: 13, color: B.textMid, marginBottom: 20, lineHeight: 1.6 }}>
+                  When enabled, emails are sent automatically for: reservation approved/denied, maintenance ticket assigned, and new Job Hub announcements.
                 </div>
-                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                   <button onClick={() => setNotifForm(null)} style={btnS}>Cancel</button>
-                  <button onClick={handleTestNotif} disabled={testingNotif} style={{ ...btnS, color: B.teal, borderColor: B.tealLight }}>
-                    {testingNotif ? 'Sending...' : 'Send Test Email'}
-                  </button>
                   <button onClick={handleSaveNotif} disabled={savingNotif} style={{ ...btnP, opacity: savingNotif ? 0.5 : 1 }}>
                     {savingNotif ? 'Saving...' : 'Save Settings'}
                   </button>
@@ -342,13 +281,13 @@ export function CoordinationPage({ store, userProfile }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: notifActive ? B.teal : B.sand }} />
                     <span style={{ fontWeight: 600, fontSize: 14, color: B.textDark }}>
-                      {notifActive ? 'Notifications active' : 'Notifications not configured'}
+                      {notifActive ? 'Notifications enabled' : 'Notifications disabled'}
                     </span>
                   </div>
                   <div style={{ fontSize: 13, color: B.textLight }}>
                     {notifActive
-                      ? `Service: ${notificationConfig.serviceId} · Members receive emails when reservations are approved or denied.`
-                      : 'Configure EmailJS to auto-email members when their reservation requests are decided.'}
+                      ? 'Members receive emails when reservations are approved/denied, tickets are assigned, and announcements are posted.'
+                      : 'Enable to auto-email members on reservation decisions, ticket assignments, and job announcements.'}
                   </div>
                 </div>
                 <button onClick={openNotifEdit} style={{ ...btnS, fontSize: 13, padding: '9px 18px' }}>Configure</button>
