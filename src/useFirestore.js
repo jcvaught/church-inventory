@@ -801,22 +801,22 @@ export function useFirestore(churchId) {
   // ── Job Hub ──
   const addJobListing = useCallback(async (job, userId, userName) => {
     try {
-      let jobNumber;
       const configRef = doc(db, 'churches', churchId, 'config', 'main');
+      const newDocRef = doc(collection(db, 'churches', churchId, 'jobListings'));
       await runTransaction(db, async (t) => {
         const configSnap = await t.get(configRef);
         const maxNum = (configSnap.data()?.maxJobNumber || 0) + 1;
-        jobNumber = 'JOB-' + String(maxNum).padStart(3, '0');
+        const jobNumber = 'JOB-' + String(maxNum).padStart(3, '0');
         t.update(configRef, { maxJobNumber: maxNum });
-      });
-      await addDoc(collection(db, 'churches', churchId, 'jobListings'), {
-        ...job,
-        jobNumber,
-        signups: [],
-        createdBy: userId,
-        createdByName: userName,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        t.set(newDocRef, {
+          ...job,
+          jobNumber,
+          signups: [],
+          createdBy: userId,
+          createdByName: userName,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
       });
     } catch (err) { handleErr(err); }
   }, [churchId]);

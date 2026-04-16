@@ -118,11 +118,15 @@ service cloud.firestore {
       allow update, delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && request.auth.uid == resource.data.authorId);
     }
 
-    // ── Job Hub — jobs: members read+update (signups); admins+mgrs create/delete ──
+    // ── Job Hub — jobs: members read; admins+mgrs create/delete/update fields;
+    //    members can update signups+updatedAt only (sign up / withdraw via transaction) ──
     match /churches/{churchId}/jobListings/{docId} {
       allow read:           if isMember(churchId);
       allow create, delete: if isChurchAdminOrManager(churchId);
-      allow update:         if isMember(churchId);
+      allow update:         if isChurchAdminOrManager(churchId) || (
+        isMember(churchId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signups', 'updatedAt'])
+      );
     }
 
     // ── Job Hub — announcements: members read; admins+mgrs write ─────────────

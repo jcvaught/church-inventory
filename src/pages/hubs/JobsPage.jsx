@@ -9,6 +9,13 @@ function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
+function formatJobDate(dateStr) {
+  if (!dateStr) return '—';
+  // Parse as local date to avoid UTC off-by-one
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 const JOB_STATUS_COLORS = {
   open:      { bg: '#DCFCE7', tx: '#166534', dot: '#16A34A' },
   closed:    { bg: '#FEF9C3', tx: '#854D0E', dot: '#EAB308' },
@@ -62,7 +69,7 @@ export function JobsPage({ store, userProfile }) {
   const userId = userProfile?.id || userProfile?.uid;
   const userName = userProfile?.name || 'Unknown';
   const isAdminOrManager = userProfile?.role === 'admin' || userProfile?.role === 'manager';
-  const todayStr = localDateStr(new Date());
+  const todayStr = useMemo(() => localDateStr(new Date()), []);
 
   // ── All state before any useEffect ──
   const [view, setView] = useState('jobs');
@@ -141,11 +148,17 @@ export function JobsPage({ store, userProfile }) {
 
   async function handleSaveJob() {
     if (!jobForm.title.trim() || !jobForm.scheduledDate) return;
+    const spots = Math.max(1, Math.floor(Number(jobForm.spotsTotal) || 1));
+    const currentSignups = editJobId ? ((jobListings || []).find(j => j._docId === editJobId)?.signups || []).length : 0;
+    if (spots < currentSignups) {
+      flash(`Cannot reduce spots below current signup count (${currentSignups}).`, true);
+      return;
+    }
     setSaving(true);
     try {
       const data = {
         ...jobForm,
-        spotsTotal: Number(jobForm.spotsTotal) || 1,
+        spotsTotal: spots,
         pay: jobForm.pay === '' ? null : Number(jobForm.pay),
       };
       if (editJobId) {
@@ -165,9 +178,11 @@ export function JobsPage({ store, userProfile }) {
 
   async function handleDeleteJob(job) {
     if (!window.confirm(`Delete "${job.title}"? This cannot be undone.`)) return;
-    await deleteJobListing(job._docId);
-    setShowJobDetail(null);
-    flash('Job deleted.');
+    try {
+      await deleteJobListing(job._docId);
+      setShowJobDetail(null);
+      flash('Job deleted.');
+    } catch { flash('Failed to delete job.', true); }
   }
 
   async function handleSignUp(job) {
@@ -181,15 +196,19 @@ export function JobsPage({ store, userProfile }) {
   async function handleWithdraw(job) {
     if (!window.confirm('Remove yourself from this job?')) return;
     setSaving(true);
-    await withdrawFromJob(job._docId, userId);
-    flash('Removed from job.');
+    try {
+      await withdrawFromJob(job._docId, userId);
+      flash('Removed from job.');
+    } catch { flash('Failed to withdraw.', true); }
     setSaving(false);
   }
 
   async function handleAdminRemoveSignup(job, uid) {
     if (!window.confirm('Remove this person from the job?')) return;
-    await withdrawFromJob(job._docId, uid);
-    flash('Removed.');
+    try {
+      await withdrawFromJob(job._docId, uid);
+      flash('Removed.');
+    } catch { flash('Failed to remove signup.', true); }
   }
 
   // ── Announcement handlers ──
@@ -233,12 +252,16 @@ export function JobsPage({ store, userProfile }) {
 
   async function handleDeleteAnn(ann) {
     if (!window.confirm('Delete this announcement?')) return;
-    await deleteJobAnnouncement(ann._docId);
-    flash('Deleted.');
+    try {
+      await deleteJobAnnouncement(ann._docId);
+      flash('Deleted.');
+    } catch { flash('Failed to delete announcement.', true); }
   }
 
   async function handleTogglePin(ann) {
-    await updateJobAnnouncement(ann._docId, { pinned: !ann.pinned });
+    try {
+      await updateJobAnnouncement(ann._docId, { pinned: !ann.pinned });
+    } catch { flash('Failed to update pin.', true); }
   }
 
   return (
@@ -306,7 +329,7 @@ export function JobsPage({ store, userProfile }) {
                     </div>
                     <div style={{ fontWeight: 700, fontSize: 15, fontFamily: f1, color: B.navy, marginBottom: 6 }}>{job.title}</div>
                     <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 2 }}>
-                      📅 {job.scheduledDate || '—'}{job.scheduledTime ? ' at ' + job.scheduledTime : ''}
+                      📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' at ' + job.scheduledTime : ''}
                     </div>
                     {job.location && (
                       <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 8 }}>📍 {job.location}</div>
@@ -462,7 +485,7 @@ export function JobsPage({ store, userProfile }) {
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, color: B.textLight, textTransform: 'uppercase', letterSpacing: .8, fontFamily: f1, marginBottom: 2 }}>Date</div>
               <div style={{ fontSize: 14, color: B.textDark, fontFamily: f2 }}>
-                {liveDetail.scheduledDate || '—'}{liveDetail.scheduledTime ? ' at ' + liveDetail.scheduledTime : ''}
+                {formatJobDate(liveDetail.scheduledDate)}{liveDetail.scheduledTime ? ' at ' + liveDetail.scheduledTime : ''}
               </div>
             </div>
             {liveDetail.location && (

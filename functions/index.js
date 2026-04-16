@@ -421,6 +421,16 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
   if (!churchId || !title) return { sent: 0 };
 
   const db = getFirestore();
+
+  // Verify caller is a member of the target church and has admin/manager role
+  const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
+  if (!callerSnap.exists || callerSnap.data().churchId !== churchId) {
+    throw new HttpsError('permission-denied', 'Not a member of this church.');
+  }
+  const callerRole = callerSnap.data().role;
+  if (callerRole !== 'admin' && callerRole !== 'manager') {
+    throw new HttpsError('permission-denied', 'Only admin or manager can send announcements.');
+  }
   const [churchSnap, usersSnap] = await Promise.all([
     db.doc(`churches/${churchId}/config/main`).get(),
     db.collection('users').where('churchId', '==', churchId).where('active', '!=', false).get(),
@@ -510,7 +520,9 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     if (!userSnap.exists) continue;
     const user = userSnap.data();
     if (!user.email) continue;
-    const jobs = remindersByUid[userSnap.id];
+    // Only send jobs that belong to the user's own church
+    const jobs = (remindersByUid[userSnap.id] || []).filter(j => j.churchId === user.churchId);
+    if (jobs.length === 0) continue;
     const safeName = escapeHtml(user.name || 'there');
 
     const jobRows = jobs.map(j => {
