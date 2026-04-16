@@ -149,10 +149,18 @@ export function JobsPage({ store, userProfile }) {
   async function handleSaveJob() {
     if (!jobForm.title.trim() || !jobForm.scheduledDate) return;
     const spots = Math.max(1, Math.floor(Number(jobForm.spotsTotal) || 1));
-    const currentSignups = editJobId ? ((jobListings || []).find(j => j._docId === editJobId)?.signups || []).length : 0;
+    const existingJob = editJobId ? (jobListings || []).find(j => j._docId === editJobId) : null;
+    const currentSignups = (existingJob?.signups || []).length;
     if (spots < currentSignups) {
       flash(`Cannot reduce spots below current signup count (${currentSignups}).`, true);
       return;
+    }
+    const terminalStatuses = ['cancelled', 'closed', 'completed'];
+    if (existingJob?.status === 'open' && terminalStatuses.includes(jobForm.status) && currentSignups > 0) {
+      const confirmed = window.confirm(
+        `This job has ${currentSignups} signup${currentSignups !== 1 ? 's' : ''}. Changing to "${jobForm.status}" will not notify them. Continue?`
+      );
+      if (!confirmed) return;
     }
     setSaving(true);
     try {
@@ -162,7 +170,7 @@ export function JobsPage({ store, userProfile }) {
         pay: jobForm.pay === '' ? null : Number(jobForm.pay),
       };
       if (editJobId) {
-        await updateJobListing(editJobId, data);
+        await updateJobListing(editJobId, data, userId, userName);
         flash('Job updated.');
       } else {
         await addJobListing(data, userId, userName);
@@ -179,7 +187,7 @@ export function JobsPage({ store, userProfile }) {
   async function handleDeleteJob(job) {
     if (!window.confirm(`Delete "${job.title}"? This cannot be undone.`)) return;
     try {
-      await deleteJobListing(job._docId);
+      await deleteJobListing(job._docId, userId, userName);
       setShowJobDetail(null);
       flash('Job deleted.');
     } catch { flash('Failed to delete job.', true); }
@@ -197,7 +205,7 @@ export function JobsPage({ store, userProfile }) {
     if (!window.confirm('Remove yourself from this job?')) return;
     setSaving(true);
     try {
-      await withdrawFromJob(job._docId, userId);
+      await withdrawFromJob(job._docId, userId, userId, userName);
       flash('Removed from job.');
     } catch { flash('Failed to withdraw.', true); }
     setSaving(false);
@@ -206,7 +214,7 @@ export function JobsPage({ store, userProfile }) {
   async function handleAdminRemoveSignup(job, uid) {
     if (!window.confirm('Remove this person from the job?')) return;
     try {
-      await withdrawFromJob(job._docId, uid);
+      await withdrawFromJob(job._docId, uid, userId, userName);
       flash('Removed.');
     } catch { flash('Failed to remove signup.', true); }
   }
@@ -253,7 +261,7 @@ export function JobsPage({ store, userProfile }) {
   async function handleDeleteAnn(ann) {
     if (!window.confirm('Delete this announcement?')) return;
     try {
-      await deleteJobAnnouncement(ann._docId);
+      await deleteJobAnnouncement(ann._docId, userId, userName);
       flash('Deleted.');
     } catch { flash('Failed to delete announcement.', true); }
   }
@@ -340,10 +348,13 @@ export function JobsPage({ store, userProfile }) {
                       </div>
                     )}
                     <div style={{ marginBottom: 10 }}><SpotsBar job={job} /></div>
-                    {(job.signups || []).length > 0 && (
+                    {isAdminOrManager && (job.signups || []).length > 0 && (
                       <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 10 }}>
                         {job.signups.map(s => s.name).join(', ')}
                       </div>
+                    )}
+                    {!isAdminOrManager && isSignedUp(job) && (
+                      <div style={{ fontSize: 12, fontWeight: 700, color: B.teal, fontFamily: f1, marginBottom: 10 }}>✓ You're signed up</div>
                     )}
                     {/* Inline action (stops card click) */}
                     {job.status === 'open' && (
@@ -505,21 +516,27 @@ export function JobsPage({ store, userProfile }) {
           {/* Signup list */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: B.textMid, textTransform: 'uppercase', letterSpacing: .8, fontFamily: f1, marginBottom: 8 }}>Signed Up</div>
-            {(liveDetail.signups || []).length === 0 ? (
-              <div style={{ fontSize: 13, color: B.textLight, fontFamily: f2 }}>No signups yet.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {liveDetail.signups.map(s => (
-                  <div key={s.uid} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: B.warmGray, borderRadius: 8 }}>
-                    <span style={{ fontSize: 13, fontFamily: f2, color: B.textDark }}>{s.name}</span>
-                    {isAdminOrManager && (
+            {isAdminOrManager ? (
+              (liveDetail.signups || []).length === 0 ? (
+                <div style={{ fontSize: 13, color: B.textLight, fontFamily: f2 }}>No signups yet.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {liveDetail.signups.map(s => (
+                    <div key={s.uid} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: B.warmGray, borderRadius: 8 }}>
+                      <span style={{ fontSize: 13, fontFamily: f2, color: B.textDark }}>{s.name}</span>
                       <button onClick={() => handleAdminRemoveSignup(liveDetail, s.uid)}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.red, fontSize: 12, fontFamily: f1, padding: '2px 6px' }}
                         aria-label={'Remove ' + s.name}>✕</button>
-                    )}
-                  </div>
-                ))}
-              </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : (
+              isSignedUp(liveDetail) ? (
+                <div style={{ fontSize: 13, fontWeight: 700, color: B.teal, fontFamily: f1 }}>✓ You're signed up</div>
+              ) : (
+                <div style={{ fontSize: 13, color: B.textLight, fontFamily: f2 }}>You have not signed up for this job.</div>
+              )
             )}
           </div>
           {/* Action row */}

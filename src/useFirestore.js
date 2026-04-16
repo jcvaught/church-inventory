@@ -803,10 +803,11 @@ export function useFirestore(churchId) {
     try {
       const configRef = doc(db, 'churches', churchId, 'config', 'main');
       const newDocRef = doc(collection(db, 'churches', churchId, 'jobListings'));
+      let jobNumber;
       await runTransaction(db, async (t) => {
         const configSnap = await t.get(configRef);
         const maxNum = (configSnap.data()?.maxJobNumber || 0) + 1;
-        const jobNumber = 'JOB-' + String(maxNum).padStart(3, '0');
+        jobNumber = 'JOB-' + String(maxNum).padStart(3, '0');
         t.update(configRef, { maxJobNumber: maxNum });
         t.set(newDocRef, {
           ...job,
@@ -818,21 +819,24 @@ export function useFirestore(churchId) {
           updatedAt: new Date().toISOString()
         });
       });
+      await logActivity('post_job', jobNumber, userId, userName, { title: job.title });
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const updateJobListing = useCallback(async (docId, updates) => {
+  const updateJobListing = useCallback(async (docId, updates, userId, userName) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'jobListings', docId), {
         ...updates,
         updatedAt: new Date().toISOString()
       });
+      if (userId) await logActivity('update_job', updates.jobNumber || docId, userId, userName, { title: updates.title, status: updates.status });
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const deleteJobListing = useCallback(async (docId) => {
+  const deleteJobListing = useCallback(async (docId, userId, userName) => {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'jobListings', docId));
+      if (userId) await logActivity('delete_job', docId, userId, userName, {});
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
@@ -840,6 +844,8 @@ export function useFirestore(churchId) {
     try {
       const jobRef = doc(db, 'churches', churchId, 'jobListings', docId);
       let errorMsg = null;
+      let jobTitle = '';
+      let jobNumber = '';
       await runTransaction(db, async (t) => {
         const snap = await t.get(jobRef);
         if (!snap.exists()) { errorMsg = 'Job not found.'; return; }
@@ -848,37 +854,44 @@ export function useFirestore(churchId) {
         const signups = data.signups || [];
         if (signups.some(s => s.uid === userId)) { errorMsg = 'You are already signed up.'; return; }
         if (signups.length >= (data.spotsTotal || 1)) { errorMsg = 'Sorry, this job is full.'; return; }
+        jobTitle = data.title || '';
+        jobNumber = data.jobNumber || docId;
         t.update(jobRef, {
           signups: [...signups, { uid: userId, name: userName, signedUpAt: new Date().toISOString() }],
           updatedAt: new Date().toISOString()
         });
       });
       if (errorMsg) return { error: errorMsg };
+      await logActivity('signup_job', jobNumber, userId, userName, { title: jobTitle });
       return { success: true };
     } catch (err) { handleErr(err); return { error: 'Sign-up failed. Please try again.' }; }
   }, [churchId]);
 
-  const withdrawFromJob = useCallback(async (docId, uid) => {
+  const withdrawFromJob = useCallback(async (docId, uid, actorId, actorName) => {
     try {
       const jobRef = doc(db, 'churches', churchId, 'jobListings', docId);
+      let jobNumber = '';
       await runTransaction(db, async (t) => {
         const snap = await t.get(jobRef);
         if (!snap.exists()) return;
+        jobNumber = snap.data().jobNumber || docId;
         const signups = (snap.data().signups || []).filter(s => s.uid !== uid);
         t.update(jobRef, { signups, updatedAt: new Date().toISOString() });
       });
+      if (actorId) await logActivity('withdraw_job', jobNumber, actorId, actorName, { removedUid: uid });
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const addJobAnnouncement = useCallback(async (ann, userId, userName) => {
     try {
-      await addDoc(collection(db, 'churches', churchId, 'jobAnnouncements'), {
+      const ref = await addDoc(collection(db, 'churches', churchId, 'jobAnnouncements'), {
         ...ann,
         createdBy: userId,
         createdByName: userName,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+      await logActivity('post_announcement', ref.id, userId, userName, { title: ann.title });
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
@@ -891,9 +904,10 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const deleteJobAnnouncement = useCallback(async (docId) => {
+  const deleteJobAnnouncement = useCallback(async (docId, userId, userName) => {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'jobAnnouncements', docId));
+      if (userId) await logActivity('delete_announcement', docId, userId, userName, {});
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
