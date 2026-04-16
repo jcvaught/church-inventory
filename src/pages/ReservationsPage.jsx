@@ -1,14 +1,15 @@
 import { useState, useMemo } from 'react';
-import { B, f1, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
+import { B, f1, f2, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { Stat } from '../components/primitives/Stat.jsx';
 import { exportReservationsCSV } from '../utils/csv.js';
-import { ITEM_STATUS, RES_STATUS } from '../utils/constants.js';
+import { ITEM_STATUS, RES_STATUS, RESOURCE_TYPE } from '../utils/constants.js';
 
 export function ReservationsPage({ store, userProfile }) {
-  const { items, settings, reservations, users, notificationConfig, config, addReservation, updateReservation, checkOutItem, logActivity } = store;
+  const { items, settings, reservations, users, rooms, notificationConfig, config, addReservation, updateReservation, checkOutItem, logActivity } = store;
   const activeItems = useMemo(() => items.filter(i => i.status !== ITEM_STATUS.DISPOSED), [items]);
+  const activeRooms = useMemo(() => (rooms || []).filter(r => r.active !== false), [rooms]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
@@ -28,7 +29,8 @@ export function ReservationsPage({ store, userProfile }) {
     return false;
   }
 
-  const emptyRes = { itemDocId:"", itemId:"", itemDesc:"", eventName:"", eventDate:"", returnDate:"", purpose:"", ministry:"", notes:"" };
+  const [resourceType, setResourceType] = useState(RESOURCE_TYPE.ITEM);
+  const emptyRes = { itemDocId:"", itemId:"", itemDesc:"", roomDocId:"", roomName:"", eventName:"", eventDate:"", returnDate:"", purpose:"", ministry:"", notes:"" };
   const [form, setForm] = useState(emptyRes);
   const [conflictErr, setConflictErr] = useState("");
   const [recurring, setRecurring] = useState(false);
@@ -95,25 +97,40 @@ export function ReservationsPage({ store, userProfile }) {
   }
 
   async function handleAdd() {
-    if (!form.itemDocId || !form.eventName.trim() || !form.eventDate) return;
+    const isRoom = resourceType === RESOURCE_TYPE.ROOM;
+    if (isRoom ? !form.roomDocId : !form.itemDocId) return;
+    if (!form.eventName.trim() || !form.eventDate) return;
     if (form.returnDate && new Date(form.returnDate) < new Date(form.eventDate)) { setConflictErr("Return date cannot be before the event date."); return; }
     setConflictErr("");
     const aStart = form.eventDate;
     const aEnd = form.returnDate || form.eventDate;
     const conflict = reservations.find(r => {
-      if (r.itemDocId !== form.itemDocId) return false;
+      const sameResource = isRoom ? r.roomDocId === form.roomDocId : r.itemDocId === form.itemDocId;
+      if (!sameResource) return false;
       if (r.status !== RES_STATUS.PENDING && r.status !== RES_STATUS.APPROVED) return false;
       const bStart = r.eventDate;
       const bEnd = r.returnDate || r.eventDate;
       return aStart <= bEnd && aEnd >= bStart;
     });
     if (conflict) {
-      setConflictErr(`Conflict: "${conflict.eventName}" (${conflict.status}) already has this item on ${conflict.eventDate}${conflict.returnDate && conflict.returnDate !== conflict.eventDate ? " – "+conflict.returnDate : ""}. Pick a different item or date.`);
+      const resourceLabel = isRoom ? `this space` : `this item`;
+      setConflictErr(`Conflict: "${conflict.eventName}" (${conflict.status}) already has ${resourceLabel} on ${conflict.eventDate}${conflict.returnDate && conflict.returnDate !== conflict.eventDate ? " – "+conflict.returnDate : ""}. Pick a different ${isRoom ? 'space' : 'item'} or date.`);
       return;
     }
     setSaving(true);
     try {
-      const baseRes = {
+      const baseRes = isRoom ? {
+        resourceType: RESOURCE_TYPE.ROOM,
+        roomDocId: form.roomDocId,
+        roomName: form.roomName,
+        eventName: form.eventName,
+        eventDate: form.eventDate,
+        returnDate: form.returnDate,
+        purpose: form.purpose,
+        ministry: form.ministry,
+        notes: form.notes,
+      } : {
+        resourceType: RESOURCE_TYPE.ITEM,
         itemDocId: form.itemDocId,
         itemId: form.itemId,
         itemDesc: form.itemDesc,
@@ -126,20 +143,20 @@ export function ReservationsPage({ store, userProfile }) {
       };
       if (recurring && recurrenceEnd && recurrenceEnd > form.eventDate) {
         const extraDates = generateRecurrenceDates(form.eventDate, form.returnDate, recurrenceFreq, recurrenceEnd);
-        // Check conflicts for all dates in the series
         const allDates = [{ eventDate: form.eventDate, returnDate: form.returnDate }, ...extraDates];
         for (const d of allDates) {
           const dStart = d.eventDate;
           const dEnd = d.returnDate || d.eventDate;
-          const conflict = reservations.find(r => {
-            if (r.itemDocId !== form.itemDocId) return false;
+          const seriesConflict = reservations.find(r => {
+            const sameResource = isRoom ? r.roomDocId === form.roomDocId : r.itemDocId === form.itemDocId;
+            if (!sameResource) return false;
             if (r.status !== RES_STATUS.PENDING && r.status !== RES_STATUS.APPROVED) return false;
             const bStart = r.eventDate;
             const bEnd = r.returnDate || r.eventDate;
             return dStart <= bEnd && dEnd >= bStart;
           });
-          if (conflict) {
-            setConflictErr(`Conflict on ${d.eventDate}: "${conflict.eventName}" (${conflict.status}) already has this item. Adjust the series dates.`);
+          if (seriesConflict) {
+            setConflictErr(`Conflict on ${d.eventDate}: "${seriesConflict.eventName}" (${seriesConflict.status}) already has this ${isRoom ? 'space' : 'item'}. Adjust the series dates.`);
             setSaving(false);
             return;
           }
@@ -168,10 +185,10 @@ export function ReservationsPage({ store, userProfile }) {
   async function handleApprove(res) {
     setSaving(true);
     await updateReservation(res._docId, { status:RES_STATUS.APPROVED, approvedBy:userId, approvedByName:userName, approvedAt:new Date().toISOString() });
-    await logActivity("reservation_approved", res.itemId, userId, userName, { eventName:res.eventName, requestedBy:res.requestedByName });
+    await logActivity("reservation_approved", res.itemId || res.roomDocId, userId, userName, { eventName:res.eventName, requestedBy:res.requestedByName });
     const requester = (users||[]).find(u => u.id === res.requestedBy);
     sendNotificationEmail(notificationConfig?.templateApproved, requester?.email, res.requestedByName, {
-      event_name: res.eventName, item_desc: res.itemDesc,
+      event_name: res.eventName, item_desc: res.itemDesc || res.roomName || '',
       event_date: formatDate(res.eventDate), action_by: userName, status: 'approved',
     });
     flash("Reservation approved!");
@@ -182,10 +199,10 @@ export function ReservationsPage({ store, userProfile }) {
   async function handleDeny(res) {
     setSaving(true);
     await updateReservation(res._docId, { status:RES_STATUS.DENIED, deniedBy:userId, deniedByName:userName, deniedAt:new Date().toISOString() });
-    await logActivity("reservation_denied", res.itemId, userId, userName, { eventName:res.eventName, requestedBy:res.requestedByName });
+    await logActivity("reservation_denied", res.itemId || res.roomDocId, userId, userName, { eventName:res.eventName, requestedBy:res.requestedByName });
     const requester = (users||[]).find(u => u.id === res.requestedBy);
     sendNotificationEmail(notificationConfig?.templateDenied, requester?.email, res.requestedByName, {
-      event_name: res.eventName, item_desc: res.itemDesc,
+      event_name: res.eventName, item_desc: res.itemDesc || res.roomName || '',
       event_date: formatDate(res.eventDate), action_by: userName, status: 'denied',
     });
     flash("Reservation denied.");
@@ -202,6 +219,7 @@ export function ReservationsPage({ store, userProfile }) {
   }
 
   async function handleCheckOutFromRes(res) {
+    if (res.resourceType === RESOURCE_TYPE.ROOM) return;
     const currentItem = items.find(i => i._docId === res.itemDocId);
     if (currentItem && currentItem.status !== ITEM_STATUS.AVAILABLE) {
       flash(`Item is currently "${currentItem.status}" and cannot be checked out.`);
@@ -292,8 +310,10 @@ export function ReservationsPage({ store, userProfile }) {
                       {r.recurrenceGroupId && <span style={{ fontSize:11, color:B.textLight, fontWeight:600, background:B.warmGray, padding:"2px 8px", borderRadius:20 }}>🔁 recurring</span>}
                     </div>
                     <div style={{ fontSize:14, color:B.textMid }}>
-                      <span style={{ fontWeight:600 }}>{r.itemDesc}</span>
-                      <span style={{ color:B.textLight, marginLeft:6 }}>({r.itemId})</span>
+                      {r.resourceType === RESOURCE_TYPE.ROOM
+                        ? <><span style={{ fontSize:12, background:B.tealPale, color:B.teal, borderRadius:20, padding:"1px 8px", fontWeight:700, fontFamily:f1, marginRight:6 }}>🏛️ Space</span><span style={{ fontWeight:600 }}>{r.roomName}</span></>
+                        : <><span style={{ fontWeight:600 }}>{r.itemDesc}</span><span style={{ color:B.textLight, marginLeft:6 }}>({r.itemId})</span></>
+                      }
                     </div>
                     <div style={{ fontSize:13, color:B.textLight, marginTop:4 }}>
                       Requested by <span style={{ fontWeight:600, color:B.textMid }}>{r.requestedByName}</span>
@@ -315,13 +335,35 @@ export function ReservationsPage({ store, userProfile }) {
       )}
 
       {/* ═══ ADD RESERVATION MODAL ═══ */}
-      <Modal open={showAdd} onClose={()=>{setShowAdd(false);setConflictErr("");}} title="New Reservation" wide>
-        <FF label="Equipment *">
-          <select style={{...inp, cursor:"pointer"}} value={form.itemDocId} onChange={e=>handleSelectItem(e.target.value)}>
-            <option value="">Select an item...</option>
-            {activeItems.map(i => <option key={i._docId} value={i._docId}>{i.description} ({i.itemId}) — {i.status}</option>)}
-          </select>
-        </FF>
+      <Modal open={showAdd} onClose={()=>{setShowAdd(false);setConflictErr("");setResourceType(RESOURCE_TYPE.ITEM);}} title="New Reservation" wide>
+        {/* Resource type toggle */}
+        <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+          {[['item','📦 Equipment'], ['room','🏛️ Space']].map(([val, label]) => (
+            <button key={val} onClick={() => { setResourceType(val); setForm(f => ({ ...f, itemDocId:'', itemId:'', itemDesc:'', roomDocId:'', roomName:'' })); setConflictErr(''); }}
+              style={{ flex:1, padding:"9px 0", borderRadius:10, border:"1px solid "+(resourceType===val ? B.teal : B.sand), background:resourceType===val ? B.tealPale : B.white, color:resourceType===val ? B.teal : B.textMid, fontFamily:f1, fontWeight:700, fontSize:13, cursor:"pointer" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {resourceType === RESOURCE_TYPE.ROOM ? (
+          <FF label="Space *">
+            <select style={{...inp, cursor:"pointer"}} value={form.roomDocId} onChange={e => {
+              const room = activeRooms.find(r => r._docId === e.target.value);
+              setForm(f => ({ ...f, roomDocId: e.target.value, roomName: room?.name || '' }));
+            }}>
+              <option value="">Select a space...</option>
+              {activeRooms.map(r => <option key={r._docId} value={r._docId}>{r.name}{r.capacity ? ` (cap. ${r.capacity})` : ''}{r.location ? ` — ${r.location}` : ''}</option>)}
+            </select>
+            {form.roomDocId && (() => { const rm = activeRooms.find(r => r._docId === form.roomDocId); return rm?.amenities?.length ? <div style={{ fontSize:12, color:B.textLight, marginTop:4, fontFamily:f2 }}>Amenities: {rm.amenities.join(', ')}</div> : null; })()}
+          </FF>
+        ) : (
+          <FF label="Equipment *">
+            <select style={{...inp, cursor:"pointer"}} value={form.itemDocId} onChange={e=>handleSelectItem(e.target.value)}>
+              <option value="">Select an item...</option>
+              {activeItems.map(i => <option key={i._docId} value={i._docId}>{i.description} ({i.itemId}) — {i.status}</option>)}
+            </select>
+          </FF>
+        )}
         <div style={{ display:"flex", gap:14 }}>
           <div style={{ flex:1 }}><FF label="Event / Purpose *"><input style={inp} value={form.eventName} onChange={e=>setForm(f=>({...f, eventName:e.target.value}))} placeholder="e.g. Youth Lock-In"/></FF></div>
           <div style={{ flex:1 }}><FF label="Ministry"><select style={{...inp, cursor:"pointer"}} value={form.ministry} onChange={e=>setForm(f=>({...f, ministry:e.target.value}))}>
@@ -370,7 +412,7 @@ export function ReservationsPage({ store, userProfile }) {
         )}
         <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:8 }}>
           <button onClick={()=>{setShowAdd(false);setConflictErr("");setRecurring(false);setRecurrenceEnd("");}} style={btnS}>Cancel</button>
-          <button onClick={handleAdd} disabled={saving||!form.itemDocId||!form.eventName.trim()||!form.eventDate} style={{ ...btnP, opacity:(!form.itemDocId||!form.eventName.trim()||!form.eventDate||saving)?.5:1 }}>
+          <button onClick={handleAdd} disabled={saving||(resourceType===RESOURCE_TYPE.ROOM?!form.roomDocId:!form.itemDocId)||!form.eventName.trim()||!form.eventDate} style={{ ...btnP, opacity:((resourceType===RESOURCE_TYPE.ROOM?!form.roomDocId:!form.itemDocId)||!form.eventName.trim()||!form.eventDate||saving)?.5:1 }}>
             {saving?"Submitting...":"Submit Request"}
           </button>
         </div>
@@ -383,9 +425,9 @@ export function ReservationsPage({ store, userProfile }) {
           return <>
             <div style={{ display:"flex", gap:20, flexWrap:"wrap", marginBottom:20 }}>
               <div style={{ flex:"1 1 220px" }}>
-                <div style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Equipment</div>
-                <div style={{ fontSize:16, fontWeight:600, color:B.navy }}>{r.itemDesc}</div>
-                <div style={{ fontSize:13, color:B.textLight, fontFamily:"monospace" }}>{r.itemId}</div>
+                <div style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>{r.resourceType === RESOURCE_TYPE.ROOM ? 'Space' : 'Equipment'}</div>
+                <div style={{ fontSize:16, fontWeight:600, color:B.navy }}>{r.resourceType === RESOURCE_TYPE.ROOM ? r.roomName : r.itemDesc}</div>
+                {r.resourceType !== RESOURCE_TYPE.ROOM && <div style={{ fontSize:13, color:B.textLight, fontFamily:"monospace" }}>{r.itemId}</div>}
               </div>
               <div style={{ flex:"1 1 220px" }}>
                 <div style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Status</div>
@@ -446,7 +488,7 @@ export function ReservationsPage({ store, userProfile }) {
                 <button onClick={()=>{ if (window.confirm("Deny this reservation request?")) handleDeny(r); }} disabled={saving} style={btnD}>Deny</button>
                 <button onClick={()=>handleApprove(r)} disabled={saving} style={btnP}>Approve</button>
               </>}
-              {r.status === RES_STATUS.APPROVED && canApproveReservation(r) && (
+              {r.status === RES_STATUS.APPROVED && r.resourceType !== RESOURCE_TYPE.ROOM && canApproveReservation(r) && (
                 <button onClick={()=>handleCheckOutFromRes(r)} disabled={saving} style={{ ...btnP, background:"#1A65C7" }}>Check Out Now</button>
               )}
             </div>

@@ -9,7 +9,7 @@ import { app, db } from '../firebase.js';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export function SettingsPage({ store, userProfile, subscription, user, canAdd, deleteAccount }) {
-  const { settings, config, users, accessPeople, accessRecords, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, loadErrors } = store;
+  const { settings, config, users, accessPeople, accessRecords, rooms, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, loadErrors, addRoom, updateRoom, deleteRoom } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
   const [newItem, setNewItem] = useState("");
@@ -47,6 +47,10 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingError, setBillingError] = useState("");
+  const [showSpacesModal, setShowSpacesModal] = useState(false);
+  const [roomForm, setRoomForm] = useState({ name:'', capacity:'', location:'', description:'', amenities:'' });
+  const [editRoomId, setEditRoomId] = useState(null);
+  const [savingRoom, setSavingRoom] = useState(false);
   const [inviteHubsInitialized, setInviteHubsInitialized] = useState(false);
 
   const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub', people_access: 'People Access Hub', tasks: 'Tasks Hub' };
@@ -461,6 +465,30 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
         {listCard("ministries", "Ministries", "⛪")}
         {listCard("tags", "Tags", "🏷️")}
       </div>
+
+      {/* Spaces / Rooms */}
+      {(isAdmin || isManager) && (
+        <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, boxShadow:"0 1px 3px rgba(27,42,74,0.06)", marginBottom:20 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+            <div>
+              <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>🏛️ Spaces</h3>
+              <p style={{ margin:"4px 0 0", fontSize:13, color:B.textLight }}>Define rooms and spaces your team can reserve.</p>
+            </div>
+            <button onClick={() => setShowSpacesModal(true)} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Manage Spaces</button>
+          </div>
+          {(rooms || []).filter(r => r.active !== false).length > 0 ? (
+            <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginTop:14 }}>
+              {(rooms || []).filter(r => r.active !== false).map(r => (
+                <span key={r._docId} style={{ fontSize:13, padding:"4px 12px", borderRadius:20, background:B.warmGray, color:B.textDark, fontFamily:f1, fontWeight:500 }}>
+                  {r.name}{r.capacity ? ` (cap. ${r.capacity})` : ''}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p style={{ margin:"12px 0 0", fontSize:13, color:B.textLight }}>No spaces defined yet.</p>
+          )}
+        </div>
+      )}
 
       {/* Team Members — admin only */}
       {isAdmin && <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
@@ -924,6 +952,78 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             style={{ ...btnS, borderColor:B.red, color:B.red, opacity:(deleting || deleteConfirmText !== "DELETE" || (!isGoogle && !deletePassword)) ? 0.5 : 1 }}>
             {deleting ? "Deleting…" : "Delete My Account"}
           </button>
+        </div>
+      </Modal>
+
+      {/* ═══ SPACES MODAL ═══ */}
+      <Modal open={showSpacesModal} onClose={() => { setShowSpacesModal(false); setEditRoomId(null); setRoomForm({ name:'', capacity:'', location:'', description:'', amenities:'' }); }} title="Manage Spaces" wide>
+        {/* Add / Edit form */}
+        <div style={{ background:B.warmGray, borderRadius:12, padding:"16px 18px", marginBottom:20 }}>
+          <div style={{ fontFamily:f1, fontWeight:700, fontSize:14, color:B.navy, marginBottom:12 }}>{editRoomId ? 'Edit Space' : 'Add New Space'}</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+            <FF label="Name *">
+              <input style={inp} value={roomForm.name} onChange={e => setRoomForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. Sanctuary"/>
+            </FF>
+            <FF label="Capacity">
+              <input style={inp} type="number" min="0" value={roomForm.capacity} onChange={e => setRoomForm(f => ({ ...f, capacity:e.target.value }))} placeholder="Max occupancy"/>
+            </FF>
+          </div>
+          <FF label="Location">
+            <input style={inp} value={roomForm.location} onChange={e => setRoomForm(f => ({ ...f, location:e.target.value }))} placeholder="e.g. Main Building, Annex"/>
+          </FF>
+          <FF label="Description">
+            <input style={inp} value={roomForm.description} onChange={e => setRoomForm(f => ({ ...f, description:e.target.value }))} placeholder="Brief description of the space"/>
+          </FF>
+          <FF label="Amenities (comma-separated)">
+            <input style={inp} value={roomForm.amenities} onChange={e => setRoomForm(f => ({ ...f, amenities:e.target.value }))} placeholder="e.g. Projector, Sound System, Whiteboard"/>
+          </FF>
+          <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:4 }}>
+            {editRoomId && <button onClick={() => { setEditRoomId(null); setRoomForm({ name:'', capacity:'', location:'', description:'', amenities:'' }); }} style={btnS}>Cancel Edit</button>}
+            <button
+              disabled={savingRoom || !roomForm.name.trim()}
+              style={{ ...btnP, opacity:(!roomForm.name.trim() || savingRoom) ? .5 : 1 }}
+              onClick={async () => {
+                if (!roomForm.name.trim()) return;
+                setSavingRoom(true);
+                const payload = {
+                  name: roomForm.name.trim(),
+                  capacity: roomForm.capacity ? parseInt(roomForm.capacity, 10) : null,
+                  location: roomForm.location.trim() || null,
+                  description: roomForm.description.trim() || null,
+                  amenities: roomForm.amenities ? roomForm.amenities.split(',').map(a => a.trim()).filter(Boolean) : [],
+                };
+                if (editRoomId) {
+                  await updateRoom(editRoomId, payload);
+                } else {
+                  await addRoom(payload);
+                }
+                setSavingRoom(false);
+                setEditRoomId(null);
+                setRoomForm({ name:'', capacity:'', location:'', description:'', amenities:'' });
+              }}>
+              {savingRoom ? 'Saving...' : editRoomId ? 'Save Changes' : 'Add Space'}
+            </button>
+          </div>
+        </div>
+        {/* Existing rooms list */}
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {(rooms || []).length === 0 && <p style={{ color:B.textLight, fontSize:14, textAlign:"center", padding:16 }}>No spaces yet. Add one above.</p>}
+          {(rooms || []).map(r => (
+            <div key={r._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 14px", borderRadius:10, background:r.active === false ? B.warmGray : B.white, border:"1px solid "+B.sand, opacity:r.active === false ? .6 : 1 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:700, fontSize:14, color:B.navy, fontFamily:f1 }}>{r.name}{r.active === false ? ' (archived)' : ''}</div>
+                <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>
+                  {[r.capacity ? `Cap. ${r.capacity}` : null, r.location, (r.amenities||[]).join(', ')].filter(Boolean).join(' · ') || 'No details'}
+                </div>
+              </div>
+              <button onClick={() => { setEditRoomId(r._docId); setRoomForm({ name:r.name, capacity:r.capacity ?? '', location:r.location||'', description:r.description||'', amenities:(r.amenities||[]).join(', ') }); }}
+                style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:13, fontWeight:600, padding:"4px 8px" }}>Edit</button>
+              {r.active === false
+                ? <button onClick={() => updateRoom(r._docId, { active:true })} style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:13, fontWeight:600, padding:"4px 8px" }}>Restore</button>
+                : <button onClick={() => { if (window.confirm(`Archive "${r.name}"? It will no longer appear as a reservable space.`)) updateRoom(r._docId, { active:false }); }} style={{ background:"none", border:"none", color:B.red, cursor:"pointer", fontSize:13, fontWeight:600, padding:"4px 8px" }}>Archive</button>
+              }
+            </div>
+          ))}
         </div>
       </Modal>
 

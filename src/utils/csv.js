@@ -55,14 +55,19 @@ export function exportAccessRecordsCSV(records) {
 }
 
 export function exportReservationsCSV(reservations) {
-  const cols = ['itemId','itemDesc','eventName','eventDate','returnDate','purpose','ministry','status','requestedByName','approvedByName','notes'];
-  const header = cols.join(',');
-  const rows = reservations.map(r => cols.map(c => {
-    const v = r[c];
-    if (v == null || v === '') return '';
-    const str = String(v);
-    return (str.includes(',') || str.includes('"') || str.includes('\n')) ? `"${str.replace(/"/g,'""')}"` : str;
-  }).join(','));
+  const header = 'resourceType,resource,itemId,eventName,eventDate,returnDate,purpose,ministry,status,requestedByName,approvedByName,notes';
+  const rows = reservations.map(r => {
+    const isRoom = r.resourceType === 'room';
+    const cells = [
+      isRoom ? 'Space' : 'Equipment',
+      isRoom ? (r.roomName || '') : (r.itemDesc || ''),
+      isRoom ? '' : (r.itemId || ''),
+      r.eventName || '', r.eventDate || '', r.returnDate || '',
+      r.purpose || '', r.ministry || '', r.status || '',
+      r.requestedByName || '', r.approvedByName || '', r.notes || '',
+    ];
+    return cells.map(v => { const s = String(v); return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g,'""')}"` : s; }).join(',');
+  });
   const csv = [header, ...rows].join('\n');
   const a = Object.assign(document.createElement('a'), {
     href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),

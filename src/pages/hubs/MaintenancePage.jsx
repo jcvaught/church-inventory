@@ -463,6 +463,139 @@ function KanbanColumn({ status, tickets, onTicketClick, onDrop, onStatusChange, 
   );
 }
 
+// ── Maintenance Calendar ───────────────────────────────────────────────────
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function MaintenanceCalendar({ tickets, onTicketClick, isMobile }) {
+  const now = new Date();
+  const [viewYear, setViewYear] = useState(now.getFullYear());
+  const [viewMonth, setViewMonth] = useState(now.getMonth());
+  const [expandedDay, setExpandedDay] = useState(null);
+
+  const ticketsByDate = useMemo(() => {
+    const map = new Map();
+    tickets.forEach(t => {
+      if (!t.dueDate) return;
+      const key = t.dueDate.slice(0, 10);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(t);
+    });
+    return map;
+  }, [tickets]);
+
+  function prevMonth() { if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); } else setViewMonth(m => m - 1); setExpandedDay(null); }
+  function nextMonth() { if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); } else setViewMonth(m => m + 1); setExpandedDay(null); }
+  function goToday() { setViewYear(now.getFullYear()); setViewMonth(now.getMonth()); setExpandedDay(null); }
+
+  const calendarDays = useMemo(() => {
+    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const daysInPrev = new Date(viewYear, viewMonth, 0).getDate();
+    const days = [];
+    for (let i = firstDay - 1; i >= 0; i--) days.push({ date: new Date(viewYear, viewMonth - 1, daysInPrev - i), isCurrentMonth: false });
+    for (let d = 1; d <= daysInMonth; d++) days.push({ date: new Date(viewYear, viewMonth, d), isCurrentMonth: true });
+    while (days.length % 7 !== 0) { const last = days[days.length - 1].date; days.push({ date: new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1), isCurrentMonth: false }); }
+    return days;
+  }, [viewYear, viewMonth]);
+
+  const todayStr = now.toISOString().slice(0, 10);
+
+  function dateStr(d) { return d.toISOString().slice(0, 10); }
+
+  function TicketChip({ ticket, compact }) {
+    const pc = priorityColors[ticket.priority] || priorityColors.Medium;
+    const isOverdue = ticket.dueDate < todayStr && ticket.status !== 'Complete' && ticket.status !== 'Cancelled';
+    return (
+      <div onClick={e => { e.stopPropagation(); onTicketClick(ticket); }}
+        style={{ display:'flex', alignItems:'center', gap:4, padding:compact ? '2px 5px' : '3px 7px', borderRadius:5, background:isOverdue ? '#FEE8E8' : pc.bg, borderLeft:'3px solid '+pc.dot, cursor:'pointer', marginBottom:2, overflow:'hidden' }}
+        title={ticket.name}>
+        <span style={{ fontSize:11, color:isOverdue ? B.red : pc.tx, fontWeight:600, fontFamily:f1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flex:1 }}>{ticket.name}</span>
+        {ticket.recurrence && <span style={{ fontSize:10, flexShrink:0 }}>🔁</span>}
+      </div>
+    );
+  }
+
+  // Mobile: grouped vertical list
+  if (isMobile) {
+    const today = todayStr;
+    const weekEnd = new Date(now); weekEnd.setDate(now.getDate() + 7);
+    const monthEnd = new Date(now); monthEnd.setDate(now.getDate() + 30);
+    const weekEndStr = weekEnd.toISOString().slice(0, 10);
+    const monthEndStr = monthEnd.toISOString().slice(0, 10);
+    const withDue = tickets.filter(t => t.dueDate).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    const groups = [
+      { label:'Overdue', tickets: withDue.filter(t => t.dueDate < today && t.status !== 'Complete' && t.status !== 'Cancelled') },
+      { label:'This Week', tickets: withDue.filter(t => t.dueDate >= today && t.dueDate <= weekEndStr) },
+      { label:'Next 30 Days', tickets: withDue.filter(t => t.dueDate > weekEndStr && t.dueDate <= monthEndStr) },
+      { label:'Later', tickets: withDue.filter(t => t.dueDate > monthEndStr) },
+    ];
+    return (
+      <div>
+        {groups.map(g => g.tickets.length > 0 && (
+          <div key={g.label} style={{ marginBottom:20 }}>
+            <div style={{ fontFamily:f1, fontWeight:700, fontSize:13, color:g.label==='Overdue' ? B.red : B.textMid, textTransform:'uppercase', letterSpacing:.8, marginBottom:8 }}>{g.label}</div>
+            {g.tickets.map(t => (
+              <div key={t._docId} onClick={() => onTicketClick(t)} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:10, background:B.white, border:'1px solid '+B.sand, marginBottom:6, cursor:'pointer' }}>
+                <span style={{ width:8, height:8, borderRadius:'50%', background:(priorityColors[t.priority]||priorityColors.Medium).dot, flexShrink:0 }}/>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:14, fontWeight:600, color:B.navy, fontFamily:f1 }}>{t.name}</div>
+                  <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>{t.dueDate}{t.recurrence ? ' · 🔁' : ''}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+        {tickets.filter(t => t.dueDate).length === 0 && <div style={{ textAlign:'center', color:B.textLight, fontSize:14, padding:32 }}>No tickets with due dates.</div>}
+      </div>
+    );
+  }
+
+  // Desktop: month grid
+  return (
+    <div>
+      {/* Nav */}
+      <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+        <button onClick={prevMonth} style={{ ...btnS, padding:'6px 12px', fontSize:16, lineHeight:1 }}>‹</button>
+        <span style={{ fontFamily:f1, fontWeight:700, fontSize:18, color:B.navy, minWidth:200, textAlign:'center' }}>{MONTH_NAMES[viewMonth]} {viewYear}</span>
+        <button onClick={nextMonth} style={{ ...btnS, padding:'6px 12px', fontSize:16, lineHeight:1 }}>›</button>
+        <button onClick={goToday} style={{ ...btnS, padding:'6px 14px', fontSize:13, marginLeft:4 }}>Today</button>
+        <span style={{ marginLeft:'auto', fontSize:13, color:B.textLight, fontFamily:f1 }}>
+          {[...ticketsByDate.values()].reduce((a, b) => a + b.length, 0)} ticket{[...ticketsByDate.values()].reduce((a, b) => a + b.length, 0) !== 1 ? 's' : ''} with due dates
+        </span>
+      </div>
+      {/* Day headers */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', gap:2, marginBottom:2 }}>
+        {DAY_NAMES.map(d => <div key={d} style={{ textAlign:'center', fontSize:12, fontWeight:700, color:B.textLight, fontFamily:f1, padding:'4px 0', textTransform:'uppercase', letterSpacing:.6 }}>{d}</div>)}
+      </div>
+      {/* Day cells */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', gap:2 }}>
+        {calendarDays.map((day, idx) => {
+          const ds = dateStr(day.date);
+          const dayTickets = ticketsByDate.get(ds) || [];
+          const isToday = ds === todayStr;
+          const hasOverdue = dayTickets.some(t => ds < todayStr && t.status !== 'Complete' && t.status !== 'Cancelled');
+          const isExpanded = expandedDay === ds;
+          const CHIP_LIMIT = 3;
+          const visible = dayTickets.slice(0, CHIP_LIMIT);
+          const overflow = dayTickets.length - CHIP_LIMIT;
+          return (
+            <div key={idx}
+              onClick={() => dayTickets.length > CHIP_LIMIT && setExpandedDay(isExpanded ? null : ds)}
+              style={{ minHeight:88, background:day.isCurrentMonth ? B.white : '#F8F8FA', borderRadius:8, border:'1px solid '+(isToday ? B.teal : hasOverdue ? '#FECACA' : B.sand), padding:'5px 6px', position:'relative', cursor:dayTickets.length > CHIP_LIMIT ? 'pointer' : 'default', outline:isToday ? '2px solid '+B.teal : 'none', outlineOffset:'-1px' }}>
+              <div style={{ fontSize:12, fontWeight:isToday ? 800 : 500, color:isToday ? B.teal : day.isCurrentMonth ? B.textDark : B.textLight, fontFamily:f1, marginBottom:3, textAlign:'right' }}>{day.date.getDate()}</div>
+              {(isExpanded ? dayTickets : visible).map(t => <TicketChip key={t._docId} ticket={t} compact/>)}
+              {!isExpanded && overflow > 0 && (
+                <div style={{ fontSize:11, color:B.teal, fontWeight:700, fontFamily:f1, textAlign:'center', marginTop:2 }}>+{overflow} more</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const getEmptyTicket = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], linkedItemDocId:'', vendorId:'', estimatedCost:'', notes:'', checklist:[] });
 const getEmptyVendor = () => ({ name:'', phone:'', email:'', specialty:'', notes:'' });
 
@@ -538,7 +671,7 @@ export function MaintenancePage({ store, userProfile }) {
     localStorage.setItem('maint_viewMode', mode);
   }
 
-  // Auto-switch to list view on mobile (don't persist — desktop preference preserved)
+  // Auto-switch to list view on mobile if in kanban (calendar handles its own mobile layout)
   useEffect(() => {
     if (isMobile && viewMode === 'kanban') setViewMode('list');
   }, [isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1019,7 +1152,7 @@ export function MaintenancePage({ store, userProfile }) {
       {/* View Toggle + Sort */}
       <div style={{ display:'flex', gap:8, marginBottom:18, alignItems:'center', flexWrap:'wrap' }}>
         <div style={{ display:'flex', background:B.warmGray, borderRadius:10, padding:3 }}>
-          {[['kanban', 'Kanban'], ['list', 'List']].map(([mode, label]) => (
+          {[['kanban', 'Kanban'], ['list', 'List'], ['calendar', 'Calendar']].map(([mode, label]) => (
             <button key={mode} onClick={() => switchViewMode(mode)} style={{ padding:'7px 18px', borderRadius:8, border:'none', background:viewMode===mode ? B.white : 'transparent', color:viewMode===mode ? B.navy : B.textMid, fontWeight:viewMode===mode ? 700 : 500, fontSize:13, fontFamily:f1, cursor:'pointer', boxShadow:viewMode===mode ? '0 1px 3px rgba(27,42,74,0.1)' : 'none', transition:'all 0.15s' }}>
               {label}
             </button>
@@ -1102,6 +1235,13 @@ export function MaintenancePage({ store, userProfile }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Calendar View */}
+      {viewMode === 'calendar' && (
+        <div style={{ background:B.white, borderRadius:14, padding:'20px 20px', border:'1px solid '+B.sand }}>
+          <MaintenanceCalendar tickets={filteredTickets} onTicketClick={openDetail} isMobile={isMobile}/>
         </div>
       )}
 

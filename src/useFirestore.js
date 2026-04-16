@@ -22,6 +22,7 @@ export function useFirestore(churchId) {
   const [accessPeople, setAccessPeople] = useState([]);
   const [accessRecords, setAccessRecords] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const clearError = useCallback(() => setError(null), []);
@@ -42,7 +43,7 @@ export function useFirestore(churchId) {
     if (!churchId) return;
     const unsubs = [];
     let loaded = 0;
-    const totalSubs = 16;
+    const totalSubs = 17;
     const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
     // Config
@@ -146,6 +147,14 @@ export function useFirestore(churchId) {
       const t = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
       t.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
       setTasks(t);
+      checkDone();
+    }, (err) => { handleErr(err); checkDone(); }));
+
+    // Rooms/Spaces
+    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'rooms'), (snap) => {
+      const r = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+      r.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setRooms(r);
       checkDone();
     }, (err) => { handleErr(err); checkDone(); }));
 
@@ -650,6 +659,34 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
+  // ── Rooms/Spaces ──
+  const addRoom = useCallback(async (room) => {
+    try {
+      const ref = await addDoc(collection(db, 'churches', churchId, 'rooms'), {
+        ...room,
+        active: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      return ref.id;
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const updateRoom = useCallback(async (docId, updates) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'rooms', docId), {
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const deleteRoom = useCallback(async (docId) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'rooms', docId));
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
   const dismissPublicRequest = useCallback(async (docId) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'publicRequests', docId), { status: 'dismissed' });
@@ -755,6 +792,7 @@ export function useFirestore(churchId) {
     updateUser, removeUser,
     addTicket, updateTicket, addTicketComment, updateTicketComment, deleteTicketComment, deleteTicket, addMaintenanceTags,
     addVendor, updateVendor, deleteVendor,
+    rooms, addRoom, updateRoom, deleteRoom,
     addBundle, updateBundle, deleteBundle,
     updateNotificationConfig,
     addAudit, updateAudit,

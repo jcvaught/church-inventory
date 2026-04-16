@@ -27,6 +27,12 @@ export const TICKET_STATUS = {
   CANCELLED:   'Cancelled',
 };
 
+// ── Reservation resource types ───────────────────────────────────────────
+export const RESOURCE_TYPE = {
+  ITEM: 'item',
+  ROOM: 'room',
+};
+
 // ── People Access record types ────────────────────────────────────────────
 export const ACCESS_RECORD_TYPE = {
   BACKGROUND_CHECK: 'background_check',

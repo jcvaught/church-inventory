@@ -118,6 +118,12 @@ service cloud.firestore {
       allow update, delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && request.auth.uid == resource.data.authorId);
     }
 
+    // ── Rooms/Spaces — members read; admins+mgrs write ────────────────────────
+    match /churches/{churchId}/rooms/{docId} {
+      allow read:  if isMember(churchId);
+      allow write: if isChurchAdminOrManager(churchId);
+    }
+
     // ── Vendors ───────────────────────────────────────────────────────────────
     match /churches/{churchId}/vendors/{docId} {
       allow read:  if isMember(churchId);
