@@ -83,7 +83,7 @@ public/
 ├── sitemap.xml                ← Static sitemap: /, /?help, /blog, and all 3 blog post URLs
 └── google254ab6f07b8682a3.html ← Google Search Console ownership verification file
 functions/
-├── index.js                   ← Cloud Functions: createCheckoutSession, createPortalSession, stripeWebhook
+├── index.js                   ← Cloud Functions: createCheckoutSession, createPortalSession, stripeWebhook, sendReservationEmail, sendTicketAssignedEmail, sendJobAnnouncementEmails (all email via SendGrid; SENDGRID_API_KEY in functions/.env; sender: churchopshub@gmail.com)
 └── package.json               ← Node 18, firebase-functions v4, firebase-admin v12, stripe v14
 ```
 
@@ -118,7 +118,7 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/tasks/{id}/comments` | Task comment subcollection: `text`, `authorId`, `authorName`, `createdAt`, `updatedAt` |
 | `churches/{churchId}/rooms` | Spaces: reservable rooms/spaces; fields: `name`, `capacity` (nullable int), `location`, `description`, `amenities[]`, `active` (soft-archive), `createdAt`, `updatedAt`; managed in Settings → Spaces card; members read, admin/mgr write |
 | `churches/{churchId}/bundles` | Coordination Hub: checkout bundles; fields: `name`, `description`, `items[{docId,itemId,description,location}]`, `createdBy`, `createdByName`, `createdAt` |
-| `churches/{churchId}/config/notifications` | Coordination Hub: EmailJS config; fields: `enabled`, `serviceId`, `publicKey`, `templateApproved`, `templateDenied`, `templateAssigned` (maintenance ticket assignment notification) |
+| `churches/{churchId}/config/notifications` | Coordination Hub: notification toggle; fields: `enabled` (bool) — all email logic handled server-side via SendGrid Cloud Functions; legacy EmailJS fields (serviceId, publicKey, templateApproved, etc.) may exist in old docs but are no longer used |
 | `churches/{churchId}/audits` | Accountability Hub: physical audit records; fields: `location`, `conductedBy`, `conductedByName`, `startedAt`, `completedAt`, `status`, `itemsChecked`, `discrepancyCount`, `items[{docId,itemId,description,currentStatus,auditResult,condition,notes}]`, `discrepancies[]`, `createdAt` |
 | `churches/{churchId}/accessPeople` | People Access Hub: tracked people (staff/volunteers); fields: `name`, `email`, `phone`, `ministries[]`, `notes`, `active` (soft archive), `userId` (nullable — linked ChurchOpsHub user uid, set by auto-link or admin), `createdBy`, `createdAt`, `updatedAt` |
 | `churches/{churchId}/accessRecords` | People Access Hub: one flat collection for all compliance record types; fields: `personId`, `personName` (denormalized), `type` (`background_check`/`key_assignment`/`certification`/`custom`), `completedDate`, `expiryDate`, `notes`, `ministry`, `recordedBy`, `recordedByName`, `createdAt`, `updatedAt`; key_assignment adds: `keyIdentifier`, `returnedDate`; certification adds: `certType`, `issuingOrganization`; custom adds: `requirementId`, `requirementName` |
@@ -290,7 +290,8 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Room/Space booking: rooms collection + Firestore rules; useFirestore rooms subscription (totalSubs→17) + CRUD; RESOURCE_TYPE enum; Settings Spaces card + modal (name/capacity/location/amenities/archive); ReservationsPage Equipment/Space toggle, room conflict detection, room badges, Check Out hidden for rooms, CSV updated | 2026-04-16 |
 | — | Preventive Maintenance Calendar: custom month grid (no library) as third Kanban/List/Calendar view mode in Maintenance Hub; priority-colored chips, 🔁 recurring badge, +N overflow, overdue cell highlight, month nav + Today button; mobile grouped list (Overdue/This Week/Next 30 Days/Later); filteredTickets passed so filters apply | 2026-04-16 |
 | — | Bug fixes (Opus review — Room booking + Maintenance Calendar): localDateStr() replaces toISOString() to fix UTC off-by-one in all US timezones; TicketChip extracted to module level (fixes React reconciliation); double-reduce in calendar header fixed; empty-state message when no spaces defined in Reservations; Mark Complete action for approved room reservations | 2026-04-16 |
-| — | Job Hub: teen job board + announcement board ($7/mo, key: jobs, JOB-###); admins post jobs (title, date/time, location, spots, pay); members sign up/withdraw; signups use runTransaction to prevent race conditions; announcements with pin + optional expiry; all-in bundle fixed to include people_access + jobs (was missing both); totalSubs 17→19 | 2026-04-16 |
+| — | Job Hub: teen job board + announcement board ($7/mo, key: jobs, JOB-###); admins post jobs (title, date/time, location, spots, pay); members sign up/withdraw; signups use runTransaction to prevent race conditions; announcements with pin + optional expiry; last 3 announcements shown on Dashboard for hub users; all-in bundle fixed to include people_access + jobs; totalSubs 17→19 | 2026-04-16 |
+| — | Email: migrated all notifications from EmailJS (client-side) to SendGrid via Cloud Functions (server-side); removed @emailjs/browser; new Cloud Functions: sendReservationEmail, sendTicketAssignedEmail, sendJobAnnouncementEmails; CoordinationPage notification settings simplified to enabled toggle only; sender: churchopshub@gmail.com | 2026-04-16 |
 
 ---
 
