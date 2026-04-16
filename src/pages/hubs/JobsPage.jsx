@@ -95,12 +95,13 @@ export function JobsPage({ store, userProfile }) {
 
   const filteredJobs = useMemo(() => {
     let jobs = jobListings || [];
-    if (statusFilter !== 'all') jobs = jobs.filter(j => j.status === statusFilter);
+    if (statusFilter === 'mine') jobs = jobs.filter(j => isSignedUp(j));
+    else if (statusFilter !== 'all') jobs = jobs.filter(j => j.status === statusFilter);
     return [...jobs].sort((a, b) =>
       (a.scheduledDate || '').localeCompare(b.scheduledDate || '') ||
       (b.createdAt || '').localeCompare(a.createdAt || '')
     );
-  }, [jobListings, statusFilter]);
+  }, [jobListings, statusFilter, userId]);
 
   const visibleAnnouncements = useMemo(() => {
     const ann = (jobAnnouncements || []).filter(a => !a.expiresAt || a.expiresAt >= todayStr);
@@ -270,7 +271,7 @@ export function JobsPage({ store, userProfile }) {
           {/* Toolbar */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', gap: 6, flex: 1, flexWrap: 'wrap' }}>
-              {[['open','Open'],['closed','Closed'],['completed','Completed'],['cancelled','Cancelled'],['all','All']].map(([v, label]) => (
+              {[['mine','My Jobs'],['open','Open'],['closed','Closed'],['completed','Completed'],['cancelled','Cancelled'],['all','All']].map(([v, label]) => (
                 <button key={v} onClick={() => setStatusFilter(v)}
                   style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid ' + (statusFilter === v ? B.teal : B.sand), background: statusFilter === v ? 'rgba(42,125,110,0.1)' : B.white, color: statusFilter === v ? B.teal : B.textMid, fontSize: 13, fontWeight: 600, fontFamily: f1, cursor: 'pointer' }}>
                   {label}
@@ -285,7 +286,7 @@ export function JobsPage({ store, userProfile }) {
           {/* Job cards */}
           {filteredJobs.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '48px 20px', color: B.textLight, fontFamily: f2, fontSize: 14 }}>
-              {statusFilter === 'open' ? 'No open jobs right now — check back soon!' : 'No jobs in this category.'}
+              {statusFilter === 'mine' ? "You haven't signed up for any jobs yet." : statusFilter === 'open' ? 'No open jobs right now — check back soon!' : 'No jobs in this category.'}
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14 }}>

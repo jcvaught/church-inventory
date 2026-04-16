@@ -1,4 +1,5 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
@@ -457,4 +458,81 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
 
   const sent = results.filter(r => r.status === 'fulfilled').length;
   return { sent };
+});
+
+// ── sendJobReminders ──────────────────────────────────────────────────────
+// Runs every morning at 8:00 AM Central time.
+// Finds all jobs scheduled for today across all churches and emails each signup.
+exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'America/Chicago' }, async () => {
+  if (!initSendGrid()) return;
+
+  const db = getFirestore();
+  const today = (() => {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  })();
+
+  // Collection group query across all churches
+  const snap = await db.collectionGroup('jobListings')
+    .where('scheduledDate', '==', today)
+    .where('status', '==', 'open')
+    .get();
+
+  if (snap.empty) return;
+
+  // Gather all unique user UIDs that need reminders
+  const remindersByUid = {}; // uid → [{ jobTitle, scheduledTime, location, pay, churchId }]
+  for (const doc of snap.docs) {
+    const job = doc.data();
+    const churchId = doc.ref.parent.parent.id;
+    for (const signup of (job.signups || [])) {
+      if (!signup.uid) continue;
+      if (!remindersByUid[signup.uid]) remindersByUid[signup.uid] = [];
+      remindersByUid[signup.uid].push({
+        title: job.title || 'Job',
+        scheduledTime: job.scheduledTime || '',
+        location: job.location || '',
+        pay: job.pay != null ? `$${Number(job.pay).toFixed(2)} per person` : null,
+        churchId,
+      });
+    }
+  }
+
+  if (Object.keys(remindersByUid).length === 0) return;
+
+  // Fetch user profiles for all UIDs
+  const userSnaps = await Promise.all(
+    Object.keys(remindersByUid).map(uid => db.doc(`users/${uid}`).get())
+  );
+
+  const emailTasks = [];
+  for (const userSnap of userSnaps) {
+    if (!userSnap.exists) continue;
+    const user = userSnap.data();
+    if (!user.email) continue;
+    const jobs = remindersByUid[userSnap.id];
+    const safeName = escapeHtml(user.name || 'there');
+
+    const jobRows = jobs.map(j => {
+      const timeStr = j.scheduledTime ? ` at ${escapeHtml(j.scheduledTime)}` : '';
+      const locStr = j.location ? `<br><span style="font-size:13px;color:#666">📍 ${escapeHtml(j.location)}</span>` : '';
+      const payStr = j.pay ? `<br><span style="font-size:13px;color:#16A34A">💵 ${escapeHtml(j.pay)}</span>` : '';
+      return `<li style="margin-bottom:8px"><strong>${escapeHtml(j.title)}</strong>${timeStr}${locStr}${payStr}</li>`;
+    }).join('');
+
+    const subject = jobs.length === 1
+      ? `Reminder: "${jobs[0].title}" is today`
+      : `Reminder: You have ${jobs.length} jobs scheduled today`;
+
+    const html = `<p>Hi ${safeName},</p>
+<p>Just a reminder — you're signed up for the following job${jobs.length !== 1 ? 's' : ''} today:</p>
+<ul style="padding-left:20px;margin:12px 0">${jobRows}</ul>
+<p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to view details or withdraw.</p>`;
+
+    const text = `Hi ${user.name || 'there'},\n\nReminder — you're signed up for the following job${jobs.length !== 1 ? 's' : ''} today:\n\n${jobs.map(j => `• ${j.title}${j.scheduledTime ? ' at ' + j.scheduledTime : ''}${j.location ? ' — ' + j.location : ''}`).join('\n')}\n\nLog in at churchopshub.com to view details.\n`;
+
+    emailTasks.push(sgMail.send({ to: user.email, from: FROM, subject, html, text }));
+  }
+
+  await Promise.allSettled(emailTasks);
 });
