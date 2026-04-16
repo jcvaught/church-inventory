@@ -15,3 +15,4 @@ Thumbs.db
 
 .vercel
 .env*.local
+scripts/serviceAccountKey.json
