@@ -46,22 +46,47 @@ export function LandingPage({ onGetStarted }) {
     <span style={{ color: dark ? B.tealLight : B.teal, fontWeight: 700, marginRight: 8 }}>✓</span>
   );
 
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'SoftwareApplication',
-    name: 'ChurchOpsHub',
-    applicationCategory: 'BusinessApplication',
-    operatingSystem: 'Web',
-    description: 'Free church inventory and asset management platform. Track equipment, supplies, reservations, maintenance, and more.',
-    url: 'https://churchopshub.com',
-    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
-  };
+  const jsonLd = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: 'ChurchOpsHub',
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web',
+      description: 'Free church inventory and asset management platform. Track equipment, supplies, reservations, maintenance, and more.',
+      url: 'https://churchopshub.com',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      featureList: [
+        'Equipment inventory tracking',
+        'Consumable supplies management',
+        'Item reservations and scheduling',
+        'Activity and audit log',
+        'Role-based team access',
+        'Maintenance ticket tracking',
+        'Utilization and insights reporting',
+        'Checkout bundles and coordination',
+        'Physical asset audits',
+        'Background check and key assignment tracking',
+        'Kanban task board',
+      ],
+      publisher: { '@type': 'Organization', name: 'ChurchOpsHub', url: 'https://churchopshub.com' },
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      name: 'ChurchOpsHub',
+      url: 'https://churchopshub.com',
+      logo: 'https://churchopshub.com/og-image.png',
+      description: 'Church inventory and operations management software built for churches of all sizes.',
+      sameAs: [],
+    },
+  ];
 
   return (
     <div style={{ fontFamily: f2, color: B.textDark, background: B.cream }}>
       <SEO
-        title="ChurchOpsHub — Simple Inventory Management for Churches"
-        description="ChurchOpsHub is the free church inventory management system. Track equipment, supplies, and reservations. Accountability, maintenance, and insights hubs available."
+        title="Church Inventory Management Software — Free | ChurchOpsHub"
+        description="ChurchOpsHub is free church inventory management software. Track equipment, supplies, reservations, maintenance tickets, and team compliance — all in one place."
         canonical="/"
         jsonLd={jsonLd}
       />
