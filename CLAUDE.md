@@ -281,6 +281,7 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Tasks Hub: Opus review — security (private tasks enforced server-side in Firestore rules; creator delete allowed), bugs (calculateNextDue month-end rollover, isDetailDirty checklist, checklist Cancel flow, addTask silent failure, photo URL memory leak), refactor (createNextRecurringTask shared helper), a11y (TaskCard role/tabIndex/aria-label, mobile status select aria-label, comment button aria-label), performance (React.memo on TaskCard + KanbanColumn, useMemo for stats) | 2026-04-15 |
 | — | Tasks Hub: real-time detail modal sync — onSnapshot listener on open task doc; silent update when no dirty edits; amber conflict banner (Reload/Dismiss) when concurrent edit detected; extracted taskToEdits() helper; isDirtyRef avoids stale closures | 2026-04-16 |
 | — | SEO: sitemap lastmod + changefreq fixes (yearly on posts, weekly on /blog); add missing moving-beyond-spreadsheets post; landing page title → "Church Inventory Management Software — Free"; add Organization schema + featureList to SoftwareApplication schema | 2026-04-16 |
+| — | Blog post: "Best Church Management Software for Small Churches in 2026" — category-reframing post (ChMS for people vs. ops software for stuff); covers Planning Center, Breeze, ChurchTrac, Churchteams, Elvanto; targets primary keyword + long-tail; based on Opus competitive analysis | 2026-04-16 |
 
 ---
 
