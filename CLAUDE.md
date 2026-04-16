@@ -285,6 +285,7 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Blog post: "Best Church Management Software for Small Churches in 2026" — category-reframing post (ChMS for people vs. ops software for stuff); covers Planning Center, Breeze, ChurchTrac, Churchteams, Elvanto; targets primary keyword + long-tail; based on Opus competitive analysis | 2026-04-16 |
 | — | Room/Space booking: rooms collection + Firestore rules; useFirestore rooms subscription (totalSubs→17) + CRUD; RESOURCE_TYPE enum; Settings Spaces card + modal (name/capacity/location/amenities/archive); ReservationsPage Equipment/Space toggle, room conflict detection, room badges, Check Out hidden for rooms, CSV updated | 2026-04-16 |
 | — | Preventive Maintenance Calendar: custom month grid (no library) as third Kanban/List/Calendar view mode in Maintenance Hub; priority-colored chips, 🔁 recurring badge, +N overflow, overdue cell highlight, month nav + Today button; mobile grouped list (Overdue/This Week/Next 30 Days/Later); filteredTickets passed so filters apply | 2026-04-16 |
+| — | Bug fixes (Opus review — Room booking + Maintenance Calendar): localDateStr() replaces toISOString() to fix UTC off-by-one in all US timezones; TicketChip extracted to module level (fixes React reconciliation); double-reduce in calendar header fixed; empty-state message when no spaces defined in Reservations; Mark Complete action for approved room reservations | 2026-04-16 |
 
 ---
 
@@ -345,6 +346,22 @@ if (date.getDate() < day) date.setDate(lastDay); // clamp to month-end
 ```
 
 This pattern is used in `calculateNextDue()` (MaintenancePage) and `generateRecurrenceDates()` (ReservationsPage).
+
+### 🟡 `toISOString()` returns UTC — wrong date in US timezones
+`date.toISOString().slice(0, 10)` converts to UTC before formatting. For users in US timezones (UTC−5 to UTC−8), a date like "April 15 at 11pm local" becomes "April 16" in UTC — off by one day. Always use local-time formatting for date strings that will be compared to stored `YYYY-MM-DD` date fields:
+
+```js
+// ❌ WRONG — UTC conversion causes off-by-one for US users
+const today = new Date().toISOString().slice(0, 10);
+
+// ✅ CORRECT — local time
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+const today = localDateStr(new Date());
+```
+
+`localDateStr` is defined at module level in `MaintenancePage.jsx`. Use this pattern anywhere you need today's date or a Date object formatted as `YYYY-MM-DD` for comparison.
 
 ### 🟡 Bare `>` in JSX text content
 esbuild's strict JSX parser rejects bare `>` characters in JSX text (e.g. `<P>Settings > Team Members</P>`). Use `→` for navigation paths or `{'>'`} to escape. Running `npm run build` will surface these immediately.
