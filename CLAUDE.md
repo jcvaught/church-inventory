@@ -279,6 +279,7 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Tasks Hub: general-purpose Kanban task board with visibility control (team/private/shared), assignees, comments, recurrence, TSK-### numbering | 2026-04-14 |
 | — | Tasks Hub: assignees filtered to Tasks Hub-access users only; per-user task defaults (⚙ Defaults button → default visibility + default share-with list, saved to users/{uid}); private tasks truly private (admin override removed); High priority pinned to top of each Kanban column | 2026-04-14 |
 | — | Tasks Hub: Opus review — security (private tasks enforced server-side in Firestore rules; creator delete allowed), bugs (calculateNextDue month-end rollover, isDetailDirty checklist, checklist Cancel flow, addTask silent failure, photo URL memory leak), refactor (createNextRecurringTask shared helper), a11y (TaskCard role/tabIndex/aria-label, mobile status select aria-label, comment button aria-label), performance (React.memo on TaskCard + KanbanColumn, useMemo for stats) | 2026-04-15 |
+| — | Tasks Hub: real-time detail modal sync — onSnapshot listener on open task doc; silent update when no dirty edits; amber conflict banner (Reload/Dismiss) when concurrent edit detected; extracted taskToEdits() helper; isDirtyRef avoids stale closures | 2026-04-16 |
 
 ---
 
