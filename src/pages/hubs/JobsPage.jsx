@@ -156,11 +156,13 @@ export function JobsPage({ store, userProfile }) {
       return;
     }
     const terminalStatuses = ['cancelled', 'closed', 'completed'];
-    if (existingJob?.status === 'open' && terminalStatuses.includes(jobForm.status) && currentSignups > 0) {
-      const confirmed = window.confirm(
-        `This job has ${currentSignups} signup${currentSignups !== 1 ? 's' : ''}. Changing to "${jobForm.status}" will not notify them. Continue?`
-      );
-      if (!confirmed) return;
+    const isGoingTerminal = existingJob?.status === 'open' && terminalStatuses.includes(jobForm.status);
+    const willNotify = isGoingTerminal && currentSignups > 0 && notificationConfig?.enabled;
+    if (isGoingTerminal && currentSignups > 0) {
+      const msg = willNotify
+        ? `This job has ${currentSignups} signup${currentSignups !== 1 ? 's' : ''}. Changing to "${jobForm.status}" will send them a cancellation email. Continue?`
+        : `This job has ${currentSignups} signup${currentSignups !== 1 ? 's' : ''}. Changing to "${jobForm.status}" will not notify them. Continue?`;
+      if (!window.confirm(msg)) return;
     }
     setSaving(true);
     try {
@@ -171,7 +173,11 @@ export function JobsPage({ store, userProfile }) {
       };
       if (editJobId) {
         await updateJobListing(editJobId, data, userId, userName);
-        flash('Job updated.');
+        if (willNotify) {
+          const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
+          fn({ churchId: userProfile?.churchId, jobDocId: editJobId }).catch(() => {});
+        }
+        flash('Job updated.' + (willNotify ? ' Signups notified.' : ''));
       } else {
         await addJobListing(data, userId, userName);
         flash('Job posted.');
@@ -182,6 +188,14 @@ export function JobsPage({ store, userProfile }) {
       flash('Failed to save job.', true);
     }
     setSaving(false);
+  }
+
+  function handleNotifySignups(job) {
+    if (!window.confirm(`Send a cancellation email to ${(job.signups || []).length} signup${(job.signups || []).length !== 1 ? 's' : ''}?`)) return;
+    const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
+    fn({ churchId: userProfile?.churchId, jobDocId: job._docId })
+      .then(() => flash('Signups notified.'))
+      .catch(() => flash('Failed to send notifications.', true));
   }
 
   async function handleDeleteJob(job) {
@@ -541,11 +555,16 @@ export function JobsPage({ store, userProfile }) {
           </div>
           {/* Action row */}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {isAdminOrManager && (
                 <>
                   <button onClick={() => { setShowJobDetail(null); openEditJob(liveDetail); }} style={{ ...btnS, fontSize: 13 }}>Edit</button>
                   <button onClick={() => handleDeleteJob(liveDetail)} style={{ ...btnD, fontSize: 13 }}>Delete</button>
+                  {['cancelled', 'closed'].includes(liveDetail.status) && (liveDetail.signups || []).length > 0 && notificationConfig?.enabled && (
+                    <button onClick={() => handleNotifySignups(liveDetail)} style={{ ...btnS, fontSize: 13, color: B.teal, borderColor: B.tealLight }}>
+                      Notify Signups
+                    </button>
+                  )}
                 </>
               )}
             </div>

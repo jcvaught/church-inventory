@@ -470,6 +470,68 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
   return { sent };
 });
 
+// ── sendJobCancelledEmails ────────────────────────────────────────────────
+// Called when a job is cancelled. Fetches signups server-side and notifies each person.
+// data: { churchId, jobDocId }
+exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  if (!initSendGrid()) return { sent: 0 };
+
+  const { churchId, jobDocId } = req.data;
+  if (!churchId || !jobDocId) return { sent: 0 };
+
+  const db = getFirestore();
+
+  // Verify caller is admin/manager of the church
+  const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
+  if (!callerSnap.exists || callerSnap.data().churchId !== churchId) {
+    throw new HttpsError('permission-denied', 'Not a member of this church.');
+  }
+  if (!['admin', 'manager'].includes(callerSnap.data().role)) {
+    throw new HttpsError('permission-denied', 'Only admin or manager can send cancellation notices.');
+  }
+
+  const [jobSnap, churchSnap] = await Promise.all([
+    db.doc(`churches/${churchId}/jobListings/${jobDocId}`).get(),
+    db.doc(`churches/${churchId}/config/main`).get(),
+  ]);
+  if (!jobSnap.exists) return { sent: 0 };
+
+  const job = jobSnap.data();
+  const signups = job.signups || [];
+  if (signups.length === 0) return { sent: 0 };
+
+  const churchName = churchSnap.data()?.churchName || 'Your Church';
+  const safeTitle = escapeHtml(job.title || 'Job');
+  const safeChurch = escapeHtml(churchName);
+  const dateStr = job.scheduledDate || '';
+  const timeStr = job.scheduledTime ? ` at ${job.scheduledTime}` : '';
+  const subject = `Job Cancelled: ${job.title || 'Job'}`;
+
+  const userSnaps = await Promise.all(signups.map(s => db.doc(`users/${s.uid}`).get()));
+
+  const results = await Promise.allSettled(userSnaps.map(snap => {
+    if (!snap.exists) return Promise.resolve();
+    const user = snap.data();
+    if (!user.email || user.churchId !== churchId) return Promise.resolve();
+    const safeName = escapeHtml(user.name || 'there');
+    const html = `<p>Hi ${safeName},</p>
+<p>We wanted to let you know that a job you signed up for has been <strong>cancelled</strong>:</p>
+<table style="border-collapse:collapse;margin:12px 0">
+  <tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">Job</td><td style="font-size:14px"><strong>${safeTitle}</strong></td></tr>
+  ${dateStr ? `<tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">Date</td><td style="font-size:14px">${escapeHtml(dateStr)}${escapeHtml(timeStr)}</td></tr>` : ''}
+</table>
+<p>No action is needed on your part.</p>
+<p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to see other available jobs.</p>
+<p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`;
+    const text = `Hi ${user.name || 'there'},\n\nThe following job you signed up for has been cancelled:\n\n${job.title || 'Job'}${dateStr ? '\nDate: ' + dateStr + timeStr : ''}\n\nNo action is needed.\n\n— ${churchName}`;
+    return sgMail.send({ to: user.email, from: FROM, subject, html, text });
+  }));
+
+  const sent = results.filter(r => r.status === 'fulfilled').length;
+  return { sent };
+});
+
 // ── sendJobReminders ──────────────────────────────────────────────────────
 // Runs every morning at 8:00 AM Central time.
 // Finds all jobs scheduled for today across all churches and emails each signup.
