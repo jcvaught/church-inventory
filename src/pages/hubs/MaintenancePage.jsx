@@ -467,6 +467,23 @@ function KanbanColumn({ status, tickets, onTicketClick, onDrop, onStatusChange, 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function TicketChip({ ticket, compact, todayStr, onTicketClick }) {
+  const pc = priorityColors[ticket.priority] || priorityColors.Medium;
+  const isOverdue = ticket.dueDate < todayStr && ticket.status !== 'Complete' && ticket.status !== 'Cancelled';
+  return (
+    <div onClick={e => { e.stopPropagation(); onTicketClick(ticket); }}
+      style={{ display:'flex', alignItems:'center', gap:4, padding:compact ? '2px 5px' : '3px 7px', borderRadius:5, background:isOverdue ? '#FEE8E8' : pc.bg, borderLeft:'3px solid '+pc.dot, cursor:'pointer', marginBottom:2, overflow:'hidden' }}
+      title={ticket.name}>
+      <span style={{ fontSize:11, color:isOverdue ? B.red : pc.tx, fontWeight:600, fontFamily:f1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flex:1 }}>{ticket.name}</span>
+      {ticket.recurrence && <span style={{ fontSize:10, flexShrink:0 }}>🔁</span>}
+    </div>
+  );
+}
+
 function MaintenanceCalendar({ tickets, onTicketClick, isMobile }) {
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
@@ -499,30 +516,15 @@ function MaintenanceCalendar({ tickets, onTicketClick, isMobile }) {
     return days;
   }, [viewYear, viewMonth]);
 
-  const todayStr = now.toISOString().slice(0, 10);
-
-  function dateStr(d) { return d.toISOString().slice(0, 10); }
-
-  function TicketChip({ ticket, compact }) {
-    const pc = priorityColors[ticket.priority] || priorityColors.Medium;
-    const isOverdue = ticket.dueDate < todayStr && ticket.status !== 'Complete' && ticket.status !== 'Cancelled';
-    return (
-      <div onClick={e => { e.stopPropagation(); onTicketClick(ticket); }}
-        style={{ display:'flex', alignItems:'center', gap:4, padding:compact ? '2px 5px' : '3px 7px', borderRadius:5, background:isOverdue ? '#FEE8E8' : pc.bg, borderLeft:'3px solid '+pc.dot, cursor:'pointer', marginBottom:2, overflow:'hidden' }}
-        title={ticket.name}>
-        <span style={{ fontSize:11, color:isOverdue ? B.red : pc.tx, fontWeight:600, fontFamily:f1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flex:1 }}>{ticket.name}</span>
-        {ticket.recurrence && <span style={{ fontSize:10, flexShrink:0 }}>🔁</span>}
-      </div>
-    );
-  }
+  const todayStr = localDateStr(now);
 
   // Mobile: grouped vertical list
   if (isMobile) {
     const today = todayStr;
     const weekEnd = new Date(now); weekEnd.setDate(now.getDate() + 7);
     const monthEnd = new Date(now); monthEnd.setDate(now.getDate() + 30);
-    const weekEndStr = weekEnd.toISOString().slice(0, 10);
-    const monthEndStr = monthEnd.toISOString().slice(0, 10);
+    const weekEndStr = localDateStr(weekEnd);
+    const monthEndStr = localDateStr(monthEnd);
     const withDue = tickets.filter(t => t.dueDate).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
     const groups = [
       { label:'Overdue', tickets: withDue.filter(t => t.dueDate < today && t.status !== 'Complete' && t.status !== 'Cancelled') },
@@ -560,9 +562,9 @@ function MaintenanceCalendar({ tickets, onTicketClick, isMobile }) {
         <span style={{ fontFamily:f1, fontWeight:700, fontSize:18, color:B.navy, minWidth:200, textAlign:'center' }}>{MONTH_NAMES[viewMonth]} {viewYear}</span>
         <button onClick={nextMonth} style={{ ...btnS, padding:'6px 12px', fontSize:16, lineHeight:1 }}>›</button>
         <button onClick={goToday} style={{ ...btnS, padding:'6px 14px', fontSize:13, marginLeft:4 }}>Today</button>
-        <span style={{ marginLeft:'auto', fontSize:13, color:B.textLight, fontFamily:f1 }}>
-          {[...ticketsByDate.values()].reduce((a, b) => a + b.length, 0)} ticket{[...ticketsByDate.values()].reduce((a, b) => a + b.length, 0) !== 1 ? 's' : ''} with due dates
-        </span>
+        {(() => { const total = [...ticketsByDate.values()].reduce((a, b) => a + b.length, 0); return (
+          <span style={{ marginLeft:'auto', fontSize:13, color:B.textLight, fontFamily:f1 }}>{total} ticket{total !== 1 ? 's' : ''} with due dates</span>
+        ); })()}
       </div>
       {/* Day headers */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', gap:2, marginBottom:2 }}>
@@ -571,7 +573,7 @@ function MaintenanceCalendar({ tickets, onTicketClick, isMobile }) {
       {/* Day cells */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', gap:2 }}>
         {calendarDays.map((day, idx) => {
-          const ds = dateStr(day.date);
+          const ds = localDateStr(day.date);
           const dayTickets = ticketsByDate.get(ds) || [];
           const isToday = ds === todayStr;
           const hasOverdue = dayTickets.some(t => ds < todayStr && t.status !== 'Complete' && t.status !== 'Cancelled');
@@ -584,7 +586,7 @@ function MaintenanceCalendar({ tickets, onTicketClick, isMobile }) {
               onClick={() => dayTickets.length > CHIP_LIMIT && setExpandedDay(isExpanded ? null : ds)}
               style={{ minHeight:88, background:day.isCurrentMonth ? B.white : '#F8F8FA', borderRadius:8, border:'1px solid '+(isToday ? B.teal : hasOverdue ? '#FECACA' : B.sand), padding:'5px 6px', position:'relative', cursor:dayTickets.length > CHIP_LIMIT ? 'pointer' : 'default', outline:isToday ? '2px solid '+B.teal : 'none', outlineOffset:'-1px' }}>
               <div style={{ fontSize:12, fontWeight:isToday ? 800 : 500, color:isToday ? B.teal : day.isCurrentMonth ? B.textDark : B.textLight, fontFamily:f1, marginBottom:3, textAlign:'right' }}>{day.date.getDate()}</div>
-              {(isExpanded ? dayTickets : visible).map(t => <TicketChip key={t._docId} ticket={t} compact/>)}
+              {(isExpanded ? dayTickets : visible).map(t => <TicketChip key={t._docId} ticket={t} compact todayStr={todayStr} onTicketClick={onTicketClick}/>)}
               {!isExpanded && overflow > 0 && (
                 <div style={{ fontSize:11, color:B.teal, fontWeight:700, fontFamily:f1, textAlign:'center', marginTop:2 }}>+{overflow} more</div>
               )}

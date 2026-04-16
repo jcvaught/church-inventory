@@ -218,6 +218,14 @@ export function ReservationsPage({ store, userProfile }) {
     setSaving(false);
   }
 
+  async function handleMarkRoomComplete(res) {
+    setSaving(true);
+    await updateReservation(res._docId, { status: RES_STATUS.RETURNED });
+    flash("Space reservation marked as complete.");
+    setShowDetail(null);
+    setSaving(false);
+  }
+
   async function handleCheckOutFromRes(res) {
     if (res.resourceType === RESOURCE_TYPE.ROOM) return;
     const currentItem = items.find(i => i._docId === res.itemDocId);
@@ -347,13 +355,17 @@ export function ReservationsPage({ store, userProfile }) {
         </div>
         {resourceType === RESOURCE_TYPE.ROOM ? (
           <FF label="Space *">
-            <select style={{...inp, cursor:"pointer"}} value={form.roomDocId} onChange={e => {
-              const room = activeRooms.find(r => r._docId === e.target.value);
-              setForm(f => ({ ...f, roomDocId: e.target.value, roomName: room?.name || '' }));
-            }}>
-              <option value="">Select a space...</option>
-              {activeRooms.map(r => <option key={r._docId} value={r._docId}>{r.name}{r.capacity ? ` (cap. ${r.capacity})` : ''}{r.location ? ` — ${r.location}` : ''}</option>)}
-            </select>
+            {activeRooms.length === 0 ? (
+              <div style={{ fontSize:13, color:B.textLight, fontFamily:f2, padding:'10px 12px', background:B.warmGray, borderRadius:8 }}>No spaces defined yet. Add spaces in Settings → Spaces.</div>
+            ) : (
+              <select style={{...inp, cursor:"pointer"}} value={form.roomDocId} onChange={e => {
+                const room = activeRooms.find(r => r._docId === e.target.value);
+                setForm(f => ({ ...f, roomDocId: e.target.value, roomName: room?.name || '' }));
+              }}>
+                <option value="">Select a space...</option>
+                {activeRooms.map(r => <option key={r._docId} value={r._docId}>{r.name}{r.capacity ? ` (cap. ${r.capacity})` : ''}{r.location ? ` — ${r.location}` : ''}</option>)}
+              </select>
+            )}
             {form.roomDocId && (() => { const rm = activeRooms.find(r => r._docId === form.roomDocId); return rm?.amenities?.length ? <div style={{ fontSize:12, color:B.textLight, marginTop:4, fontFamily:f2 }}>Amenities: {rm.amenities.join(', ')}</div> : null; })()}
           </FF>
         ) : (
@@ -490,6 +502,9 @@ export function ReservationsPage({ store, userProfile }) {
               </>}
               {r.status === RES_STATUS.APPROVED && r.resourceType !== RESOURCE_TYPE.ROOM && canApproveReservation(r) && (
                 <button onClick={()=>handleCheckOutFromRes(r)} disabled={saving} style={{ ...btnP, background:"#1A65C7" }}>Check Out Now</button>
+              )}
+              {r.status === RES_STATUS.APPROVED && r.resourceType === RESOURCE_TYPE.ROOM && canApproveReservation(r) && (
+                <button onClick={()=>{ if (window.confirm("Mark this space booking as complete?")) handleMarkRoomComplete(r); }} disabled={saving} style={btnP}>Mark Complete</button>
               )}
             </div>
           </>;
