@@ -140,6 +140,7 @@ export function CoordinationPage({ store, userProfile }) {
       templateApproved: notificationConfig?.templateApproved || '',
       templateDenied: notificationConfig?.templateDenied || '',
       templateAssigned: notificationConfig?.templateAssigned || '',
+      templateJobAnnouncement: notificationConfig?.templateJobAnnouncement || '',
     });
   }
 
@@ -310,15 +311,20 @@ export function CoordinationPage({ store, userProfile }) {
                   <FF label="Template ID — Ticket Assigned (Maintenance)">
                     <input style={inp} value={notifForm.templateAssigned} onChange={e => setNotifForm(f => ({ ...f, templateAssigned: e.target.value }))} placeholder="template_xxxxxxx" />
                   </FF>
+                  <FF label="Template ID — Job Hub Announcement">
+                    <input style={inp} value={notifForm.templateJobAnnouncement} onChange={e => setNotifForm(f => ({ ...f, templateJobAnnouncement: e.target.value }))} placeholder="template_xxxxxxx" />
+                  </FF>
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, cursor: 'pointer' }}>
                   <input type="checkbox" checked={notifForm.enabled} onChange={e => setNotifForm(f => ({ ...f, enabled: e.target.checked }))} style={{ width: 16, height: 16, cursor: 'pointer' }} />
                   <span style={{ fontSize: 14, color: B.textDark }}>Enable automatic emails on reservation approve/deny</span>
                 </label>
                 <div style={{ background: B.warmGray, borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 12, color: B.textMid, lineHeight: 1.7, fontFamily: 'monospace' }}>
-                  <div style={{ fontFamily: f1, fontSize: 12, fontWeight: 600, color: B.textDark, marginBottom: 6 }}>Available template variables:</div>
+                  <div style={{ fontFamily: f1, fontSize: 12, fontWeight: 600, color: B.textDark, marginBottom: 6 }}>Reservation template variables:</div>
                   {'{{to_email}}  {{to_name}}  {{event_name}}  {{item_desc}}'}<br />
-                  {'{{event_date}}  {{action_by}}  {{church_name}}  {{status}}'}
+                  {'{{event_date}}  {{action_by}}  {{church_name}}  {{status}}'}<br /><br />
+                  <div style={{ fontFamily: f1, fontSize: 12, fontWeight: 600, color: B.textDark, marginBottom: 4, marginTop: 4 }}>Job announcement template variables:</div>
+                  {'{{to_email}}  {{to_name}}  {{announcement_title}}  {{announcement_body}}  {{posted_by}}  {{church_name}}'}
                 </div>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                   <button onClick={() => setNotifForm(null)} style={btnS}>Cancel</button>

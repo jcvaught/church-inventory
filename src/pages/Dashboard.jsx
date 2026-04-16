@@ -1,12 +1,16 @@
 import { useState, useMemo, useContext } from 'react';
-import { B, f1 } from '../components/brand/tokens.js';
+import { B, f1, f2 } from '../components/brand/tokens.js';
 import { ITEM_STATUS, RES_STATUS } from '../utils/constants.js';
 import { Badge } from '../components/primitives/Badge.jsx';
 import { Stat } from '../components/primitives/Stat.jsx';
 import { MobileCtx } from '../hooks/useMobile.js';
 
-export function Dashboard({ store, userProfile }) {
-  const { items, supplies, activityLog, reservations } = store;
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+export function Dashboard({ store, userProfile, canSeeJobHub }) {
+  const { items, supplies, activityLog, reservations, jobAnnouncements } = store;
   const isMobile = useContext(MobileCtx);
   const [myCheckouts, setMyCheckouts] = useState(false);
   const [activityRange, setActivityRange] = useState(30);
@@ -20,7 +24,18 @@ export function Dashboard({ store, userProfile }) {
     repair: activeItems.filter(i => i.status === ITEM_STATUS.UNDER_REPAIR).length,
   }), [activeItems]);
 
-  const today = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const today = useMemo(() => localDateStr(new Date()), []);
+  const recentAnnouncements = useMemo(() => {
+    if (!canSeeJobHub) return [];
+    return (jobAnnouncements || [])
+      .filter(a => !a.expiresAt || a.expiresAt >= localDateStr(new Date()))
+      .sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        return (b.createdAt || '').localeCompare(a.createdAt || '');
+      })
+      .slice(0, 3);
+  }, [canSeeJobHub, jobAnnouncements]);
   const myName = userProfile?.name || "";
   const isAdmin = userProfile?.role === "admin";
   const isManager = userProfile?.role === "manager";
@@ -95,6 +110,28 @@ export function Dashboard({ store, userProfile }) {
               <span style={{ color:B.textLight }}> — {r.requestedByName} for {r.purpose || r.eventName} ({r.eventDate})</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Job Hub Announcements */}
+      {recentAnnouncements.length > 0 && (
+        <div style={{ background: B.white, borderRadius: 14, padding: 24, border: '1px solid ' + B.sand, boxShadow: '0 1px 3px rgba(27,42,74,0.06)', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <span style={{ fontSize: 18 }}>📢</span>
+            <h3 style={{ margin: 0, fontFamily: f1, fontSize: 17, fontWeight: 700, color: B.navy }}>Job Hub Announcements</h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {recentAnnouncements.map(ann => (
+              <div key={ann._docId} style={{ padding: '12px 16px', borderRadius: 10, background: ann.pinned ? B.tealPale : B.warmGray, border: '1px solid ' + (ann.pinned ? B.tealLight : B.sand) }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  {ann.pinned && <span style={{ fontSize: 11, fontWeight: 700, color: B.teal, fontFamily: f1 }}>📌</span>}
+                  <span style={{ fontWeight: 700, fontSize: 14, color: B.navy, fontFamily: f1 }}>{ann.title}</span>
+                  <span style={{ fontSize: 11, color: B.textLight, marginLeft: 'auto', fontFamily: f2 }}>{ann.createdAt?.slice(0, 10)}</span>
+                </div>
+                <div style={{ fontSize: 13, color: B.textMid, fontFamily: f2, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{ann.body}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

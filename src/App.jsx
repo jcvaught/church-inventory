@@ -632,7 +632,7 @@ function AppShell({ authHook }) {
       {/* Page content */}
       <PageErrorBoundary key={tab}>
       <div style={{ maxWidth:1100, margin:"0 auto", padding:isMobile?"16px 14px 96px":"28px 28px 60px" }} onClick={()=>menuOpen&&setMenuOpen(false)}>
-        {tab === "dashboard" && <Dashboard store={store} userProfile={userProfile} />}
+        {tab === "dashboard" && <Dashboard store={store} userProfile={userProfile} canSeeJobHub={userCanSeeHub('jobs')} />}
         {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} subscription={subscription} user={user} canAdd={canAdd} deleteAccount={deleteAccount} />}
         {tab === "inventory" && <ItemsPage store={store} userProfile={userProfile} initialItemId={initialItemId} scannedItemId={scannedItemId} onScannedItemConsumed={() => setScannedItemId(null)} />}
         {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
