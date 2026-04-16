@@ -67,7 +67,8 @@ src/
 │       ├── CoordinationPage.jsx    ← Coordination Hub (Phase 6): checkout bundles, email notification settings
 │       ├── AccountabilityPage.jsx  ← Accountability Hub (Phase 7): physical audits, chain of custody, insurance export
 │       ├── PeopleAccessPage.jsx    ← People Access Hub: background checks, key assignments, certifications, custom compliance milestones; bulk entry modal; link/unlink to user accounts
-│       └── TasksPage.jsx           ← Tasks Hub: general-purpose Kanban task board; visibility control (team/private/shared, no admin override — private tasks are truly private); assignees filtered to Tasks Hub users only; per-user task defaults (taskDefaultVisibility + taskDefaultSharedWith saved to users/{uid}); High priority pinned to top of each Kanban column; comments; recurrence; TSK-### numbering
+│       ├── TasksPage.jsx           ← Tasks Hub: general-purpose Kanban task board; visibility control (team/private/shared, no admin override — private tasks are truly private); assignees filtered to Tasks Hub users only; per-user task defaults (taskDefaultVisibility + taskDefaultSharedWith saved to users/{uid}); High priority pinned to top of each Kanban column; comments; recurrence; TSK-### numbering
+│       └── JobsPage.jsx            ← Job Hub: teen job board; admins post jobs (JOB-###, date/time/location/pay/spots); members sign up (transaction-safe); announcement board with pin/expiry
 ├── utils/
 │   ├── csv.js                 ← exportItemsCSV, exportSuppliesCSV, exportReservationsCSV, exportAccessRecordsCSV
 │   ├── print.js               ← printLabel, printInventory
@@ -122,6 +123,8 @@ All church data is namespaced under `churches/{churchId}/`:
 | `churches/{churchId}/accessPeople` | People Access Hub: tracked people (staff/volunteers); fields: `name`, `email`, `phone`, `ministries[]`, `notes`, `active` (soft archive), `userId` (nullable — linked ChurchOpsHub user uid, set by auto-link or admin), `createdBy`, `createdAt`, `updatedAt` |
 | `churches/{churchId}/accessRecords` | People Access Hub: one flat collection for all compliance record types; fields: `personId`, `personName` (denormalized), `type` (`background_check`/`key_assignment`/`certification`/`custom`), `completedDate`, `expiryDate`, `notes`, `ministry`, `recordedBy`, `recordedByName`, `createdAt`, `updatedAt`; key_assignment adds: `keyIdentifier`, `returnedDate`; certification adds: `certType`, `issuingOrganization`; custom adds: `requirementId`, `requirementName` |
 | `churches/{churchId}/config/settings.peopleAccessRequirements` | `[{id, name, hasExpiry}]` — custom requirement types for People Access Hub; added via `arrayUnion` |
+| `churches/{churchId}/jobListings` | Job Hub: posted jobs; fields: `jobNumber` (JOB-###), `title`, `description`, `scheduledDate`, `scheduledTime`, `location`, `spotsTotal`, `pay` (nullable float), `status` (`open`/`closed`/`completed`/`cancelled`), `signups[{uid,name,signedUpAt}]`, `createdBy`, `createdByName`, `createdAt`, `updatedAt`; signups written via `runTransaction` to prevent race conditions |
+| `churches/{churchId}/jobAnnouncements` | Job Hub: announcements; fields: `title`, `body`, `expiresAt` (nullable YYYY-MM-DD, client-side filtered), `pinned` (bool), `createdBy`, `createdByName`, `createdAt`, `updatedAt` |
 | `churches/{churchId}/publicRequests` | Public item requests submitted via `PublicRequestPage`; **unauthenticated creates allowed** (Firestore rule); fields: `name`, `email`, `phone`, `itemDescription`, `quantity`, `dateNeeded`, `urgency` (Low/Medium/High), `notes`, `status` (`pending`/`dismissed`), `submittedAt`; admins see pending requests in ItemsPage panel; dismissed via `dismissPublicRequest()` |
 | `users/{uid}` | User profile with `churchId`, `role` (`admin`/`manager`/`user`), `name`, `email`, `active`, `allowedHubs[]`, `managedMinistries[]`, `taskDefaultVisibility` (`team`/`private`/`shared`), `taskDefaultSharedWith` (`[{uid,name}]`) |
 | `suggestions/{docId}` | **Top-level** (not church-scoped) — cross-church user suggestions; fields: `text`, `category`, `submittedBy`, `submittedByName`, `churchId`, `churchName`, `submittedAt` |
@@ -188,6 +191,7 @@ Everything existing stays free. 10 team members per church included.
 | **All-In Bundle** | $29/mo (6 hubs) | ✅ Done — Phase 8 |
 | **People Access Hub** | $7/mo | ✅ Done |
 | **Tasks Hub** | $7/mo | ✅ Done |
+| **Job Hub** | $7/mo | ✅ Done |
 
 ### Grandfathering
 Existing churches at launch: 12 months Founder status (unlimited users, all hubs).
@@ -286,6 +290,7 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Room/Space booking: rooms collection + Firestore rules; useFirestore rooms subscription (totalSubs→17) + CRUD; RESOURCE_TYPE enum; Settings Spaces card + modal (name/capacity/location/amenities/archive); ReservationsPage Equipment/Space toggle, room conflict detection, room badges, Check Out hidden for rooms, CSV updated | 2026-04-16 |
 | — | Preventive Maintenance Calendar: custom month grid (no library) as third Kanban/List/Calendar view mode in Maintenance Hub; priority-colored chips, 🔁 recurring badge, +N overflow, overdue cell highlight, month nav + Today button; mobile grouped list (Overdue/This Week/Next 30 Days/Later); filteredTickets passed so filters apply | 2026-04-16 |
 | — | Bug fixes (Opus review — Room booking + Maintenance Calendar): localDateStr() replaces toISOString() to fix UTC off-by-one in all US timezones; TicketChip extracted to module level (fixes React reconciliation); double-reduce in calendar header fixed; empty-state message when no spaces defined in Reservations; Mark Complete action for approved room reservations | 2026-04-16 |
+| — | Job Hub: teen job board + announcement board ($7/mo, key: jobs, JOB-###); admins post jobs (title, date/time, location, spots, pay); members sign up/withdraw; signups use runTransaction to prevent race conditions; announcements with pin + optional expiry; all-in bundle fixed to include people_access + jobs (was missing both); totalSubs 17→19 | 2026-04-16 |
 
 ---
 
