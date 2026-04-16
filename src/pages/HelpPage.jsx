@@ -15,6 +15,7 @@ const SECTIONS = [
   { id: 'coordination',    label: 'Coordination Hub' },
   { id: 'accountability',  label: 'Accountability Hub' },
   { id: 'tasks',           label: 'Tasks Hub' },
+  { id: 'jobs',            label: 'Job Hub' },
   { id: 'team',            label: 'Team Hub' },
   { id: 'settings',        label: 'Settings & Billing' },
   { id: 'faq',             label: 'FAQ' },
@@ -574,6 +575,8 @@ export function HelpPage({ onBack }) {
                 'Reservation denied — requester is notified when their request is denied',
                 'Ticket assigned — team member is notified when assigned to a maintenance or task ticket',
                 'Job announcement — all Job Hub users are notified when a new announcement is posted',
+                'Job cancelled — signed-up members are notified when a job is cancelled or closed',
+                'Job reminder — signed-up members receive a morning reminder on the day of their job (sent at 8am)',
               ]} />
               <P>Emails are sent via SendGrid from <strong>churchopshub@gmail.com</strong>. No additional configuration is needed beyond toggling notifications on.</P>
             </Accordion>
@@ -657,6 +660,51 @@ export function HelpPage({ onBack }) {
 
             <Accordion title="Comments and photos">
               <P>Open a task to add comments (real-time thread) and photos. Comments support bullet and numbered lists. You can edit or delete your own comments; admins and managers can edit or delete any comment.</P>
+            </Accordion>
+          </Section>
+
+          {/* ──────────────────────────────────── */}
+          {/* JOB HUB                              */}
+          {/* ──────────────────────────────────── */}
+          <Section id="jobs" icon="💼" title="Job Hub" badge="$7/mo">
+            <P>A teen job board where admins post one-time jobs (setup, cleanup, childcare, etc.) and members sign up. Includes an announcement board for quick team-wide messages.</P>
+
+            <Accordion title="Posting a job" defaultOpen>
+              <P>Click <strong>+ Post Job</strong> to create a job listing. Fields include:</P>
+              <UL items={[
+                'Title and description',
+                'Date and time',
+                'Location',
+                'Spots available — limits how many people can sign up',
+                'Pay per person (optional)',
+                'Status — Open, Closed, Completed, or Cancelled',
+              ]} />
+              <P>Jobs are auto-numbered (JOB-001, JOB-002, …). Only admins and managers can create or delete jobs.</P>
+            </Accordion>
+
+            <Accordion title="Signing up and withdrawing">
+              <P>Members can sign up for any open job that has spots available. Click <strong>Sign Up</strong> on a job card or in the job detail. Sign-ups are transaction-safe — if the last spot is taken by someone else at the same time, you'll see a "job is full" message.</P>
+              <P>To withdraw, click <strong>Withdraw</strong> on the card. Admins and managers can also remove individual signups from the job detail view.</P>
+              <Tip>Use the <strong>My Jobs</strong> filter tab to see all jobs you've signed up for at a glance.</Tip>
+            </Accordion>
+
+            <Accordion title="Email notifications">
+              <P>When notifications are enabled in Coordination Hub, Job Hub sends these automatic emails:</P>
+              <UL items={[
+                'New announcement posted — all Job Hub users are notified',
+                'Job cancelled — everyone who signed up receives a cancellation notice',
+                'Morning reminder — signed-up members get a reminder email at 8am on the day of the job',
+              ]} />
+              <P>When cancelling a job with signups, you'll be asked to confirm. If notifications are on, the cancellation email is sent automatically. You can also send it manually with the <strong>Notify Signups</strong> button on a cancelled job's detail view.</P>
+            </Accordion>
+
+            <Accordion title="Announcements">
+              <P>Admins and managers can post announcements on the <strong>Announcements</strong> tab. Announcements support:</P>
+              <UL items={[
+                'Pin — pinned announcements always appear at the top',
+                'Expiry date — announcement automatically stops showing after this date',
+              ]} />
+              <P>The last 3 active announcements also appear on the main Dashboard for users with Job Hub access.</P>
             </Accordion>
           </Section>
 

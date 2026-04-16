@@ -68,7 +68,7 @@ src/
 │       ├── AccountabilityPage.jsx  ← Accountability Hub (Phase 7): physical audits, chain of custody, insurance export
 │       ├── PeopleAccessPage.jsx    ← People Access Hub: background checks, key assignments, certifications, custom compliance milestones; bulk entry modal; link/unlink to user accounts
 │       ├── TasksPage.jsx           ← Tasks Hub: general-purpose Kanban task board; visibility control (team/private/shared, no admin override — private tasks are truly private); assignees filtered to Tasks Hub users only; per-user task defaults (taskDefaultVisibility + taskDefaultSharedWith saved to users/{uid}); High priority pinned to top of each Kanban column; comments; recurrence; TSK-### numbering
-│       └── JobsPage.jsx            ← Job Hub: teen job board; admins post jobs (JOB-###, date/time/location/pay/spots); members sign up (transaction-safe); announcement board with pin/expiry
+│       └── JobsPage.jsx            ← Job Hub: teen job board; admins post jobs (JOB-###, date/time/location/pay/spots); members sign up (transaction-safe); "My Jobs" filter; announcement board with pin/expiry; cancellation emails via sendJobCancelledEmails CF; morning reminder emails via sendJobReminders scheduled CF; signup list visible to admin/mgr only (members see own status only); activity log for all job actions
 ├── utils/
 │   ├── csv.js                 ← exportItemsCSV, exportSuppliesCSV, exportReservationsCSV, exportAccessRecordsCSV
 │   ├── print.js               ← printLabel, printInventory
@@ -83,7 +83,7 @@ public/
 ├── sitemap.xml                ← Static sitemap: /, /?help, /blog, and all 3 blog post URLs
 └── google254ab6f07b8682a3.html ← Google Search Console ownership verification file
 functions/
-├── index.js                   ← Cloud Functions: createCheckoutSession, createPortalSession, stripeWebhook, sendReservationEmail, sendTicketAssignedEmail, sendJobAnnouncementEmails (all email via SendGrid; SENDGRID_API_KEY in functions/.env; sender: churchopshub@gmail.com)
+├── index.js                   ← Cloud Functions: createCheckoutSession, createPortalSession, stripeWebhook, sendReservationEmail, sendTicketAssignedEmail, sendJobAnnouncementEmails, sendJobCancelledEmails, sendJobReminders (scheduled 8am Central daily) (all email via SendGrid; SENDGRID_API_KEY in functions/.env; sender: churchopshub@gmail.com)
 └── package.json               ← Node 18, firebase-functions v4, firebase-admin v12, stripe v14
 ```
 
@@ -292,6 +292,7 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Bug fixes (Opus review — Room booking + Maintenance Calendar): localDateStr() replaces toISOString() to fix UTC off-by-one in all US timezones; TicketChip extracted to module level (fixes React reconciliation); double-reduce in calendar header fixed; empty-state message when no spaces defined in Reservations; Mark Complete action for approved room reservations | 2026-04-16 |
 | — | Job Hub: teen job board + announcement board ($7/mo, key: jobs, JOB-###); admins post jobs (title, date/time, location, spots, pay); members sign up/withdraw; signups use runTransaction to prevent race conditions; announcements with pin + optional expiry; last 3 announcements shown on Dashboard for hub users; all-in bundle fixed to include people_access + jobs; totalSubs 17→19 | 2026-04-16 |
 | — | Email: migrated all notifications from EmailJS (client-side) to SendGrid via Cloud Functions (server-side); removed @emailjs/browser; new Cloud Functions: sendReservationEmail, sendTicketAssignedEmail, sendJobAnnouncementEmails; CoordinationPage notification settings simplified to enabled toggle only; sender: churchopshub@gmail.com | 2026-04-16 |
+| — | Job Hub: My Jobs filter tab; morning reminder emails (sendJobReminders scheduled CF, 8am Central); cancellation emails (sendJobCancelledEmails CF — auto on cancel if notifications on, + "Notify Signups" button on cancelled jobs); signup list privacy (admin/mgr see names, members see own status only); activity log for all job actions; spotsTotal validation; date formatting; Opus review security + bug fixes | 2026-04-16 |
 
 ---
 
