@@ -23,6 +23,8 @@ export function useFirestore(churchId) {
   const [accessRecords, setAccessRecords] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [rooms, setRooms] = useState([]);
+  const [jobListings, setJobListings] = useState([]);
+  const [jobAnnouncements, setJobAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const clearError = useCallback(() => setError(null), []);
@@ -43,7 +45,7 @@ export function useFirestore(churchId) {
     if (!churchId) return;
     const unsubs = [];
     let loaded = 0;
-    const totalSubs = 17;
+    const totalSubs = 19;
     const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
     // Config
@@ -155,6 +157,22 @@ export function useFirestore(churchId) {
       const r = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
       r.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setRooms(r);
+      checkDone();
+    }, (err) => { handleErr(err); checkDone(); }));
+
+    // Job Listings
+    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'jobListings'), (snap) => {
+      const jobs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+      jobs.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      setJobListings(jobs);
+      checkDone();
+    }, (err) => { handleErr(err); checkDone(); }));
+
+    // Job Announcements
+    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'jobAnnouncements'), (snap) => {
+      const ann = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+      ann.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      setJobAnnouncements(ann);
       checkDone();
     }, (err) => { handleErr(err); checkDone(); }));
 
@@ -780,6 +798,105 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
+  // ── Job Hub ──
+  const addJobListing = useCallback(async (job, userId, userName) => {
+    try {
+      let jobNumber;
+      const configRef = doc(db, 'churches', churchId, 'config', 'main');
+      await runTransaction(db, async (t) => {
+        const configSnap = await t.get(configRef);
+        const maxNum = (configSnap.data()?.maxJobNumber || 0) + 1;
+        jobNumber = 'JOB-' + String(maxNum).padStart(3, '0');
+        t.update(configRef, { maxJobNumber: maxNum });
+      });
+      await addDoc(collection(db, 'churches', churchId, 'jobListings'), {
+        ...job,
+        jobNumber,
+        signups: [],
+        createdBy: userId,
+        createdByName: userName,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const updateJobListing = useCallback(async (docId, updates) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'jobListings', docId), {
+        ...updates,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const deleteJobListing = useCallback(async (docId) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'jobListings', docId));
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const signUpForJob = useCallback(async (docId, userId, userName) => {
+    try {
+      const jobRef = doc(db, 'churches', churchId, 'jobListings', docId);
+      let errorMsg = null;
+      await runTransaction(db, async (t) => {
+        const snap = await t.get(jobRef);
+        if (!snap.exists()) { errorMsg = 'Job not found.'; return; }
+        const data = snap.data();
+        if (data.status !== 'open') { errorMsg = 'This job is no longer open.'; return; }
+        const signups = data.signups || [];
+        if (signups.some(s => s.uid === userId)) { errorMsg = 'You are already signed up.'; return; }
+        if (signups.length >= (data.spotsTotal || 1)) { errorMsg = 'Sorry, this job is full.'; return; }
+        t.update(jobRef, {
+          signups: [...signups, { uid: userId, name: userName, signedUpAt: new Date().toISOString() }],
+          updatedAt: new Date().toISOString()
+        });
+      });
+      if (errorMsg) return { error: errorMsg };
+      return { success: true };
+    } catch (err) { handleErr(err); return { error: 'Sign-up failed. Please try again.' }; }
+  }, [churchId]);
+
+  const withdrawFromJob = useCallback(async (docId, uid) => {
+    try {
+      const jobRef = doc(db, 'churches', churchId, 'jobListings', docId);
+      await runTransaction(db, async (t) => {
+        const snap = await t.get(jobRef);
+        if (!snap.exists()) return;
+        const signups = (snap.data().signups || []).filter(s => s.uid !== uid);
+        t.update(jobRef, { signups, updatedAt: new Date().toISOString() });
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const addJobAnnouncement = useCallback(async (ann, userId, userName) => {
+    try {
+      await addDoc(collection(db, 'churches', churchId, 'jobAnnouncements'), {
+        ...ann,
+        createdBy: userId,
+        createdByName: userName,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const updateJobAnnouncement = useCallback(async (docId, updates) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'jobAnnouncements', docId), {
+        ...updates,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const deleteJobAnnouncement = useCallback(async (docId) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'jobAnnouncements', docId));
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
   return {
     config, settings, items, supplies, activityLog, reservations, users,
     maintenanceTickets, vendors, bundles, notificationConfig, audits, tasks,
@@ -804,6 +921,10 @@ export function useFirestore(churchId) {
     addAccessRecord, updateAccessRecord, deleteAccessRecord,
     addPeopleAccessRequirement, removePeopleAccessRequirement,
     addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags,
+    jobListings, jobAnnouncements,
+    addJobListing, updateJobListing, deleteJobListing,
+    signUpForJob, withdrawFromJob,
+    addJobAnnouncement, updateJobAnnouncement, deleteJobAnnouncement,
     clearError
   };
 }

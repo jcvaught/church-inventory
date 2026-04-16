@@ -36,6 +36,7 @@ const PRICE_IDS = {
   coordination:   'price_1TB2E2F12bDL8YA7a0VFGB6C',
   accountability: 'price_1TB2E3F12bDL8YA7hGRIALZb',
   tasks:          'price_1TM9kcF12bDL8YA7m3otofk2',
+  jobs:           'price_REPLACE_WITH_STRIPE_PRICE_ID',
   team_25:        'price_1TB2E4F12bDL8YA7LLFr3xnL',
   team_unlimited: 'price_1TB2E3F12bDL8YA7P3a9xTVV',
   all_in:         'price_1TB2E7F12bDL8YA782etfOOQ',
@@ -49,10 +50,11 @@ function getPriceConfig(priceId) {
     [PRICE_IDS.coordination]:   { type: 'hub',    hub: 'coordination' },
     [PRICE_IDS.accountability]: { type: 'hub',    hub: 'accountability' },
     [PRICE_IDS.tasks]:          { type: 'hub',    hub: 'tasks' },
+    [PRICE_IDS.jobs]:           { type: 'hub',    hub: 'jobs' },
     [PRICE_IDS.team_25]:        { type: 'team',   plan: 'team_25',        maxUsers: 25 },
     [PRICE_IDS.team_unlimited]: { type: 'team',   plan: 'team_unlimited', maxUsers: 9999 },
     [PRICE_IDS.all_in]:         { type: 'all_in', plan: 'all_in',         maxUsers: 9999,
-                                  hubs: ['maintenance', 'insights', 'coordination', 'accountability', 'tasks'] },
+                                  hubs: ['maintenance', 'insights', 'coordination', 'accountability', 'tasks', 'people_access', 'jobs'] },
   };
   return map[priceId] || null;
 }

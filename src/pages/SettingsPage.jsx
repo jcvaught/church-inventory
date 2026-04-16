@@ -53,7 +53,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [savingRoom, setSavingRoom] = useState(false);
   const [inviteHubsInitialized, setInviteHubsInitialized] = useState(false);
 
-  const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub', people_access: 'People Access Hub', tasks: 'Tasks Hub' };
+  const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub', people_access: 'People Access Hub', tasks: 'Tasks Hub', jobs: 'Job Hub' };
   const churchHubs = subscription?.grandfathered || subscription?.plan === 'all_in'
     ? Object.keys(HUB_LABELS)
     : (subscription?.hubs || []);
@@ -870,7 +870,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                 </div>
               </div>
               <p style={{ color:"rgba(255,255,255,0.65)", fontSize:13, margin:"0 0 14px", lineHeight:1.5 }}>
-                All 6 hubs + unlimited team members. Save $23/mo vs. buying individually.
+                All 7 hubs + unlimited team members. Save even more vs. buying individually.
               </p>
               <button onClick={() => handleCheckout('all_in')} style={{ ...btnP, width:"100%", background:B.teal, fontSize:13 }}>
                 Subscribe — $29/mo
