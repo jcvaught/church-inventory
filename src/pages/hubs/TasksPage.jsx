@@ -121,6 +121,9 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
           <PriorityBadge priority={task.priority}/>
         </div>
       </div>
+      {task.blockedBy?.length > 0 && task.status !== 'Complete' && task.status !== 'Cancelled' && (
+        <div style={{ fontSize:11, fontWeight:700, color:B.red, fontFamily:f1, marginBottom:3 }}>⛔ Blocked by {task.blockedBy.join(', ')}</div>
+      )}
       {parentName && <div style={{ fontSize:11, color:B.textLight, fontFamily:f1, marginBottom:3 }}>↳ {parentName}</div>}
       <div style={{ fontWeight:600, fontSize:14, color:B.navy, marginBottom:4, lineHeight:1.3 }}>{task.name}</div>
       {task.description && (
@@ -220,6 +223,46 @@ function TagInput({ tags = [], onChange, suggestions = [] }) {
               onMouseEnter={e => e.currentTarget.style.background=B.warmGray}
               onMouseLeave={e => e.currentTarget.style.background=''}
             >{s}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BlockedByInput({ blockedBy = [], onChange, tasks = [], currentTaskNumber }) {
+  const [inputVal, setInputVal] = useState('');
+  const suggestions = tasks.filter(t => t.taskNumber && t.taskNumber !== currentTaskNumber && !blockedBy.includes(t.taskNumber) && t.taskNumber.toLowerCase().includes(inputVal.toLowerCase())).slice(0, 8);
+
+  function addBlocker(num) {
+    const v = num.trim().toUpperCase();
+    if (v && !blockedBy.includes(v)) onChange([...blockedBy, v]);
+    setInputVal('');
+  }
+  function onKey(e) {
+    if ((e.key === 'Enter' || e.key === ',') && inputVal.trim()) { e.preventDefault(); addBlocker(inputVal); }
+    else if (e.key === 'Backspace' && !inputVal && blockedBy.length) onChange(blockedBy.slice(0, -1));
+  }
+  function onKeyUp(e) { if (e.key === 'Enter' && inputVal.trim()) { e.preventDefault(); addBlocker(inputVal); } }
+
+  return (
+    <div style={{ position:'relative' }}>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:6, padding:'7px 10px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, minHeight:42, alignItems:'center' }}>
+        {blockedBy.map(num => (
+          <span key={num} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 8px', borderRadius:12, background:'#FEE8E8', color:B.red, fontSize:12, fontFamily:f1 }}>
+            {num}
+            <button onMouseDown={e => { e.preventDefault(); onChange(blockedBy.filter(x => x !== num)); }} aria-label={`Remove blocker ${num}`} style={{ border:'none', background:'none', color:B.red, cursor:'pointer', padding:'0 0 0 2px', fontSize:14, lineHeight:1 }}>×</button>
+          </span>
+        ))}
+        <input value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={onKey} onKeyUp={onKeyUp} enterKeyHint="done" placeholder={blockedBy.length ? '' : 'Type TSK-###, press Enter...'} style={{ border:'none', outline:'none', fontSize:13, flex:1, minWidth:100, fontFamily:f2, color:B.textDark, background:'transparent' }}/>
+      </div>
+      {inputVal && suggestions.length > 0 && (
+        <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:200, background:B.white, border:'1px solid '+B.sand, borderRadius:10, boxShadow:'0 4px 16px rgba(27,42,74,0.1)', maxHeight:130, overflowY:'auto', marginTop:2 }}>
+          {suggestions.map(t => (
+            <div key={t._docId} onMouseDown={() => addBlocker(t.taskNumber)} style={{ padding:'8px 14px', cursor:'pointer', fontSize:13, fontFamily:f2, color:B.textDark }}
+              onMouseEnter={e => e.currentTarget.style.background=B.warmGray}
+              onMouseLeave={e => e.currentTarget.style.background=''}
+            ><strong>{t.taskNumber}</strong> — {t.name}</div>
           ))}
         </div>
       )}
@@ -698,7 +741,7 @@ function TaskCalendar({ tasks, onTaskClick, isMobile }) {
   );
 }
 
-const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], parentTaskId:null });
+const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], parentTaskId:null, blockedBy:[] });
 
 export function TasksPage({ store, userProfile }) {
   const { tasks, users, settings, config, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser, taskTemplates, addTaskTemplate, deleteTaskTemplate } = store;
@@ -744,6 +787,9 @@ export function TasksPage({ store, userProfile }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState(new Set());
+  const [bulkStatus, setBulkStatus] = useState('');
+  const [bulkSaving, setBulkSaving] = useState(false);
   const [msg, setMsg] = useState(null);
   const [collapsedStatuses, setCollapsedStatuses] = useState(new Set());
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
@@ -858,6 +904,8 @@ export function TasksPage({ store, userProfile }) {
   function switchViewMode(mode) {
     setViewMode(mode);
     localStorage.setItem('tasks_viewMode', mode);
+    setSelectedTaskIds(new Set());
+    setBulkStatus('');
   }
 
   // Auto-switch to list view on mobile (calendar handles its own mobile layout; only kanban is problematic)
@@ -886,6 +934,8 @@ export function TasksPage({ store, userProfile }) {
       sharedWith: task.sharedWith || [],
       notes: task.notes || '',
       checklist: task.checklist || [],
+      parentTaskId: task.parentTaskId || null,
+      blockedBy: task.blockedBy || [],
     };
   }
 
@@ -984,10 +1034,14 @@ export function TasksPage({ store, userProfile }) {
 
   async function handleUpdateTask() {
     if (!showDetail) return;
+    const wasComplete = showDetail.status === 'Complete';
+    const isNowComplete = detailEdits.status === 'Complete';
+    const blockers = detailEdits.blockedBy || [];
+    if (!wasComplete && isNowComplete && blockers.length > 0) {
+      if (!window.confirm(`This task is marked as blocked by ${blockers.join(', ')}. Mark it Complete anyway?`)) return;
+    }
     setSaving(true);
     try {
-      const wasComplete = showDetail.status === 'Complete';
-      const isNowComplete = detailEdits.status === 'Complete';
       const updates = {
         ...detailEdits,
         recurrence: detailEdits.recurrence || null,
@@ -1124,6 +1178,54 @@ export function TasksPage({ store, userProfile }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  function toggleSelectTask(docId) {
+    setSelectedTaskIds(prev => {
+      const next = new Set(prev);
+      if (next.has(docId)) next.delete(docId); else next.add(docId);
+      return next;
+    });
+  }
+
+  function selectAllVisible() {
+    const topLevel = sortedTasks.filter(t => !subtaskDocIds.has(t._docId));
+    setSelectedTaskIds(new Set(topLevel.map(t => t._docId)));
+  }
+
+  function clearSelection() { setSelectedTaskIds(new Set()); setBulkStatus(''); }
+
+  async function handleBulkStatusChange() {
+    if (!bulkStatus || selectedTaskIds.size === 0) return;
+    setBulkSaving(true);
+    try {
+      await Promise.all([...selectedTaskIds].map(docId => {
+        const task = tasksByDocId[docId];
+        if (!task) return Promise.resolve();
+        return updateTask(docId, {
+          status: bulkStatus,
+          completedAt: bulkStatus === 'Complete' && task.status !== 'Complete' ? new Date().toISOString() : (bulkStatus === 'Complete' ? task.completedAt : null),
+        }, userId, userName, task.taskNumber);
+      }));
+      flash(`${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''} moved to ${bulkStatus}.`);
+      clearSelection();
+    } catch { flash('Bulk update failed.', true); }
+    setBulkSaving(false);
+  }
+
+  async function handleBulkDelete() {
+    if (selectedTaskIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+    setBulkSaving(true);
+    try {
+      await Promise.all([...selectedTaskIds].map(docId => {
+        const task = tasksByDocId[docId];
+        return deleteTask(docId, task?.taskNumber, userId, userName);
+      }));
+      flash(`${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''} deleted.`);
+      clearSelection();
+    } catch { flash('Bulk delete failed.', true); }
+    setBulkSaving(false);
   }
 
   async function handleSaveAsTemplate() {
@@ -1399,6 +1501,27 @@ export function TasksPage({ store, userProfile }) {
       {/* List View */}
       {viewMode === 'list' && visibleTasks.length > 0 && (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {/* Bulk action bar */}
+          {selectedTaskIds.size > 0 && (
+            <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 16px', background:'#EFF6FF', borderRadius:12, border:'1px solid #BFDBFE', flexWrap:'wrap' }}>
+              <span style={{ fontSize:13, fontWeight:700, color:'#1D4ED8', fontFamily:f1 }}>{selectedTaskIds.size} selected</span>
+              <button onClick={clearSelection} style={{ ...btnS, fontSize:12, padding:'4px 10px' }}>Clear</button>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginLeft:8 }}>
+                <select
+                  aria-label="Set status for selected tasks"
+                  value={bulkStatus}
+                  onChange={e => setBulkStatus(e.target.value)}
+                  style={{ ...inp, width:'auto', fontSize:12, padding:'5px 10px', cursor:'pointer' }}
+                >
+                  <option value="">Move to status...</option>
+                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <button onClick={handleBulkStatusChange} disabled={bulkSaving || !bulkStatus} style={{ ...btnP, fontSize:12, padding:'5px 12px', opacity:(!bulkStatus || bulkSaving) ? .5 : 1 }}>Apply</button>
+              </div>
+              {canOperate && <button onClick={handleBulkDelete} disabled={bulkSaving} style={{ ...btnD, fontSize:12, padding:'5px 12px', opacity:bulkSaving ? .5 : 1 }}>Delete Selected</button>}
+              <button onClick={selectAllVisible} style={{ ...btnS, fontSize:12, padding:'4px 10px', marginLeft:'auto' }}>Select All</button>
+            </div>
+          )}
           {STATUSES.map(status => {
             const statusTasks = tasksByStatus[status];
             const collapsed = collapsedStatuses.has(status);
@@ -1417,16 +1540,20 @@ export function TasksPage({ store, userProfile }) {
                       ? <div style={{ color:B.textLight, fontSize:13, textAlign:'center', padding:'12px 0' }}>No tasks in {status}</div>
                       : statusTasks.filter(t => !subtaskDocIds.has(t._docId)).map(t => {
                           const subs = tasksByParent[t._docId] || [];
+                          const isSelected = selectedTaskIds.has(t._docId);
                           return (
-                            <div key={t._docId}>
-                              <TaskCard task={t} onClick={openDetail} subtaskCount={subs.length} subtaskDone={subs.filter(s=>s.status==='Complete').length}/>
-                              {subs.length > 0 && (
-                                <div style={{ marginLeft:20, borderLeft:'2px solid '+B.sand, paddingLeft:8, marginBottom:4 }}>
-                                  {subs.map(sub => (
-                                    <TaskCard key={sub._docId} task={sub} onClick={openDetail} parentName={t.taskNumber ? t.taskNumber : t.name}/>
-                                  ))}
-                                </div>
-                              )}
+                            <div key={t._docId} style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
+                              <input type="checkbox" checked={isSelected} onChange={() => toggleSelectTask(t._docId)} onClick={e => e.stopPropagation()} style={{ marginTop:18, width:15, height:15, cursor:'pointer', flexShrink:0 }} aria-label={`Select task ${t.name}`}/>
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <TaskCard task={t} onClick={openDetail} subtaskCount={subs.length} subtaskDone={subs.filter(s=>s.status==='Complete').length}/>
+                                {subs.length > 0 && (
+                                  <div style={{ marginLeft:20, borderLeft:'2px solid '+B.sand, paddingLeft:8, marginBottom:4 }}>
+                                    {subs.map(sub => (
+                                      <TaskCard key={sub._docId} task={sub} onClick={openDetail} parentName={t.taskNumber ? t.taskNumber : t.name}/>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           );
                         })
@@ -1498,6 +1625,9 @@ export function TasksPage({ store, userProfile }) {
             ))}
           </select>
         </FF>
+        <FF label="Blocked By (optional)">
+          <BlockedByInput blockedBy={taskForm.blockedBy || []} onChange={blockedBy => setTaskForm(f => ({ ...f, blockedBy }))} tasks={visibleTasks}/>
+        </FF>
         <FF label="Photos">
           <PhotoGrid photos={photoPreviews} onAdd={handlePhotoSelect} onRemove={handlePreviewRemove} uploading={false}/>
         </FF>
@@ -1566,6 +1696,9 @@ export function TasksPage({ store, userProfile }) {
                 <SharedWithSelect sharedWith={detailEdits.sharedWith || []} onChange={sharedWith => setDetailEdits(d => ({ ...d, sharedWith }))} users={taskHubUsers} assignees={detailEdits.assignees || []} currentUserId={userId}/>
               </FF>
             )}
+            <FF label="Blocked By (optional)">
+              <BlockedByInput blockedBy={detailEdits.blockedBy || []} onChange={blockedBy => setDetailEdits(d => ({ ...d, blockedBy }))} tasks={visibleTasks} currentTaskNumber={showDetail.taskNumber}/>
+            </FF>
             <RichTextarea label="Notes" style={{ ...inp, minHeight:52, resize:'vertical' }} value={detailEdits.notes} onChange={v => setDetailEdits(d => ({ ...d, notes:v }))} placeholder="Additional notes..."/>
             <FF label="Checklist">
               <div style={{ border:'1px dashed '+B.sand, borderRadius:10, padding:'12px 14px' }}>
