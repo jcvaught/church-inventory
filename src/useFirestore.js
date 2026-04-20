@@ -499,26 +499,27 @@ export function useFirestore(churchId) {
     try {
       let taskNumber;
       const configRef = doc(db, 'churches', churchId, 'config', 'main');
+      const newDocRef = doc(collection(db, 'churches', churchId, 'tasks'));
       await runTransaction(db, async (t) => {
         const configSnap = await t.get(configRef);
         const maxNum = (configSnap.data()?.maxTaskNumber || 0) + 1;
         taskNumber = 'TSK-' + String(maxNum).padStart(3, '0');
         t.update(configRef, { maxTaskNumber: maxNum });
-      });
-      const ref = await addDoc(collection(db, 'churches', churchId, 'tasks'), {
-        ...task,
-        taskNumber,
-        createdBy: userId,
-        createdByName: userName,
-        status: task.status || 'Backlog',
-        visibility: task.visibility || 'team',
-        sharedWith: task.sharedWith || [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        completedAt: null
+        t.set(newDocRef, {
+          ...task,
+          taskNumber,
+          createdBy: userId,
+          createdByName: userName,
+          status: task.status || 'Backlog',
+          visibility: task.visibility || 'team',
+          sharedWith: task.sharedWith || [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          completedAt: null
+        });
       });
       await logActivity('add_task', taskNumber, userId, userName, { name: task.name, priority: task.priority });
-      return ref.id;
+      return newDocRef.id;
     } catch (err) { handleErr(err); }
   }, [churchId]);
 

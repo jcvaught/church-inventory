@@ -47,7 +47,11 @@ function calculateNextDue(dueDate, recurrence) {
     base.setDate(Math.min(day, lastDay));
   }
   else if (recurrence === 'annually') base.setFullYear(base.getFullYear() + 1);
-  return base.toISOString().slice(0, 10);
+  return localDateStr(base);
+}
+
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 const priorityColors = {
@@ -85,7 +89,7 @@ function _StatusBadge({ status }) {
 
 const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusChange, isMobile }) {
   const sc = statusColors[task.status] || statusColors['Backlog'];
-  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'Complete' && task.status !== 'Cancelled';
+  const isOverdue = task.dueDate && task.dueDate < localDateStr(new Date()) && task.status !== 'Complete' && task.status !== 'Cancelled';
   const visIcon = task.visibility === 'private' ? '🔒' : task.visibility === 'shared' ? '👥' : null;
   return (
     <div
@@ -187,7 +191,7 @@ function TagInput({ tags = [], onChange, suggestions = [] }) {
         {tags.map(t => (
           <span key={t} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 8px', borderRadius:12, background:B.tealPale, color:B.teal, fontSize:12, fontFamily:f1 }}>
             {t}
-            <button onMouseDown={e => { e.preventDefault(); onChange(tags.filter(x => x !== t)); }} style={{ border:'none', background:'none', color:B.teal, cursor:'pointer', padding:'0 0 0 2px', fontSize:14, lineHeight:1 }}>×</button>
+            <button onMouseDown={e => { e.preventDefault(); onChange(tags.filter(x => x !== t)); }} aria-label={`Remove tag ${t}`} style={{ border:'none', background:'none', color:B.teal, cursor:'pointer', padding:'0 0 0 2px', fontSize:14, lineHeight:1 }}>×</button>
           </span>
         ))}
         <input
@@ -316,7 +320,11 @@ function PhotoGrid({ photos = [], onAdd, onRemove, uploading }) {
         ))}
         {onAdd && (
           <div
+            role="button"
+            tabIndex={0}
+            aria-label="Add photo"
             onClick={() => !uploading && fileRef.current?.click()}
+            onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && !uploading) { e.preventDefault(); fileRef.current?.click(); }}}
             style={{ borderRadius:8, border:'2px dashed '+B.sand, aspectRatio:'1', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', cursor:uploading ? 'wait' : 'pointer', background:B.warmGray, color:B.textLight, fontSize:11, gap:2 }}
           >
             {uploading ? '⏳' : <><span style={{ fontSize:22, lineHeight:1 }}>+</span>Photo</>}
@@ -552,7 +560,7 @@ const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, on
 const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[] });
 
 export function TasksPage({ store, userProfile }) {
-  const { tasks, users, settings, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser } = store;
+  const { tasks, users, settings, config, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser } = store;
   const isMobile = useContext(MobileCtx);
 
   const userId = userProfile?.id || userProfile?.uid;
@@ -710,9 +718,16 @@ export function TasksPage({ store, userProfile }) {
     localStorage.setItem('tasks_viewMode', mode);
   }
 
-  // Auto-switch to list view on mobile (don't persist — desktop preference preserved)
+  // Auto-switch to list view on mobile; restore desktop preference on return to desktop
+  const preMobileMode = useRef(null);
   useEffect(() => {
-    if (isMobile && viewMode === 'kanban') setViewMode('list');
+    if (isMobile && viewMode === 'kanban') {
+      preMobileMode.current = viewMode;
+      setViewMode('list');
+    } else if (!isMobile && preMobileMode.current) {
+      setViewMode(preMobileMode.current);
+      preMobileMode.current = null;
+    }
   }, [isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function taskToEdits(task) {
@@ -864,6 +879,8 @@ export function TasksPage({ store, userProfile }) {
       setDetailSnapshot({});
       setDetailChecklistInput('');
       flash(isNowComplete && !wasComplete && detailEdits.recurrence ? 'Task completed — next recurring task created!' : 'Task updated!');
+    } catch {
+      flash('Failed to update task. Please try again.', true);
     } finally {
       setSaving(false);
     }
@@ -947,16 +964,24 @@ export function TasksPage({ store, userProfile }) {
     try {
       await updateTask(showDetail._docId, { checklist: cl });
       setDetailSnapshot(s => ({ ...s, checklist: cl }));
+      setRemoteUpdate(null); // suppress transient conflict banner from our own write
     } catch { flash('Checklist save failed — please try again.', true); }
   }
 
   async function handleDeleteTask() {
     if (!showDetail?._docId) return;
     if (!window.confirm(`Delete "${showDetail.name}"? This cannot be undone.`)) return;
-    await deleteTask(showDetail._docId);
-    setShowDetail(null);
-    setDetailEdits({});
-    flash('Task deleted.');
+    setSaving(true);
+    try {
+      await deleteTask(showDetail._docId);
+      setShowDetail(null);
+      setDetailEdits({});
+      flash('Task deleted.');
+    } catch {
+      flash('Failed to delete task.', true);
+    } finally {
+      setSaving(false);
+    }
   }
 
   function toggleCollapse(status) {
@@ -970,14 +995,17 @@ export function TasksPage({ store, userProfile }) {
 
   // ── Stats ──
   const { openCount, inProgressCount, completedThisMonth, overdueCount } = useMemo(() => {
-    const thisMonthStart = new Date().toISOString().slice(0, 7) + '-01';
-    const today = new Date();
-    return {
-      openCount:           visibleTasks.filter(t => t.status !== 'Complete' && t.status !== 'Cancelled').length,
-      inProgressCount:     visibleTasks.filter(t => t.status === 'In Progress').length,
-      completedThisMonth:  visibleTasks.filter(t => t.status === 'Complete' && (t.completedAt || '').slice(0, 10) >= thisMonthStart).length,
-      overdueCount:        visibleTasks.filter(t => t.dueDate && new Date(t.dueDate) < today && t.status !== 'Complete' && t.status !== 'Cancelled').length,
-    };
+    const now = new Date();
+    const thisMonthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+    const todayStr = localDateStr(now);
+    return visibleTasks.reduce((acc, t) => {
+      const active = t.status !== 'Complete' && t.status !== 'Cancelled';
+      if (active) acc.openCount++;
+      if (t.status === 'In Progress') acc.inProgressCount++;
+      if (t.status === 'Complete' && (t.completedAt || '').slice(0, 10) >= thisMonthStart) acc.completedThisMonth++;
+      if (t.dueDate && t.dueDate < todayStr && active) acc.overdueCount++;
+      return acc;
+    }, { openCount: 0, inProgressCount: 0, completedThisMonth: 0, overdueCount: 0 });
   }, [visibleTasks]);
 
   // ── Filtered tasks ──
@@ -1010,6 +1038,14 @@ export function TasksPage({ store, userProfile }) {
     }
     return sorted;
   }, [filteredTasks, sortBy]);
+
+  // Pre-computed per-status task lists — avoids 6 filter passes per render in Kanban/list
+  const tasksByStatus = useMemo(() => {
+    const map = {};
+    STATUSES.forEach(s => { map[s] = []; });
+    sortedTasks.forEach(t => { if (map[t.status]) map[t.status].push(t); });
+    return map;
+  }, [sortedTasks]);
 
 
   // Whether current user can edit visibility on the detail task
@@ -1143,7 +1179,7 @@ export function TasksPage({ store, userProfile }) {
       {viewMode === 'kanban' && visibleTasks.length > 0 && (
         <div style={{ display:'flex', gap:12, overflowX:isMobile ? 'hidden' : 'auto', flexDirection:isMobile ? 'column' : 'row', paddingBottom:8, alignItems:'flex-start' }}>
           {STATUSES.map(status => (
-            <KanbanColumn key={status} status={status} tasks={sortedTasks.filter(t => t.status === status)} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile}/>
+            <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile}/>
           ))}
         </div>
       )}
@@ -1152,12 +1188,12 @@ export function TasksPage({ store, userProfile }) {
       {viewMode === 'list' && visibleTasks.length > 0 && (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           {STATUSES.map(status => {
-            const statusTasks = sortedTasks.filter(t => t.status === status);
+            const statusTasks = tasksByStatus[status];
             const collapsed = collapsedStatuses.has(status);
             const sc = statusColors[status];
             return (
               <div key={status} style={{ background:B.white, borderRadius:14, border:'1px solid '+B.sand, overflow:'hidden' }}>
-                <div onClick={() => toggleCollapse(status)} style={{ display:'flex', alignItems:'center', gap:10, padding:'13px 20px', cursor:'pointer', background:B.warmGray, userSelect:'none' }}>
+                <div onClick={() => toggleCollapse(status)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCollapse(status); }}} role="button" tabIndex={0} aria-expanded={!collapsed} style={{ display:'flex', alignItems:'center', gap:10, padding:'13px 20px', cursor:'pointer', background:B.warmGray, userSelect:'none' }}>
                   <span style={{ width:10, height:10, borderRadius:'50%', background:sc.dot, flexShrink:0 }}/>
                   <span style={{ fontWeight:700, fontSize:14, color:B.navy, fontFamily:f1 }}>{status}</span>
                   <span style={{ background:B.white, borderRadius:20, padding:'2px 10px', fontSize:12, fontWeight:700, color:B.textMid, fontFamily:f1 }}>{statusTasks.length}</span>
@@ -1359,7 +1395,7 @@ export function TasksPage({ store, userProfile }) {
                 {showDetail.completedAt && <> · Completed {showDetail.completedAt.split('T')[0]}</>}
               </div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                {(canOperate || showDetail.createdBy === userId) && <button onClick={handleDeleteTask} style={{ ...btnD, fontSize:13, padding:'9px 14px' }}>Delete</button>}
+                {(canOperate || showDetail.createdBy === userId) && <button onClick={handleDeleteTask} disabled={saving} style={{ ...btnD, fontSize:13, padding:'9px 14px', opacity:saving ? 0.5 : 1 }}>Delete</button>}
                 <button onClick={closeDetail} style={btnS}>Cancel</button>
                 <button onClick={handleUpdateTask} disabled={saving || !detailEdits.name?.trim()} style={{ ...btnP, opacity:(saving || !detailEdits.name?.trim()) ? .5 : 1 }}>
                   {saving ? 'Saving...' : 'Save Changes'}

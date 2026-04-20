@@ -99,7 +99,8 @@ service cloud.firestore {
     // ── Tasks ─────────────────────────────────────────────────────────────────
     // Private tasks are only readable by their creator.
     // Shared/team tasks are readable by all members (shared-with enforcement is client-side,
-    // as Firestore rules cannot iterate object arrays to check nested uid fields).
+    // as Firestore rules cannot iterate object arrays to check nested uid fields — 'shared'
+    // tasks are treated as team-readable at the rule layer; the client filters by sharedWith).
     match /churches/{churchId}/tasks/{docId} {
       allow read: if isMember(churchId) && (
         !resource.data.keys().hasAny(['visibility']) ||
@@ -107,11 +108,20 @@ service cloud.firestore {
         resource.data.visibility == 'shared' ||
         resource.data.createdBy == request.auth.uid
       );
-      allow create, update: if isMember(churchId);
+      // create: enforce createdBy to prevent impersonation
+      allow create: if isMember(churchId) && request.resource.data.createdBy == request.auth.uid;
+      // update: members can update team/shared tasks; private tasks only by their creator
+      allow update: if isMember(churchId) && (
+        resource.data.visibility != 'private' ||
+        resource.data.createdBy == request.auth.uid
+      );
       allow delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && resource.data.createdBy == request.auth.uid);
     }
 
     // ── Task comments — any member can add; authors can edit/delete own; admins+mgrs can edit/delete any ─────
+    // NOTE: comment reads are scoped to church members only; they are not further restricted
+    // by parent task visibility (Firestore cannot do parent doc lookups in subcollection rules
+    // without an extra get(), which would exceed the single-get() budget used by this ruleset).
     match /churches/{churchId}/tasks/{taskId}/comments/{commentId} {
       allow read:           if isMember(churchId);
       allow create:         if isMember(churchId);
