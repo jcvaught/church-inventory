@@ -174,8 +174,12 @@ function TagInput({ tags = [], onChange, suggestions = [] }) {
     setShowDrop(false);
   }
   function onKey(e) {
-    if ((e.key === 'Enter' || e.key === ',') && inputVal.trim()) { e.preventDefault(); addTag(inputVal); }
+    if ((e.key === 'Enter' || e.key === ',') && inputVal.trim()) { e.preventDefault(); e.stopPropagation(); addTag(inputVal); }
     else if (e.key === 'Backspace' && !inputVal && tags.length) onChange(tags.slice(0, -1));
+  }
+  // onKeyUp is a fallback for mobile virtual keyboards where onKeyDown may not fire for Enter
+  function onKeyUp(e) {
+    if (e.key === 'Enter' && inputVal.trim()) { e.preventDefault(); e.stopPropagation(); addTag(inputVal); }
   }
   return (
     <div style={{ position:'relative' }}>
@@ -190,9 +194,11 @@ function TagInput({ tags = [], onChange, suggestions = [] }) {
           value={inputVal}
           onChange={e => { setInputVal(e.target.value); setShowDrop(true); }}
           onKeyDown={onKey}
+          onKeyUp={onKeyUp}
           onFocus={() => setShowDrop(true)}
           onBlur={() => setTimeout(() => setShowDrop(false), 150)}
           placeholder={tags.length ? '' : 'Type tag, press Enter...'}
+          enterKeyHint="done"
           style={{ border:'none', outline:'none', fontSize:13, flex:1, minWidth:80, fontFamily:f2, color:B.textDark, background:'transparent' }}
         />
       </div>
