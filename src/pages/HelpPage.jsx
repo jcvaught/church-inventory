@@ -618,22 +618,24 @@ export function HelpPage({ onBack }) {
               <UL items={[
                 'Name and description',
                 'Priority — High, Medium, or Low',
-                'Due date',
-                'Recurrence — set a task to repeat (Weekly, Every 2 weeks, Monthly, Quarterly, Annually)',
+                'Due date and recurrence',
                 'Assignees — one or more team members',
                 'Tags — searchable labels',
                 'Visibility — Team, Private, or Shared (see below)',
+                'Parent Task — optionally nest this task under another (creates a subtask)',
+                'Blocked By — list TSK-### numbers this task depends on',
                 'Photos and notes',
               ]} />
               <P>Tasks are auto-numbered (TSK-001, TSK-002, …). Status starts at Backlog and moves through: Backlog → Planning → In Progress → On Hold → Complete → Cancelled.</P>
+              <Tip>Click <strong>From Template</strong> to pre-fill the form from a saved template. Templates appear once an admin or manager has saved at least one.</Tip>
             </Accordion>
 
             <Accordion title="Visibility control">
               <P>Each task has a <strong>Visibility</strong> setting that controls who can see it:</P>
               <UL items={[
                 'Team — visible to everyone with Tasks Hub access (default)',
-                'Private — visible only to you. Even admins cannot see private tasks.',
-                'Shared — visible to you plus specific people you choose',
+                'Private — visible only to you. Even admins cannot see private tasks. Enforced server-side.',
+                'Shared — visible to you plus specific people you choose (enforced client-side)',
               ]} />
               <P>Assignees always see their tasks regardless of visibility. Cards show a 🔒 icon for private tasks and 👥 for shared tasks.</P>
               <Tip>Use Private for your own to-do items, Shared for tasks you're collaborating on with one other person, and Team for anything the whole staff should see.</Tip>
@@ -649,13 +651,50 @@ export function HelpPage({ onBack }) {
               <Tip>Use recurring tasks for things like weekly bulletin prep, monthly board reports, or quarterly budget reviews.</Tip>
             </Accordion>
 
-            <Accordion title="Checklist sub-tasks">
+            <Accordion title="Checklist items">
               <P>Open a task and scroll to <strong>Checklist</strong>. Type an item and press Enter (or click Add) to add it. Check items off as you work. The card shows your progress (e.g. ✓ 3/5) at a glance. Checklist items carry over when a recurring task auto-creates, with done state reset.</P>
             </Accordion>
 
-            <Accordion title="Kanban and list views">
-              <P>Switch between <strong>Kanban</strong> (column per status) and <strong>List</strong> (grouped by status, collapsible). Drag cards between Kanban columns to update status. On mobile, use the <strong>Move to:</strong> dropdown on each card.</P>
-              <P>Filter by priority, status, assignee, or toggle <strong>My tasks</strong> to see only tasks assigned to you.</P>
+            <Accordion title="Subtasks and parent-child relationships">
+              <P>When creating or editing a task, choose a <strong>Parent Task</strong> to make it a subtask. In the list view, subtasks appear nested under their parent. Parent task cards show a progress badge (e.g. ↳ 2/3 subtasks done). In Kanban view, subtasks appear in their own status column with a parent reference.</P>
+              <P>Open a parent task to see all its subtasks listed with their current status. Click any subtask to open it directly.</P>
+            </Accordion>
+
+            <Accordion title="Task dependencies (Blocked By)">
+              <P>Use the <strong>Blocked By</strong> field to indicate that a task depends on other tasks being finished first. Enter one or more TSK-### numbers. Blocked tasks show an ⛔ badge on their card. When you try to mark a blocked task Complete, the app shows a soft warning so you can confirm the blockers are actually resolved.</P>
+            </Accordion>
+
+            <Accordion title="Task templates">
+              <P>Admins and managers can save any task as a template using the <strong>Save as Template</strong> button in the task detail footer. Templates capture name, description, priority, tags, recurrence, assignees, visibility, notes, and checklist (with items reset to unchecked).</P>
+              <P>When creating a new task, click <strong>From Template</strong> to pre-fill the form. Templates can be deleted from the template picker by admins and managers.</P>
+            </Accordion>
+
+            <Accordion title="Views: Kanban, List, and Calendar">
+              <P>Switch between three views using the toggle above the task list:</P>
+              <UL items={[
+                'Kanban — columns per status; drag cards to change status (desktop)',
+                'List — grouped by status with collapsible sections; checkboxes for bulk actions',
+                'Calendar — month grid showing tasks on their due dates; click a task chip to open details; mobile shows grouped list (Overdue / This Week / Next 30 Days / Later)',
+              ]} />
+              <P>Filter by priority, status, assignee, or toggle <strong>My tasks</strong>.</P>
+            </Accordion>
+
+            <Accordion title="Bulk actions (list view)">
+              <P>In <strong>List</strong> view, check the boxes next to tasks to select them. A blue action bar appears showing how many tasks are selected. From there you can:</P>
+              <UL items={[
+                'Move selected tasks to any status',
+                'Delete selected tasks (admins and managers only)',
+                'Select All visible tasks at once',
+              ]} />
+            </Accordion>
+
+            <Accordion title="CSV export">
+              <P>Click <strong>Export CSV</strong> in the toolbar to download the currently filtered tasks as a spreadsheet. The export respects all active filters — so if you filter to "In Progress" tasks, only those are exported.</P>
+            </Accordion>
+
+            <Accordion title="Due date email reminders">
+              <P>When church email notifications are enabled, assigned team members receive an automatic reminder email each morning for tasks due <strong>today</strong> or <strong>tomorrow</strong>. The email lists all their upcoming tasks with priority and status.</P>
+              <Tip>Email notifications are toggled in Coordination Hub → Notification Settings.</Tip>
             </Accordion>
 
             <Accordion title="Comments and photos">

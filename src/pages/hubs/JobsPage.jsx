@@ -1,4 +1,4 @@
-import { useState, useMemo, useContext } from 'react';
+import { useState, useMemo, useContext, memo } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
@@ -25,6 +25,140 @@ const JOB_STATUS_COLORS = {
 
 const emptyJob = () => ({ title: '', description: '', scheduledDate: '', scheduledTime: '', location: '', spotsTotal: 1, pay: '', status: 'open' });
 const emptyAnn = () => ({ title: '', body: '', expiresAt: '', pinned: false });
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+const JobChip = memo(function JobChip({ job, onJobClick, todayStr }) {
+  const sc = JOB_STATUS_COLORS[job.status] || JOB_STATUS_COLORS.open;
+  const filled = (job.signups || []).length;
+  const total = job.spotsTotal || 1;
+  const isFull = filled >= total && job.status === 'open';
+  const chipBg = isFull ? '#FEF3E8' : sc.bg;
+  const chipTx = isFull ? '#9A5E10' : sc.tx;
+  const chipBorder = isFull ? '#F59E42' : sc.dot;
+  return (
+    <div onClick={e => { e.stopPropagation(); onJobClick(job); }}
+      style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 5px', borderRadius:5, background:chipBg, borderLeft:'3px solid '+chipBorder, cursor:'pointer', marginBottom:2, overflow:'hidden' }}
+      title={job.title}>
+      <span style={{ fontSize:11, color:chipTx, fontWeight:600, fontFamily:f1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flex:1 }}>{job.title}</span>
+      <span style={{ fontSize:10, color:chipTx, flexShrink:0 }}>{filled}/{total}</span>
+    </div>
+  );
+});
+
+function JobCalendar({ jobs, onJobClick, isMobile }) {
+  const now = new Date();
+  const [viewYear, setViewYear] = useState(now.getFullYear());
+  const [viewMonth, setViewMonth] = useState(now.getMonth());
+  const [expandedDay, setExpandedDay] = useState(null);
+
+  const jobsByDate = useMemo(() => {
+    const map = new Map();
+    jobs.forEach(j => {
+      if (!j.scheduledDate) return;
+      const key = j.scheduledDate.slice(0, 10);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(j);
+    });
+    return map;
+  }, [jobs]);
+
+  function prevMonth() { if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); } else setViewMonth(m => m - 1); setExpandedDay(null); }
+  function nextMonth() { if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); } else setViewMonth(m => m + 1); setExpandedDay(null); }
+  function goToday() { setViewYear(now.getFullYear()); setViewMonth(now.getMonth()); setExpandedDay(null); }
+
+  const calendarDays = useMemo(() => {
+    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const daysInPrev = new Date(viewYear, viewMonth, 0).getDate();
+    const days = [];
+    for (let i = firstDay - 1; i >= 0; i--) days.push({ date: new Date(viewYear, viewMonth - 1, daysInPrev - i), isCurrentMonth: false });
+    for (let d = 1; d <= daysInMonth; d++) days.push({ date: new Date(viewYear, viewMonth, d), isCurrentMonth: true });
+    while (days.length % 7 !== 0) { const last = days[days.length - 1].date; days.push({ date: new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1), isCurrentMonth: false }); }
+    return days;
+  }, [viewYear, viewMonth]);
+
+  const todayStr = localDateStr(now);
+
+  // Mobile: grouped list
+  if (isMobile) {
+    const weekEnd = new Date(now); weekEnd.setDate(now.getDate() + 7);
+    const monthEnd = new Date(now); monthEnd.setDate(now.getDate() + 30);
+    const weekEndStr = localDateStr(weekEnd);
+    const monthEndStr = localDateStr(monthEnd);
+    const withDate = [...jobs].filter(j => j.scheduledDate).sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
+    const groups = [
+      { label:'Overdue', jobs: withDate.filter(j => j.scheduledDate < todayStr && j.status === 'open') },
+      { label:'This Week', jobs: withDate.filter(j => j.scheduledDate >= todayStr && j.scheduledDate <= weekEndStr) },
+      { label:'Next 30 Days', jobs: withDate.filter(j => j.scheduledDate > weekEndStr && j.scheduledDate <= monthEndStr) },
+      { label:'Later', jobs: withDate.filter(j => j.scheduledDate > monthEndStr) },
+    ];
+    return (
+      <div>
+        {groups.map(g => g.jobs.length > 0 && (
+          <div key={g.label} style={{ marginBottom:20 }}>
+            <div style={{ fontFamily:f1, fontWeight:700, fontSize:13, color:g.label==='Overdue' ? B.red : B.textMid, textTransform:'uppercase', letterSpacing:.8, marginBottom:8 }}>{g.label}</div>
+            {g.jobs.map(j => {
+              const sc = JOB_STATUS_COLORS[j.status] || JOB_STATUS_COLORS.open;
+              return (
+                <div key={j._docId} onClick={() => onJobClick(j)} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:10, background:B.white, border:'1px solid '+B.sand, marginBottom:6, cursor:'pointer' }}>
+                  <span style={{ width:8, height:8, borderRadius:'50%', background:sc.dot, flexShrink:0 }}/>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:14, fontWeight:600, color:B.navy, fontFamily:f1 }}>{j.title}</div>
+                    <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>{j.scheduledDate}{j.scheduledTime ? ' · '+j.scheduledTime : ''}</div>
+                  </div>
+                  <span style={{ fontSize:12, color:sc.tx, fontFamily:f1 }}>{(j.signups||[]).length}/{j.spotsTotal||1}</span>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        {jobs.filter(j => j.scheduledDate).length === 0 && <div style={{ textAlign:'center', color:B.textLight, fontSize:14, padding:32 }}>No jobs with dates.</div>}
+      </div>
+    );
+  }
+
+  // Desktop: month grid
+  return (
+    <div>
+      <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+        <button onClick={prevMonth} style={{ ...btnS, padding:'6px 12px', fontSize:16, lineHeight:1 }}>‹</button>
+        <span style={{ fontFamily:f1, fontWeight:700, fontSize:18, color:B.navy, minWidth:200, textAlign:'center' }}>{MONTH_NAMES[viewMonth]} {viewYear}</span>
+        <button onClick={nextMonth} style={{ ...btnS, padding:'6px 12px', fontSize:16, lineHeight:1 }}>›</button>
+        <button onClick={goToday} style={{ ...btnS, padding:'6px 14px', fontSize:13, marginLeft:4 }}>Today</button>
+        {(() => { const total = [...jobsByDate.values()].reduce((a, b) => a + b.length, 0); return (
+          <span style={{ marginLeft:'auto', fontSize:13, color:B.textLight, fontFamily:f1 }}>{total} job{total !== 1 ? 's' : ''} with dates</span>
+        ); })()}
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', gap:2, marginBottom:2 }}>
+        {DAY_NAMES.map(d => <div key={d} style={{ textAlign:'center', fontSize:12, fontWeight:700, color:B.textLight, fontFamily:f1, padding:'4px 0', textTransform:'uppercase', letterSpacing:.6 }}>{d}</div>)}
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', gap:2 }}>
+        {calendarDays.map((day, idx) => {
+          const ds = localDateStr(day.date);
+          const dayJobs = jobsByDate.get(ds) || [];
+          const isToday = ds === todayStr;
+          const isExpanded = expandedDay === ds;
+          const CHIP_LIMIT = 3;
+          const visible = dayJobs.slice(0, CHIP_LIMIT);
+          const overflow = dayJobs.length - CHIP_LIMIT;
+          return (
+            <div key={idx}
+              onClick={() => dayJobs.length > CHIP_LIMIT && setExpandedDay(isExpanded ? null : ds)}
+              style={{ minHeight:88, background:day.isCurrentMonth ? B.white : '#F8F8FA', borderRadius:8, border:'1px solid '+(isToday ? B.teal : B.sand), padding:'5px 6px', cursor:dayJobs.length > CHIP_LIMIT ? 'pointer' : 'default', outline:isToday ? '2px solid '+B.teal : 'none', outlineOffset:'-1px' }}>
+              <div style={{ fontSize:12, fontWeight:isToday ? 800 : 500, color:isToday ? B.teal : day.isCurrentMonth ? B.textDark : B.textLight, fontFamily:f1, marginBottom:3, textAlign:'right' }}>{day.date.getDate()}</div>
+              {(isExpanded ? dayJobs : visible).map(j => <JobChip key={j._docId} job={j} todayStr={todayStr} onJobClick={onJobClick}/>)}
+              {!isExpanded && overflow > 0 && (
+                <div style={{ fontSize:11, color:B.teal, fontWeight:700, fontFamily:f1, textAlign:'center', marginTop:2 }}>+{overflow} more</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function JobStatusBadge({ status }) {
   const s = JOB_STATUS_COLORS[status] || JOB_STATUS_COLORS.open;
@@ -84,6 +218,7 @@ export function JobsPage({ store, userProfile }) {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [errMsg, setErrMsg] = useState('');
+  const [showPastJobs, setShowPastJobs] = useState(false);
 
   function flash(text, isError) {
     if (isError) { setErrMsg(text); setTimeout(() => setErrMsg(''), 4000); }
@@ -118,6 +253,11 @@ export function JobsPage({ store, userProfile }) {
       return (b.createdAt || '').localeCompare(a.createdAt || '');
     });
   }, [jobAnnouncements, todayStr]);
+
+  const scheduleJobs = useMemo(() => {
+    const jobs = [...(jobListings || [])].sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || ''));
+    return showPastJobs ? jobs : jobs.filter(j => (j.scheduledDate || '') >= todayStr || !j.scheduledDate);
+  }, [jobListings, showPastJobs, todayStr]);
 
   // Keep detail in sync with live store data
   const liveDetail = showJobDetail
@@ -301,8 +441,8 @@ export function JobsPage({ store, userProfile }) {
       )}
 
       {/* View tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        {[['jobs', '💼 Job Board'], ['announcements', '📢 Announcements']].map(([v, label]) => (
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        {[['jobs', '💼 Job Board'], ['schedule', '📋 Schedule'], ['calendar', '📅 Calendar'], ['announcements', '📢 Announcements']].map(([v, label]) => (
           <button key={v} onClick={() => setView(v)}
             style={{ padding: '8px 18px', borderRadius: 20, border: '1px solid ' + (view === v ? B.teal : B.sand), background: view === v ? B.tealPale : B.white, color: view === v ? B.teal : B.textMid, fontFamily: f1, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             {label}
@@ -394,6 +534,99 @@ export function JobsPage({ store, userProfile }) {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Schedule / Roster ── */}
+      {view === 'schedule' && (
+        <div>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:8 }}>
+            <span style={{ fontSize:14, fontFamily:f1, fontWeight:700, color:B.navy }}>
+              {showPastJobs ? 'All jobs' : 'Upcoming jobs'} ({scheduleJobs.length})
+            </span>
+            <button onClick={() => setShowPastJobs(v => !v)} style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>
+              {showPastJobs ? 'Hide Past Jobs' : 'Show Past Jobs'}
+            </button>
+          </div>
+          {scheduleJobs.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'48px 20px', color:B.textLight, fontFamily:f2, fontSize:14 }}>No upcoming jobs.</div>
+          ) : isMobile ? (
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              {scheduleJobs.map(job => {
+                const sc = JOB_STATUS_COLORS[job.status] || JOB_STATUS_COLORS.open;
+                const filled = (job.signups || []).length;
+                return (
+                  <div key={job._docId} onClick={() => setShowJobDetail(job)} style={{ background:B.white, borderRadius:12, border:'1px solid '+B.sand, padding:'12px 14px', cursor:'pointer' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
+                      <div>
+                        <div style={{ fontSize:14, fontWeight:700, color:B.navy, fontFamily:f1 }}>{job.title}</div>
+                        <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}>📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' · '+job.scheduledTime : ''}</div>
+                      </div>
+                      <span style={{ fontSize:11, fontWeight:700, color:sc.tx, background:sc.bg, padding:'2px 8px', borderRadius:12 }}>{job.status}</span>
+                    </div>
+                    <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}>{filled}/{job.spotsTotal||1} spots filled</div>
+                    {isAdminOrManager && (job.signups||[]).length > 0 && (
+                      <div style={{ fontSize:12, color:B.textLight, fontFamily:f2, marginTop:4 }}>{job.signups.map(s=>s.name).join(', ')}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ overflowX:'auto' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                <thead>
+                  <tr style={{ background:B.warmGray }}>
+                    {['Date & Time', 'Job', 'Location', 'Spots', 'Status', isAdminOrManager ? 'Signed Up' : ''].filter(Boolean).map(h => (
+                      <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontFamily:f1, fontWeight:700, fontSize:11, color:B.textMid, textTransform:'uppercase', letterSpacing:.6, whiteSpace:'nowrap', borderBottom:'1px solid '+B.sand }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {scheduleJobs.map((job, i) => {
+                    const sc = JOB_STATUS_COLORS[job.status] || JOB_STATUS_COLORS.open;
+                    const filled = (job.signups || []).length;
+                    const pct = Math.min(100, (filled / (job.spotsTotal||1)) * 100);
+                    const isPast = job.scheduledDate && job.scheduledDate < todayStr;
+                    return (
+                      <tr key={job._docId} onClick={() => setShowJobDetail(job)}
+                        style={{ borderBottom:'1px solid '+B.sand, cursor:'pointer', opacity:isPast ? .65 : 1 }}
+                        onMouseEnter={e => e.currentTarget.style.background=B.warmGray}
+                        onMouseLeave={e => e.currentTarget.style.background=''}>
+                        <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textDark, whiteSpace:'nowrap' }}>
+                          {formatJobDate(job.scheduledDate)}{job.scheduledTime ? <div style={{ fontSize:11, color:B.textLight }}>{job.scheduledTime}</div> : null}
+                        </td>
+                        <td style={{ padding:'10px 14px', fontFamily:f2, color:B.navy, fontWeight:600 }}>
+                          <div>{job.title}</div>
+                          <div style={{ fontSize:11, color:B.textLight, fontFamily:'monospace' }}>{job.jobNumber}</div>
+                        </td>
+                        <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textMid }}>{job.location || '—'}</td>
+                        <td style={{ padding:'10px 14px', minWidth:100 }}>
+                          <div style={{ fontSize:12, color:B.textMid, marginBottom:3 }}>{filled}/{job.spotsTotal||1}</div>
+                          <div style={{ height:5, borderRadius:3, background:B.sand, overflow:'hidden' }}>
+                            <div style={{ height:'100%', width:pct+'%', background:filled>=(job.spotsTotal||1) ? B.red : B.teal, borderRadius:3 }}/>
+                          </div>
+                        </td>
+                        <td style={{ padding:'10px 14px' }}>
+                          <span style={{ fontSize:11, fontWeight:700, color:sc.tx, background:sc.bg, padding:'2px 8px', borderRadius:12 }}>{job.status}</span>
+                        </td>
+                        {isAdminOrManager && (
+                          <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textMid, maxWidth:220 }}>
+                            {(job.signups||[]).length === 0 ? <span style={{ color:B.textLight, fontSize:12 }}>None</span> : job.signups.map(s=>s.name).join(', ')}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Calendar ── */}
+      {view === 'calendar' && (
+        <JobCalendar jobs={jobListings || []} onJobClick={job => setShowJobDetail(job)} isMobile={isMobile}/>
       )}
 
       {/* ── Announcements ── */}
