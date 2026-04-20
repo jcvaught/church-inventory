@@ -532,6 +532,108 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
   return { sent };
 });
 
+// ── sendTaskDueReminders ──────────────────────────────────────────────────
+// Runs every morning at 8:00 AM Central time.
+// Finds all tasks due today or tomorrow (not Complete/Cancelled) that have assignees,
+// and emails each assignee. Respects per-church notification settings.
+exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'America/Chicago' }, async () => {
+  if (!initSendGrid()) return;
+
+  const db = getFirestore();
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+  const pad = n => String(n).padStart(2, '0');
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+  const tomorrowStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth()+1)}-${pad(tomorrow.getDate())}`;
+
+  // Query all tasks with a dueDate on or before tomorrow (captures overdue + due today + due tomorrow)
+  const snap = await db.collectionGroup('tasks')
+    .where('dueDate', '>=', todayStr)
+    .where('dueDate', '<=', tomorrowStr)
+    .get();
+
+  if (snap.empty) return;
+
+  // Filter to active tasks with assignees; group by assignee uid → [taskInfo]
+  const tasksByAssignee = {}; // uid → [{ taskNumber, name, dueDate, priority, status, churchId }]
+  for (const taskDoc of snap.docs) {
+    const task = taskDoc.data();
+    if (!task.dueDate) continue;
+    if (task.status === 'Complete' || task.status === 'Cancelled') continue;
+    if (!task.assignees || task.assignees.length === 0) continue;
+    const churchId = taskDoc.ref.parent.parent.id;
+    for (const assignee of task.assignees) {
+      if (!assignee.uid) continue;
+      if (!tasksByAssignee[assignee.uid]) tasksByAssignee[assignee.uid] = [];
+      tasksByAssignee[assignee.uid].push({
+        taskNumber: task.taskNumber || '',
+        name: task.name || 'Task',
+        dueDate: task.dueDate,
+        priority: task.priority || 'Medium',
+        status: task.status || 'Backlog',
+        churchId,
+      });
+    }
+  }
+
+  if (Object.keys(tasksByAssignee).length === 0) return;
+
+  // Fetch user profiles and church notification settings
+  const uids = Object.keys(tasksByAssignee);
+  const userSnaps = await Promise.all(uids.map(uid => db.doc(`users/${uid}`).get()));
+
+  // Cache notification configs per churchId to avoid redundant reads
+  const notifCache = {};
+  async function notifEnabled(churchId) {
+    if (notifCache[churchId] !== undefined) return notifCache[churchId];
+    try {
+      const s = await db.doc(`churches/${churchId}/config/notifications`).get();
+      notifCache[churchId] = !!(s.exists && s.data().enabled);
+    } catch { notifCache[churchId] = false; }
+    return notifCache[churchId];
+  }
+
+  const emailTasks = [];
+  for (const userSnap of userSnaps) {
+    if (!userSnap.exists) continue;
+    const user = userSnap.data();
+    if (!user.email) continue;
+
+    // Only send tasks belonging to the user's own church
+    const tasks = (tasksByAssignee[userSnap.id] || []).filter(t => t.churchId === user.churchId);
+    if (tasks.length === 0) continue;
+    if (!(await notifEnabled(user.churchId))) continue;
+
+    const safeName = escapeHtml(user.name || 'there');
+    const dueToday = tasks.filter(t => t.dueDate === todayStr);
+    const dueTomorrow = tasks.filter(t => t.dueDate === tomorrowStr);
+
+    const subject = tasks.length === 1
+      ? `Task Reminder: "${tasks[0].name}" due ${tasks[0].dueDate === todayStr ? 'today' : 'tomorrow'}`
+      : `Task Reminder: ${tasks.length} tasks due soon`;
+
+    const taskRow = t => {
+      const when = t.dueDate === todayStr ? '<strong style="color:#DC2626">Today</strong>' : 'Tomorrow';
+      return `<li style="margin-bottom:8px">${when} — <strong>${escapeHtml(t.name)}</strong> <span style="font-size:12px;color:#888">(${escapeHtml(t.taskNumber)} · ${escapeHtml(t.priority)} · ${escapeHtml(t.status)})</span></li>`;
+    };
+
+    const allRows = [...dueToday, ...dueTomorrow].map(taskRow).join('');
+    const html = `<p>Hi ${safeName},</p>
+<p>You have task${tasks.length !== 1 ? 's' : ''} coming due:</p>
+<ul style="padding-left:20px;margin:12px 0">${allRows}</ul>
+<p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to view and update your tasks.</p>`;
+
+    const textRows = [...dueToday, ...dueTomorrow].map(t =>
+      `• ${t.dueDate === todayStr ? 'TODAY' : 'Tomorrow'} — ${t.name} (${t.taskNumber}, ${t.priority})`
+    ).join('\n');
+    const text = `Hi ${user.name || 'there'},\n\nYou have tasks coming due:\n\n${textRows}\n\nLog in at churchopshub.com to view your tasks.\n`;
+
+    emailTasks.push(sgMail.send({ to: user.email, from: FROM, subject, html, text }));
+  }
+
+  await Promise.allSettled(emailTasks);
+});
+
 // ── sendJobReminders ──────────────────────────────────────────────────────
 // Runs every morning at 8:00 AM Central time.
 // Finds all jobs scheduled for today across all churches and emails each signup.

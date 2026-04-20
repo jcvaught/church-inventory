@@ -523,19 +523,27 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const updateTask = useCallback(async (docId, updates) => {
+  const updateTask = useCallback(async (docId, updates, userId, userName, taskNumber) => {
     try {
       const data = { ...updates, updatedAt: new Date().toISOString() };
       if (updates.status === 'Complete' && !updates.completedAt) {
         data.completedAt = new Date().toISOString();
       }
       await updateDoc(doc(db, 'churches', churchId, 'tasks', docId), data);
+      if (userId) {
+        const action = updates.status === 'Complete' ? 'complete_task' : 'update_task';
+        await logActivity(action, taskNumber || docId, userId, userName, {
+          name: updates.name,
+          ...(updates.status ? { status: updates.status } : {}),
+        });
+      }
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const deleteTask = useCallback(async (docId) => {
+  const deleteTask = useCallback(async (docId, taskNumber, userId, userName) => {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'tasks', docId));
+      if (userId) await logActivity('delete_task', taskNumber || docId, userId, userName, {});
     } catch (err) { handleErr(err); }
   }, [churchId]);
 

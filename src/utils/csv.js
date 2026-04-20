@@ -54,6 +54,26 @@ export function exportAccessRecordsCSV(records) {
   URL.revokeObjectURL(a.href);
 }
 
+export function exportTasksCSV(tasks) {
+  const cols = ['taskNumber','name','description','priority','status','visibility','dueDate','recurrence','assignees','tags','notes','createdByName','createdAt','completedAt'];
+  const header = cols.join(',');
+  const rows = (tasks || []).map(t => cols.map(c => {
+    let v = t[c];
+    if (c === 'assignees') v = (t.assignees || []).map(a => a.name).join('; ');
+    if (c === 'tags') v = (t.tags || []).join('; ');
+    if (v == null || v === '') return '';
+    const s = String(v);
+    return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g,'""')}"` : s;
+  }).join(','));
+  const csv = [header, ...rows].join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
+    download: `tasks-${new Date().toISOString().split('T')[0]}.csv`
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
 export function exportReservationsCSV(reservations) {
   const header = 'resourceType,resource,itemId,eventName,eventDate,returnDate,purpose,ministry,status,requestedByName,approvedByName,notes';
   const rows = reservations.map(r => {
