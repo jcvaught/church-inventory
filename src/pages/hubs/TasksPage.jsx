@@ -88,7 +88,7 @@ function _StatusBadge({ status }) {
   );
 }
 
-const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusChange, isMobile }) {
+const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusChange, isMobile, subtaskCount, subtaskDone, parentName }) {
   const sc = statusColors[task.status] || statusColors['Backlog'];
   const isOverdue = task.dueDate && task.dueDate < localDateStr(new Date()) && task.status !== 'Complete' && task.status !== 'Cancelled';
   const visIcon = task.visibility === 'private' ? '🔒' : task.visibility === 'shared' ? '👥' : null;
@@ -121,6 +121,7 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
           <PriorityBadge priority={task.priority}/>
         </div>
       </div>
+      {parentName && <div style={{ fontSize:11, color:B.textLight, fontFamily:f1, marginBottom:3 }}>↳ {parentName}</div>}
       <div style={{ fontWeight:600, fontSize:14, color:B.navy, marginBottom:4, lineHeight:1.3 }}>{task.name}</div>
       {task.description && (
         <div style={{ fontSize:12, color:B.textMid, lineHeight:1.4, marginBottom:6, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', whiteSpace:'pre-wrap' }}>
@@ -134,12 +135,17 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
           ))}
         </div>
       )}
-      {(task.recurrence || task.checklist?.length > 0) && (
+      {(task.recurrence || task.checklist?.length > 0 || subtaskCount > 0) && (
         <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
           {task.recurrence && <span style={{ fontSize:12, color:B.teal, fontFamily:f1 }}>🔁 {RECURRENCE_LABELS[task.recurrence]}</span>}
           {task.checklist?.length > 0 && (
             <span style={{ fontSize:12, color:task.checklist.filter(c=>c.done).length===task.checklist.length ? B.teal : B.textMid, fontFamily:f1 }}>
               ✓ {task.checklist.filter(c=>c.done).length}/{task.checklist.length}
+            </span>
+          )}
+          {subtaskCount > 0 && (
+            <span style={{ fontSize:12, color:subtaskDone===subtaskCount ? B.teal : B.textMid, fontFamily:f1 }}>
+              ↳ {subtaskDone}/{subtaskCount} subtask{subtaskCount !== 1 ? 's' : ''}
             </span>
           )}
         </div>
@@ -533,7 +539,7 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
   );
 }
 
-const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, onDrop, onStatusChange, isMobile }) {
+const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, onDrop, onStatusChange, isMobile, tasksByParent, tasksByDocId }) {
   const sc = statusColors[status] || statusColors['Backlog'];
   const [dragOver, setDragOver] = useState(false);
   return (
@@ -551,7 +557,11 @@ const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, on
       <div style={{ overflowY:'auto', maxHeight:isMobile ? 'none' : 'calc(100vh - 380px)', minHeight:80 }}>
         {tasks.length === 0
           ? <div style={{ textAlign:'center', color:B.textLight, fontSize:12, padding:'16px 0', fontStyle:'italic' }}>Empty</div>
-          : tasks.map(t => <TaskCard key={t._docId} task={t} onClick={onTaskClick} onDragStart={onDrop || undefined} onStatusChange={onStatusChange} isMobile={isMobile}/>)
+          : tasks.map(t => {
+              const subs = tasksByParent?.[t._docId] || [];
+              const parentTask = t.parentTaskId ? tasksByDocId?.[t.parentTaskId] : null;
+              return <TaskCard key={t._docId} task={t} onClick={onTaskClick} onDragStart={onDrop || undefined} onStatusChange={onStatusChange} isMobile={isMobile} subtaskCount={subs.length} subtaskDone={subs.filter(s=>s.status==='Complete').length} parentName={parentTask?.taskNumber ? parentTask.taskNumber + ' ' + parentTask.name : parentTask?.name}/>;
+            })
         }
       </div>
     </div>
@@ -688,10 +698,10 @@ function TaskCalendar({ tasks, onTaskClick, isMobile }) {
   );
 }
 
-const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[] });
+const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], parentTaskId:null });
 
 export function TasksPage({ store, userProfile }) {
-  const { tasks, users, settings, config, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser } = store;
+  const { tasks, users, settings, config, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser, taskTemplates, addTaskTemplate, deleteTaskTemplate } = store;
   const isMobile = useContext(MobileCtx);
 
   const userId = userProfile?.id || userProfile?.uid;
@@ -750,6 +760,7 @@ export function TasksPage({ store, userProfile }) {
   }));
   const [savingDefaults, setSavingDefaults] = useState(false);
 
+  const [showTemplates, setShowTemplates] = useState(false);
   const [taskForm, setTaskForm] = useState(getEmptyTask);
   const [photoFiles, setPhotoFiles] = useState([]);
   const [photoPreviews, setPhotoPreviews] = useState([]);
@@ -1115,6 +1126,44 @@ export function TasksPage({ store, userProfile }) {
     }
   }
 
+  async function handleSaveAsTemplate() {
+    if (!showDetail) return;
+    const name = window.prompt('Template name:', showDetail.name || '');
+    if (!name?.trim()) return;
+    try {
+      await addTaskTemplate({
+        name: name.trim(),
+        description: detailEdits.description ?? showDetail.description ?? '',
+        priority: detailEdits.priority ?? showDetail.priority ?? 'Medium',
+        tags: detailEdits.tags ?? showDetail.tags ?? [],
+        recurrence: detailEdits.recurrence ?? showDetail.recurrence ?? '',
+        assignees: detailEdits.assignees ?? showDetail.assignees ?? [],
+        visibility: detailEdits.visibility ?? showDetail.visibility ?? 'team',
+        sharedWith: detailEdits.sharedWith ?? showDetail.sharedWith ?? [],
+        notes: detailEdits.notes ?? showDetail.notes ?? '',
+        checklist: (detailEdits.checklist ?? showDetail.checklist ?? []).map(i => ({ ...i, done: false })),
+      }, userId, userName);
+      flash('Template saved!');
+    } catch { flash('Failed to save template.', true); }
+  }
+
+  function applyTemplate(template) {
+    setTaskForm(f => ({
+      ...f,
+      name: template.name,
+      description: template.description || '',
+      priority: template.priority || 'Medium',
+      tags: template.tags || [],
+      recurrence: template.recurrence || '',
+      assignees: template.assignees || [],
+      visibility: template.visibility || 'team',
+      sharedWith: template.sharedWith || [],
+      notes: template.notes || '',
+      checklist: (template.checklist || []).map(i => ({ ...i, done: false })),
+    }));
+    setShowTemplates(false);
+  }
+
   function toggleCollapse(status) {
     setCollapsedStatuses(prev => {
       const next = new Set(prev);
@@ -1178,6 +1227,30 @@ export function TasksPage({ store, userProfile }) {
     return map;
   }, [sortedTasks]);
 
+  // Subtask support
+  const tasksByDocId = useMemo(() => {
+    const map = {};
+    (visibleTasks).forEach(t => { map[t._docId] = t; });
+    return map;
+  }, [visibleTasks]);
+
+  const tasksByParent = useMemo(() => {
+    const map = {};
+    sortedTasks.forEach(t => {
+      if (t.parentTaskId) {
+        if (!map[t.parentTaskId]) map[t.parentTaskId] = [];
+        map[t.parentTaskId].push(t);
+      }
+    });
+    return map;
+  }, [sortedTasks]);
+
+  // Subtask docIds that have a visible parent (used to hide them from top-level list view)
+  const subtaskDocIds = useMemo(() => {
+    const ids = new Set();
+    sortedTasks.forEach(t => { if (t.parentTaskId && tasksByDocId[t.parentTaskId]) ids.add(t._docId); });
+    return ids;
+  }, [sortedTasks, tasksByDocId]);
 
   // Whether current user can edit visibility on the detail task
   const canEditVisibility = showDetail && (showDetail.createdBy === userId || canOperate);
@@ -1318,7 +1391,7 @@ export function TasksPage({ store, userProfile }) {
       {viewMode === 'kanban' && visibleTasks.length > 0 && (
         <div style={{ display:'flex', gap:12, overflowX:isMobile ? 'hidden' : 'auto', flexDirection:isMobile ? 'column' : 'row', paddingBottom:8, alignItems:'flex-start' }}>
           {STATUSES.map(status => (
-            <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile}/>
+            <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile} tasksByParent={tasksByParent} tasksByDocId={tasksByDocId}/>
           ))}
         </div>
       )}
@@ -1340,9 +1413,23 @@ export function TasksPage({ store, userProfile }) {
                 </div>
                 {!collapsed && (
                   <div style={{ padding:'12px 16px 4px' }}>
-                    {statusTasks.length === 0
+                    {statusTasks.filter(t => !subtaskDocIds.has(t._docId)).length === 0
                       ? <div style={{ color:B.textLight, fontSize:13, textAlign:'center', padding:'12px 0' }}>No tasks in {status}</div>
-                      : statusTasks.map(t => <TaskCard key={t._docId} task={t} onClick={openDetail}/>)
+                      : statusTasks.filter(t => !subtaskDocIds.has(t._docId)).map(t => {
+                          const subs = tasksByParent[t._docId] || [];
+                          return (
+                            <div key={t._docId}>
+                              <TaskCard task={t} onClick={openDetail} subtaskCount={subs.length} subtaskDone={subs.filter(s=>s.status==='Complete').length}/>
+                              {subs.length > 0 && (
+                                <div style={{ marginLeft:20, borderLeft:'2px solid '+B.sand, paddingLeft:8, marginBottom:4 }}>
+                                  {subs.map(sub => (
+                                    <TaskCard key={sub._docId} task={sub} onClick={openDetail} parentName={t.taskNumber ? t.taskNumber : t.name}/>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
                     }
                   </div>
                 )}
@@ -1359,6 +1446,13 @@ export function TasksPage({ store, userProfile }) {
 
       {/* ═══ ADD TASK MODAL ═══ */}
       <Modal open={showAdd} onClose={() => { setShowAdd(false); setPhotoFiles([]); photoPreviews.forEach(u => URL.revokeObjectURL(u)); setPhotoPreviews([]); }} title="New Task" wide>
+        {(taskTemplates || []).length > 0 && (
+          <div style={{ marginBottom:14 }}>
+            <button type="button" onClick={() => setShowTemplates(true)} style={{ ...btnS, fontSize:13, padding:'7px 14px' }}>
+              From Template
+            </button>
+          </div>
+        )}
         <FF label="Task Name *">
           <input style={inp} value={taskForm.name} onChange={e => setTaskForm(f => ({ ...f, name:e.target.value }))} placeholder="Short descriptive name..."/>
         </FF>
@@ -1396,6 +1490,14 @@ export function TasksPage({ store, userProfile }) {
             <SharedWithSelect sharedWith={taskForm.sharedWith} onChange={sharedWith => setTaskForm(f => ({ ...f, sharedWith }))} users={taskHubUsers} assignees={taskForm.assignees} currentUserId={userId}/>
           </FF>
         )}
+        <FF label="Parent Task (optional)">
+          <select style={{ ...inp, cursor:'pointer' }} value={taskForm.parentTaskId || ''} onChange={e => setTaskForm(f => ({ ...f, parentTaskId: e.target.value || null }))}>
+            <option value="">— None (top-level task) —</option>
+            {(visibleTasks).filter(t => !t.parentTaskId && t.status !== 'Complete' && t.status !== 'Cancelled').map(t => (
+              <option key={t._docId} value={t._docId}>{t.taskNumber ? t.taskNumber + ' — ' : ''}{t.name}</option>
+            ))}
+          </select>
+        </FF>
         <FF label="Photos">
           <PhotoGrid photos={photoPreviews} onAdd={handlePhotoSelect} onRemove={handlePreviewRemove} uploading={false}/>
         </FF>
@@ -1540,12 +1642,44 @@ export function TasksPage({ store, userProfile }) {
               </div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                 {(canOperate || showDetail.createdBy === userId) && <button onClick={handleDeleteTask} disabled={saving} style={{ ...btnD, fontSize:13, padding:'9px 14px', opacity:saving ? 0.5 : 1 }}>Delete</button>}
+                {canOperate && <button onClick={handleSaveAsTemplate} style={{ ...btnS, fontSize:13, padding:'9px 14px' }}>Save as Template</button>}
                 <button onClick={closeDetail} style={btnS}>Cancel</button>
                 <button onClick={handleUpdateTask} disabled={saving || !detailEdits.name?.trim()} style={{ ...btnP, opacity:(saving || !detailEdits.name?.trim()) ? .5 : 1 }}>
                   {saving ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </div>
+
+            {/* Parent link */}
+            {showDetail.parentTaskId && tasksByDocId[showDetail.parentTaskId] && (
+              <div style={{ marginBottom:16, padding:'8px 12px', borderRadius:8, background:B.warmGray, border:'1px solid '+B.sand, display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:12, color:B.textLight, fontFamily:f1 }}>Parent:</span>
+                <button onClick={() => openDetail(tasksByDocId[showDetail.parentTaskId])} style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, fontFamily:f1, color:B.teal, fontWeight:600, padding:0 }}>
+                  {tasksByDocId[showDetail.parentTaskId].taskNumber} — {tasksByDocId[showDetail.parentTaskId].name}
+                </button>
+              </div>
+            )}
+
+            {/* Subtasks */}
+            {(tasksByParent[showDetail._docId]||[]).length > 0 && (
+              <div style={{ marginBottom:20 }}>
+                <div style={{ fontWeight:700, fontSize:12, color:B.textMid, fontFamily:f1, textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>
+                  Subtasks ({tasksByParent[showDetail._docId].filter(s=>s.status==='Complete').length}/{tasksByParent[showDetail._docId].length} done)
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                  {tasksByParent[showDetail._docId].map(sub => {
+                    const sc2 = statusColors[sub.status] || statusColors['Backlog'];
+                    return (
+                      <div key={sub._docId} onClick={() => openDetail(sub)} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:8, background:B.white, border:'1px solid '+B.sand, cursor:'pointer' }}>
+                        <span style={{ width:8, height:8, borderRadius:'50%', background:sc2.dot, flexShrink:0 }}/>
+                        <span style={{ flex:1, fontSize:13, fontFamily:f2, color:B.textDark }}>{sub.name}</span>
+                        <span style={{ fontSize:11, fontFamily:f1, color:sc2.tx, background:sc2.bg, padding:'2px 8px', borderRadius:12, fontWeight:600 }}>{sub.status}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Photos */}
             <div style={{ marginBottom:20 }}>
@@ -1591,6 +1725,31 @@ export function TasksPage({ store, userProfile }) {
             {savingDefaults ? 'Saving...' : 'Save Defaults'}
           </button>
         </div>
+      </Modal>
+
+      {/* ═══ TASK TEMPLATES MODAL ═══ */}
+      <Modal open={showTemplates} onClose={() => setShowTemplates(false)} title="Choose a Template">
+        {(taskTemplates || []).length === 0 ? (
+          <p style={{ fontSize:13, color:B.textLight, textAlign:'center', padding:'24px 0' }}>No templates saved yet.</p>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {(taskTemplates || []).map(t => (
+              <div key={t._docId} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, padding:'12px 14px', borderRadius:10, border:'1px solid '+B.sand, background:B.white }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:700, fontSize:14, color:B.navy, fontFamily:f1 }}>{t.name}</div>
+                  {t.description && <div style={{ fontSize:12, color:B.textLight, fontFamily:f2, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.description}</div>}
+                  <div style={{ fontSize:11, color:B.textLight, marginTop:3, fontFamily:f1 }}>
+                    {t.priority}{t.recurrence ? ' · ' + (RECURRENCE_LABELS[t.recurrence] || t.recurrence) : ''}{(t.checklist||[]).length > 0 ? ' · ' + t.checklist.length + ' checklist item' + (t.checklist.length !== 1 ? 's' : '') : ''}
+                  </div>
+                </div>
+                <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                  <button onClick={() => applyTemplate(t)} style={{ ...btnP, fontSize:12, padding:'6px 12px' }}>Use</button>
+                  {canOperate && <button onClick={async () => { if (window.confirm(`Delete template "${t.name}"?`)) { await deleteTaskTemplate(t._docId); if ((taskTemplates||[]).length <= 1) setShowTemplates(false); }}} style={{ ...btnD, fontSize:12, padding:'6px 10px' }} aria-label={`Delete template ${t.name}`}>✕</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Modal>
     </div>
   );

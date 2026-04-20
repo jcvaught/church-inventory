@@ -25,6 +25,7 @@ export function useFirestore(churchId) {
   const [rooms, setRooms] = useState([]);
   const [jobListings, setJobListings] = useState([]);
   const [jobAnnouncements, setJobAnnouncements] = useState([]);
+  const [taskTemplates, setTaskTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const clearError = useCallback(() => setError(null), []);
@@ -45,7 +46,7 @@ export function useFirestore(churchId) {
     if (!churchId) return;
     const unsubs = [];
     let loaded = 0;
-    const totalSubs = 19;
+    const totalSubs = 20;
     const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
     // Config
@@ -173,6 +174,12 @@ export function useFirestore(churchId) {
       const ann = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
       ann.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
       setJobAnnouncements(ann);
+      checkDone();
+    }, (err) => { handleErr(err); checkDone(); }));
+
+    // Task Templates
+    unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'taskTemplates'), orderBy('name')), (snap) => {
+      setTaskTemplates(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
     }, (err) => { handleErr(err); checkDone(); }));
 
@@ -578,6 +585,24 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
+  // ── Task Templates ──
+  const addTaskTemplate = useCallback(async (template, userId, userName) => {
+    try {
+      await addDoc(collection(db, 'churches', churchId, 'taskTemplates'), {
+        ...template,
+        createdBy: userId,
+        createdByName: userName,
+        createdAt: new Date().toISOString(),
+      });
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
+  const deleteTaskTemplate = useCallback(async (docId) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'taskTemplates', docId));
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
   // ── Bundles ──
   const addBundle = useCallback(async (bundle, userId, userName) => {
     try {
@@ -944,6 +969,7 @@ export function useFirestore(churchId) {
     addAccessRecord, updateAccessRecord, deleteAccessRecord,
     addPeopleAccessRequirement, removePeopleAccessRequirement,
     addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags,
+    taskTemplates, addTaskTemplate, deleteTaskTemplate,
     jobListings, jobAnnouncements,
     addJobListing, updateJobListing, deleteJobListing,
     signUpForJob, withdrawFromJob,

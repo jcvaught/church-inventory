@@ -118,6 +118,13 @@ service cloud.firestore {
       allow delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && resource.data.createdBy == request.auth.uid);
     }
 
+    // ── Task templates — members read; admins+mgrs create/delete ─────────────
+    match /churches/{churchId}/taskTemplates/{docId} {
+      allow read:           if isMember(churchId);
+      allow create, delete: if isChurchAdminOrManager(churchId);
+      allow update:         if isChurchAdminOrManager(churchId);
+    }
+
     // ── Task comments — any member can add; authors can edit/delete own; admins+mgrs can edit/delete any ─────
     // NOTE: comment reads are scoped to church members only; they are not further restricted
     // by parent task visibility (Firestore cannot do parent doc lookups in subcollection rules
