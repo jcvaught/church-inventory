@@ -1025,4 +1025,107 @@ ChurchOpsHub's free tier is a zero-risk way to see whether organized operations 
 Your congregation's tithes paid for your building and everything in it. Both sides — the people and the stuff — deserve to be managed well.
     `.trim(),
   },
+
+  {
+    slug: 'kanban-church-maintenance',
+    title: 'How to Use a Kanban Board to Track Church Maintenance',
+    description: "A Kanban board turns your church's scattered repair list into a visible, managed workflow. Here's how it works and why it's the right tool for church maintenance teams.",
+    date: '2026-04-21',
+    keywords: 'church maintenance management, church maintenance tracking, church facilities kanban, church repair ticket system, church maintenance software',
+    content: `
+## Why Maintenance Requests Slip Through the Cracks
+
+It usually starts with good intentions. Someone notices that the projector in Room 214 is flickering. They mention it to the facilities coordinator after Sunday service. The coordinator makes a mental note — or texts it to themselves — and the conversation ends.
+
+A week later, the Room 214 teacher asks about the projector. The coordinator thought someone was looking into it. The person they thought was looking into it didn't know they were assigned. The projector is still flickering.
+
+This pattern repeats for every broken pew cushion, every HVAC filter that needs replacing, every sound board knob that sticks. The problem isn't that nobody cares — it's that there's no system to take the issue from "noticed" to "resolved" without depending on individual memory and informal communication.
+
+A Kanban board solves this. It doesn't require any special skills, it doesn't take long to set up, and once it's in place, the status of every maintenance issue in your building is visible at a glance.
+
+## What a Kanban Board Is (And Isn't)
+
+A Kanban board is a visual workflow manager. Issues move through columns representing stages of work — typically something like "Reported → In Progress → Done." Each issue is a card on the board. The board makes it obvious what's waiting, what's being worked on, and what's been resolved.
+
+That's it. The concept is simple. What makes it powerful for church maintenance is how naturally it maps to the way repair work actually flows — and how much easier it is to manage a visual board than a spreadsheet, a text thread, or someone's mental list.
+
+Kanban boards don't replace your maintenance team. They give your team a shared operating surface that eliminates the "I thought you were handling it" conversations and the repairs that stay open for months because no one knew they were still pending.
+
+## The Right Columns for Church Maintenance
+
+Not every Kanban setup is the same. The columns you use should reflect the actual stages a maintenance issue goes through in your context. For church facilities, six stages cover most workflows well:
+
+**Backlog** — The holding area. Something has been reported or noticed, but nobody has started on it yet. The Backlog is where new tickets land by default. Regularly reviewing the Backlog is how you ensure nothing stays there indefinitely.
+
+**Planning** — The issue is being scoped. You know what needs to happen, but you're gathering bids, ordering parts, scheduling a vendor visit, or coordinating access to the space. Planning tickets are actively moving forward — they just haven't started physical work yet.
+
+**In Progress** — Someone is actively working on it. This is the most limited column: if too many tickets pile up here without moving forward, that's a signal that something is stuck.
+
+**On Hold** — Work has started but is paused, typically because you're waiting on a part, a vendor, or approval. Distinguishing "On Hold" from "In Progress" keeps your board honest — you're not pretending work is active when it's stalled.
+
+**Complete** — The repair is finished, the issue is resolved, and the ticket is closed. Complete tickets build your maintenance history over time.
+
+**Cancelled** — The reported issue isn't being addressed: it was a misunderstanding, the item was replaced rather than repaired, or the repair was deferred indefinitely. Cancelled is better than leaving a ticket open with no movement — it documents the decision.
+
+This structure mirrors what's in ChurchOpsHub's Maintenance Hub, and it works in practice because it matches how church facilities work actually unfolds — including the messy middle stages where things are waiting on vendors or decisions.
+
+## What a Good Maintenance Ticket Includes
+
+A ticket on the board is only useful if it contains enough information for someone to act on it without having to ask a bunch of questions first. At minimum, each ticket should capture:
+
+**What's broken.** A clear name and description of the issue. "Projector flickering" is a start. "Sony VPL-X500 in Room 214 — flickering at startup, sometimes stabilizes after 5–10 min, may be lamp hours" is actually actionable.
+
+**Priority.** Not everything is equally urgent. The broken mic stand that's been sitting in a corner is not as urgent as the HVAC unit making a grinding noise before summer. Marking tickets as High, Medium, or Low priority lets your team triage without you having to redirect them every time.
+
+**Assignee.** Who is responsible for moving this ticket forward? If nobody is assigned, nothing happens. This doesn't have to be the person doing the repair — it could be the facilities coordinator who needs to call the vendor.
+
+**Photos.** A photo of the damage is worth several paragraphs of description. It also creates a before/after record when the repair is complete. Most facilities teams now do this from their phones as a natural part of the job.
+
+**Linked equipment.** If the ticket is about a specific piece of equipment in your inventory, linking the ticket to that record ties the maintenance history to the asset. Over time, you can see total repair costs per item — which changes replacement decisions from intuition to data.
+
+**Vendor and cost.** When third-party work is involved, recording who did the repair and what it cost builds the data you need to evaluate vendor relationships and budget for future maintenance.
+
+**Checklist.** For multi-step repairs or inspections, a checklist inside the ticket keeps progress visible without requiring a separate document. It also provides a handoff mechanism when work changes hands mid-repair.
+
+## Recurring Maintenance Is Where the Board Really Pays Off
+
+Most church maintenance falls into two categories: reactive (something broke, fix it) and preventive (schedule this now before it breaks). Reactive work is what most teams focus on. Preventive work is where most of the value is.
+
+A Kanban board with recurring ticket support handles preventive maintenance automatically. You set up a ticket for "Replace HVAC filters — Building A" with a quarterly recurrence, assign it to your facilities coordinator, and the board generates a new ticket automatically each quarter. The issue never gets missed because it never depends on someone remembering to add it.
+
+The same applies to annual tasks: fire extinguisher inspections, roof inspections after storm season, PA system annual maintenance, pest control. Instead of a calendar reminder that goes unnoticed, these generate actual tickets with assignees and due dates — and if the board shows one sitting in Backlog two weeks before its due date, that's a visible flag.
+
+The cumulative effect over months and years is a maintenance history that documents what was done, when, and by whom — which is genuinely useful for insurance purposes, budget planning, and onboarding new facilities staff who need to understand what's been maintained and what hasn't.
+
+## Getting Your Team to Actually Use It
+
+The most common failure mode for new maintenance systems isn't bad software — it's incomplete adoption. The board is only useful if the whole team uses it, which means making submission as frictionless as possible.
+
+**Lower the barrier to reporting.** If submitting a ticket requires logging into a system, navigating to the right form, and filling out six fields, people will send a text instead. The goal is to make "submit a ticket" easier than any informal alternative. QR codes on equipment and shared shortcut links on phones help. One-tap reporting from a mobile browser is the standard to aim for.
+
+**Make ticket status visible to reporters.** When someone reports an issue and it disappears into a system they can't see, they lose trust that it was received. When they can watch the ticket move from Backlog to In Progress to Complete, they see the system working. That visibility drives continued reporting.
+
+**Assign everything.** A ticket with no assignee is a ticket that won't move. When new tickets come in, assign them within 24 hours — even if the assignment is "this is scheduled for next month." Unassigned tickets are the Kanban equivalent of an empty inbox folder that nobody checks.
+
+**Review the board regularly.** A weekly five-minute board review — What moved this week? What's stuck? What's overdue? — keeps the system alive. Without a regular review cadence, tickets accumulate in the backlog and the board stops reflecting reality.
+
+## Applying Filters When the Board Gets Full
+
+A church that's been running a Kanban board for a year will have a lot of tickets — some in progress, some complete, some from three seasons ago. Filters help keep the board navigable.
+
+Filter by assignee to see only your tickets. Filter by priority to work the urgent issues first. Filter by location to focus on a specific building or wing. Filter by status to see only what's actively in flight.
+
+The history of completed and cancelled tickets has value — it's your maintenance record — so you don't want to delete it. But being able to hide it from the active board keeps the working view clean.
+
+## Starting With What Hurts Most
+
+You don't need to log every maintenance issue in your building on day one. Start with the category causing the most friction right now — typically your AV equipment or your HVAC — and build the habit there before expanding.
+
+Add five or ten tickets for known open issues. Assign them. Move a couple through the workflow so the team can see how it works. A board with real tickets moving through real stages is more motivating than an empty board waiting to be populated.
+
+Within a few weeks, the board becomes a natural part of how your team communicates about facilities work. Within a few months, you have a maintenance history that your team didn't have before — and the foundation for maintenance budgeting that's based on actual cost data rather than estimates.
+
+Your church's building and equipment are a stewardship responsibility. A Kanban board is one of the simplest tools available for taking that responsibility seriously — making the invisible visible, the informal accountable, and the reactive proactive.
+    `.trim(),
+  },
 ];
