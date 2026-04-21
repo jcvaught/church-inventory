@@ -296,25 +296,13 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Job Hub: My Jobs filter tab; morning reminder emails (sendJobReminders scheduled CF, 8am Central); cancellation emails (sendJobCancelledEmails CF — auto on cancel if notifications on, + "Notify Signups" button on cancelled jobs); signup list privacy (admin/mgr see names, members see own status only); activity log for all job actions; spotsTotal validation; date formatting; Opus review security + bug fixes | 2026-04-16 |
 | — | Tasks Hub enhancements (Opus review phase 2): activity logging for task update/complete/delete; CSV export (exportTasksCSV); due-date reminder emails (sendTaskDueReminders scheduled CF, 8am Central, collectionGroup query); Calendar view (month grid + mobile grouped list); task templates (save/apply, admin+mgr only); subtasks (parentTaskId + nested display in list/detail); bulk actions in list view (bulk status change, bulk delete); task dependencies (blockedBy TSK-### array with soft warning on Complete); firestore.indexes.json for collectionGroup dueDate query; taskTemplates Firestore rules added | 2026-04-20 |
 | — | Job Hub: Schedule (roster) view (desktop table: date/job/location/spots progress/status; admin sees signup names, members see own status; show/hide past jobs toggle) + Calendar view (month grid + mobile grouped list, chips show filled/total and status color); view tabs expanded from 2 to 4 (Job Board, Schedule, Calendar, Announcements) | 2026-04-20 |
+| — | Blog post: "How to Use a Kanban Board to Track Church Maintenance" | 2026-04-21 |
 
 ---
 
-## Future Work (Maintenance Hub — from UX Audit)
+## Future Work
 
-These items were identified during a full Maintenance Hub UX audit but deferred. Prioritized by impact:
-
-### Medium Priority
-- **Status filter** — No way to filter by one or more statuses in the filter bar. Especially useful in Kanban view where all 6 columns are always visible.
-- **Read-only fields for `user` role** — Financial fields (Estimated Cost, Actual Cost), Vendor assignment, Recurrence, and Linked Equipment are editable by all roles. Consider showing these as read-only text for `user` role to reduce accidental edits.
-- **Confirmation on drag to Complete/Cancelled** — Moving a recurring ticket to Complete silently creates the next recurring ticket. A confirm step for terminal statuses would prevent accidents.
-- **Flash message duration** — 3-second flash is too short for longer messages (e.g., "Ticket saved, but notification email failed"). Increase to 5–6 seconds or make dismissible.
-- **Loading state on initial render** — Brief empty-state flash while Firestore loads. A spinner or skeleton prevents misleading "No tickets yet" flash.
-
-### Low Priority
-- **Photo upload error feedback** — `handleDetailPhotoAdd` silently swallows upload errors. Show a flash message on failure.
-- **Checklist item reordering** — No drag-to-reorder for checklist items; items can only be added at the bottom.
-- **Assignee filter** — "My Tickets" toggle exists but no way to filter by a specific other team member.
-- **Default list view on mobile** — View mode persists from last use; a user coming from desktop Kanban gets stacked columns on mobile. Could auto-suggest list view on narrow viewports.
+No known deferred work items. The codebase is in good shape.
 
 ---
 
