@@ -682,6 +682,7 @@ function AppShell({ authHook }) {
             ["inventory","Items","📦"],
             ["supplies","Stock","🧴"],
             ["reservations","Reserve","📅"],
+            ["log","Log","📋"],
             ["hubs","Hubs","🔌"],
             ["settings","Settings","⚙️"],
           ].map(([k,label,icon]) => (

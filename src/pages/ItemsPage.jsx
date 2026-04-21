@@ -10,6 +10,7 @@ import { Badge } from '../components/primitives/Badge.jsx';
 import { resizeImageForUpload } from '../utils/imageResize.js';
 import { printLabel, printInventory } from '../utils/print.js';
 import { exportItemsCSV } from '../utils/csv.js';
+import { localDateStr } from '../utils/date.js';
 import { canManageItem } from '../utils/roleHelpers.js';
 import { ITEM_STATUS } from '../utils/constants.js';
 import QRCode from 'qrcode';
@@ -128,7 +129,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   const [repairForm, setRepairForm] = useState({ issue:"", handler:"", expectedDate:"" });
   const [retireForm, setRetireForm] = useState({ reason:"Broken", date:"", notes:"", recoveryValue:"" });
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState("");
+  const [msg, setMsg] = useState(null);
   const [showMoveToSupply, setShowMoveToSupply] = useState(null);
   const [moveSupplyForm, setMoveSupplyForm] = useState({ supplyId:"", quantity:"0", minQuantity:"5", unit:"each" });
   const [photoFile, setPhotoFile] = useState(null);
@@ -153,8 +154,8 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   }), [showDisposed, disposedItems, activeItems, search, statusFilter, locationFilter, ministryFilter]);
 
   // Helpers
-  function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }
-  const today = new Date().toISOString().split("T")[0];
+  function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
+  const today = localDateStr(new Date());
 
   // ── AI Item Identification ──
   async function handleIdentify() {
@@ -587,7 +588,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       </div>
 
       {/* Success message */}
-      {msg && <div style={{ background:B.tealPale, border:"1px solid "+B.teal, borderRadius:10, padding:"10px 16px", marginBottom:16, color:B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}>{msg}</div>}
+      {msg && <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError?'#FEE8E8':B.tealPale, border:`1px solid ${msg.isError?'#FECACA':B.teal}`, borderRadius:10, padding:"10px 16px", marginBottom:16, color:msg.isError?B.red:B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}><span>{msg.text}</span><button onClick={()=>setMsg(null)} style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button></div>}
 
       {/* Public Requests Panel — admin only */}
       {isAdmin && publicRequests?.length > 0 && (

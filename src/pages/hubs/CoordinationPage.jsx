@@ -4,6 +4,7 @@ import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { Stat } from '../../components/primitives/Stat.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
+import { localDateStr } from '../../utils/date.js';
 
 export function CoordinationPage({ store, userProfile }) {
   const {
@@ -20,10 +21,10 @@ export function CoordinationPage({ store, userProfile }) {
   const userName = userProfile?.name || 'Unknown';
   const activeItems = useMemo(() => items.filter(i => i.status !== 'Disposed'), [items]);
   const ministries = settings?.ministries || [];
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr(new Date());
 
-  const [msg, setMsg] = useState('');
-  function flash(text) { setMsg(text); setTimeout(() => setMsg(''), 3500); }
+  const [msg, setMsg] = useState(null);
+  function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
 
   // ── Bundle modal state ──
   const [showBundleModal, setShowBundleModal] = useState(false);
@@ -166,7 +167,10 @@ export function CoordinationPage({ store, userProfile }) {
       </div>
 
       {msg && (
-        <div style={{ background: B.tealPale, border: '1px solid ' + B.tealLight, borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 14, fontWeight: 600, color: B.teal }}>{msg}</div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError?'#FEE8E8':B.tealPale, border:`1px solid ${msg.isError?'#FECACA':B.tealLight}`, borderRadius:10, padding:'10px 16px', marginBottom:16, fontSize:14, fontWeight:600, color:msg.isError?B.red:B.teal }}>
+          <span>{msg.text}</span>
+          <button onClick={()=>setMsg(null)} style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button>
+        </div>
       )}
 
       {/* Stats */}

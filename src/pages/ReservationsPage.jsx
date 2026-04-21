@@ -6,6 +6,7 @@ import { FF } from '../components/primitives/FF.jsx';
 import { Stat } from '../components/primitives/Stat.jsx';
 import { exportReservationsCSV } from '../utils/csv.js';
 import { ITEM_STATUS, RES_STATUS, RESOURCE_TYPE } from '../utils/constants.js';
+import { localDateStr } from '../utils/date.js';
 
 export function ReservationsPage({ store, userProfile }) {
   const { items, settings, reservations, users, rooms, notificationConfig, config, addReservation, updateReservation, checkOutItem, logActivity } = store;
@@ -15,7 +16,7 @@ export function ReservationsPage({ store, userProfile }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState("");
+  const [msg, setMsg] = useState(null);
 
   const userId = userProfile?.id || userProfile?.uid;
   const userName = userProfile?.name || "Unknown";
@@ -38,7 +39,7 @@ export function ReservationsPage({ store, userProfile }) {
   const [recurrenceFreq, setRecurrenceFreq] = useState("weekly");
   const [recurrenceEnd, setRecurrenceEnd] = useState("");
 
-  function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }
+  function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
 
   const statusMap = {
     Pending:   { bg:"#FFF8E1", tx:"#96750E", dt:B.gold,    icon:"⏳" },
@@ -84,8 +85,8 @@ export function ReservationsPage({ store, userProfile }) {
       if (current.getDate() !== day) current.setDate(lastDay);
     }
       if (current > end) break;
-      const ev = current.toISOString().split('T')[0];
-      const ret = returnDate ? new Date(current.getTime() + retOffset).toISOString().split('T')[0] : '';
+      const ev = localDateStr(current);
+      const ret = returnDate ? localDateStr(new Date(current.getTime() + retOffset)) : '';
       dates.push({ eventDate: ev, returnDate: ret });
     }
     return dates;
@@ -235,7 +236,7 @@ export function ReservationsPage({ store, userProfile }) {
         person: res.requestedByName,
         purpose: res.purpose || res.eventName,
         ministry: res.ministry,
-        date: new Date().toISOString().split("T")[0],
+        date: localDateStr(new Date()),
         returnDate: res.returnDate || res.eventDate,
       }, userId, userName);
       await updateReservation(res._docId, { status:RES_STATUS.CHECKED_OUT, checkedOutAt:new Date().toISOString() });
@@ -255,7 +256,7 @@ export function ReservationsPage({ store, userProfile }) {
     return new Date(d+"T00:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" });
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = localDateStr(new Date());
   const pending = reservations.filter(r => r.status === RES_STATUS.PENDING);
   const approved = reservations.filter(r => r.status === RES_STATUS.APPROVED);
 
@@ -278,7 +279,10 @@ export function ReservationsPage({ store, userProfile }) {
 
       {/* Success message */}
       {msg && (
-        <div style={{ background:B.tealPale, border:"1px solid "+B.tealLight, borderRadius:10, padding:"10px 16px", marginBottom:16, fontSize:14, fontWeight:600, color:B.teal }}>{msg}</div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError?'#FEE8E8':B.tealPale, border:`1px solid ${msg.isError?'#FECACA':B.tealLight}`, borderRadius:10, padding:"10px 16px", marginBottom:16, fontSize:14, fontWeight:600, color:msg.isError?B.red:B.teal }}>
+          <span>{msg.text}</span>
+          <button onClick={()=>setMsg(null)} style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button>
+        </div>
       )}
 
       {/* Filter */}
@@ -302,7 +306,7 @@ export function ReservationsPage({ store, userProfile }) {
           {filtered.map(r => {
             const isPast = r.eventDate && r.eventDate < today;
             return (
-              <div key={r._docId} onClick={()=>setShowDetail(r)} style={{ background:B.white, borderRadius:14, padding:"18px 22px", border:"1px solid "+B.sand, cursor:"pointer", boxShadow:"0 1px 3px rgba(27,42,74,0.06)", transition:"box-shadow 0.15s", borderLeft:"4px solid "+(statusMap[r.status]?.dt || B.sand) }}
+              <div key={r._docId} onClick={()=>setShowDetail(r)} role="button" tabIndex={0} aria-label={`${r.eventName} — ${r.status}`} onKeyDown={e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();setShowDetail(r);}}} style={{ background:B.white, borderRadius:14, padding:"18px 22px", border:"1px solid "+B.sand, cursor:"pointer", boxShadow:"0 1px 3px rgba(27,42,74,0.06)", transition:"box-shadow 0.15s", borderLeft:"4px solid "+(statusMap[r.status]?.dt || B.sand) }}
                 onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 16px rgba(27,42,74,0.12)"}
                 onMouseLeave={e=>e.currentTarget.style.boxShadow="0 1px 3px rgba(27,42,74,0.06)"}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:8 }}>

@@ -4,10 +4,7 @@ import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
-
-function localDateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
+import { localDateStr } from '../../utils/date.js';
 
 function formatJobDate(dateStr) {
   if (!dateStr) return '—';
@@ -216,14 +213,10 @@ export function JobsPage({ store, userProfile }) {
   const [annForm, setAnnForm] = useState(emptyAnn());
   const [editAnnId, setEditAnnId] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState('');
-  const [errMsg, setErrMsg] = useState('');
+  const [msg, setMsg] = useState(null);
   const [showPastJobs, setShowPastJobs] = useState(false);
 
-  function flash(text, isError) {
-    if (isError) { setErrMsg(text); setTimeout(() => setErrMsg(''), 4000); }
-    else { setMsg(text); setTimeout(() => setMsg(''), 3000); }
-  }
+  function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
 
   function sendAnnouncementEmails(title, body) {
     if (!(notificationConfig?.enabled)) return;
@@ -430,13 +423,9 @@ export function JobsPage({ store, userProfile }) {
     <div>
       {/* Flash messages */}
       {msg && (
-        <div style={{ background: B.tealPale, border: '1px solid ' + B.tealLight, borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 14, fontWeight: 600, color: B.teal }}>
-          {msg}
-        </div>
-      )}
-      {errMsg && (
-        <div style={{ background: '#FEE8E8', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 14, fontWeight: 600, color: B.red }}>
-          {errMsg}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError?'#FEE8E8':B.tealPale, border:`1px solid ${msg.isError?'#FECACA':B.tealLight}`, borderRadius:10, padding:'10px 16px', marginBottom:16, fontSize:14, fontWeight:600, color:msg.isError?B.red:B.teal }}>
+          <span>{msg.text}</span>
+          <button onClick={()=>setMsg(null)} style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button>
         </div>
       )}
 

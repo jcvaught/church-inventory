@@ -7,6 +7,7 @@ import {
 import { B, f1, f2, inp, btnS } from '../../components/brand/tokens.js';
 import { escapeHtml } from '../../utils/print.js';
 import { MobileCtx } from '../../hooks/useMobile.js';
+import { localDateStr } from '../../utils/date.js';
 import { Stat } from '../../components/primitives/Stat.jsx';
 
 /* ─── Helpers ─────────────────────────────────────────────── */
@@ -246,7 +247,7 @@ function SeasonalSection({ activityLog, isMobile }) {
     for (let i = 11; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
-      const key = d.toISOString().slice(0, 7);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
       result.push({ month: d.toLocaleString('default', { month: 'short', year: '2-digit' }), checkouts: map[key] || 0 });
     }
     return result;
@@ -385,7 +386,7 @@ function SuppliesSection({ supplies, activityLog, isMobile }) {
         const daysLeft = dailyRate > 0 ? Math.floor(s.quantity / dailyRate) : null;
         const reorderDate = daysLeft != null
           // eslint-disable-next-line react-hooks/purity
-          ? new Date(Date.now() + daysLeft * 86400000).toISOString().split('T')[0]
+          ? localDateStr(new Date(Date.now() + daysLeft * 86400000))
           : null;
         return { ...s, used90, dailyRate: Math.round(dailyRate * 10) / 10, daysLeft, reorderDate };
       })

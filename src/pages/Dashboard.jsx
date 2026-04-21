@@ -4,10 +4,7 @@ import { ITEM_STATUS, RES_STATUS } from '../utils/constants.js';
 import { Badge } from '../components/primitives/Badge.jsx';
 import { Stat } from '../components/primitives/Stat.jsx';
 import { MobileCtx } from '../hooks/useMobile.js';
-
-function localDateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
+import { localDateStr } from '../utils/date.js';
 
 export function Dashboard({ store, userProfile, canSeeJobHub }) {
   const { items, supplies, activityLog, reservations, jobAnnouncements } = store;

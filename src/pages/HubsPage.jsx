@@ -147,6 +147,10 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, userCa
           return (
             <div key={hub.key}
               onClick={() => onOpenHub(hub.key)}
+              role="button"
+              tabIndex={0}
+              aria-label={hub.label}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenHub(hub.key); } }}
               style={{
                 background: B.white,
                 borderRadius: 16,

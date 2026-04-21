@@ -9,6 +9,7 @@ import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { Spinner } from '../../components/primitives/Spinner.jsx';
 import { resizeImageForUpload } from '../../utils/imageResize.js';
+import { localDateStr } from '../../utils/date.js';
 
 const STATUSES = ['Backlog', 'Planning', 'In Progress', 'On Hold', 'Complete', 'Cancelled'];
 
@@ -43,7 +44,7 @@ function calculateNextDue(dueDate, recurrence) {
     if (base.getDate() !== day) base.setDate(lastDay);
   }
   else if (recurrence === 'annually') base.setFullYear(base.getFullYear() + 1);
-  return base.toISOString().slice(0, 10);
+  return localDateStr(base);
 }
 
 const priorityColors = {
@@ -70,14 +71,7 @@ function PriorityBadge({ priority }) {
   );
 }
 
-function _StatusBadge({ status }) {
-  const s = statusColors[status] || statusColors['Backlog'];
-  return (
-    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:20, background:s.bg, color:s.tx, fontSize:11, fontWeight:700, fontFamily:f1 }}>
-      <span style={{ width:6, height:6, borderRadius:'50%', background:s.dot }}/>{status}
-    </span>
-  );
-}
+
 
 function TicketCard({ ticket, onClick, onDragStart, onStatusChange, isMobile }) {
   const sc = statusColors[ticket.status] || statusColors['Backlog'];
@@ -87,6 +81,10 @@ function TicketCard({ ticket, onClick, onDragStart, onStatusChange, isMobile }) 
       draggable={!isMobile && !!onDragStart}
       onDragStart={!isMobile && onDragStart ? e => { e.dataTransfer.setData('ticketDocId', ticket._docId); e.dataTransfer.effectAllowed = 'move'; } : undefined}
       onClick={() => onClick(ticket)}
+      role="button"
+      tabIndex={0}
+      aria-label={`${ticket.ticketNumber ? ticket.ticketNumber + ': ' : ''}${ticket.name}${isOverdue ? ' (overdue)' : ''}`}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(ticket); } }}
       style={{ background:B.white, borderRadius:12, padding:'14px 16px', border:'1px solid '+B.sand, cursor: !isMobile && onDragStart ? 'grab' : 'pointer', borderLeft:'4px solid '+sc.dot, boxShadow:'0 1px 3px rgba(27,42,74,0.06)', marginBottom:8, transition:'box-shadow 0.15s' }}
       onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(27,42,74,0.12)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 3px rgba(27,42,74,0.06)'}
@@ -468,9 +466,7 @@ function KanbanColumn({ status, tickets, onTicketClick, onDrop, onStatusChange, 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-function localDateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
+
 
 function TicketChip({ ticket, compact, todayStr, onTicketClick }) {
   const pc = priorityColors[ticket.priority] || priorityColors.Medium;
@@ -996,7 +992,8 @@ export function MaintenancePage({ store, userProfile }) {
   }
 
   // ── Stats ──
-  const thisMonthStart = new Date().toISOString().slice(0, 7) + '-01';
+  const _now = new Date();
+  const thisMonthStart = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-01`;
   const today = new Date();
   const openCount = maintenanceTickets.filter(t => t.status !== 'Complete' && t.status !== 'Cancelled').length;
   const inProgressCount = maintenanceTickets.filter(t => t.status === 'In Progress').length;
@@ -1075,7 +1072,7 @@ export function MaintenancePage({ store, userProfile }) {
       </div>
 
       {msg && (
-        <div style={{ background:msg.isError ? B.redPale : B.tealPale, border:'1px solid '+(msg.isError ? '#FECACA' : B.teal), borderRadius:10, padding:'10px 16px', marginBottom:16, color:msg.isError ? B.red : B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}>{msg.text}</div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError ? B.redPale : B.tealPale, border:'1px solid '+(msg.isError ? '#FECACA' : B.teal), borderRadius:10, padding:'10px 16px', marginBottom:16, color:msg.isError ? B.red : B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}><span>{msg.text}</span><button onClick={()=>setMsg(null)} style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button></div>
       )}
 
       {/* Vendor Directory */}

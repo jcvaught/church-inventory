@@ -1,3 +1,5 @@
+import { localDateStr } from './date.js';
+
 export function exportItemsCSV(items) {
   const cols = ['itemId','description','location','ministry','status','condition','tags','assignedTo','checkOutDate','expectedReturn','notes'];
   const header = cols.join(',');
@@ -11,7 +13,7 @@ export function exportItemsCSV(items) {
   const csv = [header, ...rows].join('\n');
   const a = Object.assign(document.createElement('a'), {
     href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
-    download: `inventory-${new Date().toISOString().split('T')[0]}.csv`
+    download: `inventory-${localDateStr(new Date())}.csv`
   });
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
@@ -29,7 +31,7 @@ export function exportSuppliesCSV(supplies) {
   const csv = [header, ...rows].join('\n');
   const a = Object.assign(document.createElement('a'), {
     href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
-    download: `supplies-${new Date().toISOString().split('T')[0]}.csv`
+    download: `supplies-${localDateStr(new Date())}.csv`
   });
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
@@ -48,7 +50,7 @@ export function exportAccessRecordsCSV(records) {
   const csv = [header, ...rows].join('\n');
   const a = Object.assign(document.createElement('a'), {
     href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
-    download: `people-access-${new Date().toISOString().split('T')[0]}.csv`
+    download: `people-access-${localDateStr(new Date())}.csv`
   });
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
@@ -68,7 +70,7 @@ export function exportTasksCSV(tasks) {
   const csv = [header, ...rows].join('\n');
   const a = Object.assign(document.createElement('a'), {
     href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
-    download: `tasks-${new Date().toISOString().split('T')[0]}.csv`
+    download: `tasks-${localDateStr(new Date())}.csv`
   });
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
@@ -91,7 +93,7 @@ export function exportReservationsCSV(reservations) {
   const csv = [header, ...rows].join('\n');
   const a = Object.assign(document.createElement('a'), {
     href: URL.createObjectURL(new Blob([csv], {type:'text/csv'})),
-    download: `reservations-${new Date().toISOString().split('T')[0]}.csv`
+    download: `reservations-${localDateStr(new Date())}.csv`
   });
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(a.href);

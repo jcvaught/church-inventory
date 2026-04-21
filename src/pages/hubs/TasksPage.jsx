@@ -10,6 +10,7 @@ import { FF } from '../../components/primitives/FF.jsx';
 import { Spinner } from '../../components/primitives/Spinner.jsx';
 import { resizeImageForUpload } from '../../utils/imageResize.js';
 import { exportTasksCSV } from '../../utils/csv.js';
+import { localDateStr } from '../../utils/date.js';
 
 const STATUSES = ['Backlog', 'Planning', 'In Progress', 'On Hold', 'Complete', 'Cancelled'];
 
@@ -51,9 +52,6 @@ function calculateNextDue(dueDate, recurrence) {
   return localDateStr(base);
 }
 
-function localDateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
 
 const priorityColors = {
   High:   { bg: '#FEE8E8', tx: B.red,      dot: '#E87171' },
@@ -79,14 +77,6 @@ function PriorityBadge({ priority }) {
   );
 }
 
-function _StatusBadge({ status }) {
-  const s = statusColors[status] || statusColors['Backlog'];
-  return (
-    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:20, background:s.bg, color:s.tx, fontSize:11, fontWeight:700, fontFamily:f1 }}>
-      <span style={{ width:6, height:6, borderRadius:'50%', background:s.dot }}/>{status}
-    </span>
-  );
-}
 
 const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusChange, isMobile, subtaskCount, subtaskDone, parentName }) {
   const sc = statusColors[task.status] || statusColors['Backlog'];
@@ -1388,7 +1378,7 @@ export function TasksPage({ store, userProfile }) {
       </div>
 
       {msg && (
-        <div style={{ background:msg.isError ? B.redPale : B.tealPale, border:'1px solid '+(msg.isError ? '#FECACA' : B.teal), borderRadius:10, padding:'10px 16px', marginBottom:16, color:msg.isError ? B.red : B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}>{msg.text}</div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError ? B.redPale : B.tealPale, border:'1px solid '+(msg.isError ? '#FECACA' : B.teal), borderRadius:10, padding:'10px 16px', marginBottom:16, color:msg.isError ? B.red : B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}><span>{msg.text}</span><button onClick={()=>setMsg(null)} style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button></div>
       )}
 
       {/* Filter Bar */}

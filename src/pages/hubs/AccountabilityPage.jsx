@@ -4,6 +4,7 @@ import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { Stat } from '../../components/primitives/Stat.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
+import { localDateStr } from '../../utils/date.js';
 
 const CONDITIONS = ['Good', 'Fair', 'Poor', 'Damaged'];
 
@@ -29,7 +30,7 @@ export function AccountabilityPage({ store, userProfile }) {
   const [auditLocation, setAuditLocation] = useState('');
   const [auditProgress, setAuditProgress] = useState({});
   const [saving, setSaving] = useState(false);
-  const [flash, setFlash] = useState('');
+  const [flash, setFlash] = useState(null);
 
   // Modals
   const [viewingAudit, setViewingAudit] = useState(null);
@@ -37,7 +38,7 @@ export function AccountabilityPage({ store, userProfile }) {
   const [chainSearch, setChainSearch] = useState('');
   const [chainItem, setChainItem] = useState(null);
 
-  function showFlash(msg) { setFlash(msg); setTimeout(() => setFlash(''), 3500); }
+  function showFlash(msg, isError = false) { setFlash({ text: msg, isError }); setTimeout(() => setFlash(null), 5000); }
 
   const isAdmin = userProfile?.role === 'admin';
   const isManager = userProfile?.role === 'manager';
@@ -126,7 +127,7 @@ export function AccountabilityPage({ store, userProfile }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `insurance-inventory-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `insurance-inventory-${localDateStr(new Date())}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -248,8 +249,9 @@ export function AccountabilityPage({ store, userProfile }) {
   return (
     <div style={{ fontFamily:f2 }}>
       {flash && (
-        <div style={{ background:B.tealPale, border:`1px solid ${B.teal}`, borderRadius:10, padding:'10px 16px', marginBottom:16, color:B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}>
-          {flash}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:flash.isError?'#FEE8E8':B.tealPale, border:`1px solid ${flash.isError?'#FECACA':B.teal}`, borderRadius:10, padding:'10px 16px', marginBottom:16, color:flash.isError?B.red:B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}>
+          <span>{flash.text}</span>
+          <button onClick={()=>setFlash(null)} style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button>
         </div>
       )}
 

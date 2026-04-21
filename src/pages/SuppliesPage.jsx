@@ -56,8 +56,7 @@ export function SuppliesPage({ store, userProfile }) {
   const [useForm, setUseForm] = useState({ qty:"1", purpose:"" });
   const [restockForm, setRestockForm] = useState({ qty:"", source:"" });
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [_photoFile, setPhotoFile] = useState(null);
+  const [msg, setMsg] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [identifying, setIdentifying] = useState(false);
 
@@ -74,7 +73,7 @@ export function SuppliesPage({ store, userProfile }) {
   const [showMoveToItem, setShowMoveToItem] = useState(null);
   const [moveItemForm, setMoveItemForm] = useState({ itemId: "", notes: "" });
 
-  function flash(text) { setMsg(text); setTimeout(()=>setMsg(""), 3000); }
+  function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
 
   // ── AI Supply Identification ──
   async function handleIdentify(file) {
@@ -137,8 +136,7 @@ export function SuppliesPage({ store, userProfile }) {
     }, userId, userName);
     setShowAdd(false);
     setSupForm(emptySupply);
-    setPhotoFile(null);
-    setPhotoPreview(null);
+        setPhotoPreview(null);
     setSaving(false);
     flash("Supply added!");
   }
@@ -256,7 +254,7 @@ export function SuppliesPage({ store, userProfile }) {
         </div>
       </div>
 
-      {msg && <div style={{ background:B.tealPale, border:"1px solid "+B.teal, borderRadius:10, padding:"10px 16px", marginBottom:16, color:B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}>{msg}</div>}
+      {msg && <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError?'#FEE8E8':B.tealPale, border:`1px solid ${msg.isError?'#FECACA':B.teal}`, borderRadius:10, padding:"10px 16px", marginBottom:16, color:msg.isError?B.red:B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}><span>{msg.text}</span><button onClick={()=>setMsg(null)} style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button></div>}
 
       {/* Low Stock Banner */}
       {lowCount > 0 && (
@@ -362,7 +360,7 @@ export function SuppliesPage({ store, userProfile }) {
         <FF label="Description">
           <input style={inp} value={supForm.description} onChange={e=>{const d=e.target.value;setSupForm(f=>{const u={...f,description:d};if(!supIdTouched)u.supplyId=generateId(d,supplies.map(s=>s.supplyId));return u;});}} placeholder="e.g. AA Batteries" autoFocus/>
           <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", marginTop:8 }}>
-            <input type="file" accept="image/*" id="photo-sup-add" style={{ display:"none" }} onChange={e=>{const f=e.target.files[0];if(f){setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));handleIdentify(f);}}}/>
+            <input type="file" accept="image/*" id="photo-sup-add" style={{ display:"none" }} onChange={e=>{const f=e.target.files[0];if(f){setPhotoPreview(URL.createObjectURL(f));handleIdentify(f);}}}/>
             <label htmlFor="photo-sup-add" style={{ ...btnS, display:"inline-block", cursor:"pointer", padding:"7px 16px", fontSize:13, opacity:identifying?.6:1, pointerEvents:identifying?"none":"auto" }}>
               {identifying ? "Identifying…" : "✨ Identify Item"}
             </label>

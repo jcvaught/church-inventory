@@ -4,6 +4,7 @@ import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { exportAccessRecordsCSV } from '../../utils/csv.js';
+import { localDateStr } from '../../utils/date.js';
 
 const TYPE_LABELS = {
   background_check: 'Background Check',
@@ -217,7 +218,7 @@ export function PeopleAccessPage({ store, userProfile }) {
   }
 
   async function handleMarkReturned(record) {
-    await updateAccessRecord(record._docId, { returnedDate: new Date().toISOString().split('T')[0] });
+    await updateAccessRecord(record._docId, { returnedDate: localDateStr(new Date()) });
   }
 
   async function handleDeleteRecord() {
