@@ -71,6 +71,7 @@ src/
 │       └── JobsPage.jsx            ← Job Hub: teen job board; admins post jobs (JOB-###, date/time/location/pay/spots); members sign up (transaction-safe); "My Jobs" filter; announcement board with pin/expiry; cancellation emails via sendJobCancelledEmails CF; morning reminder emails via sendJobReminders scheduled CF; signup list visible to admin/mgr only (members see own status only); activity log for all job actions; Schedule view (roster table: date/job/location/spots progress/status); Calendar view (month grid + mobile grouped list); 4 view tabs: Job Board, Schedule, Calendar, Announcements
 ├── utils/
 │   ├── csv.js                 ← exportItemsCSV, exportSuppliesCSV, exportReservationsCSV, exportAccessRecordsCSV
+│   ├── date.js                ← localDateStr(d) — shared local-timezone YYYY-MM-DD formatter; import instead of toISOString()
 │   ├── print.js               ← printLabel, printInventory
 │   ├── imageResize.js         ← resizeImageForUpload
 │   ├── roleHelpers.js         ← canManageMinistry, canManageItem, canManageSupply
@@ -297,6 +298,7 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Tasks Hub enhancements (Opus review phase 2): activity logging for task update/complete/delete; CSV export (exportTasksCSV); due-date reminder emails (sendTaskDueReminders scheduled CF, 8am Central, collectionGroup query); Calendar view (month grid + mobile grouped list); task templates (save/apply, admin+mgr only); subtasks (parentTaskId + nested display in list/detail); bulk actions in list view (bulk status change, bulk delete); task dependencies (blockedBy TSK-### array with soft warning on Complete); firestore.indexes.json for collectionGroup dueDate query; taskTemplates Firestore rules added | 2026-04-20 |
 | — | Job Hub: Schedule (roster) view (desktop table: date/job/location/spots progress/status; admin sees signup names, members see own status; show/hide past jobs toggle) + Calendar view (month grid + mobile grouped list, chips show filled/total and status color); view tabs expanded from 2 to 4 (Job Board, Schedule, Calendar, Announcements) | 2026-04-20 |
 | — | Blog post: "How to Use a Kanban Board to Track Church Maintenance" | 2026-04-21 |
+| — | UI/UX fix sweep (Opus review): extract `localDateStr` to `src/utils/date.js`; fix all UTC `toISOString()` date bugs (17 occurrences, 9 files); keyboard a11y on TicketCard/HubCards/ReservationCards/Modal close; flash messages standardized (5s, isError, dismiss button) app-wide; Activity Log added to mobile nav; dead code removed (`_StatusBadge`, `_photoFile`) | 2026-04-21 |
 
 ---
 
