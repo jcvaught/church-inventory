@@ -168,7 +168,7 @@ All church data is namespaced under `churches/{churchId}/`:
   - Hub visibility per user controlled by `allowedHubs[]` on user profile (see Per-User Hub Access).
 - **SEO:** `react-helmet-async` installed; `<HelmetProvider>` wraps the app in `main.jsx`. Reusable `<SEO>` component in `src/components/SEO.jsx` sets `<title>`, `<meta name="description">`, `<link rel="canonical">`, Open Graph tags, Twitter Card tags, and optional JSON-LD via `<script type="application/ld+json">` (accepts object or array). Applied to LandingPage (SoftwareApplication + Organization schemas, featureList), HelpPage, BlogIndex, and BlogPost (BlogPosting schema). Blog posts use `ogType="article"`. Google Search Console verified via `public/google254ab6f07b8682a3.html`. Sitemap at `public/sitemap.xml` — update `lastmod` on `/` and `/?help` when those pages change; add new blog posts with their publish date and `changefreq: yearly`.
 - **AppShell footer (desktop only):** Displays logo, domain, and links to Help Center and Blog. Hidden on mobile (`!isMobile`). Blog link uses `href="/blog"` — works via Vercel catch-all rewrite.
-- **localStorage:** Items page persists `locationFilter`, `ministryFilter`, and `statusFilter` under keys `inv_locationFilter` / `inv_ministryFilter` / `inv_statusFilter`.
+- **localStorage:** Items page persists `locationFilter`, `ministryFilter`, and `statusFilter` under keys `inv_locationFilter` / `inv_ministryFilter` / `inv_statusFilter`. Reservations page persists the Equipment/Space resource type toggle under `res_resourceType`.
 
 ### Item Status Values
 
@@ -299,6 +299,7 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Job Hub: Schedule (roster) view (desktop table: date/job/location/spots progress/status; admin sees signup names, members see own status; show/hide past jobs toggle) + Calendar view (month grid + mobile grouped list, chips show filled/total and status color); view tabs expanded from 2 to 4 (Job Board, Schedule, Calendar, Announcements) | 2026-04-20 |
 | — | Blog post: "How to Use a Kanban Board to Track Church Maintenance" | 2026-04-21 |
 | — | UI/UX fix sweep (Opus review): extract `localDateStr` to `src/utils/date.js`; fix all UTC `toISOString()` date bugs (17 occurrences, 9 files); keyboard a11y on TicketCard/HubCards/ReservationCards/Modal close; flash messages standardized (5s, isError, dismiss button) app-wide; Activity Log added to mobile nav; dead code removed (`_StatusBadge`, `_photoFile`) | 2026-04-21 |
+| — | UX polish (Opus medium items): supply cards click-to-detail modal (shows all fields + action buttons); reservation Equipment/Space toggle persists to localStorage (`res_resourceType`); reservations empty state role-aware; PeopleAccessPage header font-size standardized to 22px | 2026-04-21 |
 
 ---
 
