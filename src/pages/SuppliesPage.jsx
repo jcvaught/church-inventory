@@ -36,6 +36,7 @@ export function SuppliesPage({ store, userProfile }) {
   const [showUse, setShowUse] = useState(null);      // supply object
   const [showRestock, setShowRestock] = useState(null); // supply object
   const [showHistory, setShowHistory] = useState(null); // supply object
+  const [showDetail, setShowDetail] = useState(null);   // supply object (read-only)
 
   // Forms
   const emptySupply = { supplyId:"", description:"", location:"", ministry:"", quantity:0, minQuantity:5, unit:"each", tags:[] };
@@ -305,11 +306,14 @@ export function SuppliesPage({ store, userProfile }) {
             const isLow = s.quantity <= s.minQuantity;
             const isEmpty = s.quantity === 0;
             return (
-              <div key={s._docId} style={{
+              <div key={s._docId} onClick={()=>setShowDetail(s)} role="button" tabIndex={0} aria-label={s.description} onKeyDown={e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();setShowDetail(s);}}}
+                onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 16px rgba(27,42,74,0.12)"}
+                onMouseLeave={e=>e.currentTarget.style.boxShadow="0 1px 3px rgba(27,42,74,0.06)"}
+                style={{
                 background:B.white, borderRadius:14, padding:"18px 20px",
                 border: isEmpty ? "1px solid #FECACA" : isLow ? "1px solid #FFECB3" : "1px solid "+B.sand,
                 boxShadow:"0 1px 3px rgba(27,42,74,0.06)",
-                transition:"all 0.15s"
+                transition:"all 0.15s", cursor:"pointer"
               }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
                   <div>
@@ -341,7 +345,7 @@ export function SuppliesPage({ store, userProfile }) {
                     Min: {s.minQuantity || 5} {s.unit || "each"}
                     {s.lastRestocked && ` · Restocked ${s.lastRestocked.split("T")[0]}`}
                   </span>
-                  <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                  <div style={{ display:"flex", gap:6, flexShrink:0 }} onClick={e=>e.stopPropagation()}>
                     <button onClick={()=>setShowHistory(s)} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>History</button>
                     {canManageSupply(userProfile, s) && <button onClick={()=>{setEditSupForm({ supplyId:s.supplyId, description:s.description, location:s.location||"", ministry:s.ministry||"", quantity:s.quantity, minQuantity:s.minQuantity||5, unit:s.unit||"each", tags:s.tags||[] });setShowEditSupply(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Edit</button>}
                     <button onClick={()=>{setUseForm({ qty:"1", purpose:"" });setShowUse(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Use</button>
@@ -492,6 +496,45 @@ export function SuppliesPage({ store, userProfile }) {
                   </div>
                 ))}
               </div>;
+        })()}
+      </Modal>
+
+      {/* ═══ SUPPLY DETAIL MODAL ═══ */}
+      <Modal open={!!showDetail} onClose={()=>setShowDetail(null)} title={showDetail?.description||""}>
+        {showDetail && (() => {
+          const s = showDetail;
+          const isLow = s.quantity <= s.minQuantity;
+          const isEmpty = s.quantity === 0;
+          return (
+            <>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+                <div style={{ background:B.warmGray, borderRadius:10, padding:"12px 16px" }}>
+                  <div style={{ fontSize:11, fontWeight:600, color:B.textLight, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Current Stock</div>
+                  <div style={{ fontSize:22, fontWeight:700, color: isEmpty ? B.red : isLow ? "#96750E" : B.navy }}>{s.quantity ?? 0}</div>
+                  <div style={{ fontSize:12, color:B.textMid }}>{s.unit || "each"} · Min: {s.minQuantity || 5}</div>
+                </div>
+                <div style={{ background:B.warmGray, borderRadius:10, padding:"12px 16px" }}>
+                  <div style={{ fontSize:11, fontWeight:600, color:B.textLight, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Supply ID</div>
+                  <div style={{ fontSize:15, fontWeight:700, color:B.navy, fontFamily:"monospace", letterSpacing:1 }}>{s.supplyId}</div>
+                  {isLow && <div style={{ fontSize:11, fontWeight:700, color: isEmpty ? B.red : "#96750E", marginTop:4 }}>{isEmpty ? "OUT OF STOCK" : "LOW STOCK"}</div>}
+                </div>
+              </div>
+              <StockBar quantity={s.quantity || 0} minQuantity={s.minQuantity || 5} />
+              <div style={{ marginTop:16, display:"flex", flexDirection:"column", gap:8 }}>
+                {s.location && <div style={{ display:"flex", gap:8, fontSize:13 }}><span style={{ color:B.textLight, minWidth:80, fontFamily:f1, fontWeight:600 }}>Location</span><span style={{ color:B.textDark }}>{s.location}</span></div>}
+                {s.ministry && <div style={{ display:"flex", gap:8, fontSize:13 }}><span style={{ color:B.textLight, minWidth:80, fontFamily:f1, fontWeight:600 }}>Ministry</span><span style={{ color:B.textDark }}>{s.ministry}</span></div>}
+                {s.notes && <div style={{ display:"flex", gap:8, fontSize:13 }}><span style={{ color:B.textLight, minWidth:80, fontFamily:f1, fontWeight:600 }}>Notes</span><span style={{ color:B.textDark }}>{s.notes}</span></div>}
+                {s.lastRestocked && <div style={{ display:"flex", gap:8, fontSize:13 }}><span style={{ color:B.textLight, minWidth:80, fontFamily:f1, fontWeight:600 }}>Last Restock</span><span style={{ color:B.textDark }}>{s.lastRestocked.split("T")[0]}</span></div>}
+                {s.tags?.length > 0 && <div style={{ display:"flex", gap:8, fontSize:13, alignItems:"flex-start" }}><span style={{ color:B.textLight, minWidth:80, fontFamily:f1, fontWeight:600 }}>Tags</span><div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>{s.tags.map(t=><span key={t} style={{ padding:"2px 8px", borderRadius:20, background:B.warmGray, fontSize:11, color:B.textMid, fontFamily:f1, fontWeight:500 }}>{t}</span>)}</div></div>}
+              </div>
+              <div style={{ display:"flex", gap:8, marginTop:20, flexWrap:"wrap" }} onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>{setShowDetail(null);setShowHistory(s);}} style={{ ...btnS, flex:1, minWidth:80 }}>History</button>
+                {canManageSupply(userProfile, s) && <button onClick={()=>{setShowDetail(null);setEditSupForm({ supplyId:s.supplyId, description:s.description, location:s.location||"", ministry:s.ministry||"", quantity:s.quantity, minQuantity:s.minQuantity||5, unit:s.unit||"each", tags:s.tags||[] });setShowEditSupply(s);}} style={{ ...btnS, flex:1, minWidth:80 }}>Edit</button>}
+                <button onClick={()=>{setShowDetail(null);setUseForm({ qty:"1", purpose:"" });setShowUse(s);}} style={{ ...btnS, flex:1, minWidth:80 }}>Use</button>
+                <button onClick={()=>{setShowDetail(null);setRestockForm({ qty:"", source:"" });setShowRestock(s);}} style={{ ...btnP, flex:1, minWidth:80 }}>Restock</button>
+              </div>
+            </>
+          );
         })()}
       </Modal>
 

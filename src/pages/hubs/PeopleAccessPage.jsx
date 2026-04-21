@@ -395,7 +395,7 @@ export function PeopleAccessPage({ store, userProfile }) {
       {/* ── Page Header ── */}
       <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', flexDirection: isMobile ? 'column' : 'row', gap: 12, marginBottom: 20 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 20 : 24, fontFamily: f1, color: B.navy }}>People Access</h2>
+          <h2 style={{ margin: 0, fontSize: 22, fontFamily: f1, color: B.navy }}>People Access</h2>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: B.textLight, fontFamily: f2 }}>
             Track compliance milestones — background checks, key assignments, certifications, and custom requirements.
           </p>

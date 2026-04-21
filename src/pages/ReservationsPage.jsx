@@ -31,7 +31,8 @@ export function ReservationsPage({ store, userProfile }) {
     return false;
   }
 
-  const [resourceType, setResourceType] = useState(RESOURCE_TYPE.ITEM);
+  const [resourceType, setResourceType] = useState(() => localStorage.getItem('res_resourceType') || RESOURCE_TYPE.ITEM);
+  function setResourceTypePersisted(val) { setResourceType(val); localStorage.setItem('res_resourceType', val); }
   const emptyRes = { itemDocId:"", itemId:"", itemDesc:"", roomDocId:"", roomName:"", eventName:"", eventDate:"", returnDate:"", purpose:"", ministry:"", notes:"" };
   const [form, setForm] = useState(emptyRes);
   const [conflictErr, setConflictErr] = useState("");
@@ -299,7 +300,7 @@ export function ReservationsPage({ store, userProfile }) {
       {filtered.length === 0 ? (
         <div style={{ background:B.white, borderRadius:18, padding:"48px 32px", border:"1px solid "+B.sand, textAlign:"center" }}>
           <div style={{ fontSize:40, marginBottom:12 }}>📅</div>
-          <p style={{ color:B.textLight, fontSize:15 }}>{statusFilter === "all" ? "No reservations yet. Create one to get started!" : "No "+statusFilter.toLowerCase()+" reservations."}</p>
+          <p style={{ color:B.textLight, fontSize:15 }}>{statusFilter === "all" ? (isAdmin || isManager ? "No reservations yet. Create one to get started!" : "No reservations yet.") : "No "+statusFilter.toLowerCase()+" reservations."}</p>
         </div>
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
@@ -342,11 +343,11 @@ export function ReservationsPage({ store, userProfile }) {
       )}
 
       {/* ═══ ADD RESERVATION MODAL ═══ */}
-      <Modal open={showAdd} onClose={()=>{setShowAdd(false);setConflictErr("");setResourceType(RESOURCE_TYPE.ITEM);}} title="New Reservation" wide>
+      <Modal open={showAdd} onClose={()=>{setShowAdd(false);setConflictErr("");}} title="New Reservation" wide>
         {/* Resource type toggle */}
         <div style={{ display:"flex", gap:8, marginBottom:16 }}>
           {[['item','📦 Equipment'], ['room','🏛️ Space']].map(([val, label]) => (
-            <button key={val} onClick={() => { setResourceType(val); setForm(f => ({ ...f, itemDocId:'', itemId:'', itemDesc:'', roomDocId:'', roomName:'' })); setConflictErr(''); }}
+            <button key={val} onClick={() => { setResourceTypePersisted(val); setForm(f => ({ ...f, itemDocId:'', itemId:'', itemDesc:'', roomDocId:'', roomName:'' })); setConflictErr(''); }}
               style={{ flex:1, padding:"9px 0", borderRadius:10, border:"1px solid "+(resourceType===val ? B.teal : B.sand), background:resourceType===val ? B.tealPale : B.white, color:resourceType===val ? B.teal : B.textMid, fontFamily:f1, fontWeight:700, fontSize:13, cursor:"pointer" }}>
               {label}
             </button>
