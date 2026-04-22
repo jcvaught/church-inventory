@@ -34,14 +34,13 @@ const ANTHROPIC_API_KEY     = defineSecret('ANTHROPIC_API_KEY');
 // Run: firebase functions:config:set is no longer used in v2.
 // Instead set secrets: firebase functions:secrets:set STRIPE_SECRET_KEY
 // And put price IDs directly here (they are not sensitive).
-// TODO: Create a $7/mo Job Hub product in Stripe dashboard and paste the price ID below.
 const PRICE_IDS = {
   maintenance:    'price_1TB2E2F12bDL8YA7Tw4VreQc',
   insights:       'price_1TB2E6F12bDL8YA734z4Q64M',
   coordination:   'price_1TB2E2F12bDL8YA7a0VFGB6C',
   accountability: 'price_1TB2E3F12bDL8YA7hGRIALZb',
   tasks:          'price_1TM9kcF12bDL8YA7m3otofk2',
-  jobs:           'price_REPLACE_WITH_STRIPE_PRICE_ID', // TODO: set real price ID
+  jobs:           'price_1TMteeF12bDL8YA7W6XzNHq0',
   team_25:        'price_1TB2E4F12bDL8YA7LLFr3xnL',
   team_unlimited: 'price_1TB2E3F12bDL8YA7P3a9xTVV',
   all_in:         'price_1TB2E7F12bDL8YA782etfOOQ',

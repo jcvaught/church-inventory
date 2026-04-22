@@ -306,9 +306,6 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 
 ## Future Work
 
-**Known pending actions (human required):**
-- **Stripe dashboard**: Create Job Hub $7/mo product + price; paste the resulting price ID into `functions/index.js` line ~43 (`PRICE_IDS.jobs`). Until this is done, the Jobs upgrade checkout returns a `failed-precondition` error with a clear message.
-
 **Known limitation (documented, accepted):**
 - Firestore rules cannot verify that the mutating signup entry belongs to `request.auth.uid` (rules cannot iterate object arrays). Roster names remain readable by any church member via raw Firestore SDK queries. UI gates display to admin/manager only. The ±1 length delta + spotsTotal cap closes all practical attack vectors (mass-fill DoS, entry rewriting).
 
