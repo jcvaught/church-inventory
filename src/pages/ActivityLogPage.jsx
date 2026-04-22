@@ -16,17 +16,26 @@ export function ActivityLogPage({ store }) {
   const actionLabels = {
     add_item:"Item Added", edit_item:"Item Edited", check_out:"Checked Out", return:"Returned",
     dispose:"Disposed", mark_repair:"Sent to Repair", mark_repaired:"Repair Complete",
-    add_supply:"Supply Added", edit_supply:"Supply Edited", use_supply:"Supply Used", restock:"Restocked"
+    add_supply:"Supply Added", edit_supply:"Supply Edited", use_supply:"Supply Used", restock:"Restocked",
+    post_job:"Job Posted", update_job:"Job Updated", delete_job:"Job Deleted",
+    signup_job:"Signed Up for Job", withdraw_job:"Withdrew from Job",
+    post_announcement:"Announcement Posted", update_announcement:"Announcement Updated", delete_announcement:"Announcement Deleted",
   };
   const actionIcons = {
     add_item:"➕", edit_item:"✏️", check_out:"📤", return:"↩️", dispose:"🗑️",
     mark_repair:"🔧", mark_repaired:"✅", add_supply:"📋", edit_supply:"✏️",
-    use_supply:"📉", restock:"📦"
+    use_supply:"📉", restock:"📦",
+    post_job:"💼", update_job:"✏️", delete_job:"🗑️",
+    signup_job:"✅", withdraw_job:"↩️",
+    post_announcement:"📢", update_announcement:"✏️", delete_announcement:"🗑️",
   };
   const actionColors = {
     add_item:B.teal, edit_item:B.navy, check_out:"#1A65C7", return:B.teal,
     dispose:B.red, mark_repair:"#96750E", mark_repaired:B.teal,
-    add_supply:B.teal, edit_supply:B.navy, use_supply:"#96750E", restock:"#1A65C7"
+    add_supply:B.teal, edit_supply:B.navy, use_supply:"#96750E", restock:"#1A65C7",
+    post_job:"#16A34A", update_job:B.navy, delete_job:B.red,
+    signup_job:B.teal, withdraw_job:"#96750E",
+    post_announcement:"#7C3AED", update_announcement:B.navy, delete_announcement:B.red,
   };
 
   const uniqueActions = useMemo(() => [...new Set(activityLog.map(l => l.action))].sort(), [activityLog]);

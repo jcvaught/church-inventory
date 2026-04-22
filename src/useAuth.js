@@ -170,7 +170,7 @@ export function useAuth() {
   }, []);
 
   // Register with church code
-  const register = useCallback(async ({ firstName, lastName, email, password, churchCode }) => {
+  const register = useCallback(async ({ firstName, lastName, email, password, churchCode, allowedHubs }) => {
     const userName = (firstName + ' ' + lastName).trim();
     setError(null);
     let cred = null;
@@ -188,7 +188,7 @@ export function useAuth() {
         throw new Error('Invalid church code. Please check with your administrator.');
       }
 
-      // Create user profile
+      // Create user profile — allowedHubs null means "inherit all church hubs" (default for non-invite signups)
       const profile = {
         name: userName,
         firstName,
@@ -197,6 +197,7 @@ export function useAuth() {
         role: 'user',
         churchId: foundChurchId,
         active: true,
+        ...(allowedHubs != null ? { allowedHubs } : {}),
         createdAt: new Date().toISOString(),
         lastLogin: new Date().toISOString()
       };
@@ -261,7 +262,7 @@ export function useAuth() {
   }, []);
 
   // Register via Google (after Google sign-in if no profile exists)
-  const registerWithGoogle = useCallback(async ({ churchCode }) => {
+  const registerWithGoogle = useCallback(async ({ churchCode, allowedHubs }) => {
     setError(null);
     try {
       if (!auth.currentUser) throw new Error('No Google session found.');
@@ -276,6 +277,7 @@ export function useAuth() {
       const spaceIdx = displayName.indexOf(' ');
       const firstName = spaceIdx >= 0 ? displayName.slice(0, spaceIdx) : displayName;
       const lastName = spaceIdx >= 0 ? displayName.slice(spaceIdx + 1) : '';
+      // allowedHubs null means "inherit all church hubs" (default for non-invite signups)
       const profile = {
         name: displayName || auth.currentUser.email,
         firstName,
@@ -284,6 +286,7 @@ export function useAuth() {
         role: 'user',
         churchId: foundChurchId,
         active: true,
+        ...(allowedHubs != null ? { allowedHubs } : {}),
         createdAt: new Date().toISOString(),
         lastLogin: new Date().toISOString()
       };

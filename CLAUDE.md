@@ -300,12 +300,17 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 | — | Blog post: "How to Use a Kanban Board to Track Church Maintenance" | 2026-04-21 |
 | — | UI/UX fix sweep (Opus review): extract `localDateStr` to `src/utils/date.js`; fix all UTC `toISOString()` date bugs (17 occurrences, 9 files); keyboard a11y on TicketCard/HubCards/ReservationCards/Modal close; flash messages standardized (5s, isError, dismiss button) app-wide; Activity Log added to mobile nav; dead code removed (`_StatusBadge`, `_photoFile`) | 2026-04-21 |
 | — | UX polish (Opus medium items): supply cards click-to-detail modal (shows all fields + action buttons); reservation Equipment/Space toggle persists to localStorage (`res_resourceType`); reservations empty state role-aware; PeopleAccessPage header font-size standardized to 22px | 2026-04-21 |
+| — | Job Hub audit fixes (Opus + Explore review): Firestore signup rule hardened (±1 delta + spotsTotal cap blocks mass-fill DoS and tampering); collection-group index for sendJobReminders; updateJobListing strips immutable fields + wraps spotsTotal shrink in runTransaction (ToCToU fix); withdrawFromJob no-op guard; invite flow now threads allowedHubs into user profile doc; Stripe jobs price guard extended; sendJobAnnouncementEmails + sendJobCancelledEmails + sendJobReminders: subscription gating, allowedHubs/active filter, error logging, idempotency (lastReminderSentDate) + re-trigger guard (cancellationEmailSentAt 1h window), server-derived poster name, `!=` query → JS filter; ActivityLogPage labels/icons for all job actions; SettingsPage upgrade modal adds Jobs + People Access rows; LandingPage Jobs hub entry + featureList + "All 7 paid hubs" copy; JobsPage: handleSignUp try/finally, stale-now fix in JobCalendar (lazy useState + fresh Date in mobile block), liveDetail memoized, auto-close modal on remote deletion, isAdminOrManager guard on all write handlers, pay negative clamp, flash timer cleanup ref, showPastJobs persisted to localStorage(jobs_showPast), formatJobDate .slice(0,10) guard, loading labels ("Signing up…"/"Withdrawing…"), (signups\|\|[]) defensive guard, keyboard a11y (role/tabIndex/onKeyDown/aria-label) on JobCard/ScheduleRow/AnnouncementCard/calendar cells/JobChip, aria-label on nav buttons + flash dismiss + +N more button | 2026-04-21 |
 
 ---
 
 ## Future Work
 
-No known deferred work items. The codebase is in good shape.
+**Known pending actions (human required):**
+- **Stripe dashboard**: Create Job Hub $7/mo product + price; paste the resulting price ID into `functions/index.js` line ~43 (`PRICE_IDS.jobs`). Until this is done, the Jobs upgrade checkout returns a `failed-precondition` error with a clear message.
+
+**Known limitation (documented, accepted):**
+- Firestore rules cannot verify that the mutating signup entry belongs to `request.auth.uid` (rules cannot iterate object arrays). Roster names remain readable by any church member via raw Firestore SDK queries. UI gates display to admin/manager only. The ±1 length delta + spotsTotal cap closes all practical attack vectors (mass-fill DoS, entry rewriting).
 
 ---
 

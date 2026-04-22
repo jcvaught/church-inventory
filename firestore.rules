@@ -136,13 +136,23 @@ service cloud.firestore {
     }
 
     // ── Job Hub — jobs: members read; admins+mgrs create/delete/update fields;
-    //    members can update signups+updatedAt only (sign up / withdraw via transaction) ──
+    //    members can update signups+updatedAt only (sign up / withdraw via transaction).
+    //    Member-branch rule constraints:
+    //      • signups length must change by exactly ±1 (blocks mass-fill DoS and array rewrites)
+    //      • new signups.size() must not exceed spotsTotal (enforces capacity server-side)
+    //    Limitation: Firestore rules cannot iterate object arrays, so we cannot verify
+    //    that the added/removed entry belongs to request.auth.uid — the client-side
+    //    runTransaction in signUpForJob/withdrawFromJob enforces self-only semantics for
+    //    honest callers; the ±1 delta constraint closes the practical attack surface. ──
     match /churches/{churchId}/jobListings/{docId} {
       allow read:           if isMember(churchId);
       allow create, delete: if isChurchAdminOrManager(churchId);
       allow update:         if isChurchAdminOrManager(churchId) || (
         isMember(churchId) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signups', 'updatedAt'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signups', 'updatedAt']) &&
+        (request.resource.data.signups.size() == resource.data.signups.size() + 1 ||
+         request.resource.data.signups.size() == resource.data.signups.size() - 1) &&
+        request.resource.data.signups.size() <= resource.data.spotsTotal
       );
     }
 

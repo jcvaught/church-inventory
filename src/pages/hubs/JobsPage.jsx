@@ -1,4 +1,4 @@
-import { useState, useMemo, useContext, memo } from 'react';
+import { useState, useMemo, useContext, useEffect, useRef, memo } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
@@ -8,8 +8,8 @@ import { localDateStr } from '../../utils/date.js';
 
 function formatJobDate(dateStr) {
   if (!dateStr) return '—';
-  // Parse as local date to avoid UTC off-by-one
-  const [y, m, d] = dateStr.split('-').map(Number);
+  // Slice to YYYY-MM-DD first so ISO datetime strings don't produce NaN
+  const [y, m, d] = dateStr.slice(0, 10).split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 }
 
@@ -35,7 +35,11 @@ const JobChip = memo(function JobChip({ job, onJobClick, todayStr }) {
   const chipTx = isFull ? '#9A5E10' : sc.tx;
   const chipBorder = isFull ? '#F59E42' : sc.dot;
   return (
-    <div onClick={e => { e.stopPropagation(); onJobClick(job); }}
+    <div
+      role="button" tabIndex={0}
+      onClick={e => { e.stopPropagation(); onJobClick(job); }}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onJobClick(job); } }}
+      aria-label={`${job.title} — ${filled}/${total} spots filled`}
       style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 5px', borderRadius:5, background:chipBg, borderLeft:'3px solid '+chipBorder, cursor:'pointer', marginBottom:2, overflow:'hidden' }}
       title={job.title}>
       <span style={{ fontSize:11, color:chipTx, fontWeight:600, fontFamily:f1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flex:1 }}>{job.title}</span>
@@ -44,11 +48,16 @@ const JobChip = memo(function JobChip({ job, onJobClick, todayStr }) {
   );
 });
 
-function JobCalendar({ jobs, onJobClick, isMobile }) {
-  const now = new Date();
-  const [viewYear, setViewYear] = useState(now.getFullYear());
-  const [viewMonth, setViewMonth] = useState(now.getMonth());
+function JobCalendar({ jobs, onJobClick, isMobile, todayStr: todayStrProp }) {
+  // Derive 'now' at render time via useMemo so "Today" button stays correct after midnight.
+  // Re-derived whenever the viewed month changes so the highlighted day follows the real clock.
+  const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
+  const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const [expandedDay, setExpandedDay] = useState(null);
+
+  // todayStr is passed down from the parent which also computes it via useMemo([]);
+  // if not provided fall back to computing here (shouldn't happen in practice).
+  const todayStr = todayStrProp || localDateStr(new Date());
 
   const jobsByDate = useMemo(() => {
     const map = new Map();
@@ -61,9 +70,18 @@ function JobCalendar({ jobs, onJobClick, isMobile }) {
     return map;
   }, [jobs]);
 
-  function prevMonth() { if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); } else setViewMonth(m => m - 1); setExpandedDay(null); }
-  function nextMonth() { if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); } else setViewMonth(m => m + 1); setExpandedDay(null); }
-  function goToday() { setViewYear(now.getFullYear()); setViewMonth(now.getMonth()); setExpandedDay(null); }
+  function prevMonth() {
+    setExpandedDay(null);
+    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); } else setViewMonth(m => m - 1);
+  }
+  function nextMonth() {
+    setExpandedDay(null);
+    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); } else setViewMonth(m => m + 1);
+  }
+  function goToday() {
+    const now = new Date();
+    setViewYear(now.getFullYear()); setViewMonth(now.getMonth()); setExpandedDay(null);
+  }
 
   const calendarDays = useMemo(() => {
     const firstDay = new Date(viewYear, viewMonth, 1).getDay();
@@ -76,10 +94,9 @@ function JobCalendar({ jobs, onJobClick, isMobile }) {
     return days;
   }, [viewYear, viewMonth]);
 
-  const todayStr = localDateStr(now);
-
-  // Mobile: grouped list
+  // Mobile: grouped list — derive fresh 'now' so groups are correct after midnight
   if (isMobile) {
+    const now = new Date();
     const weekEnd = new Date(now); weekEnd.setDate(now.getDate() + 7);
     const monthEnd = new Date(now); monthEnd.setDate(now.getDate() + 30);
     const weekEndStr = localDateStr(weekEnd);
@@ -99,7 +116,12 @@ function JobCalendar({ jobs, onJobClick, isMobile }) {
             {g.jobs.map(j => {
               const sc = JOB_STATUS_COLORS[j.status] || JOB_STATUS_COLORS.open;
               return (
-                <div key={j._docId} onClick={() => onJobClick(j)} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:10, background:B.white, border:'1px solid '+B.sand, marginBottom:6, cursor:'pointer' }}>
+                <div key={j._docId}
+                  role="button" tabIndex={0}
+                  onClick={() => onJobClick(j)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onJobClick(j); } }}
+                  aria-label={j.title}
+                  style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:10, background:B.white, border:'1px solid '+B.sand, marginBottom:6, cursor:'pointer' }}>
                   <span style={{ width:8, height:8, borderRadius:'50%', background:sc.dot, flexShrink:0 }}/>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:14, fontWeight:600, color:B.navy, fontFamily:f1 }}>{j.title}</div>
@@ -120,9 +142,9 @@ function JobCalendar({ jobs, onJobClick, isMobile }) {
   return (
     <div>
       <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-        <button onClick={prevMonth} style={{ ...btnS, padding:'6px 12px', fontSize:16, lineHeight:1 }}>‹</button>
+        <button onClick={prevMonth} aria-label="Previous month" style={{ ...btnS, padding:'6px 12px', fontSize:16, lineHeight:1 }}>‹</button>
         <span style={{ fontFamily:f1, fontWeight:700, fontSize:18, color:B.navy, minWidth:200, textAlign:'center' }}>{MONTH_NAMES[viewMonth]} {viewYear}</span>
-        <button onClick={nextMonth} style={{ ...btnS, padding:'6px 12px', fontSize:16, lineHeight:1 }}>›</button>
+        <button onClick={nextMonth} aria-label="Next month" style={{ ...btnS, padding:'6px 12px', fontSize:16, lineHeight:1 }}>›</button>
         <button onClick={goToday} style={{ ...btnS, padding:'6px 14px', fontSize:13, marginLeft:4 }}>Today</button>
         {(() => { const total = [...jobsByDate.values()].reduce((a, b) => a + b.length, 0); return (
           <span style={{ marginLeft:'auto', fontSize:13, color:B.textLight, fontFamily:f1 }}>{total} job{total !== 1 ? 's' : ''} with dates</span>
@@ -142,12 +164,24 @@ function JobCalendar({ jobs, onJobClick, isMobile }) {
           const overflow = dayJobs.length - CHIP_LIMIT;
           return (
             <div key={idx}
-              onClick={() => dayJobs.length > CHIP_LIMIT && setExpandedDay(isExpanded ? null : ds)}
-              style={{ minHeight:88, background:day.isCurrentMonth ? B.white : '#F8F8FA', borderRadius:8, border:'1px solid '+(isToday ? B.teal : B.sand), padding:'5px 6px', cursor:dayJobs.length > CHIP_LIMIT ? 'pointer' : 'default', outline:isToday ? '2px solid '+B.teal : 'none', outlineOffset:'-1px' }}>
+              style={{ minHeight:88, background:day.isCurrentMonth ? B.white : '#F8F8FA', borderRadius:8, border:'1px solid '+(isToday ? B.teal : B.sand), padding:'5px 6px', outline:isToday ? '2px solid '+B.teal : 'none', outlineOffset:'-1px' }}>
               <div style={{ fontSize:12, fontWeight:isToday ? 800 : 500, color:isToday ? B.teal : day.isCurrentMonth ? B.textDark : B.textLight, fontFamily:f1, marginBottom:3, textAlign:'right' }}>{day.date.getDate()}</div>
               {(isExpanded ? dayJobs : visible).map(j => <JobChip key={j._docId} job={j} todayStr={todayStr} onJobClick={onJobClick}/>)}
               {!isExpanded && overflow > 0 && (
-                <div style={{ fontSize:11, color:B.teal, fontWeight:700, fontFamily:f1, textAlign:'center', marginTop:2 }}>+{overflow} more</div>
+                <button
+                  onClick={() => setExpandedDay(ds)}
+                  aria-label={`Show all ${dayJobs.length} jobs on ${ds}`}
+                  style={{ background:'none', border:'none', cursor:'pointer', fontSize:11, color:B.teal, fontWeight:700, fontFamily:f1, textAlign:'center', marginTop:2, padding:0, width:'100%' }}>
+                  +{overflow} more
+                </button>
+              )}
+              {isExpanded && overflow > 0 && (
+                <button
+                  onClick={() => setExpandedDay(null)}
+                  aria-label="Collapse day"
+                  style={{ background:'none', border:'none', cursor:'pointer', fontSize:11, color:B.textLight, fontFamily:f1, textAlign:'center', marginTop:2, padding:0, width:'100%' }}>
+                  Show less
+                </button>
               )}
             </div>
           );
@@ -214,14 +248,30 @@ export function JobsPage({ store, userProfile }) {
   const [editAnnId, setEditAnnId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
-  const [showPastJobs, setShowPastJobs] = useState(false);
+  const [showPastJobs, setShowPastJobs] = useState(() => {
+    try { return localStorage.getItem('jobs_showPast') === 'true'; } catch { return false; }
+  });
+  const flashTimerRef = useRef(null);
 
-  function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
+  function flash(text, isError = false) {
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    setMsg({ text, isError });
+    flashTimerRef.current = setTimeout(() => setMsg(null), 5000);
+  }
+
+  // Cleanup flash timer on unmount
+  useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current); }, []);
+
+  // Persist showPastJobs toggle
+  useEffect(() => {
+    try { localStorage.setItem('jobs_showPast', String(showPastJobs)); } catch { /* ignore */ }
+  }, [showPastJobs]);
 
   function sendAnnouncementEmails(title, body) {
     if (!(notificationConfig?.enabled)) return;
     const fn = httpsCallable(getFunctions(), 'sendJobAnnouncementEmails');
-    fn({ churchId: userProfile?.churchId, title, body, postedBy: userName }).catch(() => {});
+    // Note: postedBy is now derived server-side from the caller's user profile
+    fn({ churchId: userProfile?.churchId, title, body }).catch(e => console.warn('sendJobAnnouncementEmails failed', e));
   }
 
   // ── Derived state ──
@@ -239,6 +289,7 @@ export function JobsPage({ store, userProfile }) {
   }, [jobListings, statusFilter, userId]);
 
   const visibleAnnouncements = useMemo(() => {
+    // >= means announcement is visible ON the expiry day (inclusive). Admins see it disappear the next day.
     const ann = (jobAnnouncements || []).filter(a => !a.expiresAt || a.expiresAt >= todayStr);
     return [...ann].sort((a, b) => {
       if (a.pinned && !b.pinned) return -1;
@@ -252,10 +303,18 @@ export function JobsPage({ store, userProfile }) {
     return showPastJobs ? jobs : jobs.filter(j => (j.scheduledDate || '') >= todayStr || !j.scheduledDate);
   }, [jobListings, showPastJobs, todayStr]);
 
-  // Keep detail in sync with live store data
-  const liveDetail = showJobDetail
-    ? (jobListings || []).find(j => j._docId === showJobDetail._docId) || showJobDetail
-    : null;
+  // Keep detail in sync with live store data; memoized to avoid re-running find() on every render
+  const liveDetail = useMemo(
+    () => showJobDetail ? (jobListings || []).find(j => j._docId === showJobDetail._docId) || showJobDetail : null,
+    [jobListings, showJobDetail]
+  );
+
+  // Auto-close detail modal when the job is deleted by another user in real time
+  useEffect(() => {
+    if (!showJobDetail) return;
+    const stillExists = (jobListings || []).some(j => j._docId === showJobDetail._docId);
+    if (!stillExists) setShowJobDetail(null);
+  }, [jobListings, showJobDetail]);
 
   // ── Job form handlers ──
   function openNewJob() {
@@ -280,6 +339,7 @@ export function JobsPage({ store, userProfile }) {
   }
 
   async function handleSaveJob() {
+    if (!isAdminOrManager) return;
     if (!jobForm.title.trim() || !jobForm.scheduledDate) return;
     const spots = Math.max(1, Math.floor(Number(jobForm.spotsTotal) || 1));
     const existingJob = editJobId ? (jobListings || []).find(j => j._docId === editJobId) : null;
@@ -292,23 +352,23 @@ export function JobsPage({ store, userProfile }) {
     const isGoingTerminal = existingJob?.status === 'open' && terminalStatuses.includes(jobForm.status);
     const willNotify = isGoingTerminal && currentSignups > 0 && notificationConfig?.enabled;
     if (isGoingTerminal && currentSignups > 0) {
-      const msg = willNotify
+      const confirmMsg = willNotify
         ? `This job has ${currentSignups} signup${currentSignups !== 1 ? 's' : ''}. Changing to "${jobForm.status}" will send them a cancellation email. Continue?`
         : `This job has ${currentSignups} signup${currentSignups !== 1 ? 's' : ''}. Changing to "${jobForm.status}" will not notify them. Continue?`;
-      if (!window.confirm(msg)) return;
+      if (!window.confirm(confirmMsg)) return;
     }
     setSaving(true);
     try {
       const data = {
         ...jobForm,
         spotsTotal: spots,
-        pay: jobForm.pay === '' ? null : Number(jobForm.pay),
+        pay: jobForm.pay === '' ? null : Math.max(0, Number(jobForm.pay)),
       };
       if (editJobId) {
         await updateJobListing(editJobId, data, userId, userName);
         if (willNotify) {
           const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
-          fn({ churchId: userProfile?.churchId, jobDocId: editJobId }).catch(() => {});
+          fn({ churchId: userProfile?.churchId, jobDocId: editJobId }).catch(e => console.warn('sendJobCancelledEmails failed', e));
         }
         flash('Job updated.' + (willNotify ? ' Signups notified.' : ''));
       } else {
@@ -317,13 +377,14 @@ export function JobsPage({ store, userProfile }) {
       }
       setShowNewJob(false);
       setEditJobId(null);
-    } catch {
-      flash('Failed to save job.', true);
+    } catch (err) {
+      flash(err?.message || 'Failed to save job.', true);
     }
     setSaving(false);
   }
 
   function handleNotifySignups(job) {
+    if (!isAdminOrManager) return;
     if (!window.confirm(`Send a cancellation email to ${(job.signups || []).length} signup${(job.signups || []).length !== 1 ? 's' : ''}?`)) return;
     const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
     fn({ churchId: userProfile?.churchId, jobDocId: job._docId })
@@ -332,6 +393,7 @@ export function JobsPage({ store, userProfile }) {
   }
 
   async function handleDeleteJob(job) {
+    if (!isAdminOrManager) return;
     if (!window.confirm(`Delete "${job.title}"? This cannot be undone.`)) return;
     try {
       await deleteJobListing(job._docId, userId, userName);
@@ -342,10 +404,12 @@ export function JobsPage({ store, userProfile }) {
 
   async function handleSignUp(job) {
     setSaving(true);
-    const result = await signUpForJob(job._docId, userId, userName);
-    if (result?.error) flash(result.error, true);
-    else flash('You signed up!');
-    setSaving(false);
+    try {
+      const result = await signUpForJob(job._docId, userId, userName);
+      if (result?.error) flash(result.error, true);
+      else flash('You signed up!');
+    } catch { flash('Sign-up failed. Please try again.', true); }
+    finally { setSaving(false); }
   }
 
   async function handleWithdraw(job) {
@@ -355,10 +419,11 @@ export function JobsPage({ store, userProfile }) {
       await withdrawFromJob(job._docId, userId, userId, userName);
       flash('Removed from job.');
     } catch { flash('Failed to withdraw.', true); }
-    setSaving(false);
+    finally { setSaving(false); }
   }
 
   async function handleAdminRemoveSignup(job, uid) {
+    if (!isAdminOrManager) return;
     if (!window.confirm('Remove this person from the job?')) return;
     try {
       await withdrawFromJob(job._docId, uid, userId, userName);
@@ -385,6 +450,7 @@ export function JobsPage({ store, userProfile }) {
   }
 
   async function handleSaveAnn() {
+    if (!isAdminOrManager) return;
     if (!annForm.title.trim() || !annForm.body.trim()) return;
     setSaving(true);
     try {
@@ -406,6 +472,7 @@ export function JobsPage({ store, userProfile }) {
   }
 
   async function handleDeleteAnn(ann) {
+    if (!isAdminOrManager) return;
     if (!window.confirm('Delete this announcement?')) return;
     try {
       await deleteJobAnnouncement(ann._docId, userId, userName);
@@ -414,6 +481,7 @@ export function JobsPage({ store, userProfile }) {
   }
 
   async function handleTogglePin(ann) {
+    if (!isAdminOrManager) return;
     try {
       await updateJobAnnouncement(ann._docId, { pinned: !ann.pinned });
     } catch { flash('Failed to update pin.', true); }
@@ -425,7 +493,7 @@ export function JobsPage({ store, userProfile }) {
       {msg && (
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError?'#FEE8E8':B.tealPale, border:`1px solid ${msg.isError?'#FECACA':B.tealLight}`, borderRadius:10, padding:'10px 16px', marginBottom:16, fontSize:14, fontWeight:600, color:msg.isError?B.red:B.teal }}>
           <span>{msg.text}</span>
-          <button onClick={()=>setMsg(null)} style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button>
+          <button onClick={()=>setMsg(null)} aria-label="Dismiss message" style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button>
         </div>
       )}
 
@@ -469,7 +537,11 @@ export function JobsPage({ store, userProfile }) {
                 const full = isFull(job);
                 const overdue = job.scheduledDate && job.scheduledDate < todayStr && job.status === 'open';
                 return (
-                  <div key={job._docId} onClick={() => setShowJobDetail(job)}
+                  <div key={job._docId}
+                    role="button" tabIndex={0}
+                    onClick={() => setShowJobDetail(job)}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowJobDetail(job); } }}
+                    aria-label={`${job.title} — ${job.status}`}
                     style={{ background: B.white, borderRadius: 14, border: '1px solid ' + (overdue ? '#FECACA' : B.sand), padding: 18, cursor: 'pointer', transition: 'box-shadow 0.15s' }}
                     onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(27,42,74,0.1)'}
                     onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
@@ -493,7 +565,7 @@ export function JobsPage({ store, userProfile }) {
                     <div style={{ marginBottom: 10 }}><SpotsBar job={job} /></div>
                     {isAdminOrManager && (job.signups || []).length > 0 && (
                       <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 10 }}>
-                        {job.signups.map(s => s.name).join(', ')}
+                        {(job.signups || []).map(s => s.name).join(', ')}
                       </div>
                     )}
                     {!isAdminOrManager && isSignedUp(job) && (
@@ -505,14 +577,14 @@ export function JobsPage({ store, userProfile }) {
                         {signed ? (
                           <button onClick={() => handleWithdraw(job)} disabled={saving}
                             style={{ ...btnS, fontSize: 12, padding: '6px 12px', color: B.red, borderColor: '#FECACA', width: '100%' }}>
-                            Withdraw
+                            {saving ? 'Withdrawing…' : 'Withdraw'}
                           </button>
                         ) : full ? (
                           <button disabled style={{ ...btnS, fontSize: 12, padding: '6px 12px', opacity: 0.45, width: '100%', cursor: 'not-allowed' }}>Full</button>
                         ) : (
                           <button onClick={() => handleSignUp(job)} disabled={saving}
                             style={{ ...btnP, fontSize: 12, padding: '6px 12px', width: '100%' }}>
-                            Sign Up
+                            {saving ? 'Signing up…' : 'Sign Up'}
                           </button>
                         )}
                       </div>
@@ -544,7 +616,12 @@ export function JobsPage({ store, userProfile }) {
                 const sc = JOB_STATUS_COLORS[job.status] || JOB_STATUS_COLORS.open;
                 const filled = (job.signups || []).length;
                 return (
-                  <div key={job._docId} onClick={() => setShowJobDetail(job)} style={{ background:B.white, borderRadius:12, border:'1px solid '+B.sand, padding:'12px 14px', cursor:'pointer' }}>
+                  <div key={job._docId}
+                    role="button" tabIndex={0}
+                    onClick={() => setShowJobDetail(job)}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowJobDetail(job); } }}
+                    aria-label={job.title}
+                    style={{ background:B.white, borderRadius:12, border:'1px solid '+B.sand, padding:'12px 14px', cursor:'pointer' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
                       <div>
                         <div style={{ fontSize:14, fontWeight:700, color:B.navy, fontFamily:f1 }}>{job.title}</div>
@@ -554,7 +631,7 @@ export function JobsPage({ store, userProfile }) {
                     </div>
                     <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}>{filled}/{job.spotsTotal||1} spots filled</div>
                     {isAdminOrManager && (job.signups||[]).length > 0 && (
-                      <div style={{ fontSize:12, color:B.textLight, fontFamily:f2, marginTop:4 }}>{job.signups.map(s=>s.name).join(', ')}</div>
+                      <div style={{ fontSize:12, color:B.textLight, fontFamily:f2, marginTop:4 }}>{(job.signups||[]).map(s=>s.name).join(', ')}</div>
                     )}
                   </div>
                 );
@@ -577,7 +654,10 @@ export function JobsPage({ store, userProfile }) {
                     const pct = Math.min(100, (filled / (job.spotsTotal||1)) * 100);
                     const isPast = job.scheduledDate && job.scheduledDate < todayStr;
                     return (
-                      <tr key={job._docId} onClick={() => setShowJobDetail(job)}
+                      <tr key={job._docId}
+                        tabIndex={0} role="button" aria-label={job.title}
+                        onClick={() => setShowJobDetail(job)}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowJobDetail(job); } }}
                         style={{ borderBottom:'1px solid '+B.sand, cursor:'pointer', opacity:isPast ? .65 : 1 }}
                         onMouseEnter={e => e.currentTarget.style.background=B.warmGray}
                         onMouseLeave={e => e.currentTarget.style.background=''}>
@@ -600,7 +680,7 @@ export function JobsPage({ store, userProfile }) {
                         </td>
                         {isAdminOrManager && (
                           <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textMid, maxWidth:220 }}>
-                            {(job.signups||[]).length === 0 ? <span style={{ color:B.textLight, fontSize:12 }}>None</span> : job.signups.map(s=>s.name).join(', ')}
+                            {(job.signups||[]).length === 0 ? <span style={{ color:B.textLight, fontSize:12 }}>None</span> : (job.signups||[]).map(s=>s.name).join(', ')}
                           </td>
                         )}
                       </tr>
@@ -615,7 +695,7 @@ export function JobsPage({ store, userProfile }) {
 
       {/* ── Calendar ── */}
       {view === 'calendar' && (
-        <JobCalendar jobs={jobListings || []} onJobClick={job => setShowJobDetail(job)} isMobile={isMobile}/>
+        <JobCalendar jobs={jobListings || []} onJobClick={job => setShowJobDetail(job)} isMobile={isMobile} todayStr={todayStr}/>
       )}
 
       {/* ── Announcements ── */}
@@ -757,7 +837,7 @@ export function JobsPage({ store, userProfile }) {
                 <div style={{ fontSize: 13, color: B.textLight, fontFamily: f2 }}>No signups yet.</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {liveDetail.signups.map(s => (
+                  {(liveDetail.signups || []).map(s => (
                     <div key={s.uid} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: B.warmGray, borderRadius: 8 }}>
                       <span style={{ fontSize: 13, fontFamily: f2, color: B.textDark }}>{s.name}</span>
                       <button onClick={() => handleAdminRemoveSignup(liveDetail, s.uid)}
@@ -794,11 +874,11 @@ export function JobsPage({ store, userProfile }) {
               isSignedUp(liveDetail) ? (
                 <button onClick={() => handleWithdraw(liveDetail)} disabled={saving}
                   style={{ ...btnS, color: B.red, borderColor: '#FECACA', fontSize: 13 }}>
-                  Withdraw
+                  {saving ? 'Withdrawing…' : 'Withdraw'}
                 </button>
               ) : !isFull(liveDetail) ? (
                 <button onClick={() => handleSignUp(liveDetail)} disabled={saving} style={{ ...btnP, fontSize: 13 }}>
-                  Sign Up
+                  {saving ? 'Signing up…' : 'Sign Up'}
                 </button>
               ) : null
             )}

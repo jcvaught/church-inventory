@@ -859,12 +859,29 @@ export function useFirestore(churchId) {
 
   const updateJobListing = useCallback(async (docId, updates, userId, userName) => {
     try {
-      await updateDoc(doc(db, 'churches', churchId, 'jobListings', docId), {
-        ...updates,
-        updatedAt: new Date().toISOString()
-      });
+      // Strip fields that must never be overwritten via a plain update.
+      const { createdBy: _cb, createdByName: _cbn, jobNumber: _jn, signups: _s, ...safeUpdates } = updates;
+
+      // If spotsTotal is being reduced, run a transaction to verify it doesn't go below current signup count.
+      if (safeUpdates.spotsTotal !== undefined) {
+        const jobRef = doc(db, 'churches', churchId, 'jobListings', docId);
+        await runTransaction(db, async (t) => {
+          const snap = await t.get(jobRef);
+          if (!snap.exists()) return;
+          const currentSignups = (snap.data().signups || []).length;
+          if (safeUpdates.spotsTotal < currentSignups) {
+            throw new Error(`Cannot reduce spots below current signup count (${currentSignups}).`);
+          }
+          t.update(jobRef, { ...safeUpdates, updatedAt: new Date().toISOString() });
+        });
+      } else {
+        await updateDoc(doc(db, 'churches', churchId, 'jobListings', docId), {
+          ...safeUpdates,
+          updatedAt: new Date().toISOString()
+        });
+      }
       if (userId) await logActivity('update_job', updates.jobNumber || docId, userId, userName, { title: updates.title, status: updates.status });
-    } catch (err) { handleErr(err); }
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
   const deleteJobListing = useCallback(async (docId, userId, userName) => {
@@ -905,14 +922,18 @@ export function useFirestore(churchId) {
     try {
       const jobRef = doc(db, 'churches', churchId, 'jobListings', docId);
       let jobNumber = '';
+      let wasSignedUp = false;
       await runTransaction(db, async (t) => {
         const snap = await t.get(jobRef);
         if (!snap.exists()) return;
         jobNumber = snap.data().jobNumber || docId;
-        const signups = (snap.data().signups || []).filter(s => s.uid !== uid);
+        const existing = snap.data().signups || [];
+        const signups = existing.filter(s => s.uid !== uid);
+        if (signups.length === existing.length) return; // uid wasn't signed up — skip write
+        wasSignedUp = true;
         t.update(jobRef, { signups, updatedAt: new Date().toISOString() });
       });
-      if (actorId) await logActivity('withdraw_job', jobNumber, actorId, actorName, { removedUid: uid });
+      if (wasSignedUp && actorId) await logActivity('withdraw_job', jobNumber, actorId, actorName, { removedUid: uid });
     } catch (err) { handleErr(err); }
   }, [churchId]);
 

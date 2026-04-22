@@ -34,13 +34,14 @@ const ANTHROPIC_API_KEY     = defineSecret('ANTHROPIC_API_KEY');
 // Run: firebase functions:config:set is no longer used in v2.
 // Instead set secrets: firebase functions:secrets:set STRIPE_SECRET_KEY
 // And put price IDs directly here (they are not sensitive).
+// TODO: Create a $7/mo Job Hub product in Stripe dashboard and paste the price ID below.
 const PRICE_IDS = {
   maintenance:    'price_1TB2E2F12bDL8YA7Tw4VreQc',
   insights:       'price_1TB2E6F12bDL8YA734z4Q64M',
   coordination:   'price_1TB2E2F12bDL8YA7a0VFGB6C',
   accountability: 'price_1TB2E3F12bDL8YA7hGRIALZb',
   tasks:          'price_1TM9kcF12bDL8YA7m3otofk2',
-  jobs:           'price_REPLACE_WITH_STRIPE_PRICE_ID',
+  jobs:           'price_REPLACE_WITH_STRIPE_PRICE_ID', // TODO: set real price ID
   team_25:        'price_1TB2E4F12bDL8YA7LLFr3xnL',
   team_unlimited: 'price_1TB2E3F12bDL8YA7P3a9xTVV',
   all_in:         'price_1TB2E7F12bDL8YA782etfOOQ',
@@ -157,8 +158,8 @@ exports.createCheckoutSession = onCall(
 
     const { item, successUrl, cancelUrl } = req.data;
     const priceId = PRICE_IDS[item];
-    if (!priceId || priceId === 'price_REPLACE_ME') {
-      throw new HttpsError('invalid-argument', `Unknown or unconfigured item: ${item}`);
+    if (!priceId || priceId === 'price_REPLACE_ME' || priceId.startsWith('price_REPLACE_')) {
+      throw new HttpsError('failed-precondition', `The ${item} price is not configured yet. Please contact support.`);
     }
 
     const db = getFirestore();
@@ -415,9 +416,9 @@ exports.sendTicketAssignedEmail = onCall({ cors: true }, async (req) => {
 // Fetches all active users with job hub access server-side and emails them.
 exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
-  if (!initSendGrid()) return { sent: 0 };
+  if (!initSendGrid()) { console.warn('sendJobAnnouncementEmails: SendGrid not configured, skipping.'); return { sent: 0 }; }
 
-  const { churchId, title, body, postedBy } = req.data;
+  const { churchId, title, body } = req.data;
   if (!churchId || !title) return { sent: 0 };
 
   const db = getFirestore();
@@ -431,15 +432,25 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
   if (callerRole !== 'admin' && callerRole !== 'manager') {
     throw new HttpsError('permission-denied', 'Only admin or manager can send announcements.');
   }
-  const [churchSnap, usersSnap] = await Promise.all([
+
+  // Verify church has an active Jobs hub subscription
+  const [churchSnap, subSnap, usersSnap] = await Promise.all([
     db.doc(`churches/${churchId}/config/main`).get(),
-    db.collection('users').where('churchId', '==', churchId).where('active', '!=', false).get(),
+    db.doc(`churches/${churchId}/config/subscription`).get(),
+    // Use plain churchId filter — 'active != false' silently excludes docs where field is missing
+    db.collection('users').where('churchId', '==', churchId).get(),
   ]);
+  const sub = subSnap.data() || {};
+  const hasJobsHub = sub.grandfathered || sub.plan === 'all_in' || (sub.hubs || []).includes('jobs');
+  if (!hasJobsHub) return { sent: 0 };
+
+  // Use server-derived poster name (not client-supplied) to prevent impersonation in email body
+  const postedBy = callerSnap.data().name || 'Your church';
 
   const churchName = churchSnap.data()?.churchName || 'Your Church';
   const recipients = usersSnap.docs
     .map(d => ({ ...d.data(), uid: d.id }))
-    .filter(u => u.email && (!u.allowedHubs || u.allowedHubs.includes('jobs')));
+    .filter(u => u.email && u.active !== false && (!u.allowedHubs || u.allowedHubs.includes('jobs')));
 
   if (recipients.length === 0) return { sent: 0 };
 
@@ -466,6 +477,7 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
     })
   ));
 
+  results.forEach((r, i) => { if (r.status === 'rejected') console.error('sendJobAnnouncementEmails: email failed', { index: i, reason: r.reason?.message }); });
   const sent = results.filter(r => r.status === 'fulfilled').length;
   return { sent };
 });
@@ -475,7 +487,7 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
 // data: { churchId, jobDocId }
 exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
-  if (!initSendGrid()) return { sent: 0 };
+  if (!initSendGrid()) { console.warn('sendJobCancelledEmails: SendGrid not configured, skipping.'); return { sent: 0 }; }
 
   const { churchId, jobDocId } = req.data;
   if (!churchId || !jobDocId) return { sent: 0 };
@@ -501,6 +513,13 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
   const signups = job.signups || [];
   if (signups.length === 0) return { sent: 0 };
 
+  // Re-trigger guard: prevent spamming cancellation emails within a 1-hour window
+  const lastSent = job.cancellationEmailSentAt;
+  if (lastSent) {
+    const msSinceLast = Date.now() - new Date(lastSent).getTime();
+    if (msSinceLast < 60 * 60 * 1000) return { sent: 0, skipped: true };
+  }
+
   const churchName = churchSnap.data()?.churchName || 'Your Church';
   const safeTitle = escapeHtml(job.title || 'Job');
   const safeChurch = escapeHtml(churchName);
@@ -513,7 +532,9 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
   const results = await Promise.allSettled(userSnaps.map(snap => {
     if (!snap.exists) return Promise.resolve();
     const user = snap.data();
-    if (!user.email || user.churchId !== churchId) return Promise.resolve();
+    if (!user.email || user.active === false || user.churchId !== churchId) return Promise.resolve();
+    // Respect per-user hub access: skip users who don't have jobs in their allowedHubs
+    if (user.allowedHubs && !user.allowedHubs.includes('jobs')) return Promise.resolve();
     const safeName = escapeHtml(user.name || 'there');
     const html = `<p>Hi ${safeName},</p>
 <p>We wanted to let you know that a job you signed up for has been <strong>cancelled</strong>:</p>
@@ -528,7 +549,14 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
     return sgMail.send({ to: user.email, from: FROM, subject, html, text });
   }));
 
+  results.forEach((r, i) => { if (r.status === 'rejected') console.error('sendJobCancelledEmails: email failed', { index: i, reason: r.reason?.message }); });
   const sent = results.filter(r => r.status === 'fulfilled').length;
+
+  // Record send timestamp to prevent re-triggers within 1 hour
+  if (sent > 0) {
+    await db.doc(`churches/${churchId}/jobListings/${jobDocId}`).update({ cancellationEmailSentAt: new Date().toISOString() }).catch(() => {});
+  }
+
   return { sent };
 });
 
@@ -638,7 +666,7 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
 // Runs every morning at 8:00 AM Central time.
 // Finds all jobs scheduled for today across all churches and emails each signup.
 exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'America/Chicago' }, async () => {
-  if (!initSendGrid()) return;
+  if (!initSendGrid()) { console.warn('sendJobReminders: SendGrid not configured, skipping.'); return; }
 
   const db = getFirestore();
   const today = (() => {
@@ -646,7 +674,7 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   })();
 
-  // Collection group query across all churches
+  // Collection group query across all churches (requires composite index in firestore.indexes.json)
   const snap = await db.collectionGroup('jobListings')
     .where('scheduledDate', '==', today)
     .where('status', '==', 'open')
@@ -654,11 +682,34 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
 
   if (snap.empty) return;
 
-  // Gather all unique user UIDs that need reminders
+  // Cache subscription docs per churchId to enforce hub gating and avoid N+1 reads
+  const subCache = {};
+  async function churchHasJobsHub(churchId) {
+    if (subCache[churchId] !== undefined) return subCache[churchId];
+    try {
+      const s = await db.doc(`churches/${churchId}/config/subscription`).get();
+      const sub = s.data() || {};
+      subCache[churchId] = sub.grandfathered || sub.plan === 'all_in' || (sub.hubs || []).includes('jobs');
+    } catch { subCache[churchId] = false; }
+    return subCache[churchId];
+  }
+
+  // Gather all unique user UIDs that need reminders, skipping churches without the Jobs hub
+  // and skipping jobs where a reminder was already sent today (idempotency)
   const remindersByUid = {}; // uid → [{ jobTitle, scheduledTime, location, pay, churchId }]
-  for (const doc of snap.docs) {
-    const job = doc.data();
-    const churchId = doc.ref.parent.parent.id;
+  const jobsToMark = []; // [{ ref }] — jobs to stamp lastReminderSentDate after successful sends
+  for (const jobDoc of snap.docs) {
+    const job = jobDoc.data();
+    const churchId = jobDoc.ref.parent.parent.id;
+
+    // Skip if this church doesn't have the Jobs hub active
+    if (!(await churchHasJobsHub(churchId))) continue;
+
+    // Idempotency: skip if reminder already sent today (guards against cron retry / redeploy)
+    if (job.lastReminderSentDate === today) continue;
+
+    jobsToMark.push(jobDoc.ref);
+
     for (const signup of (job.signups || [])) {
       if (!signup.uid) continue;
       if (!remindersByUid[signup.uid]) remindersByUid[signup.uid] = [];
@@ -683,7 +734,9 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
   for (const userSnap of userSnaps) {
     if (!userSnap.exists) continue;
     const user = userSnap.data();
-    if (!user.email) continue;
+    if (!user.email || user.active === false) continue;
+    // Respect per-user hub access: skip users who don't have jobs in their allowedHubs
+    if (user.allowedHubs && !user.allowedHubs.includes('jobs')) continue;
     // Only send jobs that belong to the user's own church
     const jobs = (remindersByUid[userSnap.id] || []).filter(j => j.churchId === user.churchId);
     if (jobs.length === 0) continue;
@@ -710,5 +763,9 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     emailTasks.push(sgMail.send({ to: user.email, from: FROM, subject, html, text }));
   }
 
-  await Promise.allSettled(emailTasks);
+  const results = await Promise.allSettled(emailTasks);
+  results.forEach((r, i) => { if (r.status === 'rejected') console.error('sendJobReminders: email failed', { index: i, reason: r.reason?.message }); });
+
+  // Stamp all processed jobs with today's date so re-invocation skips them
+  await Promise.allSettled(jobsToMark.map(ref => ref.update({ lastReminderSentDate: today })));
 });

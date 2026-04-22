@@ -885,6 +885,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
               { key:'coordination',   label:'Coordination Hub',   price:'$7/mo',  desc:'Checkout bundles & email notifications.' },
               { key:'accountability', label:'Accountability Hub', price:'$5/mo',  desc:'Physical audits, chain of custody, insurance export.' },
               { key:'tasks',          label:'Tasks Hub',          price:'$7/mo',  desc:'Kanban task board for general church admin tasks.' },
+              { key:'jobs',           label:'Job Hub',            price:'$7/mo',  desc:'Teen job board with signups and announcements.' },
+              { key:'people_access',  label:'People Access Hub',  price:'$7/mo',  desc:'Background checks, key assignments, certifications.' },
             ].filter(h => !(subscription?.hubs || []).includes(h.key) && subscription?.plan !== 'all_in' && !subscription?.grandfathered)
              .map(h => (
               <div key={h.key} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px", borderRadius:10, border:"1px solid "+B.sand, marginBottom:8, gap:12, flexWrap:"wrap" }}>

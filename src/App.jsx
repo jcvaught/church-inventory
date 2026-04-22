@@ -100,12 +100,12 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
   }
   async function handleRegister(e) {
     e?.preventDefault(); setBusy(true);
-    await register({ firstName:form.firstName, lastName:form.lastName, email:form.email, password:form.password, churchCode:form.churchCode });
+    await register({ firstName:form.firstName, lastName:form.lastName, email:form.email, password:form.password, churchCode:form.churchCode, allowedHubs: inviteData?.hubs ?? null });
     setBusy(false);
   }
   async function handleGoogleRegister(e) {
     e?.preventDefault(); setBusy(true);
-    await registerWithGoogle({ churchCode:form.churchCode });
+    await registerWithGoogle({ churchCode:form.churchCode, allowedHubs: inviteData?.hubs ?? null });
     setBusy(false);
   }
   async function handleCreateChurch(e) {
