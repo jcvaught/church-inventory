@@ -21,6 +21,29 @@ const JOB_STATUS_COLORS = {
 };
 
 const emptyJob = () => ({ title: '', description: '', scheduledDate: '', scheduledTime: '', location: '', spotsTotal: 1, pay: '', status: 'open' });
+
+const RECURRENCE_OPTIONS = [
+  { v:'weekly', label:'Weekly' },
+  { v:'biweekly', label:'Every 2 Weeks' },
+  { v:'monthly', label:'Monthly' },
+  { v:'quarterly', label:'Quarterly' },
+  { v:'annually', label:'Annually' },
+];
+
+function countSeriesDates(startDate, freq, endDate) {
+  if (!startDate || !endDate || !freq || endDate < startDate) return 0;
+  const parse = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
+  const end = parse(endDate), cur = parse(startDate);
+  const mi = { monthly:1, quarterly:3, annually:12 }[freq];
+  const di = { weekly:7, biweekly:14 }[freq];
+  let n = 0;
+  while (cur <= end && n < 100) {
+    n++;
+    if (mi) { const day = cur.getDate(); cur.setDate(1); cur.setMonth(cur.getMonth()+mi); cur.setDate(Math.min(day, new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate())); }
+    else cur.setDate(cur.getDate() + (di || 7));
+  }
+  return n;
+}
 const emptyAnn = () => ({ title: '', body: '', expiresAt: '', pinned: false });
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -224,10 +247,10 @@ function SpotsBar({ job }) {
 export function JobsPage({ store, userProfile }) {
   const {
     jobListings, jobAnnouncements,
-    addJobListing, updateJobListing, deleteJobListing,
+    addJobListing, addJobListingSeries, updateJobListing, deleteJobListing,
     signUpForJob, withdrawFromJob,
     addJobAnnouncement, updateJobAnnouncement, deleteJobAnnouncement,
-    users, notificationConfig, config,
+    users, notificationConfig, config, settings,
   } = store;
   const isMobile = useContext(MobileCtx);
 
@@ -251,6 +274,9 @@ export function JobsPage({ store, userProfile }) {
   const [showPastJobs, setShowPastJobs] = useState(() => {
     try { return localStorage.getItem('jobs_showPast') === 'true'; } catch { return false; }
   });
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceFreq, setRecurrenceFreq] = useState('weekly');
+  const [recurrenceSeriesEndDate, setRecurrenceSeriesEndDate] = useState('');
   const flashTimerRef = useRef(null);
 
   function flash(text, isError = false) {
@@ -277,6 +303,9 @@ export function JobsPage({ store, userProfile }) {
   // ── Derived state ──
   const isSignedUp = (job) => (job.signups || []).some(s => s.uid === userId);
   const isFull = (job) => (job.signups || []).length >= (job.spotsTotal || 1);
+  const rosterVisibility = settings?.jobsRosterVisibility ?? 'signups';
+  const canSeeRoster = (job) => isAdminOrManager || rosterVisibility === 'all' || (rosterVisibility === 'signups' && isSignedUp(job));
+  const recurrencePreviewCount = useMemo(() => countSeriesDates(jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate), [jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate]);
 
   const filteredJobs = useMemo(() => {
     let jobs = jobListings || [];
@@ -320,6 +349,9 @@ export function JobsPage({ store, userProfile }) {
   function openNewJob() {
     setJobForm(emptyJob());
     setEditJobId(null);
+    setIsRecurring(false);
+    setRecurrenceFreq('weekly');
+    setRecurrenceSeriesEndDate('');
     setShowNewJob(true);
   }
 
@@ -357,6 +389,12 @@ export function JobsPage({ store, userProfile }) {
         : `This job has ${currentSignups} signup${currentSignups !== 1 ? 's' : ''}. Changing to "${jobForm.status}" will not notify them. Continue?`;
       if (!window.confirm(confirmMsg)) return;
     }
+    // Validate recurring series config before creating
+    if (!editJobId && isRecurring) {
+      if (!recurrenceSeriesEndDate) { flash('Please set a series end date.', true); return; }
+      if (recurrenceSeriesEndDate < jobForm.scheduledDate) { flash('Series end date must be after the start date.', true); return; }
+      if (recurrencePreviewCount === 0) { flash('No dates generated. Check start and end dates.', true); return; }
+    }
     setSaving(true);
     try {
       const data = {
@@ -370,7 +408,16 @@ export function JobsPage({ store, userProfile }) {
           const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
           fn({ churchId: userProfile?.churchId, jobDocId: editJobId }).catch(e => console.warn('sendJobCancelledEmails failed', e));
         }
+        // Notify original poster if a co-admin cancelled their job
+        if (jobForm.status === 'cancelled' && existingJob?.createdBy && existingJob.createdBy !== userId && notificationConfig?.enabled) {
+          const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
+          fn({ churchId: userProfile?.churchId, jobDocId: editJobId, event: 'cancellation', actorUid: userId, actorName: userName })
+            .catch(e => console.warn('sendJobPosterNotification failed', e));
+        }
         flash('Job updated.' + (willNotify ? ' Signups notified.' : ''));
+      } else if (isRecurring) {
+        await addJobListingSeries(data, recurrenceFreq, recurrenceSeriesEndDate, userId, userName);
+        flash(`${recurrencePreviewCount} recurring job${recurrencePreviewCount !== 1 ? 's' : ''} posted.`);
       } else {
         await addJobListing(data, userId, userName);
         flash('Job posted.');
@@ -418,16 +465,28 @@ export function JobsPage({ store, userProfile }) {
     try {
       await withdrawFromJob(job._docId, userId, userId, userName);
       flash('Removed from job.');
+      if (notificationConfig?.enabled) {
+        const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
+        fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'withdrawal', actorUid: userId, actorName: userName })
+          .catch(e => console.warn('sendJobPosterNotification failed', e));
+      }
     } catch { flash('Failed to withdraw.', true); }
     finally { setSaving(false); }
   }
 
   async function handleAdminRemoveSignup(job, uid) {
     if (!isAdminOrManager) return;
-    if (!window.confirm('Remove this person from the job?')) return;
+    const removed = (job.signups || []).find(s => s.uid === uid);
+    if (!window.confirm(`Remove ${removed?.name || 'this person'} from the job?`)) return;
     try {
       await withdrawFromJob(job._docId, uid, userId, userName);
       flash('Removed.');
+      // Notify the original poster if it's not their own job
+      if (notificationConfig?.enabled && job.createdBy !== userId) {
+        const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
+        fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'withdrawal', actorUid: userId, actorName: userName })
+          .catch(e => console.warn('sendJobPosterNotification failed', e));
+      }
     } catch { flash('Failed to remove signup.', true); }
   }
 
@@ -547,7 +606,10 @@ export function JobsPage({ store, userProfile }) {
                     onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
                     {/* Header row */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                      <span style={{ fontSize: 11, fontFamily: 'monospace', color: B.textLight, background: B.warmGray, padding: '2px 6px', borderRadius: 4 }}>{job.jobNumber}</span>
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <span style={{ fontSize: 11, fontFamily: 'monospace', color: B.textLight, background: B.warmGray, padding: '2px 6px', borderRadius: 4 }}>{job.jobNumber}</span>
+                        {job.recurrenceGroupId && <span title="Recurring series" style={{ fontSize:11, color:B.teal }}>🔁</span>}
+                      </div>
                       <JobStatusBadge status={job.status} />
                     </div>
                     <div style={{ fontWeight: 700, fontSize: 15, fontFamily: f1, color: B.navy, marginBottom: 6 }}>{job.title}</div>
@@ -563,7 +625,7 @@ export function JobsPage({ store, userProfile }) {
                       </div>
                     )}
                     <div style={{ marginBottom: 10 }}><SpotsBar job={job} /></div>
-                    {isAdminOrManager && (job.signups || []).length > 0 && (
+                    {canSeeRoster(job) && (job.signups || []).length > 0 && (
                       <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 10 }}>
                         {(job.signups || []).map(s => s.name).join(', ')}
                       </div>
@@ -630,7 +692,7 @@ export function JobsPage({ store, userProfile }) {
                       <span style={{ fontSize:11, fontWeight:700, color:sc.tx, background:sc.bg, padding:'2px 8px', borderRadius:12 }}>{job.status}</span>
                     </div>
                     <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}>{filled}/{job.spotsTotal||1} spots filled</div>
-                    {isAdminOrManager && (job.signups||[]).length > 0 && (
+                    {canSeeRoster(job) && (job.signups||[]).length > 0 && (
                       <div style={{ fontSize:12, color:B.textLight, fontFamily:f2, marginTop:4 }}>{(job.signups||[]).map(s=>s.name).join(', ')}</div>
                     )}
                   </div>
@@ -642,7 +704,7 @@ export function JobsPage({ store, userProfile }) {
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
                 <thead>
                   <tr style={{ background:B.warmGray }}>
-                    {['Date & Time', 'Job', 'Location', 'Spots', 'Status', isAdminOrManager ? 'Signed Up' : ''].filter(Boolean).map(h => (
+                    {['Date & Time', 'Job', 'Location', 'Spots', 'Status', (isAdminOrManager || rosterVisibility !== 'admin') ? 'Signed Up' : ''].filter(Boolean).map(h => (
                       <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontFamily:f1, fontWeight:700, fontSize:11, color:B.textMid, textTransform:'uppercase', letterSpacing:.6, whiteSpace:'nowrap', borderBottom:'1px solid '+B.sand }}>{h}</th>
                     ))}
                   </tr>
@@ -678,9 +740,12 @@ export function JobsPage({ store, userProfile }) {
                         <td style={{ padding:'10px 14px' }}>
                           <span style={{ fontSize:11, fontWeight:700, color:sc.tx, background:sc.bg, padding:'2px 8px', borderRadius:12 }}>{job.status}</span>
                         </td>
-                        {isAdminOrManager && (
+                        {(isAdminOrManager || rosterVisibility !== 'admin') && (
                           <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textMid, maxWidth:220 }}>
-                            {(job.signups||[]).length === 0 ? <span style={{ color:B.textLight, fontSize:12 }}>None</span> : (job.signups||[]).map(s=>s.name).join(', ')}
+                            {canSeeRoster(job)
+                              ? ((job.signups||[]).length === 0 ? <span style={{ color:B.textLight, fontSize:12 }}>None</span> : (job.signups||[]).map(s=>s.name).join(', '))
+                              : <span style={{ color:B.textLight, fontSize:12 }}>—</span>
+                            }
                           </td>
                         )}
                       </tr>
@@ -790,12 +855,47 @@ export function JobsPage({ store, userProfile }) {
               </select>
             </FF>
           )}
+          {/* Recurring series — new jobs only */}
+          {!editJobId && (
+            <div style={{ borderTop: '1px solid ' + B.sand, paddingTop: 14, marginTop: 4 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: isRecurring ? 12 : 0 }}>
+                <input type="checkbox" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)} style={{ width: 16, height: 16 }} />
+                <span style={{ fontSize: 13, fontFamily: f1, fontWeight: 600, color: B.textDark }}>Recurring series 🔁</span>
+              </label>
+              {isRecurring && (
+                <div>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1 1 140px' }}>
+                      <FF label="Repeats">
+                        <select style={{ ...inp, cursor: 'pointer' }} value={recurrenceFreq} onChange={e => setRecurrenceFreq(e.target.value)}>
+                          {RECURRENCE_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                        </select>
+                      </FF>
+                    </div>
+                    <div style={{ flex: '1 1 140px' }}>
+                      <FF label="Series Ends On *">
+                        <input type="date" style={inp} value={recurrenceSeriesEndDate} min={jobForm.scheduledDate || undefined} onChange={e => setRecurrenceSeriesEndDate(e.target.value)} />
+                      </FF>
+                    </div>
+                  </div>
+                  {recurrencePreviewCount > 0 && (
+                    <div style={{ fontSize: 13, color: B.teal, fontFamily: f1, fontWeight: 600, marginTop: 4 }}>
+                      This will create {recurrencePreviewCount} job{recurrencePreviewCount !== 1 ? 's' : ''}.
+                    </div>
+                  )}
+                  {recurrencePreviewCount >= 100 && (
+                    <div style={{ fontSize: 12, color: B.red, fontFamily: f2, marginTop: 2 }}>Maximum 100 jobs per series.</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
             <button onClick={() => { setShowNewJob(false); setEditJobId(null); }} style={btnS}>Cancel</button>
             <button onClick={handleSaveJob}
-              disabled={saving || !jobForm.title.trim() || !jobForm.scheduledDate}
-              style={{ ...btnP, opacity: (!jobForm.title.trim() || !jobForm.scheduledDate || saving) ? 0.5 : 1 }}>
-              {saving ? 'Saving...' : editJobId ? 'Save Changes' : 'Post Job'}
+              disabled={saving || !jobForm.title.trim() || !jobForm.scheduledDate || (isRecurring && !recurrenceSeriesEndDate)}
+              style={{ ...btnP, opacity: (!jobForm.title.trim() || !jobForm.scheduledDate || saving || (isRecurring && !recurrenceSeriesEndDate)) ? 0.5 : 1 }}>
+              {saving ? 'Saving...' : editJobId ? 'Save Changes' : isRecurring ? `Post ${recurrencePreviewCount || ''} Jobs` : 'Post Job'}
             </button>
           </div>
         </Modal>
@@ -804,7 +904,12 @@ export function JobsPage({ store, userProfile }) {
       {/* ── Job Detail Modal ── */}
       {liveDetail && (
         <Modal title={liveDetail.jobNumber + ' — ' + liveDetail.title} onClose={() => setShowJobDetail(null)} maxWidth={540}>
-          <div style={{ marginBottom: 14 }}><JobStatusBadge status={liveDetail.status} /></div>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+            <JobStatusBadge status={liveDetail.status} />
+            {liveDetail.recurrenceGroupId && (
+              <span style={{ fontSize:12, color:B.teal, fontWeight:600, fontFamily:f1 }}>🔁 Recurring series</span>
+            )}
+          </div>
           {liveDetail.description && (
             <div style={{ fontSize: 14, color: B.textDark, fontFamily: f2, lineHeight: 1.6, marginBottom: 16, whiteSpace: 'pre-wrap' }}>{liveDetail.description}</div>
           )}
@@ -832,7 +937,7 @@ export function JobsPage({ store, userProfile }) {
           {/* Signup list */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: B.textMid, textTransform: 'uppercase', letterSpacing: .8, fontFamily: f1, marginBottom: 8 }}>Signed Up</div>
-            {isAdminOrManager ? (
+            {canSeeRoster(liveDetail) ? (
               (liveDetail.signups || []).length === 0 ? (
                 <div style={{ fontSize: 13, color: B.textLight, fontFamily: f2 }}>No signups yet.</div>
               ) : (
@@ -840,9 +945,11 @@ export function JobsPage({ store, userProfile }) {
                   {(liveDetail.signups || []).map(s => (
                     <div key={s.uid} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: B.warmGray, borderRadius: 8 }}>
                       <span style={{ fontSize: 13, fontFamily: f2, color: B.textDark }}>{s.name}</span>
-                      <button onClick={() => handleAdminRemoveSignup(liveDetail, s.uid)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.red, fontSize: 12, fontFamily: f1, padding: '2px 6px' }}
-                        aria-label={'Remove ' + s.name}>✕</button>
+                      {isAdminOrManager && (
+                        <button onClick={() => handleAdminRemoveSignup(liveDetail, s.uid)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.red, fontSize: 12, fontFamily: f1, padding: '2px 6px' }}
+                          aria-label={'Remove ' + s.name}>✕</button>
+                      )}
                     </div>
                   ))}
                 </div>

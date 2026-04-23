@@ -52,6 +52,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [editRoomId, setEditRoomId] = useState(null);
   const [savingRoom, setSavingRoom] = useState(false);
   const [inviteHubsInitialized, setInviteHubsInitialized] = useState(false);
+  const [jobDelegates, setJobDelegates] = useState(() => userProfile?.jobPosterDelegates || []);
+  const [savingDelegates, setSavingDelegates] = useState(false);
 
   const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub', people_access: 'People Access Hub', tasks: 'Tasks Hub', jobs: 'Job Hub' };
   const churchHubs = subscription?.grandfathered || subscription?.plan === 'all_in'
@@ -202,6 +204,14 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const isAdmin = userProfile?.role === "admin";
   const isManager = userProfile?.role === "manager";
   const managedMinistries = userProfile?.managedMinistries || [];
+  const hasJobsHub = (subscription?.hubs || []).includes('jobs') || subscription?.plan === 'all_in' || subscription?.grandfathered;
+  const adminManagerUsers = (users || []).filter(u => ['admin', 'manager'].includes(u.role) && u.id !== userProfile?.uid && u.active !== false);
+
+  async function handleSaveDelegates(next) {
+    setSavingDelegates(true);
+    try { await updateUser(userProfile.uid, { jobPosterDelegates: next }); setJobDelegates(next); } catch { /* ignore */ }
+    setSavingDelegates(false);
+  }
 
   // ── People Access helpers (used for My Compliance card + Team badges) ──
   const ACCESS_TYPE_LABELS = { background_check: 'Background Check', key_assignment: 'Key / Fob', certification: 'Certification', custom: 'Custom' };
@@ -322,6 +332,43 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             </div>
           )}
         </div>
+
+        {/* Job Hub Delegates — admin/manager with Jobs hub */}
+        {(isAdmin || isManager) && hasJobsHub && (
+          <div style={{ marginTop:16, paddingTop:16, borderTop:'1px solid '+B.sand, width:'100%' }}>
+            <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Job Hub Report Delegates</div>
+            <div style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:10 }}>
+              These users receive the same notifications you do when someone withdraws from a job you posted.
+            </div>
+            {adminManagerUsers.length === 0 ? (
+              <div style={{ fontSize:13, color:B.textLight, fontFamily:f2 }}>No other admins or managers in your church.</div>
+            ) : (
+              <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                {adminManagerUsers.map(u => {
+                  const sel = jobDelegates.some(d => d.uid === u.id);
+                  return (
+                    <button key={u.id}
+                      disabled={savingDelegates || (!sel && jobDelegates.length >= 5)}
+                      onClick={() => {
+                        const next = sel
+                          ? jobDelegates.filter(d => d.uid !== u.id)
+                          : [...jobDelegates, { uid: u.id, name: u.name }];
+                        handleSaveDelegates(next);
+                      }}
+                      style={{ padding:'5px 12px', borderRadius:20, fontSize:13, fontFamily:f1, fontWeight:600, cursor:'pointer',
+                        border:'1px solid '+(sel ? B.teal : B.sand),
+                        background: sel ? B.tealPale : B.white,
+                        color: sel ? B.teal : B.textMid,
+                        opacity: (savingDelegates || (!sel && jobDelegates.length >= 5)) ? 0.5 : 1 }}>
+                      {sel ? '✓ ' : ''}{u.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {jobDelegates.length >= 5 && <div style={{ fontSize:12, color:B.textLight, marginTop:6, fontFamily:f2 }}>Maximum 5 delegates.</div>}
+          </div>
+        )}
       </div>
 
       {/* My Compliance — visible if this user is linked to an accessPerson */}
@@ -370,6 +417,27 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           </div>
         );
       })()}
+
+      {/* Job Hub Settings — admin only, gated on jobs hub */}
+      {isAdmin && hasJobsHub && (
+        <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
+          <h3 style={{ margin:"0 0 16px", fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Job Hub Settings</h3>
+          <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Display Roster To</div>
+          <div style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:10 }}>Controls who can see the names signed up for a job. Spot counts are always visible to all.</div>
+          {[
+            { v:'admin', label:'Admins & Managers only' },
+            { v:'signups', label:'Anyone signed up for that job' },
+            { v:'all', label:'All church members' },
+          ].map(opt => (
+            <label key={opt.v} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, cursor:'pointer', fontSize:14, fontFamily:f2, color:B.textDark }}>
+              <input type="radio" name="rosterVis" value={opt.v}
+                checked={(settings?.jobsRosterVisibility ?? 'signups') === opt.v}
+                onChange={() => updateSettings({ jobsRosterVisibility: opt.v })} />
+              {opt.label}
+            </label>
+          ))}
+        </div>
+      )}
 
       {/* Subscription & Billing */}
       <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>

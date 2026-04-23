@@ -768,3 +768,96 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
   // Stamp all processed jobs with today's date so re-invocation skips them
   await Promise.allSettled(jobsToMark.map(ref => ref.update({ lastReminderSentDate: today })));
 });
+
+// ── sendJobPosterNotification ─────────────────────────────────────────────
+// Called on member withdrawal or co-admin cancellation. Emails the job poster + delegates.
+// data: { churchId, jobDocId, event: 'withdrawal'|'cancellation', actorUid, actorName }
+exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  if (!initSendGrid()) return { sent: 0 };
+
+  const { churchId, jobDocId, event, actorUid, actorName } = req.data;
+  if (!churchId || !jobDocId || !event) return { sent: 0 };
+
+  const db = getFirestore();
+
+  const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
+  if (!callerSnap.exists || callerSnap.data().churchId !== churchId) {
+    throw new HttpsError('permission-denied', 'Not a member of this church.');
+  }
+
+  const [notifSnap, jobSnap] = await Promise.all([
+    db.doc(`churches/${churchId}/config/notifications`).get(),
+    db.doc(`churches/${churchId}/jobListings/${jobDocId}`).get(),
+  ]);
+  if (!notifSnap.data()?.enabled) return { sent: 0 };
+  if (!jobSnap.exists) return { sent: 0 };
+  const job = jobSnap.data();
+
+  // Skip self-notification
+  if (actorUid === job.createdBy) return { sent: 0 };
+
+  // 30-second double-fire guard
+  const lastNotif = job.lastPosterNotifiedAt;
+  if (lastNotif && Date.now() - new Date(lastNotif).getTime() < 30 * 1000) {
+    return { sent: 0, skipped: true };
+  }
+
+  const posterSnap = await db.doc(`users/${job.createdBy}`).get();
+  if (!posterSnap.exists) return { sent: 0 };
+  const poster = posterSnap.data();
+  if (!poster.email || poster.active === false) return { sent: 0 };
+
+  // Load and validate delegates from the poster's profile at send-time
+  const delegateEntries = poster.jobPosterDelegates || [];
+  const delegateSnaps = delegateEntries.length > 0
+    ? await Promise.all(delegateEntries.map(d => db.doc(`users/${d.uid}`).get()))
+    : [];
+  const delegateUsers = delegateSnaps
+    .filter(s => s.exists)
+    .map(s => s.data())
+    .filter(u => u.email && u.active !== false && ['admin', 'manager'].includes(u.role) && u.churchId === churchId);
+
+  const churchSnap = await db.doc(`churches/${churchId}/config/main`).get();
+  const churchName = churchSnap.data()?.churchName || 'Your Church';
+  const safeChurch = escapeHtml(churchName);
+  const safeJobTitle = escapeHtml(job.title || 'Job');
+  const safeActor = escapeHtml(actorName || 'Someone');
+  const dateStr = job.scheduledDate ? escapeHtml(job.scheduledDate) : '';
+  const timeStr = job.scheduledTime ? ` at ${escapeHtml(job.scheduledTime)}` : '';
+  const filled = (job.signups || []).length;
+  const total = job.spotsTotal || 1;
+
+  let subject, bodyHtml, bodyText;
+  if (event === 'withdrawal') {
+    subject = `[Job Hub] ${actorName || 'Someone'} withdrew from "${job.title || 'Job'}"`;
+    bodyHtml = `<p>Hi,</p>
+<p><strong>${safeActor}</strong> has withdrawn from a job you posted:</p>
+<div style="background:#f5f5f5;border-left:4px solid #0D9488;padding:12px 16px;margin:12px 0;border-radius:4px">
+  <p style="font-weight:700;margin:0 0 6px;font-size:15px">${safeJobTitle}</p>
+  ${dateStr ? `<p style="margin:0 0 4px;font-size:14px;color:#666">${dateStr}${timeStr}</p>` : ''}
+  <p style="margin:0;font-size:14px">Spots filled: <strong>${filled}/${total}</strong></p>
+</div>
+<p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to manage signups.</p>
+<p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`;
+    bodyText = `${actorName || 'Someone'} withdrew from "${job.title || 'Job'}".\n\nSpots filled: ${filled}/${total}\n\nOpen ChurchOpsHub to manage signups.\n\n— ${churchName}`;
+  } else {
+    subject = `[Job Hub] Your job "${job.title || 'Job'}" was cancelled`;
+    bodyHtml = `<p>Hi,</p>
+<p>A job you posted has been <strong>cancelled</strong> by <strong>${safeActor}</strong>:</p>
+<div style="background:#f5f5f5;border-left:4px solid #EF4444;padding:12px 16px;margin:12px 0;border-radius:4px">
+  <p style="font-weight:700;margin:0 0 6px;font-size:15px">${safeJobTitle}</p>
+  ${dateStr ? `<p style="margin:0;font-size:14px;color:#666">${dateStr}${timeStr}</p>` : ''}
+</div>
+<p><a href="https://churchopshub.com">Open ChurchOpsHub</a> for details.</p>
+<p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`;
+    bodyText = `Your job "${job.title || 'Job'}" was cancelled by ${actorName || 'someone'}.\n\nOpen ChurchOpsHub for details.\n\n— ${churchName}`;
+  }
+
+  const results = await Promise.allSettled(
+    [poster, ...delegateUsers].map(u => sgMail.send({ to: u.email, from: FROM, subject, html: bodyHtml, text: bodyText }))
+  );
+  results.forEach((r, i) => { if (r.status === 'rejected') console.error('sendJobPosterNotification: failed', { index: i, reason: r.reason?.message }); });
+  await db.doc(`churches/${churchId}/jobListings/${jobDocId}`).update({ lastPosterNotifiedAt: new Date().toISOString() }).catch(() => {});
+  return { sent: results.filter(r => r.status === 'fulfilled').length };
+});

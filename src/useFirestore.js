@@ -833,6 +833,52 @@ export function useFirestore(churchId) {
   }, [churchId]);
 
   // ── Job Hub ──
+  const addJobListingSeries = useCallback(async (job, recurrenceFreq, seriesEndDate, userId, userName) => {
+    try {
+      const parse = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
+      const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const dates = [];
+      const end = parse(seriesEndDate);
+      const cur = parse(job.scheduledDate);
+      const mi = { monthly:1, quarterly:3, annually:12 }[recurrenceFreq];
+      const di = { weekly:7, biweekly:14 }[recurrenceFreq];
+      while (cur <= end && dates.length < 100) {
+        dates.push(fmt(cur));
+        if (mi) { const day = cur.getDate(); cur.setDate(1); cur.setMonth(cur.getMonth()+mi); cur.setDate(Math.min(day, new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate())); }
+        else cur.setDate(cur.getDate() + (di || 7));
+      }
+      if (dates.length === 0) throw new Error('No dates generated. Check recurrence end date.');
+
+      const configRef = doc(db, 'churches', churchId, 'config', 'main');
+      const refs = dates.map(() => doc(collection(db, 'churches', churchId, 'jobListings')));
+      const seriesGroupId = refs[0].id;
+      let firstJobNumber;
+      await runTransaction(db, async (t) => {
+        const configSnap = await t.get(configRef);
+        const startNum = (configSnap.data()?.maxJobNumber || 0) + 1;
+        t.update(configRef, { maxJobNumber: startNum + dates.length - 1 });
+        refs.forEach((ref, i) => {
+          const jobNumber = 'JOB-' + String(startNum + i).padStart(3, '0');
+          if (i === 0) firstJobNumber = jobNumber;
+          t.set(ref, {
+            ...job,
+            scheduledDate: dates[i],
+            jobNumber,
+            recurrenceGroupId: seriesGroupId,
+            recurrenceFreq,
+            seriesEndDate,
+            signups: [],
+            createdBy: userId,
+            createdByName: userName,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        });
+      });
+      await logActivity('post_job', `${firstJobNumber} (series ×${dates.length})`, userId, userName, { title: job.title, recurrenceFreq });
+    } catch (err) { handleErr(err); throw err; }
+  }, [churchId]);
+
   const addJobListing = useCallback(async (job, userId, userName) => {
     try {
       const configRef = doc(db, 'churches', churchId, 'config', 'main');
@@ -992,7 +1038,7 @@ export function useFirestore(churchId) {
     addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags,
     taskTemplates, addTaskTemplate, deleteTaskTemplate,
     jobListings, jobAnnouncements,
-    addJobListing, updateJobListing, deleteJobListing,
+    addJobListing, addJobListingSeries, updateJobListing, deleteJobListing,
     signUpForJob, withdrawFromJob,
     addJobAnnouncement, updateJobAnnouncement, deleteJobAnnouncement,
     clearError
