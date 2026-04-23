@@ -1037,13 +1037,13 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
 });
 
 // ── sendJobPosterNotification ─────────────────────────────────────────────
-// Called on member withdrawal or co-admin cancellation. Emails the job poster + delegates.
-// data: { churchId, jobDocId, event: 'withdrawal'|'cancellation', actorUid, actorName }
+// Called on member withdrawal, admin removal, or co-admin cancellation. Emails the job poster + delegates.
+// data: { churchId, jobDocId, event: 'withdrawal'|'admin_removal'|'cancellation', actorUid, actorName, removedName? }
 exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
   if (!initSendGrid()) return { sent: 0 };
 
-  const { churchId, jobDocId, event, actorUid, actorName } = req.data;
+  const { churchId, jobDocId, event, actorUid, actorName, removedName } = req.data;
   if (!churchId || !jobDocId || !event) return { sent: 0 };
 
   const db = getFirestore();
@@ -1064,8 +1064,10 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
   // Skip self-notification
   if (actorUid === job.createdBy) return { sent: 0 };
 
-  // 30-second double-fire guard
-  const lastNotif = job.lastPosterNotifiedAt;
+  // 30-second double-fire guard — scoped per actorUid so concurrent withdrawals from different people aren't suppressed
+  const actorKey = actorUid || 'unknown';
+  const lastNotifByActors = job.lastPosterNotifiedByActors || {};
+  const lastNotif = lastNotifByActors[actorKey];
   if (lastNotif && Date.now() - new Date(lastNotif).getTime() < 30 * 1000) {
     return { sent: 0, skipped: true };
   }
@@ -1090,6 +1092,7 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
   const safeChurch = escapeHtml(churchName);
   const safeJobTitle = escapeHtml(job.title || 'Job');
   const safeActor = escapeHtml(actorName || 'Someone');
+  const safeRemoved = escapeHtml(removedName || 'Someone');
   const dateStr = job.scheduledDate ? escapeHtml(job.scheduledDate) : '';
   const timeStr = job.scheduledTime ? ` at ${escapeHtml(job.scheduledTime)}` : '';
   const filled = (job.signups || []).length;
@@ -1108,6 +1111,18 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
 <p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to manage signups.</p>
 <p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`;
     bodyText = `${actorName || 'Someone'} withdrew from "${job.title || 'Job'}".\n\nSpots filled: ${filled}/${total}\n\nOpen ChurchOpsHub to manage signups.\n\n— ${churchName}`;
+  } else if (event === 'admin_removal') {
+    subject = `[Job Hub] ${actorName || 'An admin'} removed a signup from "${job.title || 'Job'}"`;
+    bodyHtml = `<p>Hi,</p>
+<p><strong>${safeActor}</strong> has removed <strong>${safeRemoved}</strong> from a job you posted:</p>
+<div style="background:#f5f5f5;border-left:4px solid #F59E42;padding:12px 16px;margin:12px 0;border-radius:4px">
+  <p style="font-weight:700;margin:0 0 6px;font-size:15px">${safeJobTitle}</p>
+  ${dateStr ? `<p style="margin:0 0 4px;font-size:14px;color:#666">${dateStr}${timeStr}</p>` : ''}
+  <p style="margin:0;font-size:14px">Spots filled: <strong>${filled}/${total}</strong></p>
+</div>
+<p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to manage signups.</p>
+<p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`;
+    bodyText = `${actorName || 'An admin'} removed ${removedName || 'someone'} from "${job.title || 'Job'}".\n\nSpots filled: ${filled}/${total}\n\nOpen ChurchOpsHub to manage signups.\n\n— ${churchName}`;
   } else {
     subject = `[Job Hub] Your job "${job.title || 'Job'}" was cancelled`;
     bodyHtml = `<p>Hi,</p>
@@ -1125,6 +1140,6 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
     [poster, ...delegateUsers].map(u => sgMail.send({ to: u.email, from: FROM, subject, html: bodyHtml, text: bodyText }))
   );
   results.forEach((r, i) => { if (r.status === 'rejected') console.error('sendJobPosterNotification: failed', { index: i, reason: r.reason?.message }); });
-  await db.doc(`churches/${churchId}/jobListings/${jobDocId}`).update({ lastPosterNotifiedAt: new Date().toISOString() }).catch(() => {});
+  await db.doc(`churches/${churchId}/jobListings/${jobDocId}`).update({ [`lastPosterNotifiedByActors.${actorKey}`]: new Date().toISOString() }).catch(() => {});
   return { sent: results.filter(r => r.status === 'fulfilled').length };
 });

@@ -18,7 +18,7 @@ export function ActivityLogPage({ store }) {
     dispose:"Disposed", mark_repair:"Sent to Repair", mark_repaired:"Repair Complete",
     add_supply:"Supply Added", edit_supply:"Supply Edited", use_supply:"Supply Used", restock:"Restocked",
     post_job:"Job Posted", update_job:"Job Updated", delete_job:"Job Deleted",
-    signup_job:"Signed Up for Job", withdraw_job:"Withdrew from Job",
+    signup_job:"Signed Up for Job", withdraw_job:"Withdrew from Job", admin_remove_job:"Removed from Job (Admin)",
     post_announcement:"Announcement Posted", update_announcement:"Announcement Updated", delete_announcement:"Announcement Deleted",
   };
   const actionIcons = {
@@ -26,7 +26,7 @@ export function ActivityLogPage({ store }) {
     mark_repair:"🔧", mark_repaired:"✅", add_supply:"📋", edit_supply:"✏️",
     use_supply:"📉", restock:"📦",
     post_job:"💼", update_job:"✏️", delete_job:"🗑️",
-    signup_job:"✅", withdraw_job:"↩️",
+    signup_job:"✅", withdraw_job:"↩️", admin_remove_job:"🚫",
     post_announcement:"📢", update_announcement:"✏️", delete_announcement:"🗑️",
   };
   const actionColors = {
@@ -34,7 +34,7 @@ export function ActivityLogPage({ store }) {
     dispose:B.red, mark_repair:"#96750E", mark_repaired:B.teal,
     add_supply:B.teal, edit_supply:B.navy, use_supply:"#96750E", restock:"#1A65C7",
     post_job:"#16A34A", update_job:B.navy, delete_job:B.red,
-    signup_job:B.teal, withdraw_job:"#96750E",
+    signup_job:B.teal, withdraw_job:"#96750E", admin_remove_job:B.red,
     post_announcement:"#7C3AED", update_announcement:B.navy, delete_announcement:B.red,
   };
 

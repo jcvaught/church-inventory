@@ -4,7 +4,7 @@ import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
-import { localDateStr } from '../../utils/date.js';
+import { localDateStr, generateRecurrenceDates } from '../../utils/date.js';
 
 function formatJobDate(dateStr) {
   if (!dateStr) return '—';
@@ -30,20 +30,6 @@ const RECURRENCE_OPTIONS = [
   { v:'annually', label:'Annually' },
 ];
 
-function countSeriesDates(startDate, freq, endDate) {
-  if (!startDate || !endDate || !freq || endDate < startDate) return 0;
-  const parse = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
-  const end = parse(endDate), cur = parse(startDate);
-  const mi = { monthly:1, quarterly:3, annually:12 }[freq];
-  const di = { weekly:7, biweekly:14 }[freq];
-  let n = 0;
-  while (cur <= end && n < 100) {
-    n++;
-    if (mi) { const day = cur.getDate(); cur.setDate(1); cur.setMonth(cur.getMonth()+mi); cur.setDate(Math.min(day, new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate())); }
-    else cur.setDate(cur.getDate() + (di || 7));
-  }
-  return n;
-}
 const emptyAnn = () => ({ title: '', body: '', expiresAt: '', pinned: false });
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -62,7 +48,7 @@ const JobChip = memo(function JobChip({ job, onJobClick, todayStr }) {
       role="button" tabIndex={0}
       onClick={e => { e.stopPropagation(); onJobClick(job); }}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onJobClick(job); } }}
-      aria-label={`${job.title} — ${filled}/${total} spots filled`}
+      aria-label={`${job.title} — ${filled}/${total} spots filled, ${job.status}`}
       style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 5px', borderRadius:5, background:chipBg, borderLeft:'3px solid '+chipBorder, cursor:'pointer', marginBottom:2, overflow:'hidden' }}
       title={job.title}>
       <span style={{ fontSize:11, color:chipTx, fontWeight:600, fontFamily:f1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flex:1 }}>{job.title}</span>
@@ -244,6 +230,165 @@ function SpotsBar({ job }) {
   );
 }
 
+const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, saving, signed, full, showRoster, onDetail, onWithdraw, onSignUp }) {
+  const overdue = job.scheduledDate && job.scheduledDate < todayStr && job.status === 'open';
+  return (
+    <div
+      role="button" tabIndex={0}
+      onClick={() => onDetail(job)}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDetail(job); } }}
+      aria-label={`${job.title} — ${job.status}`}
+      style={{ background: B.white, borderRadius: 14, border: '1px solid ' + (overdue ? '#FECACA' : B.sand), padding: 18, cursor: 'pointer', transition: 'box-shadow 0.15s' }}
+      onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(27,42,74,0.1)'}
+      onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ fontSize: 11, fontFamily: 'monospace', color: B.textLight, background: B.warmGray, padding: '2px 6px', borderRadius: 4 }}>{job.jobNumber}</span>
+          {job.recurrenceGroupId && <span title="Recurring series" style={{ fontSize:11, color:B.teal }}>🔁</span>}
+        </div>
+        <JobStatusBadge status={job.status} />
+      </div>
+      <div style={{ fontWeight: 700, fontSize: 15, fontFamily: f1, color: B.navy, marginBottom: 6 }}>{job.title}</div>
+      <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 2 }}>
+        📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' at ' + job.scheduledTime : ''}
+      </div>
+      {job.location && (
+        <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 8 }}>📍 {job.location}</div>
+      )}
+      {job.pay != null && (
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#16A34A', fontFamily: f1, marginBottom: 10 }}>
+          ${Number(job.pay).toFixed(2)} per person
+        </div>
+      )}
+      <div style={{ marginBottom: 10 }}><SpotsBar job={job} /></div>
+      {showRoster && (job.signups || []).length > 0 && (
+        <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 10 }}>
+          {(job.signups || []).map(s => s.name).join(', ')}
+        </div>
+      )}
+      {!isAdminOrManager && signed && (
+        <div style={{ fontSize: 12, fontWeight: 700, color: B.teal, fontFamily: f1, marginBottom: 10 }}>✓ You're signed up</div>
+      )}
+      {job.status === 'open' && (
+        <div onClick={e => e.stopPropagation()}>
+          {signed ? (
+            <button onClick={() => onWithdraw(job)} disabled={saving}
+              style={{ ...btnS, fontSize: 12, padding: '6px 12px', color: B.red, borderColor: '#FECACA', width: '100%' }}>
+              {saving ? 'Withdrawing…' : 'Withdraw'}
+            </button>
+          ) : full ? (
+            <button disabled style={{ ...btnS, fontSize: 12, padding: '6px 12px', opacity: 0.45, width: '100%', cursor: 'not-allowed' }}>Full</button>
+          ) : (
+            <button onClick={() => onSignUp(job)} disabled={saving}
+              style={{ ...btnP, fontSize: 12, padding: '6px 12px', width: '100%' }}>
+              {saving ? 'Signing up…' : 'Sign Up'}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
+const MobileScheduleRow = memo(function MobileScheduleRow({ job, showRoster, onDetail }) {
+  const sc = JOB_STATUS_COLORS[job.status] || JOB_STATUS_COLORS.open;
+  const filled = (job.signups || []).length;
+  return (
+    <div
+      role="button" tabIndex={0}
+      onClick={() => onDetail(job)}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDetail(job); } }}
+      aria-label={job.title}
+      style={{ background:B.white, borderRadius:12, border:'1px solid '+B.sand, padding:'12px 14px', cursor:'pointer' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
+        <div>
+          <div style={{ fontSize:14, fontWeight:700, color:B.navy, fontFamily:f1 }}>{job.title}</div>
+          <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}>📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' · '+job.scheduledTime : ''}</div>
+        </div>
+        <span style={{ fontSize:11, fontWeight:700, color:sc.tx, background:sc.bg, padding:'2px 8px', borderRadius:12 }}>{job.status}</span>
+      </div>
+      <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}>{filled}/{job.spotsTotal||1} spots filled</div>
+      {showRoster && (job.signups||[]).length > 0 && (
+        <div style={{ fontSize:12, color:B.textLight, fontFamily:f2, marginTop:4 }}>{(job.signups||[]).map(s=>s.name).join(', ')}</div>
+      )}
+    </div>
+  );
+});
+
+const DesktopScheduleRow = memo(function DesktopScheduleRow({ job, todayStr, isAdminOrManager, rosterVisibility, showRoster, onDetail }) {
+  const sc = JOB_STATUS_COLORS[job.status] || JOB_STATUS_COLORS.open;
+  const filled = (job.signups || []).length;
+  const pct = Math.min(100, (filled / (job.spotsTotal||1)) * 100);
+  const isPast = job.scheduledDate && job.scheduledDate < todayStr;
+  return (
+    <tr
+      tabIndex={0} role="button" aria-label={job.title}
+      onClick={() => onDetail(job)}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDetail(job); } }}
+      style={{ borderBottom:'1px solid '+B.sand, cursor:'pointer', opacity:isPast ? .65 : 1 }}
+      onMouseEnter={e => e.currentTarget.style.background=B.warmGray}
+      onMouseLeave={e => e.currentTarget.style.background=''}>
+      <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textDark, whiteSpace:'nowrap' }}>
+        {formatJobDate(job.scheduledDate)}{job.scheduledTime ? <div style={{ fontSize:11, color:B.textLight }}>{job.scheduledTime}</div> : null}
+      </td>
+      <td style={{ padding:'10px 14px', fontFamily:f2, color:B.navy, fontWeight:600 }}>
+        <div>{job.title}</div>
+        <div style={{ fontSize:11, color:B.textLight, fontFamily:'monospace' }}>{job.jobNumber}</div>
+      </td>
+      <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textMid }}>{job.location || '—'}</td>
+      <td style={{ padding:'10px 14px', minWidth:100 }}>
+        <div style={{ fontSize:12, color:B.textMid, marginBottom:3 }}>{filled}/{job.spotsTotal||1}</div>
+        <div style={{ height:5, borderRadius:3, background:B.sand, overflow:'hidden' }}>
+          <div style={{ height:'100%', width:pct+'%', background:filled>=(job.spotsTotal||1) ? B.red : B.teal, borderRadius:3 }}/>
+        </div>
+      </td>
+      <td style={{ padding:'10px 14px' }}>
+        <span style={{ fontSize:11, fontWeight:700, color:sc.tx, background:sc.bg, padding:'2px 8px', borderRadius:12 }}>{job.status}</span>
+      </td>
+      {(isAdminOrManager || rosterVisibility !== 'admin') && (
+        <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textMid, maxWidth:220 }}>
+          {showRoster
+            ? ((job.signups||[]).length === 0 ? <span style={{ color:B.textLight, fontSize:12 }}>None</span> : (job.signups||[]).map(s=>s.name).join(', '))
+            : <span style={{ color:B.textLight, fontSize:12 }}>—</span>
+          }
+        </td>
+      )}
+    </tr>
+  );
+});
+
+const AnnouncementCard = memo(function AnnouncementCard({ ann, isAdminOrManager, onTogglePin, onEdit, onDelete }) {
+  return (
+    <div style={{ background: B.white, borderRadius: 12, border: '1px solid ' + (ann.pinned ? B.teal : B.sand), padding: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            {ann.pinned && <span style={{ fontSize: 11, fontWeight: 700, color: B.teal, fontFamily: f1 }}>📌 PINNED</span>}
+            <span style={{ fontSize: 15, fontWeight: 700, color: B.navy, fontFamily: f1 }}>{ann.title}</span>
+          </div>
+          <div style={{ fontSize: 14, color: B.textDark, fontFamily: f2, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ann.body}</div>
+          <div style={{ fontSize: 11, color: B.textLight, fontFamily: f2, marginTop: 8 }}>
+            Posted by {ann.createdByName}{ann.createdAt ? ' · ' + ann.createdAt.slice(0, 10) : ''}
+            {ann.expiresAt ? ' · Expires ' + ann.expiresAt : ''}
+          </div>
+        </div>
+        {isAdminOrManager && (
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <button onClick={() => onTogglePin(ann)}
+              title={ann.pinned ? 'Unpin' : 'Pin to top'}
+              aria-label={ann.pinned ? 'Unpin announcement' : 'Pin announcement to top'}
+              style={{ ...btnS, padding: '5px 9px', fontSize: 13 }}>
+              {ann.pinned ? '📌' : '📍'}
+            </button>
+            <button onClick={() => onEdit(ann)} style={{ ...btnS, padding: '5px 9px', fontSize: 13 }}>Edit</button>
+            <button onClick={() => onDelete(ann)} style={{ ...btnD, padding: '5px 9px', fontSize: 13 }}>Delete</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 export function JobsPage({ store, userProfile }) {
   const {
     jobListings, jobAnnouncements,
@@ -305,7 +450,7 @@ export function JobsPage({ store, userProfile }) {
   const isFull = (job) => (job.signups || []).length >= (job.spotsTotal || 1);
   const rosterVisibility = settings?.jobsRosterVisibility ?? 'signups';
   const canSeeRoster = (job) => isAdminOrManager || rosterVisibility === 'all' || (rosterVisibility === 'signups' && isSignedUp(job));
-  const recurrencePreviewCount = useMemo(() => countSeriesDates(jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate), [jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate]);
+  const recurrencePreviewCount = useMemo(() => generateRecurrenceDates(jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate).length, [jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate]);
 
   const filteredJobs = useMemo(() => {
     let jobs = jobListings || [];
@@ -366,6 +511,9 @@ export function JobsPage({ store, userProfile }) {
       pay: job.pay != null ? String(job.pay) : '',
       status: job.status || 'open',
     });
+    setIsRecurring(false);
+    setRecurrenceFreq('weekly');
+    setRecurrenceSeriesEndDate('');
     setEditJobId(job._docId);
     setShowNewJob(true);
   }
@@ -435,7 +583,10 @@ export function JobsPage({ store, userProfile }) {
     if (!window.confirm(`Send a cancellation email to ${(job.signups || []).length} signup${(job.signups || []).length !== 1 ? 's' : ''}?`)) return;
     const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
     fn({ churchId: userProfile?.churchId, jobDocId: job._docId })
-      .then(() => flash('Signups notified.'))
+      .then(result => {
+        if (result.data?.skipped) flash('Already notified recently — no new emails sent.');
+        else flash('Signups notified.');
+      })
       .catch(() => flash('Failed to send notifications.', true));
   }
 
@@ -463,9 +614,9 @@ export function JobsPage({ store, userProfile }) {
     if (!window.confirm('Remove yourself from this job?')) return;
     setSaving(true);
     try {
-      await withdrawFromJob(job._docId, userId, userId, userName);
+      const result = await withdrawFromJob(job._docId, userId, userId, userName);
       flash('Removed from job.');
-      if (notificationConfig?.enabled) {
+      if (result?.wasSignedUp && notificationConfig?.enabled) {
         const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
         fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'withdrawal', actorUid: userId, actorName: userName })
           .catch(e => console.warn('sendJobPosterNotification failed', e));
@@ -484,7 +635,7 @@ export function JobsPage({ store, userProfile }) {
       // Notify the original poster if it's not their own job
       if (notificationConfig?.enabled && job.createdBy !== userId) {
         const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
-        fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'withdrawal', actorUid: userId, actorName: userName })
+        fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'admin_removal', actorUid: userId, actorName: userName, removedName: removed?.name || '' })
           .catch(e => console.warn('sendJobPosterNotification failed', e));
       }
     } catch { flash('Failed to remove signup.', true); }
@@ -591,69 +742,12 @@ export function JobsPage({ store, userProfile }) {
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14 }}>
-              {filteredJobs.map(job => {
-                const signed = isSignedUp(job);
-                const full = isFull(job);
-                const overdue = job.scheduledDate && job.scheduledDate < todayStr && job.status === 'open';
-                return (
-                  <div key={job._docId}
-                    role="button" tabIndex={0}
-                    onClick={() => setShowJobDetail(job)}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowJobDetail(job); } }}
-                    aria-label={`${job.title} — ${job.status}`}
-                    style={{ background: B.white, borderRadius: 14, border: '1px solid ' + (overdue ? '#FECACA' : B.sand), padding: 18, cursor: 'pointer', transition: 'box-shadow 0.15s' }}
-                    onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(27,42,74,0.1)'}
-                    onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
-                    {/* Header row */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        <span style={{ fontSize: 11, fontFamily: 'monospace', color: B.textLight, background: B.warmGray, padding: '2px 6px', borderRadius: 4 }}>{job.jobNumber}</span>
-                        {job.recurrenceGroupId && <span title="Recurring series" style={{ fontSize:11, color:B.teal }}>🔁</span>}
-                      </div>
-                      <JobStatusBadge status={job.status} />
-                    </div>
-                    <div style={{ fontWeight: 700, fontSize: 15, fontFamily: f1, color: B.navy, marginBottom: 6 }}>{job.title}</div>
-                    <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 2 }}>
-                      📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' at ' + job.scheduledTime : ''}
-                    </div>
-                    {job.location && (
-                      <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 8 }}>📍 {job.location}</div>
-                    )}
-                    {job.pay != null && (
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#16A34A', fontFamily: f1, marginBottom: 10 }}>
-                        ${Number(job.pay).toFixed(2)} per person
-                      </div>
-                    )}
-                    <div style={{ marginBottom: 10 }}><SpotsBar job={job} /></div>
-                    {canSeeRoster(job) && (job.signups || []).length > 0 && (
-                      <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 10 }}>
-                        {(job.signups || []).map(s => s.name).join(', ')}
-                      </div>
-                    )}
-                    {!isAdminOrManager && isSignedUp(job) && (
-                      <div style={{ fontSize: 12, fontWeight: 700, color: B.teal, fontFamily: f1, marginBottom: 10 }}>✓ You're signed up</div>
-                    )}
-                    {/* Inline action (stops card click) */}
-                    {job.status === 'open' && (
-                      <div onClick={e => e.stopPropagation()}>
-                        {signed ? (
-                          <button onClick={() => handleWithdraw(job)} disabled={saving}
-                            style={{ ...btnS, fontSize: 12, padding: '6px 12px', color: B.red, borderColor: '#FECACA', width: '100%' }}>
-                            {saving ? 'Withdrawing…' : 'Withdraw'}
-                          </button>
-                        ) : full ? (
-                          <button disabled style={{ ...btnS, fontSize: 12, padding: '6px 12px', opacity: 0.45, width: '100%', cursor: 'not-allowed' }}>Full</button>
-                        ) : (
-                          <button onClick={() => handleSignUp(job)} disabled={saving}
-                            style={{ ...btnP, fontSize: 12, padding: '6px 12px', width: '100%' }}>
-                            {saving ? 'Signing up…' : 'Sign Up'}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {filteredJobs.map(job => (
+                <JobCard key={job._docId} job={job}
+                  todayStr={todayStr} isAdminOrManager={isAdminOrManager} saving={saving}
+                  signed={isSignedUp(job)} full={isFull(job)} showRoster={canSeeRoster(job)}
+                  onDetail={setShowJobDetail} onWithdraw={handleWithdraw} onSignUp={handleSignUp} />
+              ))}
             </div>
           )}
         </div>
@@ -674,30 +768,10 @@ export function JobsPage({ store, userProfile }) {
             <div style={{ textAlign:'center', padding:'48px 20px', color:B.textLight, fontFamily:f2, fontSize:14 }}>No upcoming jobs.</div>
           ) : isMobile ? (
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-              {scheduleJobs.map(job => {
-                const sc = JOB_STATUS_COLORS[job.status] || JOB_STATUS_COLORS.open;
-                const filled = (job.signups || []).length;
-                return (
-                  <div key={job._docId}
-                    role="button" tabIndex={0}
-                    onClick={() => setShowJobDetail(job)}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowJobDetail(job); } }}
-                    aria-label={job.title}
-                    style={{ background:B.white, borderRadius:12, border:'1px solid '+B.sand, padding:'12px 14px', cursor:'pointer' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
-                      <div>
-                        <div style={{ fontSize:14, fontWeight:700, color:B.navy, fontFamily:f1 }}>{job.title}</div>
-                        <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}>📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' · '+job.scheduledTime : ''}</div>
-                      </div>
-                      <span style={{ fontSize:11, fontWeight:700, color:sc.tx, background:sc.bg, padding:'2px 8px', borderRadius:12 }}>{job.status}</span>
-                    </div>
-                    <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}>{filled}/{job.spotsTotal||1} spots filled</div>
-                    {canSeeRoster(job) && (job.signups||[]).length > 0 && (
-                      <div style={{ fontSize:12, color:B.textLight, fontFamily:f2, marginTop:4 }}>{(job.signups||[]).map(s=>s.name).join(', ')}</div>
-                    )}
-                  </div>
-                );
-              })}
+              {scheduleJobs.map(job => (
+                <MobileScheduleRow key={job._docId} job={job}
+                  showRoster={canSeeRoster(job)} onDetail={setShowJobDetail} />
+              ))}
             </div>
           ) : (
             <div style={{ overflowX:'auto' }}>
@@ -710,47 +784,12 @@ export function JobsPage({ store, userProfile }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {scheduleJobs.map((job, i) => {
-                    const sc = JOB_STATUS_COLORS[job.status] || JOB_STATUS_COLORS.open;
-                    const filled = (job.signups || []).length;
-                    const pct = Math.min(100, (filled / (job.spotsTotal||1)) * 100);
-                    const isPast = job.scheduledDate && job.scheduledDate < todayStr;
-                    return (
-                      <tr key={job._docId}
-                        tabIndex={0} role="button" aria-label={job.title}
-                        onClick={() => setShowJobDetail(job)}
-                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowJobDetail(job); } }}
-                        style={{ borderBottom:'1px solid '+B.sand, cursor:'pointer', opacity:isPast ? .65 : 1 }}
-                        onMouseEnter={e => e.currentTarget.style.background=B.warmGray}
-                        onMouseLeave={e => e.currentTarget.style.background=''}>
-                        <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textDark, whiteSpace:'nowrap' }}>
-                          {formatJobDate(job.scheduledDate)}{job.scheduledTime ? <div style={{ fontSize:11, color:B.textLight }}>{job.scheduledTime}</div> : null}
-                        </td>
-                        <td style={{ padding:'10px 14px', fontFamily:f2, color:B.navy, fontWeight:600 }}>
-                          <div>{job.title}</div>
-                          <div style={{ fontSize:11, color:B.textLight, fontFamily:'monospace' }}>{job.jobNumber}</div>
-                        </td>
-                        <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textMid }}>{job.location || '—'}</td>
-                        <td style={{ padding:'10px 14px', minWidth:100 }}>
-                          <div style={{ fontSize:12, color:B.textMid, marginBottom:3 }}>{filled}/{job.spotsTotal||1}</div>
-                          <div style={{ height:5, borderRadius:3, background:B.sand, overflow:'hidden' }}>
-                            <div style={{ height:'100%', width:pct+'%', background:filled>=(job.spotsTotal||1) ? B.red : B.teal, borderRadius:3 }}/>
-                          </div>
-                        </td>
-                        <td style={{ padding:'10px 14px' }}>
-                          <span style={{ fontSize:11, fontWeight:700, color:sc.tx, background:sc.bg, padding:'2px 8px', borderRadius:12 }}>{job.status}</span>
-                        </td>
-                        {(isAdminOrManager || rosterVisibility !== 'admin') && (
-                          <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textMid, maxWidth:220 }}>
-                            {canSeeRoster(job)
-                              ? ((job.signups||[]).length === 0 ? <span style={{ color:B.textLight, fontSize:12 }}>None</span> : (job.signups||[]).map(s=>s.name).join(', '))
-                              : <span style={{ color:B.textLight, fontSize:12 }}>—</span>
-                            }
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
+                  {scheduleJobs.map(job => (
+                    <DesktopScheduleRow key={job._docId} job={job}
+                      todayStr={todayStr} isAdminOrManager={isAdminOrManager}
+                      rosterVisibility={rosterVisibility} showRoster={canSeeRoster(job)}
+                      onDetail={setShowJobDetail} />
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -776,33 +815,9 @@ export function JobsPage({ store, userProfile }) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {visibleAnnouncements.map(ann => (
-                <div key={ann._docId} style={{ background: B.white, borderRadius: 12, border: '1px solid ' + (ann.pinned ? B.teal : B.sand), padding: 18 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                        {ann.pinned && <span style={{ fontSize: 11, fontWeight: 700, color: B.teal, fontFamily: f1 }}>📌 PINNED</span>}
-                        <span style={{ fontSize: 15, fontWeight: 700, color: B.navy, fontFamily: f1 }}>{ann.title}</span>
-                      </div>
-                      <div style={{ fontSize: 14, color: B.textDark, fontFamily: f2, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ann.body}</div>
-                      <div style={{ fontSize: 11, color: B.textLight, fontFamily: f2, marginTop: 8 }}>
-                        Posted by {ann.createdByName}{ann.createdAt ? ' · ' + ann.createdAt.slice(0, 10) : ''}
-                        {ann.expiresAt ? ' · Expires ' + ann.expiresAt : ''}
-                      </div>
-                    </div>
-                    {isAdminOrManager && (
-                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                        <button onClick={() => handleTogglePin(ann)}
-                          title={ann.pinned ? 'Unpin' : 'Pin to top'}
-                          aria-label={ann.pinned ? 'Unpin announcement' : 'Pin announcement to top'}
-                          style={{ ...btnS, padding: '5px 9px', fontSize: 13 }}>
-                          {ann.pinned ? '📌' : '📍'}
-                        </button>
-                        <button onClick={() => openEditAnn(ann)} style={{ ...btnS, padding: '5px 9px', fontSize: 13 }}>Edit</button>
-                        <button onClick={() => handleDeleteAnn(ann)} style={{ ...btnD, padding: '5px 9px', fontSize: 13 }}>Delete</button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <AnnouncementCard key={ann._docId} ann={ann}
+                  isAdminOrManager={isAdminOrManager}
+                  onTogglePin={handleTogglePin} onEdit={openEditAnn} onDelete={handleDeleteAnn} />
               ))}
             </div>
           )}
@@ -878,13 +893,13 @@ export function JobsPage({ store, userProfile }) {
                       </FF>
                     </div>
                   </div>
-                  {recurrencePreviewCount > 0 && (
+                  {recurrencePreviewCount > 0 && recurrencePreviewCount < 100 && (
                     <div style={{ fontSize: 13, color: B.teal, fontFamily: f1, fontWeight: 600, marginTop: 4 }}>
                       This will create {recurrencePreviewCount} job{recurrencePreviewCount !== 1 ? 's' : ''}.
                     </div>
                   )}
                   {recurrencePreviewCount >= 100 && (
-                    <div style={{ fontSize: 12, color: B.red, fontFamily: f2, marginTop: 2 }}>Maximum 100 jobs per series.</div>
+                    <div style={{ fontSize: 13, color: B.red, fontFamily: f1, fontWeight: 600, marginTop: 4 }}>Maximum 100 jobs per series reached.</div>
                   )}
                 </div>
               )}

@@ -4,6 +4,7 @@ import {
   collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction
 } from 'firebase/firestore';
 import { db } from './firebase.js';
+import { generateRecurrenceDates } from './utils/date.js';
 
 export function useFirestore(churchId) {
   const [settings, setSettings] = useState(null);
@@ -835,18 +836,7 @@ export function useFirestore(churchId) {
   // ── Job Hub ──
   const addJobListingSeries = useCallback(async (job, recurrenceFreq, seriesEndDate, userId, userName) => {
     try {
-      const parse = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
-      const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      const dates = [];
-      const end = parse(seriesEndDate);
-      const cur = parse(job.scheduledDate);
-      const mi = { monthly:1, quarterly:3, annually:12 }[recurrenceFreq];
-      const di = { weekly:7, biweekly:14 }[recurrenceFreq];
-      while (cur <= end && dates.length < 100) {
-        dates.push(fmt(cur));
-        if (mi) { const day = cur.getDate(); cur.setDate(1); cur.setMonth(cur.getMonth()+mi); cur.setDate(Math.min(day, new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate())); }
-        else cur.setDate(cur.getDate() + (di || 7));
-      }
+      const dates = generateRecurrenceDates(job.scheduledDate, recurrenceFreq, seriesEndDate);
       if (dates.length === 0) throw new Error('No dates generated. Check recurrence end date.');
 
       const configRef = doc(db, 'churches', churchId, 'config', 'main');
@@ -979,7 +969,11 @@ export function useFirestore(churchId) {
         wasSignedUp = true;
         t.update(jobRef, { signups, updatedAt: new Date().toISOString() });
       });
-      if (wasSignedUp && actorId) await logActivity('withdraw_job', jobNumber, actorId, actorName, { removedUid: uid });
+      if (wasSignedUp && actorId) {
+        const action = actorId !== uid ? 'admin_remove_job' : 'withdraw_job';
+        await logActivity(action, jobNumber, actorId, actorName, { removedUid: uid });
+      }
+      return { wasSignedUp };
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
