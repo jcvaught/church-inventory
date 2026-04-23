@@ -30,6 +30,12 @@ export function useSubscription(churchId) {
     if (!subscription) return false;
     if (subscription.grandfathered) return true;
     if (subscription.plan === 'all_in') return true;
+    // Active 90-day trial — freeHubsSelected is null while trial is running
+    if (subscription.freeHubsSelected === null && subscription.trialEndsAt && new Date(subscription.trialEndsAt) > new Date()) {
+      return (subscription.trialHubs || []).includes(name);
+    }
+    // Post-trial: auto-selected free hubs
+    if (Array.isArray(subscription.freeHubsSelected) && subscription.freeHubsSelected.includes(name)) return true;
     return (subscription.hubs || []).includes(name);
   }
 
@@ -42,8 +48,16 @@ export function useSubscription(churchId) {
 
   function isTrialing(hubName) {
     if (!subscription) return false;
-    return subscription.status === 'trialing' && (subscription.hubs || []).includes(hubName);
+    if (subscription.freeHubsSelected !== null) return false;
+    if (!subscription.trialEndsAt || new Date(subscription.trialEndsAt) <= new Date()) return false;
+    return (subscription.trialHubs || []).includes(hubName);
   }
 
-  return { subscription, loading, hasHub, canAddUser, isTrialing };
+  function trialDaysRemaining() {
+    if (!subscription?.trialEndsAt || subscription.freeHubsSelected !== null) return 0;
+    const ms = new Date(subscription.trialEndsAt) - new Date();
+    return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+  }
+
+  return { subscription, loading, hasHub, canAddUser, isTrialing, trialDaysRemaining };
 }

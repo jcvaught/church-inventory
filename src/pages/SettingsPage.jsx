@@ -261,8 +261,10 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     );
   };
 
-  const planLabel = !subscription ? 'Free' : subscription.plan === 'free' ? 'Free' : subscription.plan === 'all_in' ? 'All-In' : subscription.plan === 'team_unlimited' ? 'Team Unlimited' : subscription.plan;
-  const activeHubs = subscription?.grandfathered ? ['All hubs (grandfathered)'] : (subscription?.hubs || []);
+  const isTrialing = subscription?.freeHubsSelected === null && subscription?.trialEndsAt && new Date(subscription.trialEndsAt) > new Date();
+  const trialDaysLeft = isTrialing ? Math.max(0, Math.ceil((new Date(subscription.trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24))) : 0;
+  const planLabel = !subscription ? 'Free' : isTrialing ? '90-Day Trial' : subscription.plan === 'free' ? 'Free' : subscription.plan === 'all_in' ? 'All-In' : subscription.plan === 'team_unlimited' ? 'Team Unlimited' : subscription.plan;
+  const activeHubs = subscription?.grandfathered ? ['All hubs (grandfathered)'] : isTrialing ? (subscription.trialHubs || []) : (subscription?.hubs || []);
   const hasStripeCustomer = !!subscription?.stripeCustomerId;
 
   async function handleCheckout(item) {
@@ -465,8 +467,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           </div>
           <div>
             <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Status</div>
-            <div style={{ fontSize:15, fontWeight:600, color: subscription?.status === 'active' || subscription?.status === 'trialing' ? B.teal : B.red }}>
-              {subscription?.status || 'active'}
+            <div style={{ fontSize:15, fontWeight:600, color: isTrialing || subscription?.status === 'active' ? B.teal : B.red }}>
+              {isTrialing ? `Trial — ${trialDaysLeft} day${trialDaysLeft !== 1 ? 's' : ''} left` : (subscription?.status || 'active')}
             </div>
           </div>
           {activeHubs.length > 0 && (
@@ -481,7 +483,17 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           )}
         </div>
         {billingError && <p style={{ color:B.red, fontSize:13, marginTop:10, marginBottom:0 }}>{billingError}</p>}
-        {planLabel === 'Free' && (
+        {isTrialing && (
+          <div style={{ background: trialDaysLeft <= 7 ? '#FFF1F2' : '#F0FDF4', border:`1px solid ${trialDaysLeft <= 7 ? '#FECACA' : '#BBF7D0'}`, borderRadius:8, padding:"10px 14px", marginTop:12 }}>
+            <p style={{ margin:0, fontSize:13, color: trialDaysLeft <= 7 ? '#B91C1C' : '#166534' }}>
+              All hubs are free until your trial ends.{' '}
+              {trialDaysLeft <= 7 && isAdmin && <strong>Upgrade before your trial expires to keep all hubs. </strong>}
+              After the trial, your two most-used hubs stay free.{' '}
+              {isAdmin && <button onClick={() => setShowUpgradeModal(true)} style={{ background:"none", border:"none", padding:0, color: trialDaysLeft <= 7 ? '#B91C1C' : B.teal, fontWeight:600, fontSize:13, cursor:"pointer" }}>View upgrade options →</button>}
+            </p>
+          </div>
+        )}
+        {!isTrialing && planLabel === 'Free' && (
           <p style={{ color:B.textLight, fontSize:13, marginTop:12, marginBottom:0 }}>
             Add hubs like <strong>Maintenance</strong> to unlock advanced features.{' '}
             {isAdmin && <button onClick={() => setShowUpgradeModal(true)} style={{ background:"none", border:"none", padding:0, color:B.teal, fontWeight:600, fontSize:13, cursor:"pointer" }}>View plans →</button>}

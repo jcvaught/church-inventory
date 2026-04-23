@@ -126,16 +126,22 @@ export function useAuth() {
         tags: DEFAULT_TAGS
       });
 
-      // Create subscription doc (free plan)
+      // Create subscription doc — starts with 90-day all-hubs trial
+      const trialStartedAt = new Date().toISOString();
+      const trialEndsAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+      const TRIAL_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'people_access', 'tasks', 'jobs'];
       await setDoc(doc(db, 'churches', churchId, 'config', 'subscription'), {
         plan: 'free',
         hubs: [],
         maxUsers: 10,
-        status: 'active',
+        status: 'trialing',
+        trialStartedAt,
+        trialEndsAt,
+        trialHubs: TRIAL_HUBS,
+        freeHubsSelected: null,
         stripeCustomerId: null,
         stripeSubscriptionId: null,
         currentPeriodEnd: null,
-        trialEnd: null,
         grandfathered: false,
         grandfatheredUntil: null,
         createdAt: new Date().toISOString()

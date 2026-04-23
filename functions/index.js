@@ -1,5 +1,6 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
@@ -340,6 +341,261 @@ function initSendGrid() {
 
 const FROM = { email: 'churchopshub@gmail.com', name: 'ChurchOpsHub' };
 
+// Shared hub-access check used by all hub-gating Cloud Functions.
+// Mirrors the client-side hasHub() logic in useSubscription.js.
+function subHasHub(sub, hubName) {
+  if (!sub) return false;
+  if (sub.grandfathered) return true;
+  if (sub.plan === 'all_in') return true;
+  // Active trial: freeHubsSelected is null while trial is running
+  if (sub.freeHubsSelected === null && sub.trialEndsAt && new Date(sub.trialEndsAt) > new Date()) {
+    return (sub.trialHubs || []).includes(hubName);
+  }
+  // Post-trial auto-selected free hubs
+  if (Array.isArray(sub.freeHubsSelected) && sub.freeHubsSelected.includes(hubName)) return true;
+  return (sub.hubs || []).includes(hubName);
+}
+
+// ── sendWelcomeEmail ──────────────────────────────────────────────────────
+// Firestore onCreate trigger: fires when a new church document is created.
+// Sends a personal welcome email to the church admin.
+exports.sendWelcomeEmail = onDocumentCreated('churches/{churchId}', async (event) => {
+  const db = getFirestore();
+  const churchData = event.data?.data();
+  if (!churchData) return;
+
+  const churchRef = event.data.ref;
+
+  // Idempotency: skip if we already sent the welcome email for this church
+  if (churchData.welcomeEmailSentAt) return;
+
+  // Fetch admin email from Firebase Auth (avoids race condition with Firestore user doc write)
+  const creatorUid = churchData.createdBy;
+  if (!creatorUid) return;
+
+  let adminEmail, adminName;
+  try {
+    const authUser = await getAuth().getUser(creatorUid);
+    adminEmail = authUser.email;
+    adminName = authUser.displayName || null;
+  } catch (err) {
+    console.error('sendWelcomeEmail: could not fetch auth user', err);
+    return;
+  }
+  if (!adminEmail) return;
+
+  if (!initSendGrid()) { console.warn('sendWelcomeEmail: SendGrid not configured, skipping.'); return; }
+
+  const churchName = escapeHtml(churchData.churchName || 'Your Church');
+  const churchCode = escapeHtml(churchData.churchCode || '');
+  const firstName = adminName ? escapeHtml(adminName.split(' ')[0]) : 'there';
+
+  // Calculate trial end date for display
+  const trialEnd = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+  const trialEndStr = trialEnd.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  const subject = `Welcome to ChurchOpsHub, ${churchData.churchName || 'your church'}!`;
+  const html = `<p>Hi ${firstName},</p>
+<p>Welcome to <strong>ChurchOpsHub</strong>! Your church <strong>${churchName}</strong> is set up and ready to go.</p>
+
+<div style="background:#F0FDF4;border-left:4px solid #0D9488;padding:12px 16px;margin:16px 0;border-radius:4px">
+  <p style="font-weight:700;margin:0 0 6px;font-size:15px">Your 90-day free trial is active</p>
+  <p style="margin:0;font-size:14px;color:#166534">All paid hubs are unlocked through <strong>${trialEndStr}</strong>. No credit card needed.</p>
+</div>
+
+<p style="font-weight:600;margin:16px 0 8px">A few things to get you started:</p>
+<ul style="padding-left:20px;margin:0 0 16px;font-size:14px;line-height:1.8">
+  <li>Add your first items in the <strong>Inventory</strong> tab</li>
+  <li>Invite your team with church code: <strong>${churchCode}</strong></li>
+  <li>Explore the Hubs tab — Maintenance, Tasks, Job Hub, and more</li>
+  <li>Set up your locations and ministries in <strong>Settings</strong></li>
+</ul>
+
+<p><a href="https://churchopshub.com/?help" style="color:#0D9488;font-weight:600">Browse the Help Center</a> if you have any questions — it covers every feature in detail.</p>
+
+<p>I'm also happy to answer questions directly. Just reply to this email.</p>
+
+<p>— John Vaught<br><span style="font-size:13px;color:#666">ChurchOpsHub</span></p>`;
+
+  const text = `Hi ${firstName},\n\nWelcome to ChurchOpsHub! Your church "${churchData.churchName}" is set up and ready to go.\n\nYour 90-day free trial is active — all paid hubs are unlocked through ${trialEndStr}. No credit card needed.\n\nA few things to get started:\n- Add your first items in the Inventory tab\n- Invite your team with church code: ${churchData.churchCode || ''}\n- Explore the Hubs tab — Maintenance, Tasks, Job Hub, and more\n- Set up your locations and ministries in Settings\n\nHelp Center: https://churchopshub.com/?help\n\nFeel free to reply with any questions.\n\n— John Vaught\nChurchOpsHub`;
+
+  try {
+    await sgMail.send({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject, html, text });
+    await churchRef.update({ welcomeEmailSentAt: new Date().toISOString() });
+  } catch (err) {
+    console.error('sendWelcomeEmail: send failed', err?.response?.body || err);
+  }
+});
+
+// ── processTrialExpirations ───────────────────────────────────────────────
+// Runs daily at 2:00 AM Central time.
+// Finds churches whose trial just expired, auto-selects their 2 most-used hubs
+// from the activity log, writes freeHubsSelected, and emails the admin.
+const TRIAL_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'people_access', 'tasks', 'jobs'];
+const HUB_ACTIONS = {
+  maintenance: ['create_ticket','update_ticket','complete_ticket','delete_ticket','assign_ticket','reopen_ticket'],
+  coordination: ['create_bundle','checkout_bundle','return_bundle','delete_bundle'],
+  accountability: ['start_audit','complete_audit','delete_audit'],
+  people_access: ['add_person','update_person','add_record','update_record','delete_record'],
+  tasks: ['create_task','update_task','complete_task','delete_task','create_template','apply_template'],
+  jobs: ['post_job','signup_job','withdraw_job','update_job','delete_job','post_announcement','update_announcement','delete_announcement'],
+};
+
+exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 'America/Chicago' }, async () => {
+  const db = getFirestore();
+  const now = new Date();
+  const nowStr = now.toISOString();
+
+  // Find all subscription docs where trial ended and free hubs haven't been selected yet.
+  // We query for status='trialing' as a proxy — CF will validate trialEndsAt precisely.
+  const subSnaps = await db.collectionGroup('config')
+    .where('status', '==', 'trialing')
+    .get();
+
+  if (subSnaps.empty) return;
+
+  for (const subDoc of subSnaps.docs) {
+    // Only process 'subscription' config docs
+    if (subDoc.id !== 'subscription') continue;
+
+    const sub = subDoc.data();
+    if (!sub.trialEndsAt) continue;
+    if (new Date(sub.trialEndsAt) > now) continue; // trial still active
+    if (sub.freeHubsSelected !== null && sub.freeHubsSelected !== undefined) continue; // already processed
+
+    const churchId = subDoc.ref.parent.parent.id;
+
+    // Count activity log entries per hub during the trial window
+    let activitySnap;
+    try {
+      activitySnap = await db.collection(`churches/${churchId}/activityLog`)
+        .where('timestamp', '>=', sub.trialStartedAt || '')
+        .get();
+    } catch (err) {
+      console.error('processTrialExpirations: activity log read failed', { churchId, err: err.message });
+      continue;
+    }
+
+    const hubCounts = {};
+    for (const hubName of TRIAL_HUBS) hubCounts[hubName] = 0;
+    // insights has no activity log entries; it starts at 0 (lower priority in auto-selection)
+
+    for (const entry of activitySnap.docs) {
+      const action = entry.data().action || '';
+      for (const [hub, actions] of Object.entries(HUB_ACTIONS)) {
+        if (actions.includes(action)) { hubCounts[hub]++; break; }
+      }
+    }
+
+    // Pick top 2 hubs by usage count; break ties alphabetically for determinism
+    const sorted = TRIAL_HUBS
+      .slice()
+      .sort((a, b) => hubCounts[b] - hubCounts[a] || a.localeCompare(b));
+    const freeHubsSelected = sorted.slice(0, 2);
+
+    // Update subscription doc
+    try {
+      await subDoc.ref.update({ freeHubsSelected, status: 'active' });
+    } catch (err) {
+      console.error('processTrialExpirations: update failed', { churchId, err: err.message });
+      continue;
+    }
+
+    // Find admin user to email
+    if (!initSendGrid()) continue;
+    let adminEmail, adminName;
+    try {
+      const churchDoc = await db.doc(`churches/${churchId}`).get();
+      const creatorUid = churchDoc.data()?.createdBy;
+      if (creatorUid) {
+        const authUser = await getAuth().getUser(creatorUid);
+        adminEmail = authUser.email;
+        adminName = authUser.displayName || null;
+      }
+    } catch (err) {
+      console.error('processTrialExpirations: could not fetch admin', { churchId, err: err.message });
+    }
+    if (!adminEmail) continue;
+
+    const hubLabel = h => ({ maintenance:'Maintenance', insights:'Insights', coordination:'Coordination', accountability:'Accountability', people_access:'People Access', tasks:'Tasks', jobs:'Job Hub' }[h] || h);
+    const freeNames = freeHubsSelected.map(hubLabel).join(' and ');
+    const firstName = adminName ? adminName.split(' ')[0] : 'there';
+
+    const subject = 'Your ChurchOpsHub trial has ended — here\'s what\'s free';
+    const html = `<p>Hi ${escapeHtml(firstName)},</p>
+<p>Your 90-day free trial has ended. Based on how your team used ChurchOpsHub, we've automatically kept your two most-used hubs active for free:</p>
+<div style="background:#F0FDF4;border-left:4px solid #0D9488;padding:12px 16px;margin:16px 0;border-radius:4px">
+  <p style="font-weight:700;margin:0;font-size:15px">${escapeHtml(freeNames)} — free forever</p>
+</div>
+<p>The Inventory Hub remains free as always. To unlock additional hubs, you can upgrade anytime from <strong>Settings → Subscription</strong>.</p>
+<p>All your data is still there — nothing was deleted.</p>
+<p>Thank you for trying ChurchOpsHub. Reply to this email with any questions.</p>
+<p>— John Vaught<br><span style="font-size:13px;color:#666">ChurchOpsHub</span></p>`;
+    const text = `Hi ${firstName},\n\nYour 90-day free trial has ended. Based on your team's usage, we've kept your two most-used hubs active for free:\n\n${freeNames}\n\nThe Inventory Hub remains free as always. To unlock additional hubs, go to Settings → Subscription.\n\nAll your data is still there — nothing was deleted.\n\nThank you for trying ChurchOpsHub.\n\n— John Vaught\nChurchOpsHub`;
+
+    try {
+      await sgMail.send({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject, html, text });
+    } catch (err) {
+      console.error('processTrialExpirations: trial-end email failed', { churchId, err: err?.response?.body || err });
+    }
+
+    // 7-day warning email (separate pass — send when 7 days remain)
+    // Handled by the daily run: if trialEndsAt is exactly 7 days from now, send warning.
+    // This is checked separately below in the same scheduled run.
+    console.log('processTrialExpirations: processed', { churchId, freeHubsSelected, nowStr });
+  }
+
+  // Second pass: send 7-day warning emails
+  const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const sevenDaysStr = sevenDaysFromNow.toISOString().slice(0, 10);
+
+  const warnSnaps = await db.collectionGroup('config')
+    .where('status', '==', 'trialing')
+    .get();
+
+  for (const subDoc of warnSnaps.docs) {
+    if (subDoc.id !== 'subscription') continue;
+    const sub = subDoc.data();
+    if (!sub.trialEndsAt) continue;
+    if (sub.trialWarningEmailSentAt) continue; // already sent
+    const trialEndDay = sub.trialEndsAt.slice(0, 10);
+    if (trialEndDay !== sevenDaysStr) continue; // not the right church
+
+    const churchId = subDoc.ref.parent.parent.id;
+    if (!initSendGrid()) continue;
+
+    let adminEmail, adminName;
+    try {
+      const churchDoc = await db.doc(`churches/${churchId}`).get();
+      const creatorUid = churchDoc.data()?.createdBy;
+      if (creatorUid) {
+        const authUser = await getAuth().getUser(creatorUid);
+        adminEmail = authUser.email;
+        adminName = authUser.displayName || null;
+      }
+    } catch { continue; }
+    if (!adminEmail) continue;
+
+    const firstName = adminName ? adminName.split(' ')[0] : 'there';
+    const trialEndDisplay = new Date(sub.trialEndsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+    const warnSubject = 'Your ChurchOpsHub trial ends in 7 days';
+    const warnHtml = `<p>Hi ${escapeHtml(firstName)},</p>
+<p>Your 90-day free trial of all ChurchOpsHub hubs ends on <strong>${escapeHtml(trialEndDisplay)}</strong> — just 7 days away.</p>
+<p>After the trial, we'll automatically keep your two most-used hubs active for free. To keep all hubs, upgrade to the <strong>All-In plan ($29/mo)</strong> from Settings → Subscription.</p>
+<p><a href="https://churchopshub.com" style="color:#0D9488;font-weight:600">Log in to ChurchOpsHub</a> to review your hubs before the trial ends.</p>
+<p>— John Vaught<br><span style="font-size:13px;color:#666">ChurchOpsHub</span></p>`;
+    const warnText = `Hi ${firstName},\n\nYour 90-day free trial ends on ${trialEndDisplay} — just 7 days away.\n\nAfter the trial, we'll automatically keep your two most-used hubs active for free. To keep all hubs, upgrade to the All-In plan ($29/mo) from Settings → Subscription.\n\nLog in at churchopshub.com to review your hubs.\n\n— John Vaught\nChurchOpsHub`;
+
+    try {
+      await sgMail.send({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject: warnSubject, html: warnHtml, text: warnText });
+      await subDoc.ref.update({ trialWarningEmailSentAt: nowStr });
+    } catch (err) {
+      console.error('processTrialExpirations: warning email failed', { churchId, err: err?.response?.body || err });
+    }
+  }
+});
+
 // ── sendReservationEmail ──────────────────────────────────────────────────
 // Called from client when a reservation is approved or denied.
 // data: { toEmail, toName, churchName, eventName, resourceDesc, eventDate, actionBy, status }
@@ -440,8 +696,7 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
     db.collection('users').where('churchId', '==', churchId).get(),
   ]);
   const sub = subSnap.data() || {};
-  const hasJobsHub = sub.grandfathered || sub.plan === 'all_in' || (sub.hubs || []).includes('jobs');
-  if (!hasJobsHub) return { sent: 0 };
+  if (!subHasHub(sub, 'jobs')) return { sent: 0 };
 
   // Use server-derived poster name (not client-supplied) to prevent impersonation in email body
   const postedBy = callerSnap.data().name || 'Your church';
@@ -502,11 +757,13 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
     throw new HttpsError('permission-denied', 'Only admin or manager can send cancellation notices.');
   }
 
-  const [jobSnap, churchSnap] = await Promise.all([
+  const [jobSnap, churchSnap, subSnap] = await Promise.all([
     db.doc(`churches/${churchId}/jobListings/${jobDocId}`).get(),
     db.doc(`churches/${churchId}/config/main`).get(),
+    db.doc(`churches/${churchId}/config/subscription`).get(),
   ]);
   if (!jobSnap.exists) return { sent: 0 };
+  if (!subHasHub(subSnap.data() || {}, 'jobs')) return { sent: 0 };
 
   const job = jobSnap.data();
   const signups = job.signups || [];
@@ -609,8 +866,9 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
   const uids = Object.keys(tasksByAssignee);
   const userSnaps = await Promise.all(uids.map(uid => db.doc(`users/${uid}`).get()));
 
-  // Cache notification configs per churchId to avoid redundant reads
+  // Cache notification configs and subscription docs per churchId
   const notifCache = {};
+  const subCache2 = {};
   async function notifEnabled(churchId) {
     if (notifCache[churchId] !== undefined) return notifCache[churchId];
     try {
@@ -618,6 +876,14 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
       notifCache[churchId] = !!(s.exists && s.data().enabled);
     } catch { notifCache[churchId] = false; }
     return notifCache[churchId];
+  }
+  async function churchHasTasksHub(churchId) {
+    if (subCache2[churchId] !== undefined) return subCache2[churchId];
+    try {
+      const s = await db.doc(`churches/${churchId}/config/subscription`).get();
+      subCache2[churchId] = subHasHub(s.data() || {}, 'tasks');
+    } catch { subCache2[churchId] = false; }
+    return subCache2[churchId];
   }
 
   const emailTasks = [];
@@ -629,6 +895,7 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
     // Only send tasks belonging to the user's own church
     const tasks = (tasksByAssignee[userSnap.id] || []).filter(t => t.churchId === user.churchId);
     if (tasks.length === 0) continue;
+    if (!(await churchHasTasksHub(user.churchId))) continue;
     if (!(await notifEnabled(user.churchId))) continue;
 
     const safeName = escapeHtml(user.name || 'there');
@@ -688,7 +955,7 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     try {
       const s = await db.doc(`churches/${churchId}/config/subscription`).get();
       const sub = s.data() || {};
-      subCache[churchId] = sub.grandfathered || sub.plan === 'all_in' || (sub.hubs || []).includes('jobs');
+      subCache[churchId] = subHasHub(sub, 'jobs');
     } catch { subCache[churchId] = false; }
     return subCache[churchId];
   }

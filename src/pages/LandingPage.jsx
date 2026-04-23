@@ -260,9 +260,14 @@ export function LandingPage({ onGetStarted }) {
           <h2 style={{ fontFamily: f1, fontSize: mob ? 30 : 40, fontWeight: 700, color: B.navy, margin: '0 0 14px' }}>
             Simple, honest pricing
           </h2>
-          <p style={{ fontSize: 17, color: B.textMid, margin: '0 0 52px', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 17, color: B.textMid, margin: '0 0 16px', lineHeight: 1.6 }}>
             Start free. Add what you need. Bundle everything and save.
           </p>
+          <div style={{ display: 'inline-block', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '10px 20px', marginBottom: 40 }}>
+            <span style={{ fontSize: 14, color: '#166534', fontFamily: f1, fontWeight: 600 }}>
+              🎉 New churches get a <strong>90-day free trial</strong> of all paid hubs — no credit card required.
+            </span>
+          </div>
 
           <div style={{
             display: mid ? 'grid' : 'flex', flexDirection: 'column',
@@ -277,7 +282,7 @@ export function LandingPage({ onGetStarted }) {
               <div style={{ fontFamily: f1, fontWeight: 700, fontSize: 18, color: B.textMid, marginBottom: 8 }}>Inventory Hub</div>
               <div style={{ fontFamily: f1, fontWeight: 800, fontSize: 48, color: B.navy, lineHeight: 1, marginBottom: 6 }}>Free</div>
               <div style={{ fontSize: 13, color: B.textLight, marginBottom: 28, fontFamily: f1 }}>Forever · No credit card</div>
-              {['Full equipment inventory', 'Supplies tracking', 'Reservations', 'Activity log', '10 team members'].map(item => (
+              {['Full equipment inventory', 'Supplies tracking', 'Reservations', 'Activity log', '10 team members', '90-day trial of all hubs'].map(item => (
                 <div key={item} style={{ display: 'flex', alignItems: 'center', marginBottom: 10, fontSize: 14, color: B.textMid }}>
                   {check(false)}{item}
                 </div>
@@ -286,7 +291,7 @@ export function LandingPage({ onGetStarted }) {
                 onClick={() => onGetStarted('register')}
                 style={{ ...btnS, width: '100%', marginTop: 28, textAlign: 'center' }}
               >
-                Get Started Free
+                Start Free — 90-Day Trial
               </button>
             </div>
 

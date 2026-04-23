@@ -461,7 +461,8 @@ function AppShell({ authHook }) {
   const [verifyBannerDismissed, setVerifyBannerDismissed] = useState(false);
   const [resentVerify, setResentVerify] = useState(false);
   const store = useFirestore(userProfile.churchId);
-  const { subscription, hasHub, canAddUser } = useSubscription(userProfile.churchId);
+  const { subscription, hasHub, canAddUser, trialDaysRemaining } = useSubscription(userProfile.churchId);
+  const [trialBannerDismissed, setTrialBannerDismissed] = useState(false);
   const [tab, setTab] = useState(() => {
     if (new URLSearchParams(window.location.search).get('item')) return 'inventory';
     return localStorage.getItem('lastTab') || 'dashboard';
@@ -611,6 +612,30 @@ function AppShell({ authHook }) {
 
       {/* Accent bar */}
       <div style={{ height:3, background:`linear-gradient(90deg, ${B.teal}, ${B.gold})` }}/>
+
+      {/* Trial banner */}
+      {subscription?.freeHubsSelected === null && subscription?.trialEndsAt && !trialBannerDismissed && (() => {
+        const days = trialDaysRemaining();
+        if (days <= 0) return null;
+        const urgent = days <= 7;
+        return (
+          <div style={{ background: urgent ? '#FFF1F2' : '#F0FDF4', borderBottom: `1px solid ${urgent ? '#FECACA' : '#BBF7D0'}`, padding:'10px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+            <span style={{ fontSize:13, color: urgent ? '#B91C1C' : '#166534', fontFamily:f1 }}>
+              {urgent
+                ? `Your free trial ends in ${days} day${days !== 1 ? 's' : ''} — upgrade to keep your hubs.`
+                : `Free trial active — all hubs unlocked for ${days} more day${days !== 1 ? 's' : ''}.`}
+            </span>
+            <div style={{ display:'flex', gap:10, alignItems:'center', flexShrink:0 }}>
+              {urgent && (
+                <button onClick={() => setTab('settings')} style={{ background:'none', border:'none', color:'#B91C1C', fontWeight:700, cursor:'pointer', fontSize:13, fontFamily:f1, textDecoration:'underline' }}>
+                  Upgrade now
+                </button>
+              )}
+              <button onClick={() => setTrialBannerDismissed(true)} aria-label="Dismiss trial banner" style={{ background:'none', border:'none', color: urgent ? '#96101A' : '#166534', cursor:'pointer', fontSize:18, lineHeight:1, fontFamily:f1 }}>×</button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Email verification banner */}
       {!user.emailVerified && !verifyBannerDismissed && (
