@@ -577,6 +577,8 @@ export function HelpPage({ onBack }) {
                 'Job announcement — all Job Hub users are notified when a new announcement is posted',
                 'Job cancelled — signed-up members are notified when a job is cancelled or closed',
                 'Job reminder — signed-up members receive a morning reminder on the day of their job (sent at 8am)',
+                'Job withdrawal — the job poster (and any report delegates) is notified when a member withdraws',
+                'Co-admin cancellation — the original job poster is notified when a different admin cancels their job',
               ]} />
               <P>Emails are sent via SendGrid from <strong>churchopshub@gmail.com</strong>. No additional configuration is needed beyond toggling notifications on.</P>
             </Accordion>
@@ -706,7 +708,7 @@ export function HelpPage({ onBack }) {
           {/* JOB HUB                              */}
           {/* ──────────────────────────────────── */}
           <Section id="jobs" icon="💼" title="Job Hub" badge="$7/mo">
-            <P>A teen job board where admins post one-time jobs (setup, cleanup, childcare, etc.) and members sign up. Includes an announcement board for quick team-wide messages.</P>
+            <P>A job board where admins post jobs (setup, cleanup, childcare, events, etc.) and members sign up. Supports one-time and recurring series. Includes a Schedule view, Calendar view, and Announcement board.</P>
 
             <Accordion title="Posting a job" defaultOpen>
               <P>Click <strong>+ Post Job</strong> to create a job listing. Fields include:</P>
@@ -718,13 +720,45 @@ export function HelpPage({ onBack }) {
                 'Pay per person (optional)',
                 'Status — Open, Closed, Completed, or Cancelled',
               ]} />
-              <P>Jobs are auto-numbered (JOB-001, JOB-002, …). Only admins and managers can create or delete jobs.</P>
+              <P>Jobs are auto-numbered (JOB-001, JOB-002, …). Only admins and managers can post or delete jobs.</P>
+            </Accordion>
+
+            <Accordion title="Recurring series 🔁">
+              <P>When posting a new job, check <strong>Recurring series</strong> to create multiple jobs at once. Set the frequency and a series end date — a preview shows how many jobs will be created (up to 100).</P>
+              <UL items={[
+                'Weekly, Every 2 Weeks, Monthly, Quarterly, or Annually',
+                'All jobs in the series share the same details but have independent signup lists',
+                'Each job gets its own JOB-### number',
+                'A 🔁 badge marks recurring jobs on cards and in the schedule',
+                'Edit or cancel individual jobs without affecting the rest of the series',
+              ]} />
+              <Tip>Recurring series cannot be edited after creation — to change the schedule, delete the existing jobs and post a new series.</Tip>
             </Accordion>
 
             <Accordion title="Signing up and withdrawing">
-              <P>Members can sign up for any open job that has spots available. Click <strong>Sign Up</strong> on a job card or in the job detail. Sign-ups are transaction-safe — if the last spot is taken by someone else at the same time, you'll see a "job is full" message.</P>
-              <P>To withdraw, click <strong>Withdraw</strong> on the card. Admins and managers can also remove individual signups from the job detail view.</P>
+              <P>Members can sign up for any open job with spots available. Click <strong>Sign Up</strong> on a job card or in the job detail. Sign-ups are transaction-safe — if the last spot is taken by someone else simultaneously, you'll see a "job is full" message.</P>
+              <P>To remove yourself, click <strong>Withdraw</strong>. Admins and managers can also remove individual signups from the job detail view.</P>
               <Tip>Use the <strong>My Jobs</strong> filter tab to see all jobs you've signed up for at a glance.</Tip>
+            </Accordion>
+
+            <Accordion title="Views: Job Board, Schedule, and Calendar">
+              <P>The Job Hub has four tabs:</P>
+              <UL items={[
+                'Job Board — card grid; filter by status or "My Jobs"',
+                'Schedule — roster table sorted by date; shows spots filled, status, and (if allowed) who signed up; toggle to show past jobs',
+                'Calendar — month grid with job chips per day; color indicates status',
+                'Announcements — pinnable posts with optional expiry',
+              ]} />
+            </Accordion>
+
+            <Accordion title="Signup roster visibility">
+              <P>Admins control who can see the list of names signed up for a job. Go to <strong>Settings → Job Hub Settings → Display Roster To</strong>:</P>
+              <UL items={[
+                'Admins & Managers only — members only see their own signup status',
+                'Anyone signed up for that job (default) — signed-up members can see each other\'s names',
+                'All church members — every hub member can see the full roster',
+              ]} />
+              <P>Spot counts (e.g. "3/5 filled") are always visible to everyone regardless of this setting.</P>
             </Accordion>
 
             <Accordion title="Email notifications">
@@ -733,8 +767,15 @@ export function HelpPage({ onBack }) {
                 'New announcement posted — all Job Hub users are notified',
                 'Job cancelled — everyone who signed up receives a cancellation notice',
                 'Morning reminder — signed-up members get a reminder email at 8am on the day of the job',
+                'Withdrawal notice — when someone withdraws, the job poster (and any delegates) is notified immediately',
+                'Co-admin cancellation — if a different admin cancels your job, you receive a notice',
               ]} />
-              <P>When cancelling a job with signups, you'll be asked to confirm. If notifications are on, the cancellation email is sent automatically. You can also send it manually with the <strong>Notify Signups</strong> button on a cancelled job's detail view.</P>
+              <P>When cancelling a job with signups, you'll be asked to confirm. If notifications are on, the cancellation email goes to signups automatically. Use the <strong>Notify Signups</strong> button to re-send on an already-cancelled job.</P>
+            </Accordion>
+
+            <Accordion title="Report delegates">
+              <P>Job posters can designate up to 5 other admins or managers to receive the same withdrawal and cancellation notifications they do. Go to <strong>Settings → My Profile → Job Hub Report Delegates</strong> and toggle the users you want to include.</P>
+              <P>Delegates receive notifications for all jobs you post — not per-job. Role is re-verified at send time, so demoted users are automatically excluded.</P>
             </Accordion>
 
             <Accordion title="Announcements">
