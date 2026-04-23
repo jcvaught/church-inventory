@@ -1128,4 +1128,141 @@ Within a few weeks, the board becomes a natural part of how your team communicat
 Your church's building and equipment are a stewardship responsibility. A Kanban board is one of the simplest tools available for taking that responsibility seriously — making the invisible visible, the informal accountable, and the reactive proactive.
     `.trim(),
   },
+
+  {
+    slug: 'church-facilities-management-guide',
+    title: 'Church Facilities Management: A Complete Guide for Non-Profits',
+    description: "Church facilities management is more than fixing what breaks. Here's a complete framework for tracking assets, managing maintenance, controlling access, and keeping your building running well on a nonprofit budget.",
+    date: '2026-04-23',
+    keywords: 'church facilities management, church building management, church property management, church facilities manager, non-profit facilities management, church asset management',
+    content: `
+## What Church Facilities Management Actually Covers
+
+Ask a church facilities manager what their job is, and the honest answer is: everything. HVAC filters and broken pew cushions. Vendor contracts and key assignments. Equipment checkouts and supply orders. Room reservations and background checks. Maintenance tickets that somehow become six-month projects.
+
+The role is broader than most churches realize when they fill it — and broader than most software products are designed to handle. This guide covers the full scope of church facilities management, the unique challenges churches face as nonprofits with volunteer workforces, and how to build systems that keep your building running without burning out the people responsible for it.
+
+## The Unique Challenges of Church Facilities
+
+Church facilities management is distinct from corporate or commercial facilities work in ways that matter for how you build your systems.
+
+**The weekend is non-negotiable.** Most organizations can absorb a facilities failure with a workaround. A church cannot quietly reschedule Sunday morning. When the main PA system fails or the HVAC goes down before a holiday service, the entire congregation feels it. This makes preventive maintenance — not just reactive repair — essential in a way it isn't in many other settings.
+
+**Budget constraints are structural.** Nonprofits operate on tighter margins, and facilities rarely compete well against program spending in budget conversations. Every dollar spent on a replacement piece of equipment is a dollar not going to ministry. This makes good tracking critical: you need to know what you have, what it costs to maintain, and when replacement is genuinely necessary versus just convenient.
+
+**Your workforce is largely volunteers.** Paid facilities staff, where they exist at all, are often one person managing dozens of spaces and hundreds of assets. Most of the people touching your equipment — setting it up, breaking it down, borrowing it for events — are volunteers who haven't been trained on proper care and aren't accountable through employment. Systems need to be simple enough that volunteers can use them and robust enough that you can see what happened when something goes wrong.
+
+**Your building serves multiple constituencies at once.** A church facility is simultaneously a worship space, a classroom, an event venue, a community center, and sometimes a school or daycare. Every group has its own schedule, its own equipment needs, and its own expectations for what they'll find when they arrive. Keeping all of those users coordinated — without double-booking spaces or losing equipment between groups — requires more structure than most churches have in place.
+
+## The Six Pillars of Church Facilities Management
+
+Effective church facilities management covers six interconnected domains. Most churches handle some of these well and others poorly. The goal is a system that addresses all six.
+
+### 1. Equipment and Asset Inventory
+
+You cannot manage what you cannot find. A complete equipment inventory — every significant asset tagged, photographed, and recorded — is the foundation everything else builds on.
+
+Your inventory should capture at minimum: item name and description, location, status (available, checked out, under repair, retired), purchase date and estimated value, serial number for insured or high-value items, and any relevant ministry or department assignment.
+
+The status field is what makes inventory actionable. An inventory without status is a list. An inventory with status is a tool your team can actually use to make decisions.
+
+[Church physical audits](/blog/church-physical-audit-guide) — scheduled comparisons of your inventory records against physical reality — are what keep the system honest over time. Most churches that run their first audit discover both assets they forgot they owned and gaps that represent real losses.
+
+### 2. Maintenance and Repair Tracking
+
+Reactive maintenance — fixing things after they break — is unavoidable. But a church that only does reactive maintenance is permanently behind, and the cost compounds. Deferred small repairs become expensive emergency repairs. Lost repair history means you can't make informed replacement decisions. Informal reporting means issues get forgotten before they get fixed.
+
+A structured maintenance system changes the dynamic. Every reported issue becomes a ticket with a status, an owner, and a history. Priority levels let your team triage without you personally directing every decision. Vendor records and cost tracking give you the data to evaluate repair-versus-replace objectively.
+
+The most important shift is from informal to formal reporting. When the mechanism for reporting a problem is "tell someone," issues get lost. When it's a QR code on the equipment that opens a new-issue form, reports happen at the point of discovery — before memories fade and mental notes get overwritten.
+
+Read more: [Church Equipment Maintenance: A Complete Guide](/blog/church-equipment-maintenance-guide)
+
+### 3. Space and Room Management
+
+Most churches have more demand for their spaces than they have spaces to offer. Fellowship hall, classrooms, sanctuaries, outdoor areas — each has its own use schedule, setup requirements, and set of competing reservations.
+
+A room reservation system solves the coordination problem. When every group submits requests through a shared system, double-bookings become visible before they happen. Approval workflows let facilities staff or ministry leaders review requests before they're confirmed. History shows which spaces are over-subscribed and which are underused — information that shapes how you plan and invest in your facility.
+
+The details that matter for room management: capacity, location, available amenities (AV setup, seating configuration, kitchen access), and any restrictions on use. Capturing these upfront reduces the back-and-forth that eats staff time before every event.
+
+### 4. Supply Management
+
+Churches consume supplies constantly — communion elements, batteries, cleaning products, paper, light bulbs, coffee, printer ink. Most churches track these poorly or not at all, which means someone discovers you're out of something at the moment it's critically needed.
+
+Good supply management requires two things: a record of what you have and a process for logging consumption. The consumption log is what most churches skip — and it's what makes the difference between knowing you're running low before you run out versus discovering it at 7am Sunday.
+
+Reorder points (the quantity at which you trigger a restock) take the decision out of the moment. Instead of someone deciding whether to reorder based on how much is left on a shelf, the system tells you when you've crossed the threshold.
+
+Read more: [Church Supply Management: How to Stop Running Out of What You Need](/blog/church-supply-management)
+
+### 5. People Access and Compliance
+
+This is the pillar most churches underinvest in — and the one with the highest risk implications when something goes wrong.
+
+People access management covers three areas:
+
+**Key and access control.** Who has a physical key to your building? Who has a fob or access code? These lists change constantly — staff turnover, ministry leader transitions, contractors who never returned their keys — and most churches couldn't produce an accurate current list on demand. A key assignment log that records who received what, when, and whether it's been returned is the minimum viable system.
+
+**Background checks.** Working with children and vulnerable adults requires documented screening. Knowing which volunteers are current, which are expiring, and which have lapsed is a compliance responsibility that belongs in a system, not a spreadsheet that gets updated when someone remembers.
+
+**Certifications and training.** Food handler certifications, first aid training, equipment operation sign-offs — any credential that expires needs a tracking system with alerts before the expiration date, not after.
+
+Read more: [Church Volunteer Equipment Accountability: Best Practices](/blog/church-volunteer-equipment-accountability)
+
+### 6. Reservations and Equipment Checkout
+
+Beyond room reservations, churches need a system for tracking equipment as it moves in and out of storage — the PA speakers borrowed for an offsite event, the tables loaded into a van for a retreat, the projector checked out for a community meeting.
+
+Without a checkout system, equipment disappears into a gray zone: it might come back, it might not, and nobody knows who had it last. With a checkout system, every departure and return is logged, creating accountability without confrontation. When something doesn't come back, you know exactly where to start looking.
+
+Reservation systems for equipment also serve a coordination function: when two ministries need the same gear on the same weekend, the conflict is visible in advance rather than discovered on Saturday morning.
+
+## Building Your System: Where to Start
+
+The common mistake is trying to build a complete system before starting. That leads to paralysis — the scope feels too large, the data entry feels too time-consuming, and nothing gets done.
+
+A better approach: start with the pillar causing the most pain and build from there.
+
+**If equipment goes missing regularly:** Start with inventory and checkout tracking. Tag your highest-value and most-borrowed items first. Build the checkout habit before expanding to full inventory.
+
+**If maintenance issues fall through the cracks:** Start with a ticketing system. Create tickets for your five most pressing open issues. Assign them. Run them through the workflow. Expand once the habit is established.
+
+**If Sunday services are regularly disrupted by equipment problems:** Start with preventive maintenance schedules for your highest-stakes gear. HVAC filters, lamp hours, battery cycles — these have known intervals that can be scheduled before they become failures.
+
+**If compliance is a concern:** Start with key assignments and background check tracking for anyone working with children. This is the highest-stakes pillar from a liability perspective and often the most neglected.
+
+## What to Look For in Church Facilities Software
+
+Not all facilities management software is built for churches. Commercial platforms are often too complex, too expensive, or too focused on infrastructure that churches don't have (like dedicated IT staff or warehouse operations). Here's what matters for a church context:
+
+**Multi-domain coverage.** Inventory, maintenance, reservations, access, and supplies should ideally live in one system. Fragmented tools mean fragmented data and staff who have to log into four different places to get a complete picture.
+
+**Volunteer-friendly UX.** If your team needs training documentation and a two-week onboarding process to use the software, most volunteers won't use it. The interface needs to be intuitive enough that a volunteer who's never seen it before can figure out the basics in minutes.
+
+**Role-based access.** Your lead pastor doesn't need access to maintenance ticketing. Your volunteer coordinator doesn't need to see financial data. Good software lets you give each role exactly the access they need without exposing everything to everyone.
+
+**Nonprofit pricing.** Enterprise facilities management software runs thousands of dollars per year. A system designed for churches should be priced for nonprofit budgets — ideally with a free tier for the core inventory features that every church needs regardless of size.
+
+ChurchOpsHub was built specifically for this context. Core inventory is free, with no time limit. Paid modules — Maintenance, Insights, Coordination, People Access, and others — add capabilities as your needs grow. There's no implementation consultant, no enterprise contract, and no training certification required to get started.
+
+## The Stewardship Argument
+
+There's a theological dimension to facilities management that often goes unspoken in operational conversations: the building, equipment, and supplies your church owns were purchased with donated funds. The congregation's tithes paid for the projectors, the folding tables, the HVAC system, the sound console.
+
+Managing those assets well — knowing where they are, maintaining them properly, tracking who has access to them — is an act of stewardship. The same discipline that governs financial accountability should govern physical asset accountability.
+
+Churches that take facilities management seriously don't just run more smoothly. They demonstrate to their congregations that leadership is careful with the resources they've been entrusted. That matters.
+
+## Getting Started
+
+You don't need a perfect system to start. You need a system that's better than what you have today.
+
+Pick your most painful pillar. Pick the ten most significant assets, the five most critical open maintenance issues, or the compliance list that keeps you up at night. Start there. Build the habit before you build the full scope.
+
+The data you create in month one will pay off for years. Maintenance history that helps you make a replacement decision. An inventory that saves a volunteer from buying something you already own. A key log that tells you exactly who to call when a door doesn't lock.
+
+Your building serves your mission. Managing it well is how you protect that service.
+    `.trim(),
+  },
 ];

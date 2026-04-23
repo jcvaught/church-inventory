@@ -14,7 +14,7 @@
   </url>
   <url>
     <loc>https://churchopshub.com/blog</loc>
-    <lastmod>2026-04-21</lastmod>
+    <lastmod>2026-04-23</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -81,6 +81,12 @@
   <url>
     <loc>https://churchopshub.com/blog/kanban-church-maintenance</loc>
     <lastmod>2026-04-21</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://churchopshub.com/blog/church-facilities-management-guide</loc>
+    <lastmod>2026-04-23</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.7</priority>
   </url>
