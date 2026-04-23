@@ -137,12 +137,14 @@ export function LandingPage({ onGetStarted }) {
       }}>
         <div style={{ maxWidth: 700, margin: '0 auto' }}>
           <div style={{
-            display: 'inline-block', background: 'rgba(42,125,110,0.2)',
-            border: '1px solid rgba(42,125,110,0.4)', borderRadius: 100,
-            padding: '5px 18px', fontSize: 13, color: '#5ecfbb',
-            fontFamily: f1, marginBottom: 32, letterSpacing: 0.5,
+            display: 'inline-flex', alignItems: 'center', gap: 10,
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.15)', borderRadius: 100,
+            padding: '7px 20px', fontSize: 13, color: 'rgba(255,255,255,0.9)',
+            fontFamily: f1, marginBottom: 32, letterSpacing: 0.3,
           }}>
-            Free for churches. Forever.
+            <span style={{ background: '#0D9488', borderRadius: 100, padding: '2px 10px', fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: '#fff' }}>FREE TRIAL</span>
+            <span>90 days of all paid hubs — no credit card required</span>
           </div>
           <h1 style={{
             fontFamily: f1, fontSize: mob ? 38 : 56, fontWeight: 800,
@@ -173,7 +175,7 @@ export function LandingPage({ onGetStarted }) {
               onClick={() => onGetStarted('register')}
               style={{ ...btnP, padding: '15px 36px', fontSize: 16 }}
             >
-              Get Started Free
+              Start Free — 90-Day Trial
             </button>
             <button
               onClick={() => onGetStarted('login')}
@@ -183,7 +185,7 @@ export function LandingPage({ onGetStarted }) {
             </button>
           </div>
           <p style={{ marginTop: 28, fontSize: 13, color: 'rgba(255,255,255,0.35)', fontFamily: f1 }}>
-            No credit card · No setup fee · Your data stays yours
+            No credit card · No setup fee · All hubs free for 90 days
           </p>
         </div>
       </section>
