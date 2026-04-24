@@ -311,6 +311,18 @@ All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
 
 ## Future Work
 
+**Tasks Hub audit (Opus, 2026-04-24) — fixes pending:**
+11 High / 13 Medium / 10 Low findings. Plan: `/Users/johnvaught/.claude/plans/tasks-hub-audit-plan.md`. Key themes:
+- Error swallowing in all task useFirestore functions (false success flashes)
+- `updateTask` doesn't strip immutable fields; `createdBy` can be overwritten (security)
+- Firestore update rule allows visibility escalation to private by non-creators
+- `HUB_ACTIONS.tasks` uses `create_task` but useFirestore logs `add_task` → 0 usage at trial expiry
+- `createNextRecurringTask` drops `parentTaskId` + `blockedBy`; no idempotency guard against double-completion
+- `calculateNextDue` Feb-29 annually bug; duplicate in MaintenancePage → extract to `src/utils/date.js`
+- `sendTaskDueReminders` missing idempotency, active/allowedHubs filter, rejection logging
+- ActivityLogPage + Dashboard missing task action labels/icons/colors → extract to `src/utils/activityLabels.js`
+- `deleteTask` doesn't cascade-delete comments subcollection or Storage photos
+
 **Known limitation (documented, accepted):**
 - Firestore rules cannot verify that the mutating signup entry belongs to `request.auth.uid` (rules cannot iterate object arrays). Roster names remain readable by any church member via raw Firestore SDK queries. UI gates display to admin/manager only. The ±1 length delta + spotsTotal cap closes all practical attack vectors (mass-fill DoS, entry rewriting).
 
