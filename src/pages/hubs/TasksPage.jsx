@@ -1163,8 +1163,11 @@ export function TasksPage({ store, userProfile }) {
   }
 
   function handlePhotoSelect(files) {
-    setPhotoFiles(prev => [...prev, ...files]);
-    setPhotoPreviews(prev => [...prev, ...files.map(f => URL.createObjectURL(f))]);
+    const valid = files.filter(f => f.size <= 5 * 1024 * 1024);
+    if (valid.length < files.length) flash('One or more photos exceed 5 MB and were skipped.', true);
+    if (!valid.length) return;
+    setPhotoFiles(prev => [...prev, ...valid]);
+    setPhotoPreviews(prev => [...prev, ...valid.map(f => URL.createObjectURL(f))]);
   }
 
   function handlePreviewRemove(index) {

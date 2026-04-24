@@ -449,7 +449,7 @@ export function JobsPage({ store, userProfile }) {
     if (!(notificationConfig?.enabled)) return;
     const fn = httpsCallable(getFunctions(), 'sendJobAnnouncementEmails');
     // Note: postedBy is now derived server-side from the caller's user profile
-    fn({ churchId: userProfile?.churchId, title, body }).catch(e => console.warn('sendJobAnnouncementEmails failed', e));
+    fn({ churchId: userProfile?.churchId, title, body }).catch(() => {});
   }
 
   // ── Derived state ──
@@ -576,13 +576,13 @@ export function JobsPage({ store, userProfile }) {
         await updateJobListing(editJobId, data, userId, userName);
         if (willNotify) {
           const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
-          fn({ churchId: userProfile?.churchId, jobDocId: editJobId }).catch(e => console.warn('sendJobCancelledEmails failed', e));
+          fn({ churchId: userProfile?.churchId, jobDocId: editJobId }).catch(() => {});
         }
         // Notify original poster if a co-admin cancelled their job
         if (jobForm.status === 'cancelled' && existingJob?.createdBy && existingJob.createdBy !== userId && notificationConfig?.enabled) {
           const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
           fn({ churchId: userProfile?.churchId, jobDocId: editJobId, event: 'cancellation', actorUid: userId, actorName: userName })
-            .catch(e => console.warn('sendJobPosterNotification failed', e));
+            .catch(() => {});
         }
         flash('Job updated.' + (willNotify ? ' Signups notified.' : ''));
         setShowNewJob(false);
@@ -663,7 +663,7 @@ export function JobsPage({ store, userProfile }) {
       if (result?.wasSignedUp && notificationConfig?.enabled) {
         const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
         fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'withdrawal', actorUid: userId, actorName: userName })
-          .catch(e => console.warn('sendJobPosterNotification failed', e));
+          .catch(() => {});
       }
     } catch { flash('Failed to withdraw.', true); }
     finally { setSavingJobId(null); }
@@ -681,7 +681,7 @@ export function JobsPage({ store, userProfile }) {
       if (notificationConfig?.enabled && job.createdBy !== userId) {
         const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
         fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'admin_removal', actorUid: userId, actorName: userName, removedName: removed?.name || '' })
-          .catch(e => console.warn('sendJobPosterNotification failed', e));
+          .catch(() => {});
       }
     } catch { flash('Failed to remove signup.', true); }
   }
@@ -749,6 +749,14 @@ export function JobsPage({ store, userProfile }) {
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError?'#FEE8E8':B.tealPale, border:`1px solid ${msg.isError?'#FECACA':B.tealLight}`, borderRadius:10, padding:'10px 16px', marginBottom:16, fontSize:14, fontWeight:600, color:msg.isError?B.red:B.teal }}>
           <span>{msg.text}</span>
           <button onClick={()=>setMsg(null)} aria-label="Dismiss message" style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button>
+        </div>
+      )}
+
+      {/* Notifications-off hint for admins/managers */}
+      {isAdminOrManager && !notificationConfig?.enabled && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: B.goldLight, border: '1px solid ' + B.gold, borderRadius: 8, padding: '8px 14px', marginBottom: 16, fontFamily: f2, fontSize: 13, color: B.textDark }}>
+          <span>⚠️</span>
+          <span>Email notifications are off — signups won't receive reminders or cancellation alerts. <strong>Settings → Notifications</strong> to enable.</span>
         </div>
       )}
 

@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Further Reading
+
+- `docs/DATA_MODEL.md` — Firestore collection schemas and rules summary
+- `docs/BUSINESS_MODEL.md` — Hub pricing, subscription doc, grandfathering, per-user hub access
+- `docs/CHANGELOG.md` — All phase history and dated fixes
+
 ## Commands
 
 ```bash
@@ -99,46 +105,13 @@ functions/
 
 ### Firestore Data Model (Multi-Tenant)
 
-All church data is namespaced under `churches/{churchId}/`:
-
-| Path | Contents |
-|------|----------|
-| `churches/{churchId}` | Church name, code, createdAt, createdBy (uid); `welcomeEmailSentAt` (set by `sendWelcomeEmail` CF for idempotency) |
-| `churches/{churchId}/config/main` | Church metadata |
-| `churches/{churchId}/config/settings` | `locations[]`, `ministries[]`, `tags[]`, `jobsRosterVisibility` (`'admin'`/`'signups'`/`'all'`, default `'signups'` — controls who can see signup names in Job Hub) |
-| `churches/{churchId}/config/subscription` | Plan, hubs[], maxUsers, status (`active`/`trialing`/`past_due`/`canceled`), Stripe IDs, grandfathered; trial fields: `trialStartedAt`, `trialEndsAt`, `trialHubs[]`, `freeHubsSelected` (null during trial; string[] after expiry — auto-selected top-2 hubs by activity log), `trialWarningEmailSentAt` |
-| `churches/{churchId}/items` | Equipment inventory items |
-| `churches/{churchId}/supplies` | Consumable supplies with quantity tracking |
-| `churches/{churchId}/activityLog` | Audit trail (every action logged) |
-| `churches/{churchId}/reservations` | Item and room/space reservation requests; `resourceType: 'item' | 'room'` (absent on old records = treat as item); item fields: `itemDocId`, `itemId`, `itemDesc`; room fields: `roomDocId`, `roomName`; shared: `eventName`, `eventDate`, `returnDate`, `purpose`, `ministry`, `notes`, `status`, `recurrenceGroupId`, `recurrenceFreq` |
-| `churches/{churchId}/maintenanceTickets` | Maintenance Hub: repair tickets (MNT-### numbering, max-based); fields: `ticketNumber`, `name`, `description`, `priority` (High/Medium/Low), `status` (Backlog/Planning/In Progress/On Hold/Complete/Cancelled), `tags[]`, `dueDate`, `recurrence` (weekly/biweekly/monthly/quarterly/annually/null), `assignees[{uid,name}]`, `checklist[{id,text,done}]`, `photos[]`, `linkedItemDocId/Id/Description`, `vendorId/Name`, `estimatedCost`, `actualCost`, `createdBy`, `createdByName`, `createdAt`, `updatedAt`, `completedAt` |
-| `churches/{churchId}/maintenanceTickets/{id}/comments` | Comment subcollection: `text`, `authorId`, `authorName`, `createdAt`, `updatedAt` (set on edit) |
-| `churches/{churchId}/vendors` | Maintenance Hub: vendor/contractor directory |
-| `churches/{churchId}/config/settings.maintenanceTags` | `string[]` — tag autocomplete for maintenance tickets; new tags added via `arrayUnion` |
-| `churches/{churchId}/tasks` | Tasks Hub: general admin tasks; fields: `taskNumber` (TSK-###), `name`, `description`, `priority`, `status`, `tags[]`, `dueDate`, `recurrence`, `assignees[{uid,name}]`, `checklist[{id,text,done}]`, `photos[]`, `notes`, `visibility` (team/private/shared), `sharedWith[{uid,name}]`, `parentTaskId` (nullable docId — subtask support), `blockedBy` (string[] of TSK-### numbers — soft dependency warning on Complete), `createdBy`, `createdByName`, `createdAt`, `updatedAt`, `completedAt`; **Firestore read rule**: `private` tasks blocked server-side for non-creators; `shared` visibility is client-side only (Firestore rules can't iterate nested object arrays to check `sharedWith[].uid`); creator can delete own tasks; collectionGroup index on `dueDate` for scheduled CF |
-| `churches/{churchId}/tasks/{id}/comments` | Task comment subcollection: `text`, `authorId`, `authorName`, `createdAt`, `updatedAt` |
-| `churches/{churchId}/taskTemplates` | Tasks Hub: saved task templates; fields: `name`, `description`, `priority`, `tags[]`, `recurrence`, `checklist[{id,text,done}]`, `visibility`, `createdBy`, `createdByName`, `createdAt`; members read, admin+mgr write |
-| `churches/{churchId}/rooms` | Spaces: reservable rooms/spaces; fields: `name`, `capacity` (nullable int), `location`, `description`, `amenities[]`, `active` (soft-archive), `createdAt`, `updatedAt`; managed in Settings → Spaces card; members read, admin/mgr write |
-| `churches/{churchId}/bundles` | Coordination Hub: checkout bundles; fields: `name`, `description`, `items[{docId,itemId,description,location}]`, `createdBy`, `createdByName`, `createdAt` |
-| `churches/{churchId}/config/notifications` | Coordination Hub: notification toggle; fields: `enabled` (bool) — all email logic handled server-side via SendGrid Cloud Functions; legacy EmailJS fields (serviceId, publicKey, templateApproved, etc.) may exist in old docs but are no longer used |
-| `churches/{churchId}/audits` | Accountability Hub: physical audit records; fields: `location`, `conductedBy`, `conductedByName`, `startedAt`, `completedAt`, `status`, `itemsChecked`, `discrepancyCount`, `items[{docId,itemId,description,currentStatus,auditResult,condition,notes}]`, `discrepancies[]`, `createdAt` |
-| `churches/{churchId}/accessPeople` | People Access Hub: tracked people (staff/volunteers); fields: `name`, `email`, `phone`, `ministries[]`, `notes`, `active` (soft archive), `userId` (nullable — linked ChurchOpsHub user uid, set by auto-link or admin), `createdBy`, `createdAt`, `updatedAt` |
-| `churches/{churchId}/accessRecords` | People Access Hub: one flat collection for all compliance record types; fields: `personId`, `personName` (denormalized), `type` (`background_check`/`key_assignment`/`certification`/`custom`), `completedDate`, `expiryDate`, `notes`, `ministry`, `recordedBy`, `recordedByName`, `createdAt`, `updatedAt`; key_assignment adds: `keyIdentifier`, `returnedDate`; certification adds: `certType`, `issuingOrganization`; custom adds: `requirementId`, `requirementName` |
-| `churches/{churchId}/config/settings.peopleAccessRequirements` | `[{id, name, hasExpiry}]` — custom requirement types for People Access Hub; added via `arrayUnion` |
-| `churches/{churchId}/jobListings` | Job Hub: posted jobs; fields: `jobNumber` (JOB-###), `title`, `description`, `scheduledDate`, `scheduledTime`, `location`, `spotsTotal`, `pay` (nullable float), `status` (`open`/`closed`/`completed`/`cancelled`), `signups[{uid,name,signedUpAt}]`, `createdBy`, `createdByName`, `createdAt`, `updatedAt`; signups via `runTransaction`; recurring series: `recurrenceGroupId` (first job's docId, same for all siblings), `recurrenceFreq` (`weekly`/`biweekly`/`monthly`/`quarterly`/`annually`), `seriesEndDate` (YYYY-MM-DD); notification markers: `lastReminderSentDate`, `cancellationEmailSentAt`, `lastPosterNotifiedAt` (30s double-fire guard) |
-| `churches/{churchId}/jobAnnouncements` | Job Hub: announcements; fields: `title`, `body`, `expiresAt` (nullable YYYY-MM-DD, client-side filtered), `pinned` (bool), `createdBy`, `createdByName`, `createdAt`, `updatedAt` |
-| `churches/{churchId}/publicRequests` | Public item requests submitted via `PublicRequestPage`; **unauthenticated creates allowed** (Firestore rule); fields: `name`, `email`, `phone`, `itemDescription`, `quantity`, `dateNeeded`, `urgency` (Low/Medium/High), `notes`, `status` (`pending`/`dismissed`), `submittedAt`; admins see pending requests in ItemsPage panel; dismissed via `dismissPublicRequest()` |
-| `users/{uid}` | User profile with `churchId`, `role` (`admin`/`manager`/`user`), `name`, `email`, `active`, `allowedHubs[]`, `managedMinistries[]`, `taskDefaultVisibility` (`team`/`private`/`shared`), `taskDefaultSharedWith` (`[{uid,name}]`), `jobPosterDelegates` (`[{uid,name}]` — up to 5; users who receive poster notifications for jobs you've posted) |
-| `suggestions/{docId}` | **Top-level** (not church-scoped) — cross-church user suggestions; fields: `text`, `category`, `submittedBy`, `submittedByName`, `churchId`, `churchName`, `submittedAt` |
-| `errors/{docId}` | **Top-level** (not church-scoped) — Firestore error log written by `handleErr()` in `useFirestore`; fields: `message`, `stack` (first 4 lines), `churchId`, `timestamp`; owner-only read in Firestore rules |
-
-`churchId` is always `{creatorUid}-church` (set at church creation time).
+Full collection schemas and Firestore rules summary: `docs/DATA_MODEL.md`. Quick summary: all church data lives under `churches/{churchId}/`; `churchId = {creatorUid}-church`.
 
 ### Auth Flow
 
 1. **Create church** — admin creates a church with a unique alphanumeric church code; their UID becomes the churchId prefix.
 2. **Join church** — new members register with email/password or Google, entering the church code to be linked to the right `churchId`.
-3. Firestore rules use granular per-subcollection rules (not a wildcard). Each collection has explicit read/create/update/delete grants based on role. Key constraints:
+3. Firestore rules use granular per-subcollection rules (not a wildcard). Key constraints:
    - `config/subscription` — client create only at church creation time; no client updates (webhook/Admin SDK only)
    - `activityLog` — immutable; members can create, nobody can update or delete
    - `maintenanceTickets` — members can update (edit fields, assign, move status); only admin/manager can create or delete
@@ -165,7 +138,7 @@ All church data is namespaced under `churches/{churchId}/`:
   - **user**: day-to-day use — checkout/return items, request reservations (cancel own), log supply usage/restock, view all accessible hubs. Cannot add/edit items or supplies, approve reservations, or start audits. Cannot see People Access Hub at all (hidden from picker and blocked on access).
   - Items/supplies with no ministry assigned are admin-only (managers cannot edit unscoped items).
   - Settings page: all users see a Profile card (name, email, role, managed ministries); Team Members section is admin-only; list editors (locations/ministries/tags) are editable by admin and manager.
-  - Hub visibility per user controlled by `allowedHubs[]` on user profile (see Per-User Hub Access).
+  - Hub visibility per user controlled by `allowedHubs[]` on user profile (see `docs/BUSINESS_MODEL.md`).
 - **SEO:** `react-helmet-async` installed; `<HelmetProvider>` wraps the app in `main.jsx`. Reusable `<SEO>` component in `src/components/SEO.jsx` sets `<title>`, `<meta name="description">`, `<link rel="canonical">`, Open Graph tags, Twitter Card tags, and optional JSON-LD via `<script type="application/ld+json">` (accepts object or array). Applied to LandingPage (SoftwareApplication + Organization schemas, featureList), HelpPage, BlogIndex, and BlogPost (BlogPosting schema). Blog posts use `ogType="article"`. Google Search Console verified via `public/google254ab6f07b8682a3.html`. Sitemap at `public/sitemap.xml` — update `lastmod` on `/` and `/?help` when those pages change; add new blog posts with their publish date and `changefreq: yearly`.
 - **AppShell footer (desktop only):** Displays logo, domain, and links to Help Center and Blog. Hidden on mobile (`!isMobile`). Blog link uses `href="/blog"` — works via Vercel catch-all rewrite.
 - **localStorage:** Items page persists `locationFilter`, `ministryFilter`, and `statusFilter` under keys `inv_locationFilter` / `inv_ministryFilter` / `inv_statusFilter`. Reservations page persists the Equipment/Space resource type toggle under `res_resourceType`.
@@ -176,140 +149,25 @@ All church data is namespaced under `churches/{churchId}/`:
 
 ## Business Model — Hub-Based Monetization
 
-**"The stuff is free, what you do with the stuff is paid."**
+**"The stuff is free, what you do with the stuff is paid."** Inventory Hub is forever free (10 users included). Paid hubs:
 
-### Inventory Hub (Forever Free) — System of Record
-Everything existing stays free. 10 team members per church included.
+| Hub | Price |
+|-----|-------|
+| Team Hub | $9/mo (25 users) or $19/mo (unlimited) |
+| Insights Hub | $7/mo |
+| Maintenance Hub | $7/mo |
+| Coordination Hub | $7/mo |
+| Accountability Hub | $5/mo |
+| People Access Hub | $7/mo |
+| Tasks Hub | $7/mo |
+| Job Hub | $7/mo |
+| All-In Bundle | $29/mo (all hubs) |
 
-### Paid Hubs
+New churches get a 90-day free trial of all paid hubs. Feature gating via `useSubscription` + `UpgradeGate`. See `docs/BUSINESS_MODEL.md` for subscription doc schema, grandfathering, feature gating details, and per-user hub access rules.
 
-| Hub | Price | Status |
-|-----|-------|--------|
-| **Team Hub** | $9/mo (25 users) or $19/mo (unlimited) | ✅ Done — Phase 5 |
-| **Insights Hub** | $7/mo | ✅ Done — Phase 4 |
-| **Maintenance Hub** | $7/mo | ✅ Done — Phase 3 |
-| **Coordination Hub** | $7/mo | ✅ Done — Phase 6 |
-| **Accountability Hub** | $5/mo | ✅ Done — Phase 7 |
-| **All-In Bundle** | $29/mo (6 hubs) | ✅ Done — Phase 8 |
-| **People Access Hub** | $7/mo | ✅ Done |
-| **Tasks Hub** | $7/mo | ✅ Done |
-| **Job Hub** | $7/mo | ✅ Done |
+## Project History
 
-### Grandfathering
-Existing churches at launch: 12 months Founder status (unlimited users, all hubs).
-
-### Subscription Doc
-`churches/{churchId}/config/subscription`:
-```json
-{
-  "plan": "free|team_25|team_unlimited|all_in",
-  "hubs": ["maintenance", "insights", ...],
-  "maxUsers": 10,
-  "status": "active|trialing|past_due|canceled",
-  "grandfathered": false,
-  "grandfatheredUntil": null
-}
-```
-
-### Feature Gating
-- `useSubscription(churchId)` → `hasHub(name)`, `canAddUser(count)`, `isTrialing(name)`
-- `UpgradeGate` component wraps paid pages
-- Hub tabs: shown with 🔒 when church hasn't subscribed (drives discovery); hidden entirely when user's `allowedHubs[]` excludes them
-- `userCanSeeHub(hubName)` in `App.jsx` combines church-level `hasHub()` + role check (people_access blocked for `user` role) + user-level `allowedHubs` check
-- Payment: Stripe (Cloud Functions — wired up via `createCheckoutSession` / `createPortalSession`)
-
-### Per-User Hub Access
-Hub visibility is controlled at two levels:
-1. **Church level** — subscription `hubs[]` determines which hubs the church has paid for
-2. **User level** — `allowedHubs[]` on `users/{uid}` determines which of those hubs a given user can see
-
-**Rules:**
-- `admin` role always sees all church hubs — no `allowedHubs` check needed
-- `manager` role: visible hubs = intersection of church `hubs[]` and user `allowedHubs[]`; `allowedHubs` null/missing = inherits all church hubs
-- `user` role: same as manager but **People Access Hub is always hidden** regardless of `allowedHubs`
-- `allowedHubs` null/missing = user inherits all church hubs (default for backward compatibility)
-- Admins assign hub access per-user in Settings > Team Members (only showing hubs the church has)
-- **People Access Hub** — manager+ only; certifications within it are admin-only (background checks, key assignments, custom requirements editable by manager)
-- This is a **UI/UX concern only** — Firestore rules do not change
-
-## Completed Phases
-
-All phases complete as of 2026-03-17. See `docs/CHANGELOG.md` for full details.
-
-| Phase | Name | Date |
-|-------|------|------|
-| 1–3 | Code restructure, Subscription infrastructure, Maintenance Hub | — |
-| 4 | Insights Hub | — |
-| 5 | Team Hub | — |
-| 6 | Coordination Hub | — |
-| 7 | Accountability Hub | — |
-| 8 | Stripe Integration | — |
-| 9 | UX Polish & AI Features | 2026-03-15 |
-| 10 | UX Polish: Duplication, Shortcuts, Public Requests | 2026-03-15 |
-| 11 | Maintenance UX Improvements | 2026-03-16 |
-| 12 | Help Center & User-Facing Documentation | 2026-03-16 |
-| 13 | Maintenance Hub Enhancements | 2026-03-16 |
-| 14 | UI Polish | 2026-03-16 |
-| 15 | Security, Performance & Code Quality Audit | 2026-03-16 |
-| 16 | Full App Code Review & Bug Sweep | 2026-03-17 |
-| 17 | Mobile Audit & Responsive Fixes | 2026-03-17 |
-| 18 | UX Polish & Settings Inline Editing | 2026-03-17 |
-| 19 | Production Crash: Full Investigation & Fix | 2026-03-17 |
-| 20 | Delete Actions & Supply Tags | 2026-03-17 |
-| 21 | AI Supply Identification | 2026-03-17 |
-| — | Location Report (Insights Hub) | 2026-03-18 |
-| — | Move between Inventory and Supplies (admin) | 2026-03-18 |
-| — | Auto-generated IDs & inline tag creation for items | 2026-03-18 |
-| — | iOS Safari compatibility fixes | 2026-03-18 |
-| — | SEO: sitemap, robots.txt, meta tags, schema markup, blog | 2026-03-18 |
-| — | Blog link in AppShell desktop footer; Google Search Console verification | 2026-03-19 |
-| — | Auto-generate Item ID when moving supply to inventory | 2026-03-19 |
-| — | Hub picker (HubsPage): single "Hubs" tab replaces individual hub tabs; picker grid + sub-nav breadcrumb | 2026-03-19 |
-| — | People Access Hub: background checks, key assignments, certifications, custom requirements, expiry alerts, CSV export | 2026-03-19 |
-| — | People Access: bulk entry modal (spreadsheet-style, interval expiry, name autocomplete) | 2026-03-19 |
-| — | People Access: link accessPeople to user accounts (auto-link by email on login, manual link by admin); My Compliance card in Settings; Team Members compliance badges | 2026-03-19 |
-| — | Security hardening: granular Firestore rules (per-subcollection), user self-escalation fix, `escapeHtml` XSS fix for print functions, CSP/security headers in vercel.json, URL allowlist in Cloud Functions, supply quantity race condition → runTransaction, storage size+type limits | 2026-03-20 |
-| — | Blog post: "Church Supply Management: How to Stop Running Out of What You Need" | 2026-03-21 |
-| — | Maintenance Hub: user role can now update/edit tickets and drag Kanban status; Delete gated to admin+mgr; removed dead allowedHubs args from invite registration flow | 2026-03-22 |
-| — | Hub access control: People Access Hub hidden from user role entirely; certifications admin-only (add/edit/delete); managers handle background checks, key assignments, custom requirements | 2026-03-22 |
-| — | Security audit: fixed missing cert role guard in `handleBulkSave` (PeopleAccessPage) | 2026-03-22 |
-| — | Maintenance Hub UX (user role audit): role-aware subtitle + empty state; ticket number search; checklist add/remove now auto-save | 2026-03-22 |
-| — | Maintenance Hub UX (mobile + comments): mobile Kanban replaced with "Move to:" select on cards; unsaved-changes confirm on modal close; comment edit/delete for own comments; relative timestamps; own-comment styling; Firestore rule updated to allow comment author self-edit/delete | 2026-03-22 |
-| — | Blog post: "Church Equipment Maintenance: A Complete Guide" | 2026-03-24 |
-| — | RichTextarea Enter key list continuation: Enter continues bullet/numbered list; double Enter on empty prefix line exits list; numbered lists auto-increment | 2026-03-24 |
-| — | UX fixes (Opus audit — Maintenance + Inventory hubs): error flash red styling, checklist save error handling, onDragStart boolean fix, comment tap targets, comment placeholder text, bulk location role gate, "Send to Repair" label, role-aware empty state, statusFilter localStorage persistence, search placeholder cleanup, overdue red border persists in bulk select | 2026-03-24 |
-| — | Assignee color differentiation on Maintenance Kanban cards: deterministic hash of uid mapped to 8-color palette; same person always gets same color | 2026-04-04 |
-| — | Blog post: "How to Do a Church Physical Audit: A Step-by-Step Guide" | 2026-04-07 |
-| — | UI polish: confirm on deny, hub card focus, item name tooltip, auth form mobile, brand token cleanup, CoordinationPage required-field errors + badge, COC timeline mobile, skipped names truncation, BlogPost word-break | 2026-04-09 |
-| — | Blog post: "5 Things Every Church Facilities Manager Needs to Track" | 2026-04-09 |
-| — | Blog post: "Church Volunteer Equipment Accountability: Best Practices" | 2026-04-09 |
-| — | Tasks Hub: general-purpose Kanban task board with visibility control (team/private/shared), assignees, comments, recurrence, TSK-### numbering | 2026-04-14 |
-| — | Tasks Hub: assignees filtered to Tasks Hub-access users only; per-user task defaults (⚙ Defaults button → default visibility + default share-with list, saved to users/{uid}); private tasks truly private (admin override removed); High priority pinned to top of each Kanban column | 2026-04-14 |
-| — | Tasks Hub: Opus review — security (private tasks enforced server-side in Firestore rules; creator delete allowed), bugs (calculateNextDue month-end rollover, isDetailDirty checklist, checklist Cancel flow, addTask silent failure, photo URL memory leak), refactor (createNextRecurringTask shared helper), a11y (TaskCard role/tabIndex/aria-label, mobile status select aria-label, comment button aria-label), performance (React.memo on TaskCard + KanbanColumn, useMemo for stats) | 2026-04-15 |
-| — | Tasks Hub: real-time detail modal sync — onSnapshot listener on open task doc; silent update when no dirty edits; amber conflict banner (Reload/Dismiss) when concurrent edit detected; extracted taskToEdits() helper; isDirtyRef avoids stale closures | 2026-04-16 |
-| — | SEO: sitemap lastmod + changefreq fixes (yearly on posts, weekly on /blog); add missing moving-beyond-spreadsheets post; landing page title → "Church Inventory Management Software — Free"; add Organization schema + featureList to SoftwareApplication schema | 2026-04-16 |
-| — | Blog post: "Best Church Management Software for Small Churches in 2026" — category-reframing post (ChMS for people vs. ops software for stuff); covers Planning Center, Breeze, ChurchTrac, Churchteams, Elvanto; targets primary keyword + long-tail; based on Opus competitive analysis | 2026-04-16 |
-| — | Room/Space booking: rooms collection + Firestore rules; useFirestore rooms subscription (totalSubs→17) + CRUD; RESOURCE_TYPE enum; Settings Spaces card + modal (name/capacity/location/amenities/archive); ReservationsPage Equipment/Space toggle, room conflict detection, room badges, Check Out hidden for rooms, CSV updated | 2026-04-16 |
-| — | Preventive Maintenance Calendar: custom month grid (no library) as third Kanban/List/Calendar view mode in Maintenance Hub; priority-colored chips, 🔁 recurring badge, +N overflow, overdue cell highlight, month nav + Today button; mobile grouped list (Overdue/This Week/Next 30 Days/Later); filteredTickets passed so filters apply | 2026-04-16 |
-| — | Bug fixes (Opus review — Room booking + Maintenance Calendar): localDateStr() replaces toISOString() to fix UTC off-by-one in all US timezones; TicketChip extracted to module level (fixes React reconciliation); double-reduce in calendar header fixed; empty-state message when no spaces defined in Reservations; Mark Complete action for approved room reservations | 2026-04-16 |
-| — | Job Hub: teen job board + announcement board ($7/mo, key: jobs, JOB-###); admins post jobs (title, date/time, location, spots, pay); members sign up/withdraw; signups use runTransaction to prevent race conditions; announcements with pin + optional expiry; last 3 announcements shown on Dashboard for hub users; all-in bundle fixed to include people_access + jobs; totalSubs 17→19 | 2026-04-16 |
-| — | Email: migrated all notifications from EmailJS (client-side) to SendGrid via Cloud Functions (server-side); removed @emailjs/browser; new Cloud Functions: sendReservationEmail, sendTicketAssignedEmail, sendJobAnnouncementEmails; CoordinationPage notification settings simplified to enabled toggle only; sender: churchopshub@gmail.com | 2026-04-16 |
-| — | Job Hub: My Jobs filter tab; morning reminder emails (sendJobReminders scheduled CF, 8am Central); cancellation emails (sendJobCancelledEmails CF — auto on cancel if notifications on, + "Notify Signups" button on cancelled jobs); signup list privacy (admin/mgr see names, members see own status only); activity log for all job actions; spotsTotal validation; date formatting; Opus review security + bug fixes | 2026-04-16 |
-| — | Tasks Hub enhancements (Opus review phase 2): activity logging for task update/complete/delete; CSV export (exportTasksCSV); due-date reminder emails (sendTaskDueReminders scheduled CF, 8am Central, collectionGroup query); Calendar view (month grid + mobile grouped list); task templates (save/apply, admin+mgr only); subtasks (parentTaskId + nested display in list/detail); bulk actions in list view (bulk status change, bulk delete); task dependencies (blockedBy TSK-### array with soft warning on Complete); firestore.indexes.json for collectionGroup dueDate query; taskTemplates Firestore rules added | 2026-04-20 |
-| — | Job Hub: Schedule (roster) view (desktop table: date/job/location/spots progress/status; admin sees signup names, members see own status; show/hide past jobs toggle) + Calendar view (month grid + mobile grouped list, chips show filled/total and status color); view tabs expanded from 2 to 4 (Job Board, Schedule, Calendar, Announcements) | 2026-04-20 |
-| — | Blog post: "How to Use a Kanban Board to Track Church Maintenance" | 2026-04-21 |
-| — | UI/UX fix sweep (Opus review): extract `localDateStr` to `src/utils/date.js`; fix all UTC `toISOString()` date bugs (17 occurrences, 9 files); keyboard a11y on TicketCard/HubCards/ReservationCards/Modal close; flash messages standardized (5s, isError, dismiss button) app-wide; Activity Log added to mobile nav; dead code removed (`_StatusBadge`, `_photoFile`) | 2026-04-21 |
-| — | UX polish (Opus medium items): supply cards click-to-detail modal (shows all fields + action buttons); reservation Equipment/Space toggle persists to localStorage (`res_resourceType`); reservations empty state role-aware; PeopleAccessPage header font-size standardized to 22px | 2026-04-21 |
-| — | Job Hub enhancements (Opus review): recurring job series (`recurrenceGroupId`/`recurrenceFreq`/`seriesEndDate`, up to 100 jobs, month-end rollover safe, all created in one transaction with contiguous JOB-### numbers, 🔁 badge + "Recurring series" tag in detail modal); poster + delegate notifications (`sendJobPosterNotification` CF — fires on member withdrawal and co-admin cancellation, 30s double-fire guard, skip self-notification, delegate role validated at send-time); `jobPosterDelegates [{uid,name}]` on user profile, picker in Settings Profile card (admin+manager, jobs hub gated, cap 5); roster visibility toggle in Settings Job Hub card (admin only) — `'admin'`/`'signups'`/`'all'`, default `signups`, `canSeeRoster()` helper replaces all `isAdminOrManager` guards in JobCard/Schedule/Detail/Calendar | 2026-04-23 |
-| — | 90-day free trial system: new churches get all 7 paid hubs free for 90 days; `useAuth.js` writes `trialStartedAt`/`trialEndsAt`/`trialHubs`/`freeHubsSelected: null` to subscription doc at creation; `useSubscription.js` `hasHub()` and `isTrialing()` updated to check trial state; new `trialDaysRemaining()` exported; trial banner in AppShell header (green during trial, red in last 7 days); Settings subscription card shows trial status + days remaining + upgrade prompt; LandingPage pricing section adds 90-day trial callout + "Start Free — 90-Day Trial" CTA; `sendWelcomeEmail` Firestore `onCreate` trigger (Auth-derived email, idempotency via `welcomeEmailSentAt`, `replyTo: jcvaught@gmail.com`); `processTrialExpirations` daily scheduled CF (2am Central) — auto-selects 2 most-used hubs from `activityLog`, writes `freeHubsSelected`, emails admin; 7-day warning email (same CF, second pass, `trialWarningEmailSentAt` idempotency); `subHasHub()` shared helper in `functions/index.js` — all hub-gating CFs updated to use it (`sendJobAnnouncementEmails`, `sendJobCancelledEmails`, `sendJobReminders`, `sendJobPosterNotification`); `sendTaskDueReminders` now checks tasks hub via `churchHasTasksHub()`; subscription `status` set to `'trialing'` at creation, changed to `'active'` on expiry | 2026-04-23 |
-| — | Welcome email on signup: `sendWelcomeEmail` CF (see above) sends personalized email to new church admins with trial details, church code, help center link, reply-to personal Gmail | 2026-04-23 |
-| — | Job Hub audit fixes (Opus + Explore review): Firestore signup rule hardened (±1 delta + spotsTotal cap blocks mass-fill DoS and tampering); collection-group index for sendJobReminders; updateJobListing strips immutable fields + wraps spotsTotal shrink in runTransaction (ToCToU fix); withdrawFromJob no-op guard; invite flow now threads allowedHubs into user profile doc; Stripe jobs price guard extended; sendJobAnnouncementEmails + sendJobCancelledEmails + sendJobReminders: subscription gating, allowedHubs/active filter, error logging, idempotency (lastReminderSentDate) + re-trigger guard (cancellationEmailSentAt 1h window), server-derived poster name, `!=` query → JS filter; ActivityLogPage labels/icons for all job actions; SettingsPage upgrade modal adds Jobs + People Access rows; LandingPage Jobs hub entry + featureList + "All 7 paid hubs" copy; JobsPage: handleSignUp try/finally, stale-now fix in JobCalendar (lazy useState + fresh Date in mobile block), liveDetail memoized, auto-close modal on remote deletion, isAdminOrManager guard on all write handlers, pay negative clamp, flash timer cleanup ref, showPastJobs persisted to localStorage(jobs_showPast), formatJobDate .slice(0,10) guard, loading labels ("Signing up…"/"Withdrawing…"), (signups\|\|[]) defensive guard, keyboard a11y (role/tabIndex/onKeyDown/aria-label) on JobCard/ScheduleRow/AnnouncementCard/calendar cells/JobChip, aria-label on nav buttons + flash dismiss + +N more button | 2026-04-21 |
-| — | Job Hub Phase 1 fixes (new Opus review of recurring/poster/roster features): H1: 30s poster-notif guard scoped by actorUid (`lastPosterNotifiedByActors` map — concurrent withdrawals from different members no longer suppress each other); H2: `admin_removal` event added to `sendJobPosterNotification` CF with distinct email copy (names actor + removed person), `handleAdminRemoveSignup` sends correct event + `removedName`; M1: `generateRecurrenceDates(startDate, freq, endDate, cap)` extracted to `src/utils/date.js` — removes duplicate logic from `JobsPage.countSeriesDates` and `useFirestore.addJobListingSeries`; M3: `withdrawFromJob` returns `{ wasSignedUp }`, `handleWithdraw` gates poster notification on truthy value; M4: `withdrawFromJob` logs `admin_remove_job` vs `withdraw_job` based on `actorId !== uid`; `ActivityLogPage` adds label/icon/color for `admin_remove_job`; M7: `JobCard`, `MobileScheduleRow`, `DesktopScheduleRow`, `AnnouncementCard` extracted to module-scope `React.memo` components; M8: `handleNotifySignups` checks `result.data?.skipped` and shows "Already notified recently" flash; L2: `openEditJob` resets `isRecurring`/`recurrenceFreq`/`recurrenceSeriesEndDate`; L6: recurrence cap shows only red warning at 100, not both green+red; L7: `JobChip` `aria-label` includes job status | 2026-04-23 |
-| — | Job Hub H3: series-wide edit and delete — `updateJobListingSeries` + `deleteJobListingSeries` in useFirestore (batch writes via `writeBatch`; spotsTotal validated against each job's signups before write); edit modal gains "This job only / This + all future jobs" scope selector when editing a recurring series job; detail modal gains "Delete Series" button | 2026-04-24 |
-| — | Tasks Hub audit fixes (Opus review, 2026-04-24): error swallowing → all task functions now rethrow; updateTask strips immutable fields (taskNumber, createdBy, createdAt) before write; Firestore rule blocks visibility escalation to private by non-creators + immutable field assertion; HUB_ACTIONS.tasks create_task→add_task + delete_template fix (trial hub selection now correct); calculateNextDue Feb-29 annually fix + extracted to src/utils/date.js (deduplicates MaintenancePage); createNextRecurringTask idempotency via runTransaction (nextRecurrenceCreatedAt flag) + preserves parentTaskId/blockedBy; addTask uses t.set(..., merge:true) on configRef (fixes new churches); handleDeleteTask cascade-deletes subtasks with count in confirm; deleteTask batch-deletes comments subcollection + Storage photos; bulk Complete triggers createNextRecurringTask; templates strip assignees/sharedWith (no roster leak); applyTemplate doesn't copy assignees/sharedWith; deleteTaskTemplate call site passes userId+userName; handleDetailPhotoRemove: confirm+busy+deleteObject; checklist optimistic-update with rollback on failure; blockedByInput validates against local tasks + filters Complete/Cancelled suggestions; photoPreviews blob URL cleanup useEffect; selectedTaskIds pruned on remote deletion; Add modal onClose resets taskForm; Stats bar emojis aria-hidden; Comment Post → "Posting..." label swap; TagInput onBlur setTimeout cleanup; initials() .filter(Boolean) guard; formatCommentDate Invalid Date guard; Defaults form re-derives from userProfile; activityLabels.js shared utility (labels/icons/colors for all actions) imported by ActivityLogPage + Dashboard; sendTaskDueReminders: idempotency (lastReminderSentDate), active+allowedHubs filter, rejection logging, console.warn on missing SendGrid | 2026-04-24 |
-| — | Tasks + Job Hub follow-up audit fixes (Opus review #2, 2026-04-24): H1: tasksByDocId useMemo moved before pruning useEffect (TDZ crash fix); H2: addTaskTags gated behind canOperate (user-role silent Firestore permission error fixed); H3: Firestore task update rule now blocks visibility changes by non-creators; H4: sendTaskDueReminders lower bound removed (overdue tasks now included); H5: job signup rule blocks writes on cancelled/completed jobs (status == 'open' check); M1: High priority always pinned to top of each Kanban column; M2: blockedBy + parentTaskId added to isDetailDirtyNow dirty check; M3: bulk Complete warns when selected tasks have open blockedBy dependencies; M5: updateJobListing activity log captures jobNumber before field strip; M6: updateJobListingSeries → runTransaction (atomic read + write, closes TOCTOU); M7: handleAdminRemoveSignup notification gated on result?.wasSignedUp; M8: all Job Hub CRUD catch blocks now rethrow; M9: sendTaskDueReminders only stamps tasks where at least one email succeeded; M10: PhotoGrid edit callbacks gated by canEditPhotos (creator/assignee/admin+mgr); M11: deactivated assignees now appear in task filter dropdown; M12: updateJobAnnouncement logs update_announcement + adds userId/userName params; M13: filterSearch trimmed before lowercase (mobile voice input fix); M14: comment handlers (post/edit/delete) now catch errors and flash; L1: dragChecklistIdx reset on onDragEnd; L3: Delete This + Future button for recurring job series (deleteJobListingSeriesFrom helper); L4: template modal closes unconditionally after last template deleted; L5: savingJobId per-card (sign-up/withdraw no longer freezes all cards) | 2026-04-24 |
-
----
+All phase work and dated fixes: `docs/CHANGELOG.md`.
 
 ## Future Work
 
@@ -372,7 +230,7 @@ function localDateStr(d) {
 const today = localDateStr(new Date());
 ```
 
-`localDateStr` is defined at module level in `MaintenancePage.jsx`. Use this pattern anywhere you need today's date or a Date object formatted as `YYYY-MM-DD` for comparison.
+`localDateStr` is defined in `src/utils/date.js`. Import it instead of using `toISOString()` anywhere a `YYYY-MM-DD` date string is needed.
 
 ### 🟡 Bare `>` in JSX text content
 esbuild's strict JSX parser rejects bare `>` characters in JSX text (e.g. `<P>Settings > Team Members</P>`). Use `→` for navigation paths or `{'>'`} to escape. Running `npm run build` will surface these immediately.
