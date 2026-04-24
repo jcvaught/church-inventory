@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   doc, setDoc, getDoc, deleteDoc, getDocs,
-  collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction
+  collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction, writeBatch
 } from 'firebase/firestore';
 import { db } from './firebase.js';
 import { generateRecurrenceDates } from './utils/date.js';
@@ -927,6 +927,48 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
+  // Updates all series jobs with scheduledDate >= fromDate in a single batch write.
+  const updateJobListingSeries = useCallback(async (groupId, fromDate, updates, userId, userName) => {
+    try {
+      const { createdBy: _cb, createdByName: _cbn, jobNumber: _jn, signups: _s, scheduledDate: _sd, ...safeUpdates } = updates;
+      const snap = await getDocs(query(
+        collection(db, 'churches', churchId, 'jobListings'),
+        where('recurrenceGroupId', '==', groupId),
+        where('scheduledDate', '>=', fromDate)
+      ));
+      if (snap.empty) return { count: 0 };
+      if (safeUpdates.spotsTotal !== undefined) {
+        for (const d of snap.docs) {
+          const cnt = (d.data().signups || []).length;
+          if (safeUpdates.spotsTotal < cnt) {
+            throw new Error(`Cannot reduce spots — ${d.data().jobNumber || d.id} has ${cnt} signup(s) which would exceed the new limit.`);
+          }
+        }
+      }
+      const batch = writeBatch(db);
+      const now = new Date().toISOString();
+      snap.docs.forEach(d => batch.update(d.ref, { ...safeUpdates, updatedAt: now }));
+      await batch.commit();
+      await logActivity('update_job', `${updates.title || groupId} (series ×${snap.size})`, userId, userName, { title: updates.title });
+      return { count: snap.size };
+    } catch (err) { handleErr(err); throw err; }
+  }, [churchId]);
+
+  // Deletes all jobs in a recurring series.
+  const deleteJobListingSeries = useCallback(async (groupId, userId, userName) => {
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'churches', churchId, 'jobListings'),
+        where('recurrenceGroupId', '==', groupId)
+      ));
+      if (snap.empty) return;
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      await logActivity('delete_job', `series ×${snap.size}`, userId, userName, {});
+    } catch (err) { handleErr(err); throw err; }
+  }, [churchId]);
+
   const signUpForJob = useCallback(async (docId, userId, userName) => {
     try {
       const jobRef = doc(db, 'churches', churchId, 'jobListings', docId);
@@ -1032,7 +1074,7 @@ export function useFirestore(churchId) {
     addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags,
     taskTemplates, addTaskTemplate, deleteTaskTemplate,
     jobListings, jobAnnouncements,
-    addJobListing, addJobListingSeries, updateJobListing, deleteJobListing,
+    addJobListing, addJobListingSeries, updateJobListing, deleteJobListing, updateJobListingSeries, deleteJobListingSeries,
     signUpForJob, withdrawFromJob,
     addJobAnnouncement, updateJobAnnouncement, deleteJobAnnouncement,
     clearError

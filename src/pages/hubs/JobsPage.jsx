@@ -392,7 +392,7 @@ const AnnouncementCard = memo(function AnnouncementCard({ ann, isAdminOrManager,
 export function JobsPage({ store, userProfile }) {
   const {
     jobListings, jobAnnouncements,
-    addJobListing, addJobListingSeries, updateJobListing, deleteJobListing,
+    addJobListing, addJobListingSeries, updateJobListing, deleteJobListing, updateJobListingSeries, deleteJobListingSeries,
     signUpForJob, withdrawFromJob,
     addJobAnnouncement, updateJobAnnouncement, deleteJobAnnouncement,
     users, notificationConfig, config, settings,
@@ -422,6 +422,9 @@ export function JobsPage({ store, userProfile }) {
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrenceFreq, setRecurrenceFreq] = useState('weekly');
   const [recurrenceSeriesEndDate, setRecurrenceSeriesEndDate] = useState('');
+  const [seriesEditScope, setSeriesEditScope] = useState('this');
+  const [editJobSeriesGroupId, setEditJobSeriesGroupId] = useState(null);
+  const [editJobFromDate, setEditJobFromDate] = useState('');
   const flashTimerRef = useRef(null);
 
   function flash(text, isError = false) {
@@ -497,6 +500,9 @@ export function JobsPage({ store, userProfile }) {
     setIsRecurring(false);
     setRecurrenceFreq('weekly');
     setRecurrenceSeriesEndDate('');
+    setSeriesEditScope('this');
+    setEditJobSeriesGroupId(null);
+    setEditJobFromDate('');
     setShowNewJob(true);
   }
 
@@ -514,6 +520,9 @@ export function JobsPage({ store, userProfile }) {
     setIsRecurring(false);
     setRecurrenceFreq('weekly');
     setRecurrenceSeriesEndDate('');
+    setSeriesEditScope('this');
+    setEditJobSeriesGroupId(job.recurrenceGroupId || null);
+    setEditJobFromDate(job.scheduledDate || '');
     setEditJobId(job._docId);
     setShowNewJob(true);
   }
@@ -550,7 +559,16 @@ export function JobsPage({ store, userProfile }) {
         spotsTotal: spots,
         pay: jobForm.pay === '' ? null : Math.max(0, Number(jobForm.pay)),
       };
-      if (editJobId) {
+      if (editJobId && seriesEditScope === 'future' && editJobSeriesGroupId) {
+        // Series edit — apply changes to this and all future jobs
+        if (isGoingTerminal) {
+          if (!window.confirm(`Change status to "${jobForm.status}" for this and all future jobs in the series? Signups will not be automatically notified.`)) { setSaving(false); return; }
+        }
+        const { count } = await updateJobListingSeries(editJobSeriesGroupId, editJobFromDate, data, userId, userName);
+        flash(`${count} job${count !== 1 ? 's' : ''} updated.`);
+        setShowNewJob(false);
+        setEditJobId(null);
+      } else if (editJobId) {
         await updateJobListing(editJobId, data, userId, userName);
         if (willNotify) {
           const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
@@ -563,6 +581,8 @@ export function JobsPage({ store, userProfile }) {
             .catch(e => console.warn('sendJobPosterNotification failed', e));
         }
         flash('Job updated.' + (willNotify ? ' Signups notified.' : ''));
+        setShowNewJob(false);
+        setEditJobId(null);
       } else if (isRecurring) {
         await addJobListingSeries(data, recurrenceFreq, recurrenceSeriesEndDate, userId, userName);
         flash(`${recurrencePreviewCount} recurring job${recurrencePreviewCount !== 1 ? 's' : ''} posted.`);
@@ -598,6 +618,16 @@ export function JobsPage({ store, userProfile }) {
       setShowJobDetail(null);
       flash('Job deleted.');
     } catch { flash('Failed to delete job.', true); }
+  }
+
+  async function handleDeleteSeries(job) {
+    if (!isAdminOrManager) return;
+    if (!window.confirm(`Delete the entire recurring series for "${job.title}"? All jobs in this series will be permanently deleted.`)) return;
+    try {
+      await deleteJobListingSeries(job.recurrenceGroupId, userId, userName);
+      setShowJobDetail(null);
+      flash('Series deleted.');
+    } catch { flash('Failed to delete series.', true); }
   }
 
   async function handleSignUp(job) {
@@ -870,6 +900,20 @@ export function JobsPage({ store, userProfile }) {
               </select>
             </FF>
           )}
+          {/* Series edit scope — only shown when editing a recurring job */}
+          {editJobId && editJobSeriesGroupId && (
+            <div style={{ borderTop: '1px solid ' + B.sand, paddingTop: 14, marginTop: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: B.textLight, textTransform: 'uppercase', letterSpacing: .8, fontFamily: f1, marginBottom: 8 }}>Apply changes to</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[['this', 'This job only'], ['future', 'This + all future jobs']].map(([v, label]) => (
+                  <button key={v} type="button" onClick={() => setSeriesEditScope(v)}
+                    style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid ' + (seriesEditScope === v ? B.teal : B.sand), background: seriesEditScope === v ? B.tealPale : B.white, color: seriesEditScope === v ? B.teal : B.textMid, fontFamily: f1, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Recurring series — new jobs only */}
           {!editJobId && (
             <div style={{ borderTop: '1px solid ' + B.sand, paddingTop: 14, marginTop: 4 }}>
@@ -984,6 +1028,9 @@ export function JobsPage({ store, userProfile }) {
                 <>
                   <button onClick={() => { setShowJobDetail(null); openEditJob(liveDetail); }} style={{ ...btnS, fontSize: 13 }}>Edit</button>
                   <button onClick={() => handleDeleteJob(liveDetail)} style={{ ...btnD, fontSize: 13 }}>Delete</button>
+                  {liveDetail.recurrenceGroupId && (
+                    <button onClick={() => handleDeleteSeries(liveDetail)} style={{ ...btnD, fontSize: 13 }}>Delete Series</button>
+                  )}
                   {['cancelled', 'closed'].includes(liveDetail.status) && (liveDetail.signups || []).length > 0 && notificationConfig?.enabled && (
                     <button onClick={() => handleNotifySignups(liveDetail)} style={{ ...btnS, fontSize: 13, color: B.teal, borderColor: B.tealLight }}>
                       Notify Signups
