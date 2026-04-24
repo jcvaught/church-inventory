@@ -5,6 +5,7 @@ import { Badge } from '../components/primitives/Badge.jsx';
 import { Stat } from '../components/primitives/Stat.jsx';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { localDateStr } from '../utils/date.js';
+import { actionLabels, actionIcons } from '../utils/activityLabels.js';
 
 export function Dashboard({ store, userProfile, canSeeJobHub }) {
   const { items, supplies, activityLog, reservations, jobAnnouncements } = store;
@@ -173,8 +174,10 @@ export function Dashboard({ store, userProfile, canSeeJobHub }) {
           </div>
         </div>
         {(() => {
-          const icons = { add_item:"➕", edit_item:"✏️", check_out:"📤", return:"↩️", dispose:"🗑️", restock:"📦", use_supply:"📉", mark_repair:"🔧", mark_repaired:"✅", add_supply:"📋", edit_supply:"✏️", reservation_approved:"✅📅", reservation_denied:"❌📅" };
-          const labels = { add_item:"Item Added", edit_item:"Item Edited", check_out:"Checked Out", return:"Returned", dispose:"Disposed", mark_repair:"Sent to Repair", mark_repaired:"Repair Complete", add_supply:"Supply Added", edit_supply:"Supply Edited", use_supply:"Supply Used", restock:"Restocked", reservation_approved:"Reservation Approved", reservation_denied:"Reservation Denied" };
+          const extraIcons = { reservation_approved: '✅📅', reservation_denied: '❌📅' };
+          const extraLabels = { reservation_approved: 'Reservation Approved', reservation_denied: 'Reservation Denied' };
+          const icons = { ...actionIcons, ...extraIcons };
+          const labels = { ...actionLabels, ...extraLabels };
           return activityFiltered.length === 0
             ? <p style={{ color:B.textLight, fontSize:14 }}>{activityLog.length === 0 ? "No activity yet. Start by adding items to your inventory!" : `No activity in the last ${activityRange} days.`}</p>
             : <div style={{ display:"flex", flexDirection:"column", gap:6 }}>

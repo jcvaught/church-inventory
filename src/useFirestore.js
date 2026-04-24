@@ -3,7 +3,8 @@ import {
   doc, setDoc, getDoc, deleteDoc, getDocs,
   collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction, writeBatch
 } from 'firebase/firestore';
-import { db } from './firebase.js';
+import { db, storage } from './firebase.js';
+import { ref as stRef, deleteObject } from 'firebase/storage';
 import { generateRecurrenceDates } from './utils/date.js';
 
 export function useFirestore(churchId) {
@@ -512,7 +513,7 @@ export function useFirestore(churchId) {
         const configSnap = await t.get(configRef);
         const maxNum = (configSnap.data()?.maxTaskNumber || 0) + 1;
         taskNumber = 'TSK-' + String(maxNum).padStart(3, '0');
-        t.update(configRef, { maxTaskNumber: maxNum });
+        t.set(configRef, { maxTaskNumber: maxNum }, { merge: true });
         t.set(newDocRef, {
           ...task,
           taskNumber,
@@ -528,39 +529,52 @@ export function useFirestore(churchId) {
       });
       await logActivity('add_task', taskNumber, userId, userName, { name: task.name, priority: task.priority });
       return newDocRef.id;
-    } catch (err) { handleErr(err); }
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
   const updateTask = useCallback(async (docId, updates, userId, userName, taskNumber) => {
     try {
-      const data = { ...updates, updatedAt: new Date().toISOString() };
+      const { taskNumber: _tn, createdBy: _cb, createdByName: _cbn, createdAt: _ca, _docId, ...safe } = updates;
+      const data = { ...safe, updatedAt: new Date().toISOString() };
       if (updates.status === 'Complete' && !updates.completedAt) {
         data.completedAt = new Date().toISOString();
       }
       await updateDoc(doc(db, 'churches', churchId, 'tasks', docId), data);
       if (userId) {
-        const action = updates.status === 'Complete' ? 'complete_task' : 'update_task';
+        const action = safe.status === 'Complete' ? 'complete_task' : 'update_task';
         await logActivity(action, taskNumber || docId, userId, userName, {
-          name: updates.name,
-          ...(updates.status ? { status: updates.status } : {}),
+          name: safe.name,
+          ...(safe.status ? { status: safe.status } : {}),
         });
       }
-    } catch (err) { handleErr(err); }
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
-  const deleteTask = useCallback(async (docId, taskNumber, userId, userName) => {
+  const deleteTask = useCallback(async (docId, task, userId, userName) => {
     try {
-      await deleteDoc(doc(db, 'churches', churchId, 'tasks', docId));
-      if (userId) await logActivity('delete_task', taskNumber || docId, userId, userName, {});
-    } catch (err) { handleErr(err); }
+      const taskNumber = typeof task === 'string' ? task : (task?.taskNumber || docId);
+      const photoUrls = typeof task === 'object' ? (task?.photos || []) : [];
+      const commentsSnap = await getDocs(collection(db, 'churches', churchId, 'tasks', docId, 'comments'));
+      const batch = writeBatch(db);
+      commentsSnap.docs.forEach(d => batch.delete(d.ref));
+      batch.delete(doc(db, 'churches', churchId, 'tasks', docId));
+      await batch.commit();
+      if (photoUrls.length > 0) {
+        await Promise.allSettled(photoUrls.map(url => {
+          try { return deleteObject(stRef(storage, url)); } catch { return Promise.resolve(); }
+        }));
+      }
+      if (userId) await logActivity('delete_task', taskNumber, userId, userName, {});
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
   const addTaskComment = useCallback(async (taskId, text, authorId, authorName) => {
+    if (!text || !text.trim()) return;
     try {
       await addDoc(collection(db, 'churches', churchId, 'tasks', taskId, 'comments'), {
         text, authorId, authorName, createdAt: new Date().toISOString()
       });
-    } catch (err) { handleErr(err); }
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
   const updateTaskComment = useCallback(async (taskId, commentId, text) => {
@@ -568,13 +582,13 @@ export function useFirestore(churchId) {
       await updateDoc(doc(db, 'churches', churchId, 'tasks', taskId, 'comments', commentId), {
         text, updatedAt: new Date().toISOString()
       });
-    } catch (err) { handleErr(err); }
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
   const deleteTaskComment = useCallback(async (taskId, commentId) => {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'tasks', taskId, 'comments', commentId));
-    } catch (err) { handleErr(err); }
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
   const addTaskTags = useCallback(async (tags) => {
@@ -589,19 +603,21 @@ export function useFirestore(churchId) {
   // ── Task Templates ──
   const addTaskTemplate = useCallback(async (template, userId, userName) => {
     try {
-      await addDoc(collection(db, 'churches', churchId, 'taskTemplates'), {
+      const ref = await addDoc(collection(db, 'churches', churchId, 'taskTemplates'), {
         ...template,
         createdBy: userId,
         createdByName: userName,
         createdAt: new Date().toISOString(),
       });
-    } catch (err) { handleErr(err); }
+      await logActivity('create_template', template.name || ref.id, userId, userName, { recurrence: template.recurrence });
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
-  const deleteTaskTemplate = useCallback(async (docId) => {
+  const deleteTaskTemplate = useCallback(async (docId, userId, userName) => {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'taskTemplates', docId));
-    } catch (err) { handleErr(err); }
+      if (userId) await logActivity('delete_template', docId, userId, userName, {});
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
   // ── Bundles ──

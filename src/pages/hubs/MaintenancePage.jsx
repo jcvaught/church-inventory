@@ -9,7 +9,7 @@ import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { Spinner } from '../../components/primitives/Spinner.jsx';
 import { resizeImageForUpload } from '../../utils/imageResize.js';
-import { localDateStr } from '../../utils/date.js';
+import { localDateStr, calculateNextDue } from '../../utils/date.js';
 
 const STATUSES = ['Backlog', 'Planning', 'In Progress', 'On Hold', 'Complete', 'Cancelled'];
 
@@ -28,24 +28,6 @@ const PRIORITIES = ['High', 'Medium', 'Low'];
 const RECURRENCE_OPTIONS = [['', 'None'], ['weekly', 'Weekly'], ['biweekly', 'Every 2 weeks'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['annually', 'Annually']];
 const RECURRENCE_LABELS = { weekly:'Weekly', biweekly:'Every 2 wks', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' };
 
-function calculateNextDue(dueDate, recurrence) {
-  const base = dueDate ? new Date(dueDate + 'T12:00:00') : new Date();
-  if (recurrence === 'weekly') base.setDate(base.getDate() + 7);
-  else if (recurrence === 'biweekly') base.setDate(base.getDate() + 14);
-  else if (recurrence === 'monthly') {
-    const day = base.getDate();
-    base.setMonth(base.getMonth() + 1);
-    const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
-    if (base.getDate() !== day) base.setDate(lastDay);
-  } else if (recurrence === 'quarterly') {
-    const day = base.getDate();
-    base.setMonth(base.getMonth() + 3);
-    const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
-    if (base.getDate() !== day) base.setDate(lastDay);
-  }
-  else if (recurrence === 'annually') base.setFullYear(base.getFullYear() + 1);
-  return localDateStr(base);
-}
 
 const priorityColors = {
   High:   { bg: '#FEE8E8', tx: B.red,      dot: '#E87171' },

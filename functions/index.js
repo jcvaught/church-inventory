@@ -433,11 +433,11 @@ exports.sendWelcomeEmail = onDocumentCreated('churches/{churchId}', async (event
 // from the activity log, writes freeHubsSelected, and emails the admin.
 const TRIAL_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'people_access', 'tasks', 'jobs'];
 const HUB_ACTIONS = {
-  maintenance: ['create_ticket','update_ticket','complete_ticket','delete_ticket','assign_ticket','reopen_ticket'],
+  maintenance: ['add_ticket','update_ticket','complete_ticket','delete_ticket','assign_ticket','reopen_ticket'],
   coordination: ['create_bundle','checkout_bundle','return_bundle','delete_bundle'],
   accountability: ['start_audit','complete_audit','delete_audit'],
   people_access: ['add_person','update_person','add_record','update_record','delete_record'],
-  tasks: ['create_task','update_task','complete_task','delete_task','create_template','apply_template'],
+  tasks: ['add_task','update_task','complete_task','delete_task','create_template','delete_template'],
   jobs: ['post_job','signup_job','withdraw_job','update_job','delete_job','post_announcement','update_announcement','delete_announcement'],
 };
 
@@ -821,7 +821,7 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
 // Finds all tasks due today or tomorrow (not Complete/Cancelled) that have assignees,
 // and emails each assignee. Respects per-church notification settings.
 exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'America/Chicago' }, async () => {
-  if (!initSendGrid()) return;
+  if (!initSendGrid()) { console.warn('sendTaskDueReminders: SendGrid not configured, skipping.'); return; }
 
   const db = getFirestore();
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
@@ -840,12 +840,16 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
 
   // Filter to active tasks with assignees; group by assignee uid → [taskInfo]
   const tasksByAssignee = {}; // uid → [{ taskNumber, name, dueDate, priority, status, churchId }]
+  const tasksToMark = []; // task refs to stamp with lastReminderSentDate after successful sends
   for (const taskDoc of snap.docs) {
     const task = taskDoc.data();
     if (!task.dueDate) continue;
     if (task.status === 'Complete' || task.status === 'Cancelled') continue;
     if (!task.assignees || task.assignees.length === 0) continue;
+    // Idempotency: skip if reminder already sent today
+    if (task.lastReminderSentDate === todayStr) continue;
     const churchId = taskDoc.ref.parent.parent.id;
+    tasksToMark.push(taskDoc.ref);
     for (const assignee of task.assignees) {
       if (!assignee.uid) continue;
       if (!tasksByAssignee[assignee.uid]) tasksByAssignee[assignee.uid] = [];
@@ -890,7 +894,9 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
   for (const userSnap of userSnaps) {
     if (!userSnap.exists) continue;
     const user = userSnap.data();
-    if (!user.email) continue;
+    if (!user.email || user.active === false) continue;
+    // Respect per-user hub access: skip users who don't have tasks in their allowedHubs
+    if (user.allowedHubs && !user.allowedHubs.includes('tasks')) continue;
 
     // Only send tasks belonging to the user's own church
     const tasks = (tasksByAssignee[userSnap.id] || []).filter(t => t.churchId === user.churchId);
@@ -925,7 +931,17 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
     emailTasks.push(sgMail.send({ to: user.email, from: FROM, subject, html, text }));
   }
 
-  await Promise.allSettled(emailTasks);
+  const results = await Promise.allSettled(emailTasks);
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') console.error('sendTaskDueReminders: email failed', { index: i, reason: r.reason?.message });
+  });
+
+  // Stamp processed tasks so re-invocation same day skips them
+  if (tasksToMark.length > 0) {
+    const markBatch = db.batch();
+    tasksToMark.forEach(ref => markBatch.update(ref, { lastReminderSentDate: todayStr }));
+    await markBatch.commit();
+  }
 });
 
 // ── sendJobReminders ──────────────────────────────────────────────────────

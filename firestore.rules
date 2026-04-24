@@ -110,11 +110,17 @@ service cloud.firestore {
       );
       // create: enforce createdBy to prevent impersonation
       allow create: if isMember(churchId) && request.resource.data.createdBy == request.auth.uid;
-      // update: members can update team/shared tasks; private tasks only by their creator
+      // update: members can update team/shared tasks; private tasks only by their creator.
+      // Non-creators cannot escalate visibility to 'private'.
+      // createdBy, taskNumber, and createdAt are immutable.
+      // Known limitation: members can update team/shared tasks they didn't create (no
+      // assignee-array check possible in rules — same pattern as Jobs Hub signups).
       allow update: if isMember(churchId) && (
-        resource.data.visibility != 'private' ||
-        resource.data.createdBy == request.auth.uid
-      );
+        (resource.data.visibility != 'private' && request.resource.data.visibility != 'private')
+        || resource.data.createdBy == request.auth.uid
+      ) && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.taskNumber == resource.data.taskNumber
+        && request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && resource.data.createdBy == request.auth.uid);
     }
 

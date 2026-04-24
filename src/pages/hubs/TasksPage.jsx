@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext, useRef, useMemo, memo } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { collection, doc, onSnapshot, query as fsQuery, orderBy } from 'firebase/firestore';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { collection, doc, onSnapshot, query as fsQuery, orderBy, runTransaction } from 'firebase/firestore';
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebase.js';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
@@ -10,12 +10,13 @@ import { FF } from '../../components/primitives/FF.jsx';
 import { Spinner } from '../../components/primitives/Spinner.jsx';
 import { resizeImageForUpload } from '../../utils/imageResize.js';
 import { exportTasksCSV } from '../../utils/csv.js';
-import { localDateStr } from '../../utils/date.js';
+import { localDateStr, calculateNextDue } from '../../utils/date.js';
 
 const STATUSES = ['Backlog', 'Planning', 'In Progress', 'On Hold', 'Complete', 'Cancelled'];
 
 function initials(name) {
-  const parts = (name || '?').trim().split(/\s+/);
+  const parts = (name || '?').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
@@ -28,29 +29,6 @@ function assigneeColor(uid) {
 const PRIORITIES = ['High', 'Medium', 'Low'];
 const RECURRENCE_OPTIONS = [['', 'None'], ['weekly', 'Weekly'], ['biweekly', 'Every 2 weeks'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['annually', 'Annually']];
 const RECURRENCE_LABELS = { weekly:'Weekly', biweekly:'Every 2 wks', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' };
-
-function calculateNextDue(dueDate, recurrence) {
-  const base = dueDate ? new Date(dueDate + 'T12:00:00') : new Date();
-  if (recurrence === 'weekly') base.setDate(base.getDate() + 7);
-  else if (recurrence === 'biweekly') base.setDate(base.getDate() + 14);
-  else if (recurrence === 'monthly') {
-    const day = base.getDate();
-    const targetMonth = base.getMonth() + 1;
-    base.setDate(1);
-    base.setMonth(targetMonth);
-    const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
-    base.setDate(Math.min(day, lastDay));
-  } else if (recurrence === 'quarterly') {
-    const day = base.getDate();
-    const targetMonth = base.getMonth() + 3;
-    base.setDate(1);
-    base.setMonth(targetMonth);
-    const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
-    base.setDate(Math.min(day, lastDay));
-  }
-  else if (recurrence === 'annually') base.setFullYear(base.getFullYear() + 1);
-  return localDateStr(base);
-}
 
 
 const priorityColors = {
@@ -169,6 +147,8 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
 function TagInput({ tags = [], onChange, suggestions = [] }) {
   const [inputVal, setInputVal] = useState('');
   const [showDrop, setShowDrop] = useState(false);
+  const blurTimerRef = useRef(null);
+  useEffect(() => () => { if (blurTimerRef.current) clearTimeout(blurTimerRef.current); }, []);
   const filtered = suggestions.filter(s => !tags.includes(s) && s.toLowerCase().includes(inputVal.toLowerCase()));
 
   function addTag(t) {
@@ -200,7 +180,7 @@ function TagInput({ tags = [], onChange, suggestions = [] }) {
           onKeyDown={onKey}
           onKeyUp={onKeyUp}
           onFocus={() => setShowDrop(true)}
-          onBlur={() => setTimeout(() => setShowDrop(false), 150)}
+          onBlur={() => { blurTimerRef.current = setTimeout(() => setShowDrop(false), 150); }}
           placeholder={tags.length ? '' : 'Type tag, press Enter...'}
           enterKeyHint="done"
           style={{ border:'none', outline:'none', fontSize:13, flex:1, minWidth:80, fontFamily:f2, color:B.textDark, background:'transparent' }}
@@ -222,11 +202,24 @@ function TagInput({ tags = [], onChange, suggestions = [] }) {
 
 function BlockedByInput({ blockedBy = [], onChange, tasks = [], currentTaskNumber }) {
   const [inputVal, setInputVal] = useState('');
-  const suggestions = tasks.filter(t => t.taskNumber && t.taskNumber !== currentTaskNumber && !blockedBy.includes(t.taskNumber) && t.taskNumber.toLowerCase().includes(inputVal.toLowerCase())).slice(0, 8);
+  const [blockerError, setBlockerError] = useState('');
+  const suggestions = tasks.filter(t =>
+    t.taskNumber?.startsWith('TSK-') &&
+    t.taskNumber !== currentTaskNumber &&
+    !blockedBy.includes(t.taskNumber) &&
+    !['Complete', 'Cancelled'].includes(t.status) &&
+    t.taskNumber.toLowerCase().includes(inputVal.toLowerCase())
+  ).slice(0, 8);
 
   function addBlocker(num) {
     const v = num.trim().toUpperCase();
-    if (v && !blockedBy.includes(v)) onChange([...blockedBy, v]);
+    if (!v || blockedBy.includes(v)) { setInputVal(''); return; }
+    if (!tasks.find(t => t.taskNumber === v)) {
+      setBlockerError('Task not found.');
+      setTimeout(() => setBlockerError(''), 3000);
+      return;
+    }
+    onChange([...blockedBy, v]);
     setInputVal('');
   }
   function onKey(e) {
@@ -256,6 +249,7 @@ function BlockedByInput({ blockedBy = [], onChange, tasks = [], currentTaskNumbe
           ))}
         </div>
       )}
+      {blockerError && <div style={{ fontSize:11, color:B.red, fontFamily:f1, marginTop:3 }}>{blockerError}</div>}
     </div>
   );
 }
@@ -489,6 +483,7 @@ function RichTextarea({ value, onChange, style, placeholder, onKeyDown, label })
 function formatCommentDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
+  if (isNaN(d)) return '';
   const now = new Date();
   const diffMs = now - d;
   const diffMin = Math.floor(diffMs / 60000);
@@ -566,7 +561,7 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) { e.preventDefault(); onPost(); } }}
           />
         </div>
-        <button onClick={onPost} disabled={posting || !newComment.trim()} style={{ ...btnP, padding:'11px 18px', opacity:(posting || !newComment.trim()) ? .5 : 1, flexShrink:0 }}>Post</button>
+        <button onClick={onPost} disabled={posting || !newComment.trim()} style={{ ...btnP, padding:'11px 18px', opacity:(posting || !newComment.trim()) ? .5 : 1, flexShrink:0 }}>{posting ? 'Posting...' : 'Post'}</button>
       </div>
     </div>
   );
@@ -871,6 +866,14 @@ export function TasksPage({ store, userProfile }) {
   // Keep isDirtyRef current so async snapshot callbacks can read it without stale closures
   useEffect(() => { isDirtyRef.current = isDetailDirtyNow; }, [isDetailDirtyNow]);
 
+  // Cleanup blob URLs on unmount (M11)
+  useEffect(() => () => { photoPreviews.forEach(u => URL.revokeObjectURL(u)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Prune selectedTaskIds when tasks are deleted remotely (M12)
+  useEffect(() => {
+    setSelectedTaskIds(prev => new Set([...prev].filter(id => tasksByDocId[id])));
+  }, [tasksByDocId]);
+
   // ── Helpers ──
   function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
 
@@ -962,6 +965,15 @@ export function TasksPage({ store, userProfile }) {
 
   // ── Handlers ──
   async function createNextRecurringTask(source) {
+    const sourceRef = doc(db, 'churches', churchId, 'tasks', source._docId);
+    let shouldCreate = false;
+    await runTransaction(db, async (t) => {
+      const snap = await t.get(sourceRef);
+      if (!snap.exists() || snap.data().nextRecurrenceCreatedAt) return;
+      shouldCreate = true;
+      t.update(sourceRef, { nextRecurrenceCreatedAt: new Date().toISOString() });
+    });
+    if (!shouldCreate) return;
     const nextDue = calculateNextDue(source.dueDate, source.recurrence);
     await addTask({
       name: source.name,
@@ -976,6 +988,8 @@ export function TasksPage({ store, userProfile }) {
       photos: [],
       visibility: source.visibility || 'team',
       sharedWith: source.visibility === 'shared' ? (source.sharedWith || []) : [],
+      parentTaskId: source.parentTaskId || null,
+      blockedBy: source.blockedBy || [],
       completedAt: null,
     }, userId, userName);
   }
@@ -1111,9 +1125,21 @@ export function TasksPage({ store, userProfile }) {
 
   async function handleDetailPhotoRemove(index) {
     if (!showDetail?._docId) return;
+    if (!window.confirm('Remove this photo?')) return;
+    const photoUrl = (showDetail.photos || [])[index];
     const updatedPhotos = (showDetail.photos || []).filter((_, i) => i !== index);
-    await updateTask(showDetail._docId, { photos: updatedPhotos });
-    setShowDetail(prev => ({ ...prev, photos: updatedPhotos }));
+    setUploadingPhotos(true);
+    try {
+      if (photoUrl) {
+        try { await deleteObject(storageRef(storage, photoUrl)); } catch { /* storage object may already be gone */ }
+      }
+      await updateTask(showDetail._docId, { photos: updatedPhotos });
+      setShowDetail(prev => ({ ...prev, photos: updatedPhotos }));
+    } catch {
+      flash('Failed to remove photo.', true);
+    } finally {
+      setUploadingPhotos(false);
+    }
   }
 
   function handlePhotoSelect(files) {
@@ -1130,6 +1156,9 @@ export function TasksPage({ store, userProfile }) {
   async function handleDrop(docId, newStatus) {
     const task = visibleTasks.find(t => t._docId === docId);
     if (!task || task.status === newStatus) return;
+    if (newStatus === 'Complete' && task.blockedBy?.length > 0) {
+      if (!window.confirm(`"${task.name}" is blocked by ${task.blockedBy.join(', ')}. Mark it Complete anyway?`)) return;
+    }
     if (newStatus === 'Complete' || newStatus === 'Cancelled') {
       const extra = newStatus === 'Complete' && task.recurrence ? ' A new recurring task will be created.' : '';
       if (!window.confirm(`Move "${task.name}" to ${newStatus}?${extra}`)) return;
@@ -1146,20 +1175,31 @@ export function TasksPage({ store, userProfile }) {
     }
   }
 
-  async function handleChecklistUpdate(cl) {
+  async function handleChecklistUpdate(cl, prevCl) {
     try {
       await updateTask(showDetail._docId, { checklist: cl });
       setDetailSnapshot(s => ({ ...s, checklist: cl }));
       setRemoteUpdate(null); // suppress transient conflict banner from our own write
-    } catch { flash('Checklist save failed — please try again.', true); }
+    } catch {
+      flash('Checklist save failed — please try again.', true);
+      if (prevCl !== undefined) {
+        setDetailEdits(d => ({ ...d, checklist: prevCl }));
+        setShowDetail(prev => ({ ...prev, checklist: prevCl }));
+      }
+    }
   }
 
   async function handleDeleteTask() {
     if (!showDetail?._docId) return;
-    if (!window.confirm(`Delete "${showDetail.name}"? This cannot be undone.`)) return;
+    const subtasks = (tasks || []).filter(t => t.parentTaskId === showDetail._docId);
+    const confirmMsg = subtasks.length > 0
+      ? `Delete "${showDetail.name}" and its ${subtasks.length} subtask${subtasks.length !== 1 ? 's' : ''}? This cannot be undone.`
+      : `Delete "${showDetail.name}"? This cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
     setSaving(true);
     try {
-      await deleteTask(showDetail._docId, showDetail.taskNumber, userId, userName);
+      await Promise.allSettled(subtasks.map(st => deleteTask(st._docId, st, userId, userName)));
+      await deleteTask(showDetail._docId, showDetail, userId, userName);
       setShowDetail(null);
       setDetailEdits({});
       flash('Task deleted.');
@@ -1189,14 +1229,18 @@ export function TasksPage({ store, userProfile }) {
     if (!bulkStatus || selectedTaskIds.size === 0) return;
     setBulkSaving(true);
     try {
-      await Promise.all([...selectedTaskIds].map(docId => {
-        const task = tasksByDocId[docId];
-        if (!task) return Promise.resolve();
-        return updateTask(docId, {
+      const tasksToUpdate = [...selectedTaskIds].map(docId => tasksByDocId[docId]).filter(Boolean);
+      await Promise.all(tasksToUpdate.map(task =>
+        updateTask(task._docId, {
           status: bulkStatus,
           completedAt: bulkStatus === 'Complete' && task.status !== 'Complete' ? new Date().toISOString() : (bulkStatus === 'Complete' ? task.completedAt : null),
-        }, userId, userName, task.taskNumber);
-      }));
+        }, userId, userName, task.taskNumber)
+      ));
+      if (bulkStatus === 'Complete') {
+        await Promise.allSettled(
+          tasksToUpdate.filter(t => t.recurrence && t.status !== 'Complete').map(t => createNextRecurringTask(t))
+        );
+      }
       flash(`${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''} moved to ${bulkStatus}.`);
       clearSelection();
     } catch { flash('Bulk update failed.', true); }
@@ -1210,7 +1254,7 @@ export function TasksPage({ store, userProfile }) {
     try {
       await Promise.all([...selectedTaskIds].map(docId => {
         const task = tasksByDocId[docId];
-        return deleteTask(docId, task?.taskNumber, userId, userName);
+        return deleteTask(docId, task, userId, userName);
       }));
       flash(`${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''} deleted.`);
       clearSelection();
@@ -1229,9 +1273,6 @@ export function TasksPage({ store, userProfile }) {
         priority: detailEdits.priority ?? showDetail.priority ?? 'Medium',
         tags: detailEdits.tags ?? showDetail.tags ?? [],
         recurrence: detailEdits.recurrence ?? showDetail.recurrence ?? '',
-        assignees: detailEdits.assignees ?? showDetail.assignees ?? [],
-        visibility: detailEdits.visibility ?? showDetail.visibility ?? 'team',
-        sharedWith: detailEdits.sharedWith ?? showDetail.sharedWith ?? [],
         notes: detailEdits.notes ?? showDetail.notes ?? '',
         checklist: (detailEdits.checklist ?? showDetail.checklist ?? []).map(i => ({ ...i, done: false })),
       }, userId, userName);
@@ -1247,9 +1288,6 @@ export function TasksPage({ store, userProfile }) {
       priority: template.priority || 'Medium',
       tags: template.tags || [],
       recurrence: template.recurrence || '',
-      assignees: template.assignees || [],
-      visibility: template.visibility || 'team',
-      sharedWith: template.sharedWith || [],
       notes: template.notes || '',
       checklist: (template.checklist || []).map(i => ({ ...i, done: false })),
     }));
@@ -1370,7 +1408,7 @@ export function TasksPage({ store, userProfile }) {
           { label:'Overdue', value:overdueCount, icon:'⚠️', color:overdueCount > 0 ? B.red : B.textMid },
         ].map(s => (
           <div key={s.label} style={{ background:B.white, borderRadius:10, padding:'10px 16px', border:'1px solid '+B.sand, display:'flex', alignItems:'center', gap:10 }}>
-            <span style={{ fontSize:15 }}>{s.icon}</span>
+            <span aria-hidden="true" style={{ fontSize:15 }}>{s.icon}</span>
             <span style={{ fontSize:20, fontWeight:700, color:s.color, fontFamily:f1 }}>{s.value}</span>
             <span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:0.8, fontFamily:f1 }}>{s.label}</span>
           </div>
@@ -1433,7 +1471,7 @@ export function TasksPage({ store, userProfile }) {
         </div>
         <button
           type="button"
-          onClick={() => { setDefaultsForm({ ...taskDefaults }); setShowDefaultsModal(true); }}
+          onClick={() => { setDefaultsForm({ visibility: userProfile?.taskDefaultVisibility || 'team', sharedWith: userProfile?.taskDefaultSharedWith || [] }); setShowDefaultsModal(true); }}
           style={{ padding:'7px 14px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:500, display:'flex', alignItems:'center', gap:5 }}
         >
           ⚙ Defaults
@@ -1562,7 +1600,7 @@ export function TasksPage({ store, userProfile }) {
       )}
 
       {/* ═══ ADD TASK MODAL ═══ */}
-      <Modal open={showAdd} onClose={() => { setShowAdd(false); setPhotoFiles([]); photoPreviews.forEach(u => URL.revokeObjectURL(u)); setPhotoPreviews([]); }} title="New Task" wide>
+      <Modal open={showAdd} onClose={() => { setShowAdd(false); setTaskForm(getEmptyTask()); setPhotoFiles([]); photoPreviews.forEach(u => URL.revokeObjectURL(u)); setPhotoPreviews([]); }} title="New Task" wide>
         {(taskTemplates || []).length > 0 && (
           <div style={{ marginBottom:14 }}>
             <button type="button" onClick={() => setShowTemplates(true)} style={{ ...btnS, fontSize:13, padding:'7px 14px' }}>
@@ -1704,28 +1742,33 @@ export function TasksPage({ store, userProfile }) {
                     onDrop={() => {
                       const from = dragChecklistIdx.current;
                       if (from === null || from === idx) return;
-                      const cl = [...(detailEdits.checklist || [])];
+                      const prevCl = detailEdits.checklist || [];
+                      const cl = [...prevCl];
                       const [moved] = cl.splice(from, 1);
                       cl.splice(idx, 0, moved);
                       dragChecklistIdx.current = null;
                       setDetailEdits(d => ({ ...d, checklist: cl }));
-                      handleChecklistUpdate(cl);
+                      setShowDetail(prev => ({ ...prev, checklist: cl }));
+                      handleChecklistUpdate(cl, prevCl);
                     }}
                     style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderBottom:'1px solid '+B.sand, cursor:'grab' }}
                   >
                     <span style={{ color:B.textLight, fontSize:14, flexShrink:0, cursor:'grab' }}>⠿</span>
                     <input type="checkbox" checked={item.done} style={{ flexShrink:0, width:16, height:16, cursor:'pointer' }} onChange={() => {
-                      const cl = [...(detailEdits.checklist || [])];
+                      const prevCl = detailEdits.checklist || [];
+                      const cl = [...prevCl];
                       cl[idx] = { ...cl[idx], done: !cl[idx].done };
                       setDetailEdits(d => ({ ...d, checklist: cl }));
                       setShowDetail(prev => ({ ...prev, checklist: cl }));
-                      handleChecklistUpdate(cl);
+                      handleChecklistUpdate(cl, prevCl);
                     }}/>
                     <span style={{ flex:1, fontSize:13, color:item.done ? B.textLight : B.textDark, textDecoration:item.done ? 'line-through' : 'none', fontFamily:f2 }}>{item.text}</span>
                     <button type="button" onClick={() => {
-                      const cl = (detailEdits.checklist || []).filter((_, i) => i !== idx);
+                      const prevCl = detailEdits.checklist || [];
+                      const cl = prevCl.filter((_, i) => i !== idx);
                       setDetailEdits(d => ({ ...d, checklist: cl }));
-                      handleChecklistUpdate(cl);
+                      setShowDetail(prev => ({ ...prev, checklist: cl }));
+                      handleChecklistUpdate(cl, prevCl);
                     }} style={{ border:'none', background:'none', color:B.textLight, cursor:'pointer', fontSize:18, lineHeight:1, padding:'0 2px' }}>×</button>
                   </div>
                 ))}
@@ -1739,9 +1782,11 @@ export function TasksPage({ store, userProfile }) {
                     onKeyDown={e => {
                       if (e.key === 'Enter' && detailChecklistInput.trim()) {
                         e.preventDefault();
-                        const cl = [...(detailEdits.checklist || []), { id: Date.now().toString(), text: detailChecklistInput.trim(), done: false }];
+                        const prevCl = detailEdits.checklist || [];
+                        const cl = [...prevCl, { id: Date.now().toString(), text: detailChecklistInput.trim(), done: false }];
                         setDetailEdits(d => ({ ...d, checklist: cl }));
-                        handleChecklistUpdate(cl);
+                        setShowDetail(prev => ({ ...prev, checklist: cl }));
+                        handleChecklistUpdate(cl, prevCl);
                         setDetailChecklistInput('');
                         checklistInputRef.current?.focus();
                       }
@@ -1749,9 +1794,11 @@ export function TasksPage({ store, userProfile }) {
                   />
                   <button type="button" onClick={() => {
                     if (!detailChecklistInput.trim()) return;
-                    const cl = [...(detailEdits.checklist || []), { id: Date.now().toString(), text: detailChecklistInput.trim(), done: false }];
+                    const prevCl = detailEdits.checklist || [];
+                    const cl = [...prevCl, { id: Date.now().toString(), text: detailChecklistInput.trim(), done: false }];
                     setDetailEdits(d => ({ ...d, checklist: cl }));
-                    handleChecklistUpdate(cl);
+                    setShowDetail(prev => ({ ...prev, checklist: cl }));
+                    handleChecklistUpdate(cl, prevCl);
                     setDetailChecklistInput('');
                     checklistInputRef.current?.focus();
                   }} style={{ ...btnS, padding:'9px 14px', fontSize:13, flexShrink:0 }}>Add</button>
@@ -1867,7 +1914,7 @@ export function TasksPage({ store, userProfile }) {
                 </div>
                 <div style={{ display:'flex', gap:6, flexShrink:0 }}>
                   <button onClick={() => applyTemplate(t)} style={{ ...btnP, fontSize:12, padding:'6px 12px' }}>Use</button>
-                  {canOperate && <button onClick={async () => { if (window.confirm(`Delete template "${t.name}"?`)) { await deleteTaskTemplate(t._docId); if ((taskTemplates||[]).length <= 1) setShowTemplates(false); }}} style={{ ...btnD, fontSize:12, padding:'6px 10px' }} aria-label={`Delete template ${t.name}`}>✕</button>}
+                  {canOperate && <button onClick={async () => { if (window.confirm(`Delete template "${t.name}"?`)) { await deleteTaskTemplate(t._docId, userId, userName); if ((taskTemplates||[]).length <= 1) setShowTemplates(false); }}} style={{ ...btnD, fontSize:12, padding:'6px 10px' }} aria-label={`Delete template ${t.name}`}>✕</button>}
                 </div>
               </div>
             ))}
