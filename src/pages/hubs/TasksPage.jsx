@@ -752,6 +752,15 @@ export function TasksPage({ store, userProfile }) {
     }),
   [users]);
 
+  // Assignees for the filter dropdown: active users with Tasks Hub access, plus deactivated users
+  // who appear on existing tasks (so tasks assigned to them remain filterable).
+  const filterableAssignees = useMemo(() => {
+    const fromTasks = (tasks || []).flatMap(t => t.assignees || []);
+    const seen = new Set(taskHubUsers.map(u => u.id));
+    const extra = fromTasks.filter(a => !seen.has(a.uid)).map(a => ({ id: a.uid, name: a.name }));
+    return [...taskHubUsers, ...extra];
+  }, [taskHubUsers, tasks]);
+
   // ── Visibility filter — applied before any rendering ──
   // Private/shared tasks are truly private: no admin override.
   const visibleTasks = useMemo(() => (tasks || []).filter(t => {
@@ -761,6 +770,13 @@ export function TasksPage({ store, userProfile }) {
     if (t.visibility === 'shared' && t.sharedWith?.some(s => s.uid === userId)) return true;
     return false;
   }), [tasks, userId]);
+
+  // Declared early — referenced in the pruning useEffect below (TDZ guard per CLAUDE.md Known Pitfalls)
+  const tasksByDocId = useMemo(() => {
+    const map = {};
+    visibleTasks.forEach(t => { map[t._docId] = t; });
+    return map;
+  }, [visibleTasks]);
 
   // ── State ──
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('tasks_viewMode') || 'kanban');
@@ -854,12 +870,13 @@ export function TasksPage({ store, userProfile }) {
 
   // ── Dirty-state tracking ──
   const isDetailDirtyNow = useMemo(() => {
-    const fields = ['name', 'description', 'status', 'priority', 'dueDate', 'recurrence', 'visibility', 'notes'];
+    const fields = ['name', 'description', 'status', 'priority', 'dueDate', 'recurrence', 'visibility', 'notes', 'parentTaskId'];
     if (fields.some(f => (detailEdits[f] ?? '') !== (detailSnapshot[f] ?? ''))) return true;
     if (JSON.stringify(detailEdits.tags) !== JSON.stringify(detailSnapshot.tags)) return true;
     if (JSON.stringify(detailEdits.assignees) !== JSON.stringify(detailSnapshot.assignees)) return true;
     if (JSON.stringify(detailEdits.sharedWith) !== JSON.stringify(detailSnapshot.sharedWith)) return true;
     if (JSON.stringify(detailEdits.checklist) !== JSON.stringify(detailSnapshot.checklist)) return true;
+    if (JSON.stringify(detailEdits.blockedBy) !== JSON.stringify(detailSnapshot.blockedBy)) return true;
     return false;
   }, [detailEdits, detailSnapshot]);
 
@@ -1020,7 +1037,7 @@ export function TasksPage({ store, userProfile }) {
           await updateTask(docId, { photos: urls });
         } catch { flash('Photo upload failed — task saved without photos.', true); }
       }
-      if (taskForm.tags.length > 0 && addTaskTags) {
+      if (canOperate && taskForm.tags.length > 0 && addTaskTags) {
         await addTaskTags(taskForm.tags);
       }
       setShowAdd(false);
@@ -1053,7 +1070,7 @@ export function TasksPage({ store, userProfile }) {
         completedAt: isNowComplete && !wasComplete ? new Date().toISOString() : (isNowComplete ? showDetail.completedAt : null),
       };
       await updateTask(showDetail._docId, updates, userId, userName, showDetail.taskNumber);
-      if (detailEdits.tags?.length > 0 && addTaskTags) {
+      if (canOperate && detailEdits.tags?.length > 0 && addTaskTags) {
         await addTaskTags(detailEdits.tags);
       }
 
@@ -1092,20 +1109,23 @@ export function TasksPage({ store, userProfile }) {
     try {
       await addTaskComment(showDetail._docId, newComment.trim(), userId, userName);
       setNewComment('');
-    } finally {
-      setPostingComment(false);
-    }
+    } catch { flash('Failed to post comment.', true); }
+    finally { setPostingComment(false); }
   }
 
   async function handleEditComment(commentId, text) {
     if (!showDetail?._docId || !text.trim()) return;
-    await updateTaskComment(showDetail._docId, commentId, text.trim());
+    try {
+      await updateTaskComment(showDetail._docId, commentId, text.trim());
+    } catch { flash('Failed to update comment.', true); }
   }
 
   async function handleDeleteComment(commentId) {
     if (!showDetail?._docId) return;
     if (!window.confirm('Delete this comment?')) return;
-    await deleteTaskComment(showDetail._docId, commentId);
+    try {
+      await deleteTaskComment(showDetail._docId, commentId);
+    } catch { flash('Failed to delete comment.', true); }
   }
 
   async function handleDetailPhotoAdd(files) {
@@ -1227,9 +1247,13 @@ export function TasksPage({ store, userProfile }) {
 
   async function handleBulkStatusChange() {
     if (!bulkStatus || selectedTaskIds.size === 0) return;
+    const tasksToUpdate = [...selectedTaskIds].map(docId => tasksByDocId[docId]).filter(Boolean);
+    if (bulkStatus === 'Complete') {
+      const blocked = tasksToUpdate.filter(t => (t.blockedBy || []).length > 0 && t.status !== 'Complete' && t.status !== 'Cancelled');
+      if (blocked.length > 0 && !window.confirm(`${blocked.length} selected task${blocked.length !== 1 ? 's' : ''} ha${blocked.length !== 1 ? 've' : 's'} open dependencies. Mark complete anyway?`)) return;
+    }
     setBulkSaving(true);
     try {
-      const tasksToUpdate = [...selectedTaskIds].map(docId => tasksByDocId[docId]).filter(Boolean);
       await Promise.all(tasksToUpdate.map(task =>
         updateTask(task._docId, {
           status: bulkStatus,
@@ -1320,7 +1344,7 @@ export function TasksPage({ store, userProfile }) {
 
   // ── Filtered tasks ──
   const filteredTasks = useMemo(() => {
-    const search = filterSearch.toLowerCase();
+    const search = filterSearch.trim().toLowerCase();
     return visibleTasks.filter(t => {
       if (filterPriority && t.priority !== filterPriority) return false;
       if (filterStatus && t.status !== filterStatus) return false;
@@ -1349,21 +1373,17 @@ export function TasksPage({ store, userProfile }) {
     return sorted;
   }, [filteredTasks, sortBy]);
 
-  // Pre-computed per-status task lists — avoids 6 filter passes per render in Kanban/list
+  // Pre-computed per-status task lists — avoids 6 filter passes per render in Kanban/list.
+  // High priority is always pinned to the top of each column regardless of the user's sort choice.
   const tasksByStatus = useMemo(() => {
     const map = {};
     STATUSES.forEach(s => { map[s] = []; });
     sortedTasks.forEach(t => { if (map[t.status]) map[t.status].push(t); });
+    STATUSES.forEach(s => { map[s].sort((a, b) => (a.priority === 'High' ? 0 : 1) - (b.priority === 'High' ? 0 : 1)); });
     return map;
   }, [sortedTasks]);
 
   // Subtask support
-  const tasksByDocId = useMemo(() => {
-    const map = {};
-    (visibleTasks).forEach(t => { map[t._docId] = t; });
-    return map;
-  }, [visibleTasks]);
-
   const tasksByParent = useMemo(() => {
     const map = {};
     sortedTasks.forEach(t => {
@@ -1437,7 +1457,7 @@ export function TasksPage({ store, userProfile }) {
         </select>
         <select style={{ ...inp, width:'auto', cursor:'pointer' }} value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}>
           <option value="">All assignees</option>
-          {taskHubUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          {filterableAssignees.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
         <button
           type="button"
@@ -1738,6 +1758,7 @@ export function TasksPage({ store, userProfile }) {
                     key={item.id}
                     draggable
                     onDragStart={() => { dragChecklistIdx.current = idx; }}
+                    onDragEnd={() => { dragChecklistIdx.current = null; }}
                     onDragOver={e => e.preventDefault()}
                     onDrop={() => {
                       const from = dragChecklistIdx.current;
@@ -1854,7 +1875,10 @@ export function TasksPage({ store, userProfile }) {
             {/* Photos */}
             <div style={{ marginBottom:20 }}>
               <div style={{ fontWeight:700, fontSize:12, color:B.textMid, fontFamily:f1, textTransform:'uppercase', letterSpacing:.5, marginBottom:10 }}>Photos</div>
-              <PhotoGrid photos={showDetail.photos || []} onAdd={handleDetailPhotoAdd} onRemove={handleDetailPhotoRemove} uploading={uploadingPhotos}/>
+              {(() => {
+                const canEditPhotos = canOperate || showDetail.createdBy === userId || (showDetail.assignees || []).some(a => a.uid === userId);
+                return <PhotoGrid photos={showDetail.photos || []} onAdd={canEditPhotos ? handleDetailPhotoAdd : undefined} onRemove={canEditPhotos ? handleDetailPhotoRemove : undefined} uploading={uploadingPhotos}/>;
+              })()}
             </div>
 
             {/* Comments */}
@@ -1914,7 +1938,7 @@ export function TasksPage({ store, userProfile }) {
                 </div>
                 <div style={{ display:'flex', gap:6, flexShrink:0 }}>
                   <button onClick={() => applyTemplate(t)} style={{ ...btnP, fontSize:12, padding:'6px 12px' }}>Use</button>
-                  {canOperate && <button onClick={async () => { if (window.confirm(`Delete template "${t.name}"?`)) { await deleteTaskTemplate(t._docId, userId, userName); if ((taskTemplates||[]).length <= 1) setShowTemplates(false); }}} style={{ ...btnD, fontSize:12, padding:'6px 10px' }} aria-label={`Delete template ${t.name}`}>✕</button>}
+                  {canOperate && <button onClick={async () => { if (window.confirm(`Delete template "${t.name}"?`)) { await deleteTaskTemplate(t._docId, userId, userName); setShowTemplates(false); }}} style={{ ...btnD, fontSize:12, padding:'6px 10px' }} aria-label={`Delete template ${t.name}`}>✕</button>}
                 </div>
               </div>
             ))}

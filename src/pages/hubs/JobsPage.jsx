@@ -230,7 +230,7 @@ function SpotsBar({ job }) {
   );
 }
 
-const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, saving, signed, full, showRoster, onDetail, onWithdraw, onSignUp }) {
+const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJobId, signed, full, showRoster, onDetail, onWithdraw, onSignUp }) {
   const overdue = job.scheduledDate && job.scheduledDate < todayStr && job.status === 'open';
   return (
     <div
@@ -271,19 +271,22 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, saving,
       )}
       {job.status === 'open' && (
         <div onClick={e => e.stopPropagation()}>
-          {signed ? (
-            <button onClick={() => onWithdraw(job)} disabled={saving}
-              style={{ ...btnS, fontSize: 12, padding: '6px 12px', color: B.red, borderColor: '#FECACA', width: '100%' }}>
-              {saving ? 'Withdrawing…' : 'Withdraw'}
-            </button>
-          ) : full ? (
-            <button disabled style={{ ...btnS, fontSize: 12, padding: '6px 12px', opacity: 0.45, width: '100%', cursor: 'not-allowed' }}>Full</button>
-          ) : (
-            <button onClick={() => onSignUp(job)} disabled={saving}
-              style={{ ...btnP, fontSize: 12, padding: '6px 12px', width: '100%' }}>
-              {saving ? 'Signing up…' : 'Sign Up'}
-            </button>
-          )}
+          {(() => {
+            const isSaving = savingJobId === job._docId;
+            return signed ? (
+              <button onClick={() => onWithdraw(job)} disabled={!!savingJobId}
+                style={{ ...btnS, fontSize: 12, padding: '6px 12px', color: B.red, borderColor: '#FECACA', width: '100%' }}>
+                {isSaving ? 'Withdrawing…' : 'Withdraw'}
+              </button>
+            ) : full ? (
+              <button disabled style={{ ...btnS, fontSize: 12, padding: '6px 12px', opacity: 0.45, width: '100%', cursor: 'not-allowed' }}>Full</button>
+            ) : (
+              <button onClick={() => onSignUp(job)} disabled={!!savingJobId}
+                style={{ ...btnP, fontSize: 12, padding: '6px 12px', width: '100%' }}>
+                {isSaving ? 'Signing up…' : 'Sign Up'}
+              </button>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -392,7 +395,7 @@ const AnnouncementCard = memo(function AnnouncementCard({ ann, isAdminOrManager,
 export function JobsPage({ store, userProfile }) {
   const {
     jobListings, jobAnnouncements,
-    addJobListing, addJobListingSeries, updateJobListing, deleteJobListing, updateJobListingSeries, deleteJobListingSeries,
+    addJobListing, addJobListingSeries, updateJobListing, deleteJobListing, updateJobListingSeries, deleteJobListingSeries, deleteJobListingSeriesFrom,
     signUpForJob, withdrawFromJob,
     addJobAnnouncement, updateJobAnnouncement, deleteJobAnnouncement,
     users, notificationConfig, config, settings,
@@ -415,6 +418,7 @@ export function JobsPage({ store, userProfile }) {
   const [annForm, setAnnForm] = useState(emptyAnn());
   const [editAnnId, setEditAnnId] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [savingJobId, setSavingJobId] = useState(null);
   const [msg, setMsg] = useState(null);
   const [showPastJobs, setShowPastJobs] = useState(() => {
     try { return localStorage.getItem('jobs_showPast') === 'true'; } catch { return false; }
@@ -630,19 +634,29 @@ export function JobsPage({ store, userProfile }) {
     } catch { flash('Failed to delete series.', true); }
   }
 
+  async function handleDeleteSeriesFrom(job) {
+    if (!isAdminOrManager) return;
+    if (!window.confirm(`Delete "${job.title}" and all future jobs in this series? Past jobs are kept.`)) return;
+    try {
+      await deleteJobListingSeriesFrom(job.recurrenceGroupId, job.scheduledDate, userId, userName);
+      setShowJobDetail(null);
+      flash('This and future series jobs deleted.');
+    } catch { flash('Failed to delete series jobs.', true); }
+  }
+
   async function handleSignUp(job) {
-    setSaving(true);
+    setSavingJobId(job._docId);
     try {
       const result = await signUpForJob(job._docId, userId, userName);
       if (result?.error) flash(result.error, true);
       else flash('You signed up!');
     } catch { flash('Sign-up failed. Please try again.', true); }
-    finally { setSaving(false); }
+    finally { setSavingJobId(null); }
   }
 
   async function handleWithdraw(job) {
     if (!window.confirm('Remove yourself from this job?')) return;
-    setSaving(true);
+    setSavingJobId(job._docId);
     try {
       const result = await withdrawFromJob(job._docId, userId, userId, userName);
       flash('Removed from job.');
@@ -652,7 +666,7 @@ export function JobsPage({ store, userProfile }) {
           .catch(e => console.warn('sendJobPosterNotification failed', e));
       }
     } catch { flash('Failed to withdraw.', true); }
-    finally { setSaving(false); }
+    finally { setSavingJobId(null); }
   }
 
   async function handleAdminRemoveSignup(job, uid) {
@@ -660,7 +674,8 @@ export function JobsPage({ store, userProfile }) {
     const removed = (job.signups || []).find(s => s.uid === uid);
     if (!window.confirm(`Remove ${removed?.name || 'this person'} from the job?`)) return;
     try {
-      await withdrawFromJob(job._docId, uid, userId, userName);
+      const result = await withdrawFromJob(job._docId, uid, userId, userName);
+      if (!result?.wasSignedUp) return; // already removed — no-op, no flash, no notification
       flash('Removed.');
       // Notify the original poster if it's not their own job
       if (notificationConfig?.enabled && job.createdBy !== userId) {
@@ -696,7 +711,7 @@ export function JobsPage({ store, userProfile }) {
     try {
       const data = { ...annForm, expiresAt: annForm.expiresAt || null };
       if (editAnnId) {
-        await updateJobAnnouncement(editAnnId, data);
+        await updateJobAnnouncement(editAnnId, data, userId, userName);
         flash('Announcement updated.');
       } else {
         await addJobAnnouncement(data, userId, userName);
@@ -723,7 +738,7 @@ export function JobsPage({ store, userProfile }) {
   async function handleTogglePin(ann) {
     if (!isAdminOrManager) return;
     try {
-      await updateJobAnnouncement(ann._docId, { pinned: !ann.pinned });
+      await updateJobAnnouncement(ann._docId, { pinned: !ann.pinned }, userId, userName);
     } catch { flash('Failed to update pin.', true); }
   }
 
@@ -774,7 +789,7 @@ export function JobsPage({ store, userProfile }) {
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14 }}>
               {filteredJobs.map(job => (
                 <JobCard key={job._docId} job={job}
-                  todayStr={todayStr} isAdminOrManager={isAdminOrManager} saving={saving}
+                  todayStr={todayStr} isAdminOrManager={isAdminOrManager} savingJobId={savingJobId}
                   signed={isSignedUp(job)} full={isFull(job)} showRoster={canSeeRoster(job)}
                   onDetail={setShowJobDetail} onWithdraw={handleWithdraw} onSignUp={handleSignUp} />
               ))}
@@ -1029,7 +1044,10 @@ export function JobsPage({ store, userProfile }) {
                   <button onClick={() => { setShowJobDetail(null); openEditJob(liveDetail); }} style={{ ...btnS, fontSize: 13 }}>Edit</button>
                   <button onClick={() => handleDeleteJob(liveDetail)} style={{ ...btnD, fontSize: 13 }}>Delete</button>
                   {liveDetail.recurrenceGroupId && (
-                    <button onClick={() => handleDeleteSeries(liveDetail)} style={{ ...btnD, fontSize: 13 }}>Delete Series</button>
+                    <>
+                      <button onClick={() => handleDeleteSeriesFrom(liveDetail)} style={{ ...btnD, fontSize: 13 }}>Delete This + Future</button>
+                      <button onClick={() => handleDeleteSeries(liveDetail)} style={{ ...btnD, fontSize: 13 }}>Delete Series</button>
+                    </>
                   )}
                   {['cancelled', 'closed'].includes(liveDetail.status) && (liveDetail.signups || []).length > 0 && notificationConfig?.enabled && (
                     <button onClick={() => handleNotifySignups(liveDetail)} style={{ ...btnS, fontSize: 13, color: B.teal, borderColor: B.tealLight }}>
@@ -1041,13 +1059,13 @@ export function JobsPage({ store, userProfile }) {
             </div>
             {liveDetail.status === 'open' && (
               isSignedUp(liveDetail) ? (
-                <button onClick={() => handleWithdraw(liveDetail)} disabled={saving}
+                <button onClick={() => handleWithdraw(liveDetail)} disabled={!!savingJobId}
                   style={{ ...btnS, color: B.red, borderColor: '#FECACA', fontSize: 13 }}>
-                  {saving ? 'Withdrawing…' : 'Withdraw'}
+                  {savingJobId === liveDetail._docId ? 'Withdrawing…' : 'Withdraw'}
                 </button>
               ) : !isFull(liveDetail) ? (
-                <button onClick={() => handleSignUp(liveDetail)} disabled={saving} style={{ ...btnP, fontSize: 13 }}>
-                  {saving ? 'Signing up…' : 'Sign Up'}
+                <button onClick={() => handleSignUp(liveDetail)} disabled={!!savingJobId} style={{ ...btnP, fontSize: 13 }}>
+                  {savingJobId === liveDetail._docId ? 'Signing up…' : 'Sign Up'}
                 </button>
               ) : null
             )}

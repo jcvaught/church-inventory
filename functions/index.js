@@ -830,17 +830,16 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
   const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
   const tomorrowStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth()+1)}-${pad(tomorrow.getDate())}`;
 
-  // Query all tasks with a dueDate on or before tomorrow (captures overdue + due today + due tomorrow)
+  // Query all tasks with a dueDate on or before tomorrow (captures overdue + due today + due tomorrow).
+  // No lower bound so overdue tasks are included; status check below excludes Complete/Cancelled.
   const snap = await db.collectionGroup('tasks')
-    .where('dueDate', '>=', todayStr)
     .where('dueDate', '<=', tomorrowStr)
     .get();
 
   if (snap.empty) return;
 
-  // Filter to active tasks with assignees; group by assignee uid → [taskInfo]
-  const tasksByAssignee = {}; // uid → [{ taskNumber, name, dueDate, priority, status, churchId }]
-  const tasksToMark = []; // task refs to stamp with lastReminderSentDate after successful sends
+  // Filter to active tasks with assignees; group by assignee uid → [taskInfo + taskRef]
+  const tasksByAssignee = {}; // uid → [{ taskNumber, name, dueDate, priority, status, churchId, _ref }]
   for (const taskDoc of snap.docs) {
     const task = taskDoc.data();
     if (!task.dueDate) continue;
@@ -849,7 +848,6 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
     // Idempotency: skip if reminder already sent today
     if (task.lastReminderSentDate === todayStr) continue;
     const churchId = taskDoc.ref.parent.parent.id;
-    tasksToMark.push(taskDoc.ref);
     for (const assignee of task.assignees) {
       if (!assignee.uid) continue;
       if (!tasksByAssignee[assignee.uid]) tasksByAssignee[assignee.uid] = [];
@@ -860,6 +858,7 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
         priority: task.priority || 'Medium',
         status: task.status || 'Backlog',
         churchId,
+        _ref: taskDoc.ref,
       });
     }
   }
@@ -891,6 +890,7 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
   }
 
   const emailTasks = [];
+  const emailTaskRefs = []; // parallel to emailTasks: task refs included in each send
   for (const userSnap of userSnaps) {
     if (!userSnap.exists) continue;
     const user = userSnap.data();
@@ -929,6 +929,7 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
     const text = `Hi ${user.name || 'there'},\n\nYou have tasks coming due:\n\n${textRows}\n\nLog in at churchopshub.com to view your tasks.\n`;
 
     emailTasks.push(sgMail.send({ to: user.email, from: FROM, subject, html, text }));
+    emailTaskRefs.push(tasks.map(t => t._ref));
   }
 
   const results = await Promise.allSettled(emailTasks);
@@ -936,10 +937,14 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
     if (r.status === 'rejected') console.error('sendTaskDueReminders: email failed', { index: i, reason: r.reason?.message });
   });
 
-  // Stamp processed tasks so re-invocation same day skips them
-  if (tasksToMark.length > 0) {
+  // Only stamp tasks for which at least one email was successfully sent
+  const refsToStamp = new Set();
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') emailTaskRefs[i].forEach(ref => refsToStamp.add(ref));
+  });
+  if (refsToStamp.size > 0) {
     const markBatch = db.batch();
-    tasksToMark.forEach(ref => markBatch.update(ref, { lastReminderSentDate: todayStr }));
+    refsToStamp.forEach(ref => markBatch.update(ref, { lastReminderSentDate: todayStr }));
     await markBatch.commit();
   }
 });

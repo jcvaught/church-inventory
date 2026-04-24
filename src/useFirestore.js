@@ -906,11 +906,13 @@ export function useFirestore(churchId) {
         });
       });
       await logActivity('post_job', jobNumber, userId, userName, { title: job.title });
-    } catch (err) { handleErr(err); }
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
   const updateJobListing = useCallback(async (docId, updates, userId, userName) => {
     try {
+      // Capture jobNumber before stripping so the activity log shows JOB-### not a docId.
+      const jobNumberForLog = updates.jobNumber;
       // Strip fields that must never be overwritten via a plain update.
       const { createdBy: _cb, createdByName: _cbn, jobNumber: _jn, signups: _s, ...safeUpdates } = updates;
 
@@ -932,7 +934,7 @@ export function useFirestore(churchId) {
           updatedAt: new Date().toISOString()
         });
       }
-      if (userId) await logActivity('update_job', updates.jobNumber || docId, userId, userName, { title: updates.title, status: updates.status });
+      if (userId) await logActivity('update_job', jobNumberForLog || docId, userId, userName, { title: updates.title, status: updates.status });
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
@@ -940,33 +942,53 @@ export function useFirestore(churchId) {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'jobListings', docId));
       if (userId) await logActivity('delete_job', docId, userId, userName, {});
-    } catch (err) { handleErr(err); }
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
-  // Updates all series jobs with scheduledDate >= fromDate in a single batch write.
+  // Updates all series jobs with scheduledDate >= fromDate atomically via runTransaction.
   const updateJobListingSeries = useCallback(async (groupId, fromDate, updates, userId, userName) => {
     try {
       const { createdBy: _cb, createdByName: _cbn, jobNumber: _jn, signups: _s, scheduledDate: _sd, ...safeUpdates } = updates;
+      // Fetch refs first (outside transaction — query can't run inside a transaction)
       const snap = await getDocs(query(
         collection(db, 'churches', churchId, 'jobListings'),
         where('recurrenceGroupId', '==', groupId),
         where('scheduledDate', '>=', fromDate)
       ));
       if (snap.empty) return { count: 0 };
-      if (safeUpdates.spotsTotal !== undefined) {
-        for (const d of snap.docs) {
-          const cnt = (d.data().signups || []).length;
-          if (safeUpdates.spotsTotal < cnt) {
-            throw new Error(`Cannot reduce spots — ${d.data().jobNumber || d.id} has ${cnt} signup(s) which would exceed the new limit.`);
+      const refs = snap.docs.map(d => d.ref);
+      await runTransaction(db, async (t) => {
+        const docs = await Promise.all(refs.map(ref => t.get(ref)));
+        if (safeUpdates.spotsTotal !== undefined) {
+          for (const d of docs) {
+            if (!d.exists()) continue;
+            const cnt = (d.data().signups || []).length;
+            if (safeUpdates.spotsTotal < cnt) {
+              throw new Error(`Cannot reduce spots — ${d.data().jobNumber || d.id} has ${cnt} signup(s) which would exceed the new limit.`);
+            }
           }
         }
-      }
+        const now = new Date().toISOString();
+        docs.forEach(d => { if (d.exists()) t.update(d.ref, { ...safeUpdates, updatedAt: now }); });
+      });
+      await logActivity('update_job', `${updates.title || groupId} (series ×${refs.length})`, userId, userName, { title: updates.title });
+      return { count: refs.length };
+    } catch (err) { handleErr(err); throw err; }
+  }, [churchId]);
+
+  // Deletes all jobs in a recurring series from a given date onward.
+  const deleteJobListingSeriesFrom = useCallback(async (groupId, fromDate, userId, userName) => {
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'churches', churchId, 'jobListings'),
+        where('recurrenceGroupId', '==', groupId),
+        where('scheduledDate', '>=', fromDate)
+      ));
+      if (snap.empty) return;
       const batch = writeBatch(db);
-      const now = new Date().toISOString();
-      snap.docs.forEach(d => batch.update(d.ref, { ...safeUpdates, updatedAt: now }));
+      snap.docs.forEach(d => batch.delete(d.ref));
       await batch.commit();
-      await logActivity('update_job', `${updates.title || groupId} (series ×${snap.size})`, userId, userName, { title: updates.title });
-      return { count: snap.size };
+      await logActivity('delete_job', `series from ${fromDate} ×${snap.size}`, userId, userName, {});
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
@@ -1032,7 +1054,7 @@ export function useFirestore(churchId) {
         await logActivity(action, jobNumber, actorId, actorName, { removedUid: uid });
       }
       return { wasSignedUp };
-    } catch (err) { handleErr(err); }
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
   const addJobAnnouncement = useCallback(async (ann, userId, userName) => {
@@ -1045,23 +1067,24 @@ export function useFirestore(churchId) {
         updatedAt: new Date().toISOString()
       });
       await logActivity('post_announcement', ref.id, userId, userName, { title: ann.title });
-    } catch (err) { handleErr(err); }
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
-  const updateJobAnnouncement = useCallback(async (docId, updates) => {
+  const updateJobAnnouncement = useCallback(async (docId, updates, userId, userName) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'jobAnnouncements', docId), {
         ...updates,
         updatedAt: new Date().toISOString()
       });
-    } catch (err) { handleErr(err); }
+      if (userId) await logActivity('update_announcement', docId, userId, userName, { title: updates.title });
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
   const deleteJobAnnouncement = useCallback(async (docId, userId, userName) => {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'jobAnnouncements', docId));
       if (userId) await logActivity('delete_announcement', docId, userId, userName, {});
-    } catch (err) { handleErr(err); }
+    } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
   return {
@@ -1090,7 +1113,7 @@ export function useFirestore(churchId) {
     addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags,
     taskTemplates, addTaskTemplate, deleteTaskTemplate,
     jobListings, jobAnnouncements,
-    addJobListing, addJobListingSeries, updateJobListing, deleteJobListing, updateJobListingSeries, deleteJobListingSeries,
+    addJobListing, addJobListingSeries, updateJobListing, deleteJobListing, updateJobListingSeries, deleteJobListingSeries, deleteJobListingSeriesFrom,
     signUpForJob, withdrawFromJob,
     addJobAnnouncement, updateJobAnnouncement, deleteJobAnnouncement,
     clearError

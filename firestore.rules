@@ -118,6 +118,10 @@ service cloud.firestore {
       allow update: if isMember(churchId) && (
         (resource.data.visibility != 'private' && request.resource.data.visibility != 'private')
         || resource.data.createdBy == request.auth.uid
+      ) && (
+        request.resource.data.visibility == resource.data.visibility
+        || resource.data.createdBy == request.auth.uid
+        || isChurchAdminOrManager(churchId)
       ) && request.resource.data.createdBy == resource.data.createdBy
         && request.resource.data.taskNumber == resource.data.taskNumber
         && request.resource.data.createdAt == resource.data.createdAt;
@@ -155,6 +159,7 @@ service cloud.firestore {
       allow create, delete: if isChurchAdminOrManager(churchId);
       allow update:         if isChurchAdminOrManager(churchId) || (
         isMember(churchId) &&
+        resource.data.status == 'open' &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signups', 'updatedAt']) &&
         (request.resource.data.signups.size() == resource.data.signups.size() + 1 ||
          request.resource.data.signups.size() == resource.data.signups.size() - 1) &&
