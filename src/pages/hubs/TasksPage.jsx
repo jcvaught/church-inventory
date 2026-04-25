@@ -346,15 +346,43 @@ function VisibilitySelect({ visibility, onChange, canEdit }) {
 }
 
 function PhotoGrid({ photos = [], onAdd, onRemove, uploading }) {
+  const [lightboxIdx, setLightboxIdx] = useState(null);
   const fileRef = useRef();
+
+  useEffect(() => {
+    if (lightboxIdx === null) return;
+    function handleKey(e) {
+      if (e.key === 'Escape') setLightboxIdx(null);
+      if (e.key === 'ArrowLeft') setLightboxIdx(i => Math.max(0, i - 1));
+      if (e.key === 'ArrowRight') setLightboxIdx(i => Math.min(photos.length - 1, i + 1));
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [lightboxIdx, photos.length]);
+
   return (
     <div>
+      {lightboxIdx !== null && (
+        <div onClick={() => setLightboxIdx(null)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.92)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <img src={photos[lightboxIdx]} alt="" onClick={e => e.stopPropagation()} style={{ maxWidth:'90vw', maxHeight:'90vh', objectFit:'contain', borderRadius:6 }}/>
+          <button onClick={() => setLightboxIdx(null)} aria-label="Close lightbox" style={{ position:'absolute', top:16, right:20, background:'none', border:'none', color:'#fff', fontSize:32, cursor:'pointer', lineHeight:1, padding:4 }}>×</button>
+          {photos.length > 1 && lightboxIdx > 0 && (
+            <button onClick={e => { e.stopPropagation(); setLightboxIdx(i => i - 1); }} aria-label="Previous photo" style={{ position:'absolute', left:16, background:'rgba(255,255,255,0.18)', border:'none', color:'#fff', fontSize:28, cursor:'pointer', borderRadius:8, padding:'6px 14px', lineHeight:1 }}>‹</button>
+          )}
+          {photos.length > 1 && lightboxIdx < photos.length - 1 && (
+            <button onClick={e => { e.stopPropagation(); setLightboxIdx(i => i + 1); }} aria-label="Next photo" style={{ position:'absolute', right:16, background:'rgba(255,255,255,0.18)', border:'none', color:'#fff', fontSize:28, cursor:'pointer', borderRadius:8, padding:'6px 14px', lineHeight:1 }}>›</button>
+          )}
+          {photos.length > 1 && (
+            <div style={{ position:'absolute', bottom:16, color:'rgba(255,255,255,0.65)', fontSize:13 }}>{lightboxIdx + 1} / {photos.length}</div>
+          )}
+        </div>
+      )}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(90px, 1fr))', gap:8 }}>
         {photos.map((url, i) => (
-          <div key={i} style={{ position:'relative', borderRadius:8, overflow:'hidden', aspectRatio:'1', background:B.warmGray }}>
+          <div key={i} role="button" tabIndex={0} aria-label={`View photo ${i+1}`} onClick={() => setLightboxIdx(i)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightboxIdx(i); }}} style={{ position:'relative', borderRadius:8, overflow:'hidden', aspectRatio:'1', background:B.warmGray, cursor:'zoom-in' }}>
             <img src={url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
             {onRemove && (
-              <button onClick={() => onRemove(i)} style={{ position:'absolute', top:3, right:3, width:20, height:20, borderRadius:'50%', background:'rgba(0,0,0,0.55)', border:'none', color:B.white, cursor:'pointer', fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}>×</button>
+              <button onClick={e => { e.stopPropagation(); onRemove(i); }} style={{ position:'absolute', top:3, right:3, width:20, height:20, borderRadius:'50%', background:'rgba(0,0,0,0.55)', border:'none', color:B.white, cursor:'pointer', fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}>×</button>
             )}
           </div>
         ))}
@@ -2010,7 +2038,7 @@ export function TasksPage({ store, userProfile }) {
         <FF label="Task Name *">
           <input style={inp} value={taskForm.name} onChange={e => setTaskForm(f => ({ ...f, name:e.target.value }))} placeholder="Short descriptive name..."/>
         </FF>
-        <RichTextarea label="Description" style={{ ...inp, minHeight:72, resize:'vertical' }} value={taskForm.description} onChange={v => setTaskForm(f => ({ ...f, description:v }))} placeholder="Full details of the task..."/>
+        <RichTextarea label="Description" style={{ ...inp, minHeight:72, resize:'vertical' }} value={taskForm.description} onChange={v => setTaskForm(f => ({ ...f, description:v }))} placeholder="What needs to be done — scope, context, and acceptance criteria"/>
         <div style={{ display:'grid', gridTemplateColumns:isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap:12 }}>
           <FF label="Priority">
             <select style={{ ...inp, cursor:'pointer' }} value={taskForm.priority} onChange={e => setTaskForm(f => ({ ...f, priority:e.target.value }))}>
@@ -2089,7 +2117,7 @@ export function TasksPage({ store, userProfile }) {
         <FF label="Photos">
           <PhotoGrid photos={photoPreviews} onAdd={handlePhotoSelect} onRemove={handlePreviewRemove} uploading={false}/>
         </FF>
-        <RichTextarea label="Notes" style={{ ...inp, minHeight:52, resize:'vertical' }} value={taskForm.notes} onChange={v => setTaskForm(f => ({ ...f, notes:v }))} placeholder="Additional notes..."/>
+        <RichTextarea label="Notes" style={{ ...inp, minHeight:52, resize:'vertical' }} value={taskForm.notes} onChange={v => setTaskForm(f => ({ ...f, notes:v }))} placeholder="Follow-up reminders, reference links, or working notes"/>
         <button onClick={handleAddTask} disabled={saving || !taskForm.name.trim()} style={{ ...btnP, width:'100%', opacity:(saving || !taskForm.name.trim()) ? .5 : 1, marginTop:4 }}>
           {saving ? 'Creating...' : 'Create Task'}
         </button>
@@ -2123,7 +2151,7 @@ export function TasksPage({ store, userProfile }) {
             <FF label="Name">
               <input style={inp} value={detailEdits.name} onChange={e => setDetailEdits(d => ({ ...d, name:e.target.value }))}/>
             </FF>
-            <RichTextarea label="Description" style={{ ...inp, minHeight:72, resize:'vertical' }} value={detailEdits.description} onChange={v => setDetailEdits(d => ({ ...d, description:v }))} placeholder="Full details..."/>
+            <RichTextarea label="Description" style={{ ...inp, minHeight:72, resize:'vertical' }} value={detailEdits.description} onChange={v => setDetailEdits(d => ({ ...d, description:v }))} placeholder="What needs to be done — scope, context, and acceptance criteria"/>
             <div style={{ display:'grid', gridTemplateColumns:isMobile ? '1fr 1fr' : '1fr 1fr', gap:12 }}>
               <FF label="Due Date">
                 <input style={inp} type="date" value={detailEdits.dueDate} onChange={e => setDetailEdits(d => ({ ...d, dueDate:e.target.value }))}/>
@@ -2191,7 +2219,7 @@ export function TasksPage({ store, userProfile }) {
                 </select>
               </FF>
             </div>
-            <RichTextarea label="Notes" style={{ ...inp, minHeight:52, resize:'vertical' }} value={detailEdits.notes} onChange={v => setDetailEdits(d => ({ ...d, notes:v }))} placeholder="Additional notes..."/>
+            <RichTextarea label="Notes" style={{ ...inp, minHeight:52, resize:'vertical' }} value={detailEdits.notes} onChange={v => setDetailEdits(d => ({ ...d, notes:v }))} placeholder="Follow-up reminders, reference links, or working notes"/>
             <FF label="Checklist">
               <div style={{ border:'1px dashed '+B.sand, borderRadius:10, padding:'12px 14px' }}>
                 {(detailEdits.checklist || []).length === 0 && (

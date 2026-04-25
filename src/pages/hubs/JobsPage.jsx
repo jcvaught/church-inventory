@@ -34,7 +34,7 @@ const RECURRENCE_OPTIONS = [
   { v:'annually', label:'Annually' },
 ];
 
-const emptyAnn = () => ({ title: '', body: '', expiresAt: '', pinned: false });
+const emptyAnn = () => ({ title: '', body: '', expiresAt: '', pinned: false, repeatWeekly: false });
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -421,7 +421,7 @@ export function JobsPage({ store, userProfile }) {
     addJobListing, addJobListingSeries, updateJobListing, deleteJobListing, updateJobListingSeries, deleteJobListingSeries, deleteJobListingSeriesFrom,
     signUpForJob, withdrawFromJob, updateJobSignupAttendance,
     addJobAnnouncement, updateJobAnnouncement, deleteJobAnnouncement,
-    addTask,
+    addTask, updateUser,
     accessPeople, accessRecords,
     getJobSwapRequests, addJobSwapRequest, deleteJobSwapRequest,
     users, notificationConfig, config, settings,
@@ -464,6 +464,9 @@ export function JobsPage({ store, userProfile }) {
   const [swapSaving, setSwapSaving] = useState(false);
   const [swapRequests, setSwapRequests] = useState([]);
   const [swapRequestsJobId, setSwapRequestsJobId] = useState(null);
+  const [showDelegatesModal, setShowDelegatesModal] = useState(false);
+  const [jobDelegates, setJobDelegates] = useState(() => userProfile?.jobPosterDelegates || []);
+  const [savingDelegates, setSavingDelegates] = useState(false);
 
   function flash(text, isError = false) {
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
@@ -501,6 +504,13 @@ export function JobsPage({ store, userProfile }) {
   const rosterVisibility = settings?.jobsRosterVisibility ?? 'signups';
   const canSeeRoster = (job) => isAdminOrManager || rosterVisibility === 'all' || (rosterVisibility === 'signups' && isSignedUp(job));
   const recurrencePreviewCount = useMemo(() => generateRecurrenceDates(jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate).length, [jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate]);
+  const adminManagerUsers = useMemo(() => (users || []).filter(u => (u.role === 'admin' || u.role === 'manager') && u.id !== userId), [users, userId]);
+
+  async function handleSaveDelegates(next) {
+    setSavingDelegates(true);
+    try { await updateUser(userId, { jobPosterDelegates: next }); setJobDelegates(next); } catch { /* ignore */ }
+    setSavingDelegates(false);
+  }
 
   const leaderboard = useMemo(() => {
     const stats = {};
@@ -859,6 +869,7 @@ export function JobsPage({ store, userProfile }) {
       body: ann.body || '',
       expiresAt: ann.expiresAt || '',
       pinned: !!ann.pinned,
+      repeatWeekly: !!ann.repeatWeekly,
     });
     setEditAnnId(ann._docId);
     setShowNewAnn(true);
@@ -945,6 +956,7 @@ export function JobsPage({ store, userProfile }) {
             </div>
             {isAdminOrManager && (
               <div style={{ display:'flex', gap:8 }}>
+                <button onClick={() => setShowDelegatesModal(true)} style={{ ...btnS, padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }} title="Manage who receives your job notification emails">📧 Delegates</button>
                 <button onClick={() => {
                   const url = `${window.location.origin}?jobs=${userProfile?.churchId}&cn=${encodeURIComponent(config?.churchName || '')}`;
                   navigator.clipboard.writeText(url).then(() => flash('Job board link copied!')).catch(() => flash('Could not copy link.', true));
@@ -1452,9 +1464,25 @@ export function JobsPage({ store, userProfile }) {
                 <input type="date" style={inp} value={annForm.expiresAt} onChange={e => setAnnForm(f => ({ ...f, expiresAt: e.target.value }))} />
               </FF>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10 }}>
-              <input type="checkbox" id="pinAnn" checked={annForm.pinned} onChange={e => setAnnForm(f => ({ ...f, pinned: e.target.checked }))} style={{ width: 16, height: 16, cursor: 'pointer' }} />
-              <label htmlFor="pinAnn" style={{ fontSize: 13, fontFamily: f2, color: B.textDark, cursor: 'pointer' }}>Pin to top</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox" id="pinAnn" checked={annForm.pinned} onChange={e => setAnnForm(f => ({ ...f, pinned: e.target.checked }))} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+                <label htmlFor="pinAnn" style={{ fontSize: 13, fontFamily: f2, color: B.textDark, cursor: 'pointer' }}>Pin to top</label>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox" id="repeatAnn" checked={annForm.repeatWeekly} onChange={e => {
+                  const checked = e.target.checked;
+                  setAnnForm(f => {
+                    const next = { ...f, repeatWeekly: checked };
+                    if (checked && !f.expiresAt) {
+                      const d = new Date(); d.setDate(d.getDate() + 7);
+                      next.expiresAt = localDateStr(d);
+                    }
+                    return next;
+                  });
+                }} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+                <label htmlFor="repeatAnn" style={{ fontSize: 13, fontFamily: f2, color: B.textDark, cursor: 'pointer' }}>Repeat weekly</label>
+              </div>
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
@@ -1464,6 +1492,39 @@ export function JobsPage({ store, userProfile }) {
               style={{ ...btnP, opacity: (!annForm.title.trim() || !annForm.body.trim() || saving) ? 0.5 : 1 }}>
               {saving ? 'Saving...' : editAnnId ? 'Save Changes' : 'Post'}
             </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Notification Delegates Modal ── */}
+      {showDelegatesModal && (
+        <Modal title="Job Notification Delegates" onClose={() => setShowDelegatesModal(false)} maxWidth={480}>
+          <p style={{ fontSize: 13, color: B.textMid, fontFamily: f2, marginTop: 0, marginBottom: 16 }}>
+            These co-admins/managers receive the same withdrawal and cancellation notifications you do for jobs you post.
+          </p>
+          {adminManagerUsers.length === 0 ? (
+            <p style={{ fontSize: 13, color: B.textLight, fontFamily: f2 }}>No other admins or managers in your church.</p>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {adminManagerUsers.map(u => {
+                const sel = jobDelegates.some(d => d.uid === u.id);
+                return (
+                  <button key={u.id}
+                    disabled={savingDelegates || (!sel && jobDelegates.length >= 5)}
+                    onClick={() => {
+                      const next = sel ? jobDelegates.filter(d => d.uid !== u.id) : [...jobDelegates, { uid: u.id, name: u.name }];
+                      handleSaveDelegates(next);
+                    }}
+                    style={{ padding: '5px 14px', borderRadius: 20, fontSize: 13, fontFamily: f1, fontWeight: 600, cursor: 'pointer', border: '1px solid ' + (sel ? B.teal : B.sand), background: sel ? B.tealPale : B.white, color: sel ? B.teal : B.textMid, opacity: (savingDelegates || (!sel && jobDelegates.length >= 5)) ? 0.5 : 1 }}>
+                    {sel ? '✓ ' : ''}{u.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {jobDelegates.length >= 5 && <p style={{ fontSize: 12, color: B.textLight, fontFamily: f2, marginTop: 8, marginBottom: 0 }}>Maximum 5 delegates.</p>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+            <button onClick={() => setShowDelegatesModal(false)} style={btnS}>Done</button>
           </div>
         </Modal>
       )}

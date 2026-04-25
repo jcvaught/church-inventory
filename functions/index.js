@@ -1424,4 +1424,17 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
       console.error(`generateRecurringTemplateTasks: failed for church ${churchId} template ${templateDoc.id}`, err?.message);
     }
   }
+
+  // Auto-advance weekly announcements whose expiresAt has passed
+  try {
+    const annSnap = await db.collectionGroup('jobAnnouncements').where('repeatWeekly', '==', true).get();
+    for (const annDoc of annSnap.docs) {
+      const ann = annDoc.data();
+      if (!ann.expiresAt || ann.expiresAt < todayStr) {
+        await annDoc.ref.update({ expiresAt: advanceDate(todayStr, 'weekly') });
+      }
+    }
+  } catch (err) {
+    console.error('generateRecurringTemplateTasks: announcement sweep failed', err?.message);
+  }
 });
