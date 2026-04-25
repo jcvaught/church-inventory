@@ -541,7 +541,7 @@ export function JobsPage({ store, userProfile }) {
       flash(`Cannot reduce spots below current signup count (${currentSignups}).`, true);
       return;
     }
-    const terminalStatuses = ['cancelled', 'closed', 'completed'];
+    const terminalStatuses = ['cancelled', 'closed'];
     const isGoingTerminal = existingJob?.status === 'open' && terminalStatuses.includes(jobForm.status);
     const willNotify = isGoingTerminal && currentSignups > 0 && notificationConfig?.enabled;
     if (isGoingTerminal && currentSignups > 0) {
@@ -618,7 +618,7 @@ export function JobsPage({ store, userProfile }) {
     if (!isAdminOrManager) return;
     if (!window.confirm(`Delete "${job.title}"? This cannot be undone.`)) return;
     try {
-      await deleteJobListing(job._docId, userId, userName);
+      await deleteJobListing(job._docId, userId, userName, job.jobNumber);
       setShowJobDetail(null);
       flash('Job deleted.');
     } catch { flash('Failed to delete job.', true); }

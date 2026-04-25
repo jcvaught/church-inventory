@@ -688,15 +688,17 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
     throw new HttpsError('permission-denied', 'Only admin or manager can send announcements.');
   }
 
-  // Verify church has an active Jobs hub subscription
-  const [churchSnap, subSnap, usersSnap] = await Promise.all([
+  // Verify church has an active Jobs hub subscription and notifications enabled
+  const [churchSnap, subSnap, notifSnap2, usersSnap] = await Promise.all([
     db.doc(`churches/${churchId}/config/main`).get(),
     db.doc(`churches/${churchId}/config/subscription`).get(),
+    db.doc(`churches/${churchId}/config/notifications`).get(),
     // Use plain churchId filter — 'active != false' silently excludes docs where field is missing
     db.collection('users').where('churchId', '==', churchId).get(),
   ]);
   const sub = subSnap.data() || {};
   if (!subHasHub(sub, 'jobs')) return { sent: 0 };
+  if (!notifSnap2.data()?.enabled) return { sent: 0 };
 
   // Use server-derived poster name (not client-supplied) to prevent impersonation in email body
   const postedBy = callerSnap.data().name || 'Your church';
@@ -969,8 +971,9 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
 
   if (snap.empty) return;
 
-  // Cache subscription docs per churchId to enforce hub gating and avoid N+1 reads
+  // Cache subscription and notification docs per churchId to avoid N+1 reads
   const subCache = {};
+  const notifCache2 = {};
   async function churchHasJobsHub(churchId) {
     if (subCache[churchId] !== undefined) return subCache[churchId];
     try {
@@ -979,6 +982,14 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
       subCache[churchId] = subHasHub(sub, 'jobs');
     } catch { subCache[churchId] = false; }
     return subCache[churchId];
+  }
+  async function jobNotifEnabled(churchId) {
+    if (notifCache2[churchId] !== undefined) return notifCache2[churchId];
+    try {
+      const s = await db.doc(`churches/${churchId}/config/notifications`).get();
+      notifCache2[churchId] = !!(s.exists && s.data().enabled);
+    } catch { notifCache2[churchId] = false; }
+    return notifCache2[churchId];
   }
 
   // Gather all unique user UIDs that need reminders, skipping churches without the Jobs hub
@@ -991,6 +1002,8 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
 
     // Skip if this church doesn't have the Jobs hub active
     if (!(await churchHasJobsHub(churchId))) continue;
+    // F-04: skip if church has disabled notifications
+    if (!(await jobNotifEnabled(churchId))) continue;
 
     // Idempotency: skip if reminder already sent today (guards against cron retry / redeploy)
     if (job.lastReminderSentDate === today) continue;
@@ -1006,6 +1019,7 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
         location: job.location || '',
         pay: job.pay != null ? `$${Number(job.pay).toFixed(2)} per person` : null,
         churchId,
+        _ref: jobDoc.ref,
       });
     }
   }
@@ -1017,7 +1031,10 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     Object.keys(remindersByUid).map(uid => db.doc(`users/${uid}`).get())
   );
 
+  // Track per-job send results so we only stamp jobs where at least one email succeeded (F-07)
+  const jobsWithSuccesses = new Set(); // job refs that had at least one fulfilled send
   const emailTasks = [];
+  const emailJobRefs = []; // parallel to emailTasks: the job ref for each send
   for (const userSnap of userSnaps) {
     if (!userSnap.exists) continue;
     const user = userSnap.data();
@@ -1048,13 +1065,22 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     const text = `Hi ${user.name || 'there'},\n\nReminder — you're signed up for the following job${jobs.length !== 1 ? 's' : ''} today:\n\n${jobs.map(j => `• ${j.title}${j.scheduledTime ? ' at ' + j.scheduledTime : ''}${j.location ? ' — ' + j.location : ''}`).join('\n')}\n\nLog in at churchopshub.com to view details.\n`;
 
     emailTasks.push(sgMail.send({ to: user.email, from: FROM, subject, html, text }));
+    // Each user's jobs come from multiple job refs — record all their refs for this send
+    emailJobRefs.push(jobs.map(j => j._ref));
   }
 
   const results = await Promise.allSettled(emailTasks);
-  results.forEach((r, i) => { if (r.status === 'rejected') console.error('sendJobReminders: email failed', { index: i, reason: r.reason?.message }); });
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      console.error('sendJobReminders: email failed', { index: i, reason: r.reason?.message });
+    } else {
+      // At least one email succeeded for these jobs — mark them for stamping
+      emailJobRefs[i].forEach(ref => jobsWithSuccesses.add(ref));
+    }
+  });
 
-  // Stamp all processed jobs with today's date so re-invocation skips them
-  await Promise.allSettled(jobsToMark.map(ref => ref.update({ lastReminderSentDate: today })));
+  // Only stamp jobs where at least one email was successfully sent (F-07)
+  await Promise.allSettled([...jobsWithSuccesses].map(ref => ref.update({ lastReminderSentDate: today })));
 });
 
 // ── sendJobPosterNotification ─────────────────────────────────────────────
@@ -1074,11 +1100,13 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
     throw new HttpsError('permission-denied', 'Not a member of this church.');
   }
 
-  const [notifSnap, jobSnap] = await Promise.all([
+  const [notifSnap, subSnap, jobSnap] = await Promise.all([
     db.doc(`churches/${churchId}/config/notifications`).get(),
+    db.doc(`churches/${churchId}/config/subscription`).get(),
     db.doc(`churches/${churchId}/jobListings/${jobDocId}`).get(),
   ]);
   if (!notifSnap.data()?.enabled) return { sent: 0 };
+  if (!subHasHub(subSnap.data() || {}, 'jobs')) return { sent: 0 };
   if (!jobSnap.exists) return { sent: 0 };
   const job = jobSnap.data();
 

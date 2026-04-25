@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext, useRef, useMemo, memo } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { collection, doc, onSnapshot, query as fsQuery, orderBy, runTransaction } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query as fsQuery, orderBy, runTransaction, getDocs, where, updateDoc, deleteField, arrayRemove } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebase.js';
 import { MobileCtx } from '../../hooks/useMobile.js';
@@ -992,23 +992,29 @@ export function TasksPage({ store, userProfile }) {
     });
     if (!shouldCreate) return;
     const nextDue = calculateNextDue(source.dueDate, source.recurrence);
-    await addTask({
-      name: source.name,
-      description: source.description,
-      priority: source.priority,
-      tags: source.tags || [],
-      dueDate: nextDue,
-      recurrence: source.recurrence,
-      assignees: source.assignees || [],
-      checklist: (source.checklist || []).map(c => ({ ...c, done: false })),
-      notes: source.notes || null,
-      photos: [],
-      visibility: source.visibility || 'team',
-      sharedWith: source.visibility === 'shared' ? (source.sharedWith || []) : [],
-      parentTaskId: source.parentTaskId || null,
-      blockedBy: source.blockedBy || [],
-      completedAt: null,
-    }, userId, userName);
+    try {
+      await addTask({
+        name: source.name,
+        description: source.description,
+        priority: source.priority,
+        tags: source.tags || [],
+        dueDate: nextDue,
+        recurrence: source.recurrence,
+        assignees: source.assignees || [],
+        checklist: (source.checklist || []).map(c => ({ ...c, done: false })),
+        notes: source.notes || null,
+        photos: [],
+        visibility: source.visibility || 'team',
+        sharedWith: source.visibility === 'shared' ? (source.sharedWith || []) : [],
+        parentTaskId: source.parentTaskId || null,
+        blockedBy: source.blockedBy || [],
+        completedAt: null,
+      }, userId, userName);
+    } catch (err) {
+      // Roll back the marker so the user can retry by completing the task again
+      await updateDoc(sourceRef, { nextRecurrenceCreatedAt: deleteField() });
+      throw err;
+    }
   }
 
   async function handleAddTask() {
@@ -1222,7 +1228,14 @@ export function TasksPage({ store, userProfile }) {
     setSaving(true);
     try {
       await Promise.allSettled(subtasks.map(st => deleteTask(st._docId, st, userId, userName)));
+      const deletedTaskNumber = showDetail.taskNumber;
       await deleteTask(showDetail._docId, showDetail, userId, userName);
+      if (deletedTaskNumber) {
+        const blockedSnap = await getDocs(
+          fsQuery(collection(db, 'churches', churchId, 'tasks'), where('blockedBy', 'array-contains', deletedTaskNumber))
+        );
+        await Promise.allSettled(blockedSnap.docs.map(d => updateDoc(d.ref, { blockedBy: arrayRemove(deletedTaskNumber) })));
+      }
       setShowDetail(null);
       setDetailEdits({});
       flash('Task deleted.');
@@ -1257,18 +1270,24 @@ export function TasksPage({ store, userProfile }) {
     }
     setBulkSaving(true);
     try {
-      await Promise.all(tasksToUpdate.map(task =>
+      const results = await Promise.allSettled(tasksToUpdate.map(task =>
         updateTask(task._docId, {
           status: bulkStatus,
           completedAt: bulkStatus === 'Complete' && task.status !== 'Complete' ? new Date().toISOString() : (bulkStatus === 'Complete' ? task.completedAt : null),
         }, userId, userName, task.taskNumber)
       ));
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.length - succeeded;
       if (bulkStatus === 'Complete') {
         await Promise.allSettled(
           tasksToUpdate.filter(t => t.recurrence && t.status !== 'Complete').map(t => createNextRecurringTask(t))
         );
       }
-      flash(`${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''} moved to ${bulkStatus}.`);
+      if (failed > 0) {
+        flash(`${succeeded} of ${results.length} tasks updated; ${failed} failed.`, true);
+      } else {
+        flash(`${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''} moved to ${bulkStatus}.`);
+      }
       clearSelection();
     } catch { flash('Bulk update failed.', true); }
     setBulkSaving(false);
@@ -1279,11 +1298,17 @@ export function TasksPage({ store, userProfile }) {
     if (!window.confirm(`Delete ${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''}? This cannot be undone.`)) return;
     setBulkSaving(true);
     try {
-      await Promise.all([...selectedTaskIds].map(docId => {
+      const results = await Promise.allSettled([...selectedTaskIds].map(docId => {
         const task = tasksByDocId[docId];
         return deleteTask(docId, task, userId, userName);
       }));
-      flash(`${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''} deleted.`);
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.length - succeeded;
+      if (failed > 0) {
+        flash(`${succeeded} of ${selectedTaskIds.size} tasks deleted; ${failed} failed.`, true);
+      } else {
+        flash(`${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''} deleted.`);
+      }
       clearSelection();
     } catch { flash('Bulk delete failed.', true); }
     setBulkSaving(false);

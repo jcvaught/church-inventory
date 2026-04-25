@@ -527,7 +527,9 @@ export function useFirestore(churchId) {
           completedAt: null
         });
       });
-      await logActivity('add_task', taskNumber, userId, userName, { name: task.name, priority: task.priority });
+      const addLogDetails = { priority: task.priority };
+      if (task.visibility !== 'private' && task.visibility !== 'shared') addLogDetails.name = task.name;
+      await logActivity('add_task', taskNumber, userId, userName, addLogDetails);
       return newDocRef.id;
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
@@ -542,10 +544,9 @@ export function useFirestore(churchId) {
       await updateDoc(doc(db, 'churches', churchId, 'tasks', docId), data);
       if (userId) {
         const action = safe.status === 'Complete' ? 'complete_task' : 'update_task';
-        await logActivity(action, taskNumber || docId, userId, userName, {
-          name: safe.name,
-          ...(safe.status ? { status: safe.status } : {}),
-        });
+        const updateLogDetails = { ...(safe.status ? { status: safe.status } : {}) };
+        if (safe.name && safe.visibility !== 'private' && safe.visibility !== 'shared') updateLogDetails.name = safe.name;
+        await logActivity(action, taskNumber || docId, userId, userName, updateLogDetails);
       }
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
@@ -938,10 +939,10 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
-  const deleteJobListing = useCallback(async (docId, userId, userName) => {
+  const deleteJobListing = useCallback(async (docId, userId, userName, jobNumber) => {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'jobListings', docId));
-      if (userId) await logActivity('delete_job', docId, userId, userName, {});
+      if (userId) await logActivity('delete_job', jobNumber || docId, userId, userName, {});
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
