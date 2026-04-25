@@ -4,6 +4,19 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-04-25 — Tier 2 Tasks Features (Session 4)
+
+6 features from the Tasks session (FB-06, FB-08, FB-10, FB-14, FB-17, FB-25). Commit `5648b45`.
+
+- **FB-06** `TasksPage` + `useFirestore` + `functions/index.js` — @-mentions in task comments: `@ Mention` button in comment input opens a dropdown of hub users; selecting a user appends `@Name` to the comment text; `@Name` substrings are highlighted teal when rendering comment text; `mentions: [uid]` array stored on comment doc; new `sendTaskMentionEmail` onCall CF sends a SendGrid notification to each mentioned user (respects `notifEnabled` + `subHasHub`)
+- **FB-08** `TasksPage` + `csv.js` — Time tracking: `estimatedHours` and `actualHours` number fields on tasks; shown in TaskCard as `⏱ actual/estimate h`; inputs in Add Task (estimate only) and Detail modals; included in CSV export
+- **FB-10** `TasksPage` — Manual Kanban reorder: cards in each column are now card-level drop targets; dropping a card onto another card in the same column writes ascending `sortOrder` to all tasks in that column; `sortOrder` takes precedence over the High-priority pin (which applies only to tasks without a `sortOrder`)
+- **FB-14** `TasksPage` + `functions/index.js` — Recurring template auto-generation: Save-as-Template replaces the `window.prompt` with a proper modal including name, `autoGenerate` checkbox, frequency, and first-generate-on date; new `generateRecurringTemplateTasks` scheduled CF (8am Central daily) queries `taskTemplates` with `autoGenerate == true`, creates tasks via Admin SDK transaction, and advances `autoGenerateNextAt`
+- **FB-17** `TasksPage` — Task velocity Insights view: "Insights" tab (admin/manager only) shows a 12-week `BarChart` of tasks created vs. completed per week (Recharts) and 4 summary stat cards including a 90-day average velocity
+- **FB-25** `TasksPage` + `csv.js` — Ministry-scoped tasks: optional `ministry` field on tasks (populated from `settings.ministries`); indigo badge on TaskCard; ministry filter dropdown in the filter bar (persisted in saved views); ministry dropdown in Add Task and Detail modals; included in CSV export
+
+---
+
 ## 2026-04-25 — Tier 2 Jobs Features (Session 3)
 
 5 features from the Jobs session (FB-04, FB-11, FB-15, FB-16, FB-20). FB-13 (job swap) deferred to Tier 3.
