@@ -477,6 +477,9 @@ export function JobsPage({ store, userProfile }) {
   // Cleanup flash timer on unmount
   useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current); }, []);
 
+  // Sync delegate list if userProfile updates (e.g. saved from another session or Settings)
+  useEffect(() => { setJobDelegates(userProfile?.jobPosterDelegates || []); }, [userProfile?.jobPosterDelegates]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Load swap requests when admin opens job detail
   useEffect(() => {
     if (!showJobDetail || !isAdminOrManager) { setSwapRequests([]); setSwapRequestsJobId(null); return; }
@@ -1478,6 +1481,7 @@ export function JobsPage({ store, userProfile }) {
                       const d = new Date(); d.setDate(d.getDate() + 7);
                       next.expiresAt = localDateStr(d);
                     }
+                    if (!checked) next.expiresAt = '';
                     return next;
                   });
                 }} style={{ width: 16, height: 16, cursor: 'pointer' }} />

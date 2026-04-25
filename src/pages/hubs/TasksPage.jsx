@@ -358,7 +358,7 @@ function PhotoGrid({ photos = [], onAdd, onRemove, uploading }) {
     }
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [lightboxIdx, photos.length]);
+  }, [lightboxIdx, photos]);
 
   return (
     <div>

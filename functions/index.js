@@ -1428,9 +1428,20 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
   // Auto-advance weekly announcements whose expiresAt has passed
   try {
     const annSnap = await db.collectionGroup('jobAnnouncements').where('repeatWeekly', '==', true).get();
+    const jobsSubCache = {};
+    async function churchHasJobsHub(churchId) {
+      if (jobsSubCache[churchId] !== undefined) return jobsSubCache[churchId];
+      try {
+        const s = await db.doc(`churches/${churchId}/config/subscription`).get();
+        jobsSubCache[churchId] = subHasHub(s.data() || {}, 'jobs');
+      } catch { jobsSubCache[churchId] = false; }
+      return jobsSubCache[churchId];
+    }
     for (const annDoc of annSnap.docs) {
       const ann = annDoc.data();
-      if (!ann.expiresAt || ann.expiresAt < todayStr) {
+      if (!ann.expiresAt || ann.expiresAt <= todayStr) {
+        const churchId = annDoc.ref.parent.parent.id;
+        if (!await churchHasJobsHub(churchId)) continue;
         await annDoc.ref.update({ expiresAt: advanceDate(todayStr, 'weekly') });
       }
     }
