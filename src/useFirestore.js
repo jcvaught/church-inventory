@@ -1014,22 +1014,35 @@ export function useFirestore(churchId) {
       let errorMsg = null;
       let jobTitle = '';
       let jobNumber = '';
+      let wasWaitlisted = false;
       await runTransaction(db, async (t) => {
         const snap = await t.get(jobRef);
         if (!snap.exists()) { errorMsg = 'Job not found.'; return; }
         const data = snap.data();
         if (data.status !== 'open') { errorMsg = 'This job is no longer open.'; return; }
         const signups = data.signups || [];
+        const waitlist = data.waitlist || [];
         if (signups.some(s => s.uid === userId)) { errorMsg = 'You are already signed up.'; return; }
-        if (signups.length >= (data.spotsTotal || 1)) { errorMsg = 'Sorry, this job is full.'; return; }
+        if (waitlist.some(w => w.uid === userId)) { errorMsg = 'You are already on the waitlist.'; return; }
         jobTitle = data.title || '';
         jobNumber = data.jobNumber || docId;
-        t.update(jobRef, {
-          signups: [...signups, { uid: userId, name: userName, signedUpAt: new Date().toISOString() }],
-          updatedAt: new Date().toISOString()
-        });
+        if (signups.length >= (data.spotsTotal || 1)) {
+          t.update(jobRef, {
+            waitlist: [...waitlist, { uid: userId, name: userName, addedAt: new Date().toISOString() }],
+            updatedAt: new Date().toISOString()
+          });
+          wasWaitlisted = true;
+          return;
+        }
+        const signupEntry = { uid: userId, name: userName, signedUpAt: new Date().toISOString() };
+        if (data.requiresWaiver) signupEntry.acknowledgedWaiverAt = new Date().toISOString();
+        t.update(jobRef, { signups: [...signups, signupEntry], updatedAt: new Date().toISOString() });
       });
       if (errorMsg) return { error: errorMsg };
+      if (wasWaitlisted) {
+        await logActivity('signup_job', jobNumber, userId, userName, { title: jobTitle, waitlisted: true });
+        return { wasWaitlisted: true };
+      }
       await logActivity('signup_job', jobNumber, userId, userName, { title: jobTitle });
       return { success: true };
     } catch (err) { handleErr(err); return { error: 'Sign-up failed. Please try again.' }; }
@@ -1040,21 +1053,44 @@ export function useFirestore(churchId) {
       const jobRef = doc(db, 'churches', churchId, 'jobListings', docId);
       let jobNumber = '';
       let wasSignedUp = false;
+      let wasOnWaitlist = false;
       await runTransaction(db, async (t) => {
         const snap = await t.get(jobRef);
         if (!snap.exists()) return;
         jobNumber = snap.data().jobNumber || docId;
         const existing = snap.data().signups || [];
         const signups = existing.filter(s => s.uid !== uid);
-        if (signups.length === existing.length) return; // uid wasn't signed up — skip write
-        wasSignedUp = true;
-        t.update(jobRef, { signups, updatedAt: new Date().toISOString() });
+        if (signups.length < existing.length) {
+          wasSignedUp = true;
+          t.update(jobRef, { signups, updatedAt: new Date().toISOString() });
+          return;
+        }
+        const existingWL = snap.data().waitlist || [];
+        const waitlist = existingWL.filter(w => w.uid !== uid);
+        if (waitlist.length < existingWL.length) {
+          wasOnWaitlist = true;
+          t.update(jobRef, { waitlist, updatedAt: new Date().toISOString() });
+        }
       });
       if (wasSignedUp && actorId) {
         const action = actorId !== uid ? 'admin_remove_job' : 'withdraw_job';
         await logActivity(action, jobNumber, actorId, actorName, { removedUid: uid });
       }
-      return { wasSignedUp };
+      return { wasSignedUp, wasOnWaitlist };
+    } catch (err) { handleErr(err); throw err; }
+  }, [churchId]);
+
+  const updateJobSignupAttendance = useCallback(async (docId, uid, attended) => {
+    try {
+      const jobRef = doc(db, 'churches', churchId, 'jobListings', docId);
+      await runTransaction(db, async (t) => {
+        const snap = await t.get(jobRef);
+        if (!snap.exists()) return;
+        const signups = (snap.data().signups || []).map(s =>
+          s.uid === uid ? { ...s, attended } : s
+        );
+        t.update(jobRef, { signups, updatedAt: new Date().toISOString() });
+      });
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
@@ -1115,7 +1151,7 @@ export function useFirestore(churchId) {
     taskTemplates, addTaskTemplate, deleteTaskTemplate,
     jobListings, jobAnnouncements,
     addJobListing, addJobListingSeries, updateJobListing, deleteJobListing, updateJobListingSeries, deleteJobListingSeries, deleteJobListingSeriesFrom,
-    signUpForJob, withdrawFromJob,
+    signUpForJob, withdrawFromJob, updateJobSignupAttendance,
     addJobAnnouncement, updateJobAnnouncement, deleteJobAnnouncement,
     clearError
   };

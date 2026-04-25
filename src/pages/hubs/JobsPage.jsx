@@ -21,7 +21,7 @@ const JOB_STATUS_COLORS = {
   cancelled: { bg: '#F3F4F6', tx: '#6B7280', dot: '#9CA3AF' },
 };
 
-const emptyJob = () => ({ title: '', description: '', scheduledDate: '', scheduledTime: '', location: '', spotsTotal: 1, pay: '', status: 'open', jobLead: null });
+const emptyJob = () => ({ title: '', description: '', scheduledDate: '', scheduledTime: '', location: '', spotsTotal: 1, pay: '', status: 'open', jobLead: null, requiresWaiver: false, waiverText: '' });
 
 const RECURRENCE_OPTIONS = [
   { v:'weekly', label:'Weekly' },
@@ -231,7 +231,7 @@ function SpotsBar({ job }) {
   );
 }
 
-const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJobId, signed, full, showRoster, onDetail, onWithdraw, onSignUp }) {
+const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJobId, signed, full, onWaitlist, showRoster, onDetail, onWithdraw, onSignUp }) {
   const overdue = job.scheduledDate && job.scheduledDate < todayStr && job.status === 'open';
   return (
     <div
@@ -270,6 +270,12 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJ
       {!isAdminOrManager && signed && (
         <div style={{ fontSize: 12, fontWeight: 700, color: B.teal, fontFamily: f1, marginBottom: 10 }}>✓ You're signed up</div>
       )}
+      {!isAdminOrManager && onWaitlist && (
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#D97706', fontFamily: f1, marginBottom: 10 }}>⏳ You're on the waitlist</div>
+      )}
+      {isAdminOrManager && (job.waitlist || []).length > 0 && (
+        <div style={{ fontSize: 11, color: '#92400E', fontFamily: f1, marginBottom: 6 }}>{(job.waitlist || []).length} on waitlist</div>
+      )}
       {job.status === 'open' && (
         <div onClick={e => e.stopPropagation()}>
           {(() => {
@@ -279,8 +285,16 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJ
                 style={{ ...btnS, fontSize: 12, padding: '6px 12px', color: B.red, borderColor: '#FECACA', width: '100%' }}>
                 {isSaving ? 'Withdrawing…' : 'Withdraw'}
               </button>
+            ) : onWaitlist ? (
+              <button onClick={() => onWithdraw(job)} disabled={!!savingJobId}
+                style={{ ...btnS, fontSize: 12, padding: '6px 12px', color: '#92400E', borderColor: '#FDE68A', width: '100%' }}>
+                {isSaving ? '…' : 'Leave Waitlist'}
+              </button>
             ) : full ? (
-              <button disabled style={{ ...btnS, fontSize: 12, padding: '6px 12px', opacity: 0.45, width: '100%', cursor: 'not-allowed' }}>Full</button>
+              <button onClick={() => onSignUp(job)} disabled={!!savingJobId}
+                style={{ ...btnS, fontSize: 12, padding: '6px 12px', color: B.textMid, width: '100%' }}>
+                {isSaving ? '…' : 'Join Waitlist'}
+              </button>
             ) : (
               <button onClick={() => onSignUp(job)} disabled={!!savingJobId}
                 style={{ ...btnP, fontSize: 12, padding: '6px 12px', width: '100%' }}>
@@ -319,7 +333,7 @@ const MobileScheduleRow = memo(function MobileScheduleRow({ job, showRoster, onD
   );
 });
 
-const DesktopScheduleRow = memo(function DesktopScheduleRow({ job, todayStr, isAdminOrManager, rosterVisibility, showRoster, onDetail }) {
+const DesktopScheduleRow = memo(function DesktopScheduleRow({ job, todayStr, isAdminOrManager, rosterVisibility, showRoster, onDetail, onEdit }) {
   const sc = JOB_STATUS_COLORS[job.status] || JOB_STATUS_COLORS.open;
   const filled = (job.signups || []).length;
   const pct = Math.min(100, (filled / (job.spotsTotal||1)) * 100);
@@ -355,6 +369,11 @@ const DesktopScheduleRow = memo(function DesktopScheduleRow({ job, todayStr, isA
             ? ((job.signups||[]).length === 0 ? <span style={{ color:B.textLight, fontSize:12 }}>None</span> : (job.signups||[]).map(s=>s.name).join(', '))
             : <span style={{ color:B.textLight, fontSize:12 }}>—</span>
           }
+        </td>
+      )}
+      {isAdminOrManager && (
+        <td style={{ padding:'10px 14px' }} onClick={e => e.stopPropagation()}>
+          <button onClick={() => onEdit(job)} style={{ ...btnS, fontSize:11, padding:'4px 8px' }}>Edit</button>
         </td>
       )}
     </tr>
@@ -397,7 +416,7 @@ export function JobsPage({ store, userProfile }) {
   const {
     jobListings, jobAnnouncements,
     addJobListing, addJobListingSeries, updateJobListing, deleteJobListing, updateJobListingSeries, deleteJobListingSeries, deleteJobListingSeriesFrom,
-    signUpForJob, withdrawFromJob,
+    signUpForJob, withdrawFromJob, updateJobSignupAttendance,
     addJobAnnouncement, updateJobAnnouncement, deleteJobAnnouncement,
     users, notificationConfig, config, settings,
   } = store;
@@ -455,10 +474,24 @@ export function JobsPage({ store, userProfile }) {
 
   // ── Derived state ──
   const isSignedUp = (job) => (job.signups || []).some(s => s.uid === userId);
+  const isOnWaitlist = (job) => (job.waitlist || []).some(w => w.uid === userId);
   const isFull = (job) => (job.signups || []).length >= (job.spotsTotal || 1);
   const rosterVisibility = settings?.jobsRosterVisibility ?? 'signups';
   const canSeeRoster = (job) => isAdminOrManager || rosterVisibility === 'all' || (rosterVisibility === 'signups' && isSignedUp(job));
   const recurrencePreviewCount = useMemo(() => generateRecurrenceDates(jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate).length, [jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate]);
+
+  const leaderboard = useMemo(() => {
+    const stats = {};
+    (jobListings || []).forEach(job => {
+      (job.signups || []).forEach(s => {
+        if (!stats[s.uid]) stats[s.uid] = { uid: s.uid, name: s.name, jobs: 0, attended: 0, noShow: 0, totalPay: 0 };
+        stats[s.uid].jobs++;
+        if (s.attended === true) { stats[s.uid].attended++; stats[s.uid].totalPay += Number(job.pay || 0); }
+        else if (s.attended === false) stats[s.uid].noShow++;
+      });
+    });
+    return Object.values(stats).sort((a, b) => b.attended - a.attended || b.jobs - a.jobs || a.name.localeCompare(b.name));
+  }, [jobListings]);
 
   const filteredJobs = useMemo(() => {
     let jobs = jobListings || [];
@@ -522,6 +555,8 @@ export function JobsPage({ store, userProfile }) {
       pay: job.pay != null ? String(job.pay) : '',
       status: job.status || 'open',
       jobLead: job.jobLead || null,
+      requiresWaiver: job.requiresWaiver || false,
+      waiverText: job.waiverText || '',
     });
     setIsRecurring(false);
     setRecurrenceFreq('weekly');
@@ -647,25 +682,35 @@ export function JobsPage({ store, userProfile }) {
   }
 
   async function handleSignUp(job) {
+    if (job.requiresWaiver && job.waiverText) {
+      const confirmed = window.confirm(`By signing up, you agree to the following:\n\n${job.waiverText}\n\nDo you agree?`);
+      if (!confirmed) return;
+    }
     setSavingJobId(job._docId);
     try {
       const result = await signUpForJob(job._docId, userId, userName);
       if (result?.error) flash(result.error, true);
+      else if (result?.wasWaitlisted) flash("You've been added to the waitlist!");
       else flash('You signed up!');
     } catch { flash('Sign-up failed. Please try again.', true); }
     finally { setSavingJobId(null); }
   }
 
   async function handleWithdraw(job) {
-    if (!window.confirm('Remove yourself from this job?')) return;
+    const onWL = isOnWaitlist(job);
+    if (!window.confirm(onWL ? 'Remove yourself from the waitlist?' : 'Remove yourself from this job?')) return;
     setSavingJobId(job._docId);
     try {
       const result = await withdrawFromJob(job._docId, userId, userId, userName);
-      flash('Removed from job.');
-      if (result?.wasSignedUp && notificationConfig?.enabled) {
-        const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
-        fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'withdrawal', actorUid: userId, actorName: userName })
-          .catch(() => {});
+      if (result?.wasSignedUp) {
+        flash('Removed from job.');
+        if (notificationConfig?.enabled) {
+          const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
+          fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'withdrawal', actorUid: userId, actorName: userName }).catch(() => {});
+        }
+        httpsCallable(getFunctions(), 'promoteFromWaitlist')({ churchId: userProfile?.churchId, jobDocId: job._docId }).catch(() => {});
+      } else if (result?.wasOnWaitlist) {
+        flash('Removed from waitlist.');
       }
     } catch { flash('Failed to withdraw.', true); }
     finally { setSavingJobId(null); }
@@ -673,19 +718,30 @@ export function JobsPage({ store, userProfile }) {
 
   async function handleAdminRemoveSignup(job, uid) {
     if (!isAdminOrManager) return;
-    const removed = (job.signups || []).find(s => s.uid === uid);
-    if (!window.confirm(`Remove ${removed?.name || 'this person'} from the job?`)) return;
+    const removedSignup = (job.signups || []).find(s => s.uid === uid);
+    const removedWaiter = (job.waitlist || []).find(w => w.uid === uid);
+    const removed = removedSignup || removedWaiter;
+    if (!window.confirm(`Remove ${removed?.name || 'this person'}?`)) return;
     try {
       const result = await withdrawFromJob(job._docId, uid, userId, userName);
-      if (!result?.wasSignedUp) return; // already removed — no-op, no flash, no notification
-      flash('Removed.');
-      // Notify the original poster if it's not their own job
-      if (notificationConfig?.enabled && job.createdBy !== userId) {
-        const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
-        fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'admin_removal', actorUid: userId, actorName: userName, removedName: removed?.name || '' })
-          .catch(() => {});
+      if (result?.wasSignedUp) {
+        flash('Removed.');
+        if (notificationConfig?.enabled && job.createdBy !== userId) {
+          const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
+          fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'admin_removal', actorUid: userId, actorName: userName, removedName: removed?.name || '' }).catch(() => {});
+        }
+        httpsCallable(getFunctions(), 'promoteFromWaitlist')({ churchId: userProfile?.churchId, jobDocId: job._docId }).catch(() => {});
+      } else if (result?.wasOnWaitlist) {
+        flash('Removed from waitlist.');
       }
-    } catch { flash('Failed to remove signup.', true); }
+    } catch { flash('Failed to remove.', true); }
+  }
+
+  async function handleUpdateAttendance(job, uid, attended) {
+    if (!isAdminOrManager) return;
+    try {
+      await updateJobSignupAttendance(job._docId, uid, attended);
+    } catch { flash('Failed to update attendance.', true); }
   }
 
   // ── Announcement handlers ──
@@ -764,7 +820,7 @@ export function JobsPage({ store, userProfile }) {
 
       {/* View tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {[['jobs', '💼 Job Board'], ['schedule', '📋 Schedule'], ['calendar', '📅 Calendar'], ['announcements', '📢 Announcements']].map(([v, label]) => (
+        {[['jobs', '💼 Job Board'], ['schedule', '📋 Schedule'], ['calendar', '📅 Calendar'], ['announcements', '📢 Announcements'], ...(isAdminOrManager ? [['reports', '📊 Reports']] : [])].map(([v, label]) => (
           <button key={v} onClick={() => setView(v)}
             style={{ padding: '8px 18px', borderRadius: 20, border: '1px solid ' + (view === v ? B.teal : B.sand), background: view === v ? B.tealPale : B.white, color: view === v ? B.teal : B.textMid, fontFamily: f1, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             {label}
@@ -800,7 +856,7 @@ export function JobsPage({ store, userProfile }) {
               {filteredJobs.map(job => (
                 <JobCard key={job._docId} job={job}
                   todayStr={todayStr} isAdminOrManager={isAdminOrManager} savingJobId={savingJobId}
-                  signed={isSignedUp(job)} full={isFull(job)} showRoster={canSeeRoster(job)}
+                  signed={isSignedUp(job)} full={isFull(job)} onWaitlist={isOnWaitlist(job)} showRoster={canSeeRoster(job)}
                   onDetail={setShowJobDetail} onWithdraw={handleWithdraw} onSignUp={handleSignUp} />
               ))}
             </div>
@@ -836,7 +892,7 @@ export function JobsPage({ store, userProfile }) {
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
                 <thead>
                   <tr style={{ background:B.warmGray }}>
-                    {['Date & Time', 'Job', 'Location', 'Spots', 'Status', (isAdminOrManager || rosterVisibility !== 'admin') ? 'Signed Up' : ''].filter(Boolean).map(h => (
+                    {['Date & Time', 'Job', 'Location', 'Spots', 'Status', (isAdminOrManager || rosterVisibility !== 'admin') ? 'Signed Up' : '', isAdminOrManager ? 'Actions' : ''].filter(Boolean).map(h => (
                       <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontFamily:f1, fontWeight:700, fontSize:11, color:B.textMid, textTransform:'uppercase', letterSpacing:.6, whiteSpace:'nowrap', borderBottom:'1px solid '+B.sand }}>{h}</th>
                     ))}
                   </tr>
@@ -846,7 +902,7 @@ export function JobsPage({ store, userProfile }) {
                     <DesktopScheduleRow key={job._docId} job={job}
                       todayStr={todayStr} isAdminOrManager={isAdminOrManager}
                       rosterVisibility={rosterVisibility} showRoster={canSeeRoster(job)}
-                      onDetail={setShowJobDetail} />
+                      onDetail={setShowJobDetail} onEdit={openEditJob} />
                   ))}
                 </tbody>
               </table>
@@ -877,6 +933,42 @@ export function JobsPage({ store, userProfile }) {
                   isAdminOrManager={isAdminOrManager}
                   onTogglePin={handleTogglePin} onEdit={openEditAnn} onDelete={handleDeleteAnn} />
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Reports ── */}
+      {view === 'reports' && isAdminOrManager && (
+        <div>
+          <h3 style={{ fontFamily:f1, fontSize:18, fontWeight:700, color:B.navy, marginBottom:16 }}>Volunteer Leaderboard</h3>
+          {leaderboard.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'48px 20px', color:B.textLight, fontFamily:f2, fontSize:14 }}>No signup data yet.</div>
+          ) : (
+            <div style={{ background:B.white, borderRadius:14, border:'1px solid '+B.sand, overflow:'hidden' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                <thead>
+                  <tr style={{ background:B.warmGray }}>
+                    {['Rank','Volunteer','Jobs','Attended','No-Show','Pay Earned'].map(h => (
+                      <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontFamily:f1, fontWeight:700, fontSize:11, color:B.textMid, textTransform:'uppercase', letterSpacing:.6, borderBottom:'1px solid '+B.sand }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {leaderboard.map((entry, i) => (
+                    <tr key={entry.uid} style={{ borderBottom: i < leaderboard.length-1 ? '1px solid '+B.sand : 'none' }}>
+                      <td style={{ padding:'10px 14px', fontFamily:f1, fontWeight:700, color:['#D97706','#6B7280','#92400E'][i] || B.textMid }}>{i+1}</td>
+                      <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textDark, fontWeight:600 }}>{entry.name}</td>
+                      <td style={{ padding:'10px 14px', fontFamily:f1, color:B.textMid }}>{entry.jobs}</td>
+                      <td style={{ padding:'10px 14px', fontFamily:f1, color:'#16A34A', fontWeight:700 }}>{entry.attended}</td>
+                      <td style={{ padding:'10px 14px', fontFamily:f1, color:entry.noShow > 0 ? B.red : B.textLight }}>{entry.noShow || 0}</td>
+                      <td style={{ padding:'10px 14px', fontFamily:f1, color:entry.totalPay > 0 ? '#16A34A' : B.textLight, fontWeight:entry.totalPay > 0 ? 700 : 400 }}>
+                        {entry.totalPay > 0 ? '$'+entry.totalPay.toFixed(2) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -940,6 +1032,18 @@ export function JobsPage({ store, userProfile }) {
               </select>
             </FF>
           )}
+          {/* Waiver/consent */}
+          <div style={{ borderTop:'1px solid '+B.sand, paddingTop:14, marginTop:4 }}>
+            <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', marginBottom: jobForm.requiresWaiver ? 12 : 0 }}>
+              <input type="checkbox" checked={jobForm.requiresWaiver} onChange={e => setJobForm(f => ({ ...f, requiresWaiver: e.target.checked }))} style={{ width:16, height:16 }} />
+              <span style={{ fontSize:13, fontFamily:f1, fontWeight:600, color:B.textDark }}>Require waiver/consent before signing up</span>
+            </label>
+            {jobForm.requiresWaiver && (
+              <FF label="Waiver Text *">
+                <textarea style={{ ...inp, minHeight:80, resize:'vertical' }} value={jobForm.waiverText} onChange={e => setJobForm(f => ({ ...f, waiverText: e.target.value }))} placeholder="Enter the consent statement volunteers must agree to before signing up..." />
+              </FF>
+            )}
+          </div>
           {/* Series edit scope — only shown when editing a recurring job */}
           {editJobId && editJobSeriesGroupId && (
             <div style={{ borderTop: '1px solid ' + B.sand, paddingTop: 14, marginTop: 4 }}>
@@ -1039,6 +1143,13 @@ export function JobsPage({ store, userProfile }) {
             )}
           </div>
           <div style={{ marginBottom: 16 }}><SpotsBar job={liveDetail} /></div>
+          {/* Waiver notice */}
+          {liveDetail.requiresWaiver && liveDetail.waiverText && (
+            <div style={{ background:'#FFF9C4', border:'1px solid #FDE68A', borderRadius:8, padding:'10px 14px', marginBottom:16 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:'#92400E', textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Waiver Required</div>
+              <div style={{ fontSize:13, color:B.textDark, fontFamily:f2, lineHeight:1.6 }}>{liveDetail.waiverText}</div>
+            </div>
+          )}
           {/* Signup list */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: B.textMid, textTransform: 'uppercase', letterSpacing: .8, fontFamily: f1, marginBottom: 8 }}>Signed Up</div>
@@ -1047,26 +1158,73 @@ export function JobsPage({ store, userProfile }) {
                 <div style={{ fontSize: 13, color: B.textLight, fontFamily: f2 }}>No signups yet.</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {(liveDetail.signups || []).map(s => (
-                    <div key={s.uid} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: B.warmGray, borderRadius: 8 }}>
-                      <span style={{ fontSize: 13, fontFamily: f2, color: B.textDark }}>{s.name}</span>
-                      {isAdminOrManager && (
-                        <button onClick={() => handleAdminRemoveSignup(liveDetail, s.uid)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.red, fontSize: 12, fontFamily: f1, padding: '2px 6px' }}
-                          aria-label={'Remove ' + s.name}>✕</button>
-                      )}
-                    </div>
-                  ))}
+                  {(liveDetail.signups || []).map(s => {
+                    const isPastJob = liveDetail.scheduledDate && liveDetail.scheduledDate < todayStr;
+                    return (
+                      <div key={s.uid} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: B.warmGray, borderRadius: 8 }}>
+                        <div>
+                          <span style={{ fontSize: 13, fontFamily: f2, color: B.textDark }}>{s.name}</span>
+                          {isAdminOrManager && liveDetail.requiresWaiver && (
+                            <span title={s.acknowledgedWaiverAt ? 'Waiver acknowledged ' + s.acknowledgedWaiverAt.slice(0,10) : 'No waiver on file'}
+                              style={{ fontSize:11, marginLeft:6, color:s.acknowledgedWaiverAt ? '#16A34A' : B.textLight }}>
+                              {s.acknowledgedWaiverAt ? '📋✓' : '📋?'}
+                            </span>
+                          )}
+                          {isAdminOrManager && s.attended !== undefined && (
+                            <span style={{ fontSize:11, fontWeight:700, color:s.attended ? '#16A34A' : B.red, marginLeft:8 }}>
+                              {s.attended ? '✓ Attended' : '✗ No-show'}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+                          {isAdminOrManager && isPastJob && (
+                            <button onClick={() => handleUpdateAttendance(liveDetail, s.uid, !s.attended)}
+                              style={{ background:'none', border:'1px solid '+(s.attended ? B.red : '#16A34A'), cursor:'pointer', color:s.attended ? B.red : '#16A34A', fontSize:11, fontFamily:f1, padding:'2px 6px', borderRadius:4 }}
+                              aria-label={s.attended ? 'Mark as no-show' : 'Mark as attended'}>
+                              {s.attended ? 'Undo' : 'Attended'}
+                            </button>
+                          )}
+                          {isAdminOrManager && (
+                            <button onClick={() => handleAdminRemoveSignup(liveDetail, s.uid)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.red, fontSize: 12, fontFamily: f1, padding: '2px 6px' }}
+                              aria-label={'Remove ' + s.name}>✕</button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )
             ) : (
               isSignedUp(liveDetail) ? (
                 <div style={{ fontSize: 13, fontWeight: 700, color: B.teal, fontFamily: f1 }}>✓ You're signed up</div>
+              ) : isOnWaitlist(liveDetail) ? (
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#D97706', fontFamily: f1 }}>⏳ You're on the waitlist</div>
               ) : (
                 <div style={{ fontSize: 13, color: B.textLight, fontFamily: f2 }}>You have not signed up for this job.</div>
               )
             )}
           </div>
+          {/* Waitlist (admin only) */}
+          {isAdminOrManager && (liveDetail.waitlist || []).length > 0 && (
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:B.textMid, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:8 }}>
+                Waitlist ({(liveDetail.waitlist || []).length})
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {(liveDetail.waitlist || []).map((w, i) => (
+                  <div key={w.uid} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 10px', background:'#FFF9C4', borderRadius:8, border:'1px solid #FDE68A' }}>
+                    <span style={{ fontSize:13, fontFamily:f2, color:B.textDark }}>
+                      <span style={{ fontSize:11, color:B.textLight, marginRight:6 }}>#{i+1}</span>{w.name}
+                    </span>
+                    <button onClick={() => handleAdminRemoveSignup(liveDetail, w.uid)}
+                      style={{ background:'none', border:'none', cursor:'pointer', color:B.red, fontSize:12, fontFamily:f1, padding:'2px 6px' }}
+                      aria-label={'Remove '+w.name+' from waitlist'}>✕</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Action row */}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -1094,11 +1252,21 @@ export function JobsPage({ store, userProfile }) {
                   style={{ ...btnS, color: B.red, borderColor: '#FECACA', fontSize: 13 }}>
                   {savingJobId === liveDetail._docId ? 'Withdrawing…' : 'Withdraw'}
                 </button>
+              ) : isOnWaitlist(liveDetail) ? (
+                <button onClick={() => handleWithdraw(liveDetail)} disabled={!!savingJobId}
+                  style={{ ...btnS, color:'#92400E', borderColor:'#FDE68A', background:'#FFF9C4', fontSize:13 }}>
+                  {savingJobId === liveDetail._docId ? '…' : 'Leave Waitlist'}
+                </button>
               ) : !isFull(liveDetail) ? (
                 <button onClick={() => handleSignUp(liveDetail)} disabled={!!savingJobId} style={{ ...btnP, fontSize: 13 }}>
                   {savingJobId === liveDetail._docId ? 'Signing up…' : 'Sign Up'}
                 </button>
-              ) : null
+              ) : (
+                <button onClick={() => handleSignUp(liveDetail)} disabled={!!savingJobId}
+                  style={{ ...btnS, fontSize:13, color:B.textMid }}>
+                  {savingJobId === liveDetail._docId ? '…' : 'Join Waitlist'}
+                </button>
+              )
             )}
           </div>
         </Modal>

@@ -1208,3 +1208,83 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
   await db.doc(`churches/${churchId}/jobListings/${jobDocId}`).update({ [`lastPosterNotifiedByActors.${actorKey}`]: new Date().toISOString() }).catch(() => {});
   return { sent: results.filter(r => r.status === 'fulfilled').length };
 });
+
+// ── promoteFromWaitlist ───────────────────────────────────────────────────
+// Called after a signup withdrawal. Atomically promotes the first waitlist
+// entry to signups, then sends that person a promotion email.
+// data: { churchId, jobDocId }
+exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  const { churchId, jobDocId } = req.data;
+  if (!churchId || !jobDocId) return { promoted: false };
+
+  const db = getFirestore();
+
+  const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
+  if (!callerSnap.exists || callerSnap.data().churchId !== churchId) {
+    throw new HttpsError('permission-denied', 'Not a member of this church.');
+  }
+
+  const jobRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}`);
+  let promotedUser = null;
+  let jobData = null;
+
+  await db.runTransaction(async (t) => {
+    const snap = await t.get(jobRef);
+    if (!snap.exists) return;
+    const data = snap.data();
+    const waitlist = data.waitlist || [];
+    const signups = data.signups || [];
+    if (waitlist.length === 0) return;
+    if (signups.length >= (data.spotsTotal || 1)) return;
+    const [first, ...rest] = waitlist;
+    promotedUser = first;
+    jobData = data;
+    t.update(jobRef, {
+      signups: [...signups, { uid: first.uid, name: first.name, signedUpAt: first.addedAt || new Date().toISOString() }],
+      waitlist: rest,
+      updatedAt: new Date().toISOString()
+    });
+  });
+
+  if (!promotedUser) return { promoted: false };
+  if (!initSendGrid()) return { promoted: true, promotedName: promotedUser.name };
+
+  const [churchSnap, subSnap, notifSnap, userSnap] = await Promise.all([
+    db.doc(`churches/${churchId}/config/main`).get(),
+    db.doc(`churches/${churchId}/config/subscription`).get(),
+    db.doc(`churches/${churchId}/config/notifications`).get(),
+    db.doc(`users/${promotedUser.uid}`).get(),
+  ]);
+
+  if (!notifSnap.data()?.enabled) return { promoted: true, promotedName: promotedUser.name };
+  if (!subHasHub(subSnap.data() || {}, 'jobs')) return { promoted: true, promotedName: promotedUser.name };
+
+  const user = userSnap.data();
+  if (!user?.email || user.active === false || user.churchId !== churchId) return { promoted: true };
+  if (user.allowedHubs && !user.allowedHubs.includes('jobs')) return { promoted: true };
+
+  const churchName = churchSnap.data()?.churchName || 'Your Church';
+  const safeTitle = escapeHtml(jobData?.title || 'Job');
+  const safeName = escapeHtml(user.name || 'there');
+  const safeChurch = escapeHtml(churchName);
+  const dateStr = jobData?.scheduledDate || '';
+  const timeStr = jobData?.scheduledTime ? ` at ${jobData.scheduledTime}` : '';
+  const subject = `You're off the waitlist: ${jobData?.title || 'Job'}`;
+  const html = `<p>Hi ${safeName},</p>
+<p>Great news! A spot has opened up and you've been moved off the waitlist for:</p>
+<table style="border-collapse:collapse;margin:12px 0">
+  <tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">Job</td><td style="font-size:14px"><strong>${safeTitle}</strong></td></tr>
+  ${dateStr ? `<tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">Date</td><td style="font-size:14px">${escapeHtml(dateStr)}${escapeHtml(timeStr)}</td></tr>` : ''}
+</table>
+<p>You're now officially signed up! <a href="https://churchopshub.com">Open ChurchOpsHub</a> to view the details.</p>
+<p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`;
+  const text = `Hi ${user.name || 'there'},\n\nGreat news! A spot opened up for:\n\n${jobData?.title || 'Job'}${dateStr ? '\nDate: ' + dateStr + timeStr : ''}\n\nYou're now signed up.\n\n— ${churchName}`;
+
+  try {
+    await sgMail.send({ to: user.email, from: FROM, subject, html, text });
+  } catch (err) {
+    console.error('promoteFromWaitlist: email failed', err?.message);
+  }
+  return { promoted: true, promotedName: promotedUser.name };
+});
