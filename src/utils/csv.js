@@ -57,7 +57,7 @@ export function exportAccessRecordsCSV(records) {
 }
 
 export function exportTasksCSV(tasks) {
-  const cols = ['taskNumber','name','description','priority','status','visibility','dueDate','recurrence','assignees','tags','notes','createdByName','createdAt','completedAt'];
+  const cols = ['taskNumber','name','description','priority','status','visibility','ministry','dueDate','recurrence','estimatedHours','actualHours','assignees','tags','notes','createdByName','createdAt','completedAt'];
   const header = cols.join(',');
   const rows = (tasks || []).map(t => cols.map(c => {
     let v = t[c];

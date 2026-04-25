@@ -1288,3 +1288,140 @@ exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
   }
   return { promoted: true, promotedName: promotedUser.name };
 });
+
+// ── sendTaskMentionEmail ──────────────────────────────────────────────────
+// Called when a comment with @-mentions is posted on a task.
+exports.sendTaskMentionEmail = onCall({ cors: true }, async (req) => {
+  const { churchId, taskNumber, taskName, commentText, mentionedUids, commentAuthorName } = req.data;
+  const uid = req.auth?.uid;
+  if (!uid || !churchId) throw new HttpsError('invalid-argument', 'Auth and churchId required');
+  if (!initSendGrid()) return { sent: 0 };
+
+  const db = getFirestore();
+  const [notifSnap, subSnap, churchSnap] = await Promise.all([
+    db.doc(`churches/${churchId}/config/notifications`).get(),
+    db.doc(`churches/${churchId}/config/subscription`).get(),
+    db.doc(`churches/${churchId}/config/main`).get(),
+  ]);
+  if (!notifSnap.data()?.enabled) return { sent: 0 };
+  if (!subHasHub(subSnap.data(), 'tasks')) return { sent: 0 };
+
+  const churchName = escapeHtml(churchSnap.data()?.churchName || 'Your Church');
+  const safeAuthor = escapeHtml(commentAuthorName || 'Someone');
+  const safeTaskNum = escapeHtml(taskNumber || '');
+  const safeTaskName = escapeHtml(taskName || '');
+  const safeComment = escapeHtml((commentText || '').substring(0, 500));
+
+  let sent = 0;
+  for (const mentionedUid of (mentionedUids || [])) {
+    if (mentionedUid === uid) continue;
+    try {
+      const userSnap = await db.doc(`users/${mentionedUid}`).get();
+      const user = userSnap.data();
+      if (!user?.email || user.active === false) continue;
+      if (user.allowedHubs && !user.allowedHubs.includes('tasks')) continue;
+
+      const safeName = escapeHtml(user.name || 'there');
+      const subject = `${commentAuthorName || 'Someone'} mentioned you in ${taskNumber || 'a task'}`;
+      const html = `<p>Hi ${safeName},</p>
+<p><strong>${safeAuthor}</strong> mentioned you in a comment on task <strong>${safeTaskNum} — ${safeTaskName}</strong>:</p>
+<blockquote style="border-left:3px solid #2A7D6E;margin:12px 0;padding:8px 12px;background:#f8f8f8;font-size:14px">${safeComment}</blockquote>
+<p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to view and reply.</p>
+<p style="font-size:13px;color:#666">— ${churchName} via ChurchOpsHub</p>`;
+      await sgMail.send({ to: user.email, from: FROM, subject, html });
+      sent++;
+    } catch (err) {
+      console.error('sendTaskMentionEmail: failed for', mentionedUid, err?.message);
+    }
+  }
+  return { sent };
+});
+
+// ── generateRecurringTemplateTasks ────────────────────────────────────────
+// Runs daily at 8am Central. Creates tasks from templates with autoGenerate enabled.
+exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', timeZone: 'America/Chicago' }, async () => {
+  const db = getFirestore();
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+  const pad = n => String(n).padStart(2, '0');
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+
+  // Single-field query; date filter applied in code to avoid composite index requirement
+  const snap = await db.collectionGroup('taskTemplates').where('autoGenerate', '==', true).get();
+  if (snap.empty) return;
+
+  const due = snap.docs.filter(d => {
+    const t = d.data();
+    return t.autoGenerateNextAt && t.autoGenerateNextAt <= todayStr;
+  });
+  if (!due.length) return;
+
+  const subCache = {};
+  async function churchHasTasksHub(churchId) {
+    if (subCache[churchId] !== undefined) return subCache[churchId];
+    try {
+      const s = await db.doc(`churches/${churchId}/config/subscription`).get();
+      subCache[churchId] = subHasHub(s.data() || {}, 'tasks');
+    } catch { subCache[churchId] = false; }
+    return subCache[churchId];
+  }
+
+  function advanceDate(dateStr, freq) {
+    const base = new Date(dateStr + 'T12:00:00');
+    if (freq === 'weekly') { base.setDate(base.getDate() + 7); }
+    else if (freq === 'biweekly') { base.setDate(base.getDate() + 14); }
+    else if (freq === 'monthly') { const d = base.getDate(); base.setDate(1); base.setMonth(base.getMonth() + 1); base.setDate(Math.min(d, new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate())); }
+    else if (freq === 'quarterly') { const d = base.getDate(); base.setDate(1); base.setMonth(base.getMonth() + 3); base.setDate(Math.min(d, new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate())); }
+    else if (freq === 'annually') { const d = base.getDate(); base.setDate(1); base.setFullYear(base.getFullYear() + 1); base.setDate(Math.min(d, new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate())); }
+    return `${base.getFullYear()}-${pad(base.getMonth()+1)}-${pad(base.getDate())}`;
+  }
+
+  for (const templateDoc of due) {
+    const template = templateDoc.data();
+    const churchId = templateDoc.ref.parent.parent.id;
+    if (!await churchHasTasksHub(churchId)) continue;
+
+    try {
+      const configRef = db.doc(`churches/${churchId}/config/main`);
+      const newTaskRef = db.collection(`churches/${churchId}/tasks`).doc();
+      let taskNumber;
+
+      await db.runTransaction(async (t) => {
+        const configSnap = await t.get(configRef);
+        const maxNum = (configSnap.data()?.maxTaskNumber || 0) + 1;
+        taskNumber = 'TSK-' + String(maxNum).padStart(3, '0');
+        t.set(configRef, { maxTaskNumber: maxNum }, { merge: true });
+        t.set(newTaskRef, {
+          name: template.name || 'Recurring Task',
+          description: template.description || '',
+          priority: template.priority || 'Medium',
+          status: 'Backlog',
+          tags: template.tags || [],
+          dueDate: todayStr,
+          recurrence: template.autoGenerateFrequency || null,
+          assignees: template.assignees || [],
+          checklist: (template.checklist || []).map(i => ({ ...i, done: false })),
+          notes: template.notes || null,
+          photos: [],
+          visibility: template.visibility || 'team',
+          sharedWith: template.sharedWith || [],
+          completedAt: null,
+          linkedItemDocId: null,
+          linkedTicketDocId: null,
+          ministry: template.ministry || null,
+          sourceTemplateId: templateDoc.id,
+          taskNumber,
+          createdBy: 'system',
+          createdByName: 'Auto-generated',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      });
+
+      const nextDate = template.autoGenerateFrequency ? advanceDate(todayStr, template.autoGenerateFrequency) : todayStr;
+      await templateDoc.ref.update({ autoGenerateNextAt: nextDate, lastGeneratedAt: todayStr });
+      console.log(`generateRecurringTemplateTasks: created ${taskNumber} for church ${churchId}`);
+    } catch (err) {
+      console.error(`generateRecurringTemplateTasks: failed for church ${churchId} template ${templateDoc.id}`, err?.message);
+    }
+  }
+});

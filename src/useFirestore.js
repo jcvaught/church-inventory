@@ -569,12 +569,12 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
-  const addTaskComment = useCallback(async (taskId, text, authorId, authorName) => {
+  const addTaskComment = useCallback(async (taskId, text, authorId, authorName, mentions) => {
     if (!text || !text.trim()) return;
     try {
-      await addDoc(collection(db, 'churches', churchId, 'tasks', taskId, 'comments'), {
-        text, authorId, authorName, createdAt: new Date().toISOString()
-      });
+      const data = { text, authorId, authorName, createdAt: new Date().toISOString() };
+      if (mentions && mentions.length > 0) data.mentions = mentions;
+      await addDoc(collection(db, 'churches', churchId, 'tasks', taskId, 'comments'), data);
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 

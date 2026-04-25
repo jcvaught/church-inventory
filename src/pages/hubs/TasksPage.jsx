@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext, useRef, useMemo, memo } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, doc, onSnapshot, query as fsQuery, orderBy, runTransaction, getDocs, where, updateDoc, deleteField, arrayRemove } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -99,9 +100,10 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
           {task.description}
         </div>
       )}
-      {task.tags?.length > 0 && (
+      {(task.ministry || task.tags?.length > 0) && (
         <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:6 }}>
-          {task.tags.slice(0,4).map(tag => (
+          {task.ministry && <span style={{ padding:'2px 8px', borderRadius:12, background:'#E8EBF8', color:'#3D4E9E', fontSize:10, fontFamily:f1, fontWeight:700 }}>{task.ministry}</span>}
+          {task.tags?.slice(0,3).map(tag => (
             <span key={tag} style={{ padding:'2px 8px', borderRadius:12, background:B.warmGray, color:B.textMid, fontSize:10, fontFamily:f1 }}>{tag}</span>
           ))}
         </div>
@@ -121,9 +123,12 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
           )}
         </div>
       )}
-      {(task.photos?.length > 0 || task.dueDate) && (
-        <div style={{ display:'flex', justifyContent:'flex-end', gap:8, alignItems:'center' }}>
+      {(task.photos?.length > 0 || task.dueDate || task.estimatedHours != null || task.actualHours != null) && (
+        <div style={{ display:'flex', justifyContent:'flex-end', gap:8, alignItems:'center', flexWrap:'wrap' }}>
           {task.photos?.length > 0 && <span style={{ fontSize:11, color:B.textLight }}>📷 {task.photos.length}</span>}
+          {(task.estimatedHours != null || task.actualHours != null) && (
+            <span style={{ fontSize:11, color:B.textLight }}>⏱ {task.actualHours != null ? task.actualHours : '—'}/{task.estimatedHours != null ? task.estimatedHours : '—'}h</span>
+          )}
           {task.dueDate && <span style={{ fontSize:11, color: isOverdue ? B.red : B.textLight }}>📅 {task.dueDate}</span>}
         </div>
       )}
@@ -496,10 +501,17 @@ function formatCommentDate(iso) {
   return d.toLocaleDateString([], { month:'short', day:'numeric' });
 }
 
-function CommentThread({ comments, loading, newComment, onChange, onPost, posting, userId, canOperate, onEdit, onDelete }) {
+function renderWithMentions(text) {
+  if (!text || !text.includes('@')) return text;
+  const parts = text.split(/(@[\w][\w\s]*?\b)/g);
+  return parts.map((p, i) => p.startsWith('@') ? <span key={i} style={{ color:'#2A7D6E', fontWeight:700 }}>{p}</span> : p);
+}
+
+function CommentThread({ comments, loading, newComment, onChange, onPost, posting, userId, canOperate, onEdit, onDelete, users = [] }) {
   const endRef = useRef();
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
+  const [mentionOpen, setMentionOpen] = useState(false);
   useEffect(() => { if (comments.length) endRef.current?.scrollIntoView({ behavior:'smooth' }); }, [comments.length]);
 
   function startEdit(c) { setEditingId(c.id); setEditText(c.text); }
@@ -543,7 +555,7 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
                           </div>
                         </div>
                       )
-                      : <div style={{ fontSize:13, color:B.textDark, lineHeight:1.5, whiteSpace:'pre-wrap' }}>{c.text}</div>
+                      : <div style={{ fontSize:13, color:B.textDark, lineHeight:1.5, whiteSpace:'pre-wrap' }}>{renderWithMentions(c.text)}</div>
                     }
                   </div>
                 );
@@ -552,22 +564,37 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
         <div ref={endRef}/>
       </div>
       <div style={{ display:'flex', gap:8, alignItems:'flex-start' }}>
-        <div style={{ flex:1 }}>
+        <div style={{ flex:1, position:'relative' }}>
           <RichTextarea
             value={newComment}
             onChange={onChange}
             style={{ ...inp, minHeight:38, resize:'vertical', width:'100%', boxSizing:'border-box' }}
             placeholder="Add a comment... (Enter to post · Shift+Enter for new line)"
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) { e.preventDefault(); onPost(); } }}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) { e.preventDefault(); onPost(); } else if (e.key === 'Escape') setMentionOpen(false); }}
           />
+          {mentionOpen && users.filter(u => u.id !== userId).length > 0 && (
+            <div style={{ position:'absolute', bottom:'100%', left:0, right:0, zIndex:200, background:'#fff', border:'1px solid #E8E0D5', borderRadius:10, boxShadow:'0 4px 16px rgba(27,42,74,0.1)', maxHeight:150, overflowY:'auto', marginBottom:2 }}>
+              {users.filter(u => u.id !== userId).map(u => (
+                <div key={u.id} onMouseDown={e => { e.preventDefault(); onChange(newComment + (newComment.length && !newComment.endsWith(' ') ? ' ' : '') + '@' + u.name + ' '); setMentionOpen(false); }} style={{ padding:'8px 14px', cursor:'pointer', fontSize:13, fontFamily:'Source Sans 3, sans-serif', color:'#1B2A4A' }}
+                  onMouseEnter={e => e.currentTarget.style.background='#F7F4EF'}
+                  onMouseLeave={e => e.currentTarget.style.background=''}
+                >@{u.name}</div>
+              ))}
+            </div>
+          )}
         </div>
-        <button onClick={onPost} disabled={posting || !newComment.trim()} style={{ ...btnP, padding:'11px 18px', opacity:(posting || !newComment.trim()) ? .5 : 1, flexShrink:0 }}>{posting ? 'Posting...' : 'Post'}</button>
+        <div style={{ display:'flex', flexDirection:'column', gap:4, flexShrink:0 }}>
+          <button onClick={onPost} disabled={posting || !newComment.trim()} style={{ ...btnP, padding:'11px 18px', opacity:(posting || !newComment.trim()) ? .5 : 1 }}>{posting ? 'Posting...' : 'Post'}</button>
+          {users.filter(u => u.id !== userId).length > 0 && (
+            <button type="button" onMouseDown={e => { e.preventDefault(); setMentionOpen(v => !v); }} style={{ ...btnS, padding:'6px 12px', fontSize:12, textAlign:'center' }}>@ Mention</button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, onDrop, onStatusChange, isMobile, tasksByParent, tasksByDocId, onQuickAdd }) {
+const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, onDrop, onReorder, onStatusChange, isMobile, tasksByParent, tasksByDocId, onQuickAdd }) {
   const sc = statusColors[status] || statusColors['Backlog'];
   const [dragOver, setDragOver] = useState(false);
   const [quickAddName, setQuickAddName] = useState('');
@@ -589,7 +616,26 @@ const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, on
           : tasks.map(t => {
               const subs = tasksByParent?.[t._docId] || [];
               const parentTask = t.parentTaskId ? tasksByDocId?.[t.parentTaskId] : null;
-              return <TaskCard key={t._docId} task={t} onClick={onTaskClick} onDragStart={onDrop || undefined} onStatusChange={onStatusChange} isMobile={isMobile} subtaskCount={subs.length} subtaskDone={subs.filter(s=>s.status==='Complete').length} parentName={parentTask?.taskNumber ? parentTask.taskNumber + ' ' + parentTask.name : parentTask?.name}/>;
+              return (
+                <div
+                  key={t._docId}
+                  onDragOver={!isMobile && (onDrop || onReorder) ? e => e.preventDefault() : undefined}
+                  onDrop={!isMobile && (onDrop || onReorder) ? e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDragOver(false);
+                    const fromDocId = e.dataTransfer.getData('taskDocId');
+                    if (!fromDocId || fromDocId === t._docId) return;
+                    if (tasks.some(x => x._docId === fromDocId) && onReorder) {
+                      onReorder(fromDocId, t._docId);
+                    } else if (onDrop) {
+                      onDrop(fromDocId);
+                    }
+                  } : undefined}
+                >
+                  <TaskCard task={t} onClick={onTaskClick} onDragStart={onDrop || onReorder || undefined} onStatusChange={onStatusChange} isMobile={isMobile} subtaskCount={subs.length} subtaskDone={subs.filter(s=>s.status==='Complete').length} parentName={parentTask?.taskNumber ? parentTask.taskNumber + ' ' + parentTask.name : parentTask?.name}/>
+                </div>
+              );
             })
         }
       </div>
@@ -739,7 +785,7 @@ function TaskCalendar({ tasks, onTaskClick, isMobile }) {
   );
 }
 
-const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], parentTaskId:null, blockedBy:[], linkedItemDocId:null, linkedTicketDocId:null });
+const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], parentTaskId:null, blockedBy:[], linkedItemDocId:null, linkedTicketDocId:null, estimatedHours:null, actualHours:null, ministry:'' });
 
 export function TasksPage({ store, userProfile }) {
   const { tasks, items, maintenanceTickets, users, settings, config, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser, taskTemplates, addTaskTemplate, deleteTaskTemplate } = store;
@@ -798,6 +844,7 @@ export function TasksPage({ store, userProfile }) {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterMyTasks, setFilterMyTasks] = useState(false);
   const [filterAssignee, setFilterAssignee] = useState('');
+  const [filterMinistry, setFilterMinistry] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -822,6 +869,8 @@ export function TasksPage({ store, userProfile }) {
   const [savingDefaults, setSavingDefaults] = useState(false);
 
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [saveTemplateForm, setSaveTemplateForm] = useState({ name: '', autoGenerate: false, autoGenerateFrequency: 'weekly', autoGenerateNextAt: '' });
   const [taskForm, setTaskForm] = useState(getEmptyTask);
   const [photoFiles, setPhotoFiles] = useState([]);
   const [photoPreviews, setPhotoPreviews] = useState([]);
@@ -893,6 +942,9 @@ export function TasksPage({ store, userProfile }) {
     if (JSON.stringify(detailEdits.blockedBy) !== JSON.stringify(detailSnapshot.blockedBy)) return true;
     if ((detailEdits.linkedItemDocId ?? null) !== (detailSnapshot.linkedItemDocId ?? null)) return true;
     if ((detailEdits.linkedTicketDocId ?? null) !== (detailSnapshot.linkedTicketDocId ?? null)) return true;
+    if ((detailEdits.estimatedHours ?? null) !== (detailSnapshot.estimatedHours ?? null)) return true;
+    if ((detailEdits.actualHours ?? null) !== (detailSnapshot.actualHours ?? null)) return true;
+    if ((detailEdits.ministry ?? '') !== (detailSnapshot.ministry ?? '')) return true;
     return false;
   }, [detailEdits, detailSnapshot]);
 
@@ -964,6 +1016,9 @@ export function TasksPage({ store, userProfile }) {
       blockedBy: task.blockedBy || [],
       linkedItemDocId: task.linkedItemDocId || null,
       linkedTicketDocId: task.linkedTicketDocId || null,
+      estimatedHours: task.estimatedHours ?? null,
+      actualHours: task.actualHours ?? null,
+      ministry: task.ministry || '',
     };
   }
 
@@ -1133,7 +1188,15 @@ export function TasksPage({ store, userProfile }) {
     if (!newComment.trim() || !showDetail?._docId) return;
     setPostingComment(true);
     try {
-      await addTaskComment(showDetail._docId, newComment.trim(), userId, userName);
+      const text = newComment.trim();
+      const mentions = taskHubUsers
+        .filter(u => u.id !== userId && text.includes('@' + u.name))
+        .map(u => u.id);
+      await addTaskComment(showDetail._docId, text, userId, userName, mentions.length ? mentions : undefined);
+      if (mentions.length > 0 && notificationConfig?.enabled) {
+        const fn = httpsCallable(getFunctions(), 'sendTaskMentionEmail');
+        fn({ churchId, taskNumber: showDetail.taskNumber, taskName: showDetail.name || '', commentText: text, mentionedUids: mentions, commentAuthorName: userName }).catch(() => {});
+      }
       setNewComment('');
     } catch { flash('Failed to post comment.', true); }
     finally { setPostingComment(false); }
@@ -1354,6 +1417,19 @@ export function TasksPage({ store, userProfile }) {
     setBulkSaving(false);
   }
 
+  async function handleReorder(fromDocId, toDocId, status) {
+    const columnTasks = tasksByStatus[status];
+    const fromIdx = columnTasks.findIndex(t => t._docId === fromDocId);
+    const toIdx = columnTasks.findIndex(t => t._docId === toDocId);
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+    const reordered = [...columnTasks];
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+    await Promise.allSettled(reordered.map((t, i) =>
+      updateDoc(doc(db, 'churches', churchId, 'tasks', t._docId), { sortOrder: i })
+    ));
+  }
+
   async function handleQuickAddTask(name, status) {
     if (!name.trim()) return;
     try {
@@ -1378,20 +1454,39 @@ export function TasksPage({ store, userProfile }) {
     } catch { flash('Failed to add task.', true); }
   }
 
-  async function handleSaveAsTemplate() {
+  function handleOpenSaveTemplate() {
     if (!showDetail) return;
-    const name = window.prompt('Template name:', showDetail.name || '');
-    if (!name?.trim()) return;
+    setSaveTemplateForm({
+      name: showDetail.name || '',
+      autoGenerate: false,
+      autoGenerateFrequency: 'weekly',
+      autoGenerateNextAt: localDateStr(new Date()),
+    });
+    setShowSaveTemplate(true);
+  }
+
+  async function handleSaveTemplateSubmit() {
+    if (!saveTemplateForm.name.trim()) return;
     try {
-      await addTaskTemplate({
-        name: name.trim(),
-        description: detailEdits.description ?? showDetail.description ?? '',
-        priority: detailEdits.priority ?? showDetail.priority ?? 'Medium',
-        tags: detailEdits.tags ?? showDetail.tags ?? [],
-        recurrence: detailEdits.recurrence ?? showDetail.recurrence ?? '',
-        notes: detailEdits.notes ?? showDetail.notes ?? '',
-        checklist: (detailEdits.checklist ?? showDetail.checklist ?? []).map(i => ({ ...i, done: false })),
-      }, userId, userName);
+      const templateData = {
+        name: saveTemplateForm.name.trim(),
+        description: detailEdits.description ?? showDetail?.description ?? '',
+        priority: detailEdits.priority ?? showDetail?.priority ?? 'Medium',
+        tags: detailEdits.tags ?? showDetail?.tags ?? [],
+        recurrence: detailEdits.recurrence ?? showDetail?.recurrence ?? '',
+        notes: detailEdits.notes ?? showDetail?.notes ?? '',
+        checklist: (detailEdits.checklist ?? showDetail?.checklist ?? []).map(i => ({ ...i, done: false })),
+        visibility: detailEdits.visibility ?? showDetail?.visibility ?? 'team',
+        assignees: detailEdits.assignees ?? showDetail?.assignees ?? [],
+        ministry: detailEdits.ministry ?? showDetail?.ministry ?? '',
+      };
+      if (saveTemplateForm.autoGenerate) {
+        templateData.autoGenerate = true;
+        templateData.autoGenerateFrequency = saveTemplateForm.autoGenerateFrequency;
+        templateData.autoGenerateNextAt = saveTemplateForm.autoGenerateNextAt || localDateStr(new Date());
+      }
+      await addTaskTemplate(templateData, userId, userName);
+      setShowSaveTemplate(false);
       flash('Template saved!');
     } catch { flash('Failed to save template.', true); }
   }
@@ -1434,6 +1529,23 @@ export function TasksPage({ store, userProfile }) {
     }, { openCount: 0, inProgressCount: 0, completedThisMonth: 0, overdueCount: 0 });
   }, [visibleTasks]);
 
+  // ── Task velocity (Insights view) ──
+  const velocityData = useMemo(() => {
+    if (!canOperate) return [];
+    const now = new Date();
+    return Array.from({ length: 12 }, (_, i) => {
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - now.getDay() - (11 - i) * 7);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      const startStr = localDateStr(weekStart);
+      const endStr = localDateStr(weekEnd);
+      const completed = visibleTasks.filter(t => t.completedAt && t.completedAt.slice(0,10) >= startStr && t.completedAt.slice(0,10) <= endStr).length;
+      const created = visibleTasks.filter(t => t.createdAt && t.createdAt.slice(0,10) >= startStr && t.createdAt.slice(0,10) <= endStr).length;
+      return { week: weekStart.toLocaleDateString('en-US', { month:'short', day:'numeric' }), completed, created };
+    });
+  }, [visibleTasks, canOperate]);
+
   // ── Saved filter views ──
   const savedFilters = useMemo(() => {
     const u = (users || []).find(u => u.id === userId);
@@ -1443,7 +1555,7 @@ export function TasksPage({ store, userProfile }) {
   function handleSaveView() {
     const name = window.prompt('Save this filter view as:');
     if (!name?.trim()) return;
-    const view = { name: name.trim(), search: filterSearch, priority: filterPriority, status: filterStatus, assignee: filterAssignee, myTasks: filterMyTasks };
+    const view = { name: name.trim(), search: filterSearch, priority: filterPriority, status: filterStatus, assignee: filterAssignee, myTasks: filterMyTasks, ministry: filterMinistry };
     const current = (users || []).find(u => u.id === userId)?.taskSavedFilters || [];
     updateUser(userId, { taskSavedFilters: [...current, view] }).catch(() => flash('Failed to save view.', true));
   }
@@ -1459,6 +1571,7 @@ export function TasksPage({ store, userProfile }) {
     setFilterStatus(view.status || '');
     setFilterAssignee(view.assignee || '');
     setFilterMyTasks(!!view.myTasks);
+    setFilterMinistry(view.ministry || '');
   }
 
   // ── Filtered tasks ──
@@ -1469,10 +1582,11 @@ export function TasksPage({ store, userProfile }) {
       if (filterStatus && t.status !== filterStatus) return false;
       if (filterMyTasks && !t.assignees?.some(a => a.uid === userId)) return false;
       if (filterAssignee && !t.assignees?.some(a => a.uid === filterAssignee)) return false;
+      if (filterMinistry && t.ministry !== filterMinistry) return false;
       if (search && !t.name?.toLowerCase().includes(search) && !t.description?.toLowerCase().includes(search) && !t.tags?.some(tag => tag.includes(search)) && !t.taskNumber?.toLowerCase().includes(search)) return false;
       return true;
     });
-  }, [visibleTasks, filterSearch, filterPriority, filterStatus, filterMyTasks, filterAssignee, userId]);
+  }, [visibleTasks, filterSearch, filterPriority, filterStatus, filterMyTasks, filterAssignee, filterMinistry, userId]);
 
   const sortedTasks = useMemo(() => {
     const sorted = [...filteredTasks];
@@ -1498,7 +1612,16 @@ export function TasksPage({ store, userProfile }) {
     const map = {};
     STATUSES.forEach(s => { map[s] = []; });
     sortedTasks.forEach(t => { if (map[t.status]) map[t.status].push(t); });
-    STATUSES.forEach(s => { map[s].sort((a, b) => (a.priority === 'High' ? 0 : 1) - (b.priority === 'High' ? 0 : 1)); });
+    STATUSES.forEach(s => {
+      map[s].sort((a, b) => {
+        const aHasOrder = a.sortOrder != null;
+        const bHasOrder = b.sortOrder != null;
+        if (aHasOrder && bHasOrder) return a.sortOrder - b.sortOrder;
+        if (aHasOrder) return -1;
+        if (bHasOrder) return 1;
+        return (a.priority === 'High' ? 0 : 1) - (b.priority === 'High' ? 0 : 1);
+      });
+    });
     return map;
   }, [sortedTasks]);
 
@@ -1585,9 +1708,15 @@ export function TasksPage({ store, userProfile }) {
         >
           My tasks
         </button>
-        {(filterSearch || filterPriority || filterStatus || filterAssignee || filterMyTasks) && (
+        {(settings?.ministries || []).length > 0 && (
+          <select style={{ ...inp, width:'auto', cursor:'pointer' }} value={filterMinistry} onChange={e => setFilterMinistry(e.target.value)}>
+            <option value="">All ministries</option>
+            {(settings.ministries || []).map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        )}
+        {(filterSearch || filterPriority || filterStatus || filterAssignee || filterMyTasks || filterMinistry) && (
           <>
-            <button type="button" onClick={() => { setFilterSearch(''); setFilterPriority(''); setFilterStatus(''); setFilterAssignee(''); setFilterMyTasks(false); }} style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, cursor:'pointer' }}>Clear</button>
+            <button type="button" onClick={() => { setFilterSearch(''); setFilterPriority(''); setFilterStatus(''); setFilterAssignee(''); setFilterMyTasks(false); setFilterMinistry(''); }} style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, cursor:'pointer' }}>Clear</button>
             <button type="button" onClick={handleSaveView} title="Save current filters as a named view" style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.teal, fontSize:13, cursor:'pointer' }}>Save View</button>
           </>
         )}
@@ -1606,7 +1735,7 @@ export function TasksPage({ store, userProfile }) {
       {/* View Toggle + Sort */}
       <div style={{ display:'flex', gap:8, marginBottom:18, alignItems:'center', flexWrap:'wrap' }}>
         <div style={{ display:'flex', background:B.warmGray, borderRadius:10, padding:3 }}>
-          {[['kanban', 'Kanban'], ['list', 'List'], ['calendar', 'Calendar']].map(([mode, label]) => (
+          {[['kanban', 'Kanban'], ['list', 'List'], ['calendar', 'Calendar'], ...(canOperate ? [['insights', 'Insights']] : [])].map(([mode, label]) => (
             <button key={mode} onClick={() => switchViewMode(mode)} style={{ padding:'7px 18px', borderRadius:8, border:'none', background:viewMode===mode ? B.white : 'transparent', color:viewMode===mode ? B.navy : B.textMid, fontWeight:viewMode===mode ? 700 : 500, fontSize:13, fontFamily:f1, cursor:'pointer', boxShadow:viewMode===mode ? '0 1px 3px rgba(27,42,74,0.1)' : 'none', transition:'all 0.15s' }}>
               {label}
             </button>
@@ -1673,7 +1802,7 @@ export function TasksPage({ store, userProfile }) {
       {viewMode === 'kanban' && visibleTasks.length > 0 && (
         <div style={{ display:'flex', gap:12, overflowX:isMobile ? 'hidden' : 'auto', flexDirection:isMobile ? 'column' : 'row', paddingBottom:8, alignItems:'flex-start' }}>
           {STATUSES.map(status => (
-            <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile} tasksByParent={tasksByParent} tasksByDocId={tasksByDocId} onQuickAdd={name => handleQuickAddTask(name, status)}/>
+            <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onReorder={(from, to) => handleReorder(from, to, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile} tasksByParent={tasksByParent} tasksByDocId={tasksByDocId} onQuickAdd={name => handleQuickAddTask(name, status)}/>
           ))}
         </div>
       )}
@@ -1758,6 +1887,45 @@ export function TasksPage({ store, userProfile }) {
         <TaskCalendar tasks={filteredTasks} onTaskClick={openDetail} isMobile={isMobile}/>
       )}
 
+      {/* Insights View */}
+      {viewMode === 'insights' && canOperate && (
+        <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+          <div style={{ background:B.white, borderRadius:14, padding:'24px', border:'1px solid '+B.sand }}>
+            <div style={{ fontWeight:700, fontSize:14, color:B.navy, fontFamily:f1, marginBottom:2 }}>Task Velocity — Last 12 Weeks</div>
+            <div style={{ fontSize:12, color:B.textLight, marginBottom:16, fontFamily:f1 }}>Completed vs. created per week</div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={velocityData} margin={{ top:0, right:0, left:-20, bottom:0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={B.sand} />
+                <XAxis dataKey="week" tick={{ fontSize:10, fontFamily:f1, fill:B.textMid }} />
+                <YAxis allowDecimals={false} tick={{ fontSize:10, fontFamily:f1, fill:B.textMid }} />
+                <Tooltip contentStyle={{ fontFamily:f1, fontSize:12 }} />
+                <Bar dataKey="created" fill={B.gold} name="Created" radius={[3,3,0,0]} />
+                <Bar dataKey="completed" fill={B.teal} name="Completed" radius={[3,3,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap:10 }}>
+            {(() => {
+              const d90 = new Date(); d90.setDate(d90.getDate() - 90);
+              const s90 = localDateStr(d90);
+              const c90 = visibleTasks.filter(t => t.completedAt && t.completedAt.slice(0,10) >= s90).length;
+              return [
+                { label:'Total Visible', value:visibleTasks.length, icon:'📋' },
+                { label:'Completed', value:visibleTasks.filter(t=>t.status==='Complete').length, icon:'✅' },
+                { label:'Overdue', value:overdueCount, icon:'⚠️' },
+                { label:'Avg/Week (90d)', value:(c90/13).toFixed(1), icon:'📈' },
+              ];
+            })().map(s => (
+              <div key={s.label} style={{ background:B.white, borderRadius:10, padding:'14px 16px', border:'1px solid '+B.sand }}>
+                <span style={{ fontSize:20 }}>{s.icon}</span>
+                <div style={{ fontSize:22, fontWeight:700, color:B.navy, fontFamily:f1, margin:'6px 0 2px' }}>{s.value}</div>
+                <div style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.6, fontFamily:f1 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ═══ ADD TASK MODAL ═══ */}
       <Modal open={showAdd} onClose={() => { setShowAdd(false); setTaskForm(getEmptyTask()); setPhotoFiles([]); photoPreviews.forEach(u => URL.revokeObjectURL(u)); setPhotoPreviews([]); }} title="New Task" wide>
         {(taskTemplates || []).length > 0 && (
@@ -1815,6 +1983,19 @@ export function TasksPage({ store, userProfile }) {
         <FF label="Blocked By (optional)">
           <BlockedByInput blockedBy={taskForm.blockedBy || []} onChange={blockedBy => setTaskForm(f => ({ ...f, blockedBy }))} tasks={visibleTasks}/>
         </FF>
+        <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap:12 }}>
+          {(settings?.ministries || []).length > 0 && (
+            <FF label="Ministry (optional)">
+              <select style={{ ...inp, cursor:'pointer' }} value={taskForm.ministry} onChange={e => setTaskForm(f => ({ ...f, ministry: e.target.value }))}>
+                <option value="">— None —</option>
+                {(settings.ministries || []).map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </FF>
+          )}
+          <FF label="Estimate (hrs)">
+            <input style={inp} type="number" min="0" step="0.5" value={taskForm.estimatedHours ?? ''} onChange={e => setTaskForm(f => ({ ...f, estimatedHours: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="0"/>
+          </FF>
+        </div>
         <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
           <FF label="Link to Item (optional)">
             <select style={{ ...inp, cursor:'pointer' }} value={taskForm.linkedItemDocId || ''} onChange={e => setTaskForm(f => ({ ...f, linkedItemDocId: e.target.value || null }))}>
@@ -1904,6 +2085,22 @@ export function TasksPage({ store, userProfile }) {
             <FF label="Blocked By (optional)">
               <BlockedByInput blockedBy={detailEdits.blockedBy || []} onChange={blockedBy => setDetailEdits(d => ({ ...d, blockedBy }))} tasks={visibleTasks} currentTaskNumber={showDetail.taskNumber}/>
             </FF>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap:12 }}>
+              {(settings?.ministries || []).length > 0 && (
+                <FF label="Ministry">
+                  <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.ministry || ''} onChange={e => setDetailEdits(d => ({ ...d, ministry: e.target.value }))}>
+                    <option value="">— None —</option>
+                    {(settings.ministries || []).map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </FF>
+              )}
+              <FF label="Estimate (hrs)">
+                <input style={inp} type="number" min="0" step="0.5" value={detailEdits.estimatedHours ?? ''} onChange={e => setDetailEdits(d => ({ ...d, estimatedHours: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="0"/>
+              </FF>
+              <FF label="Actual (hrs)">
+                <input style={inp} type="number" min="0" step="0.5" value={detailEdits.actualHours ?? ''} onChange={e => setDetailEdits(d => ({ ...d, actualHours: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="0"/>
+              </FF>
+            </div>
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
               <FF label="Link to Item (optional)">
                 <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.linkedItemDocId || ''} onChange={e => setDetailEdits(d => ({ ...d, linkedItemDocId: e.target.value || null }))}>
@@ -2008,7 +2205,7 @@ export function TasksPage({ store, userProfile }) {
               </div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                 {(canOperate || showDetail.createdBy === userId) && <button onClick={handleDeleteTask} disabled={saving} style={{ ...btnD, fontSize:13, padding:'9px 14px', opacity:saving ? 0.5 : 1 }}>Delete</button>}
-                {canOperate && <button onClick={handleSaveAsTemplate} style={{ ...btnS, fontSize:13, padding:'9px 14px' }}>Save as Template</button>}
+                {canOperate && <button onClick={handleOpenSaveTemplate} style={{ ...btnS, fontSize:13, padding:'9px 14px' }}>Save as Template</button>}
                 <button onClick={closeDetail} style={btnS}>Cancel</button>
                 <button onClick={handleUpdateTask} disabled={saving || !detailEdits.name?.trim()} style={{ ...btnP, opacity:(saving || !detailEdits.name?.trim()) ? .5 : 1 }}>
                   {saving ? 'Saving...' : 'Save Changes'}
@@ -2059,7 +2256,7 @@ export function TasksPage({ store, userProfile }) {
             {/* Comments */}
             <div>
               <div style={{ fontWeight:700, fontSize:12, color:B.textMid, fontFamily:f1, textTransform:'uppercase', letterSpacing:.5, marginBottom:10 }}>Comments</div>
-              <CommentThread comments={comments} loading={commentsLoading} newComment={newComment} onChange={setNewComment} onPost={handlePostComment} posting={postingComment} userId={userId} canOperate={canOperate} onEdit={handleEditComment} onDelete={handleDeleteComment}/>
+              <CommentThread comments={comments} loading={commentsLoading} newComment={newComment} onChange={setNewComment} onPost={handlePostComment} posting={postingComment} userId={userId} canOperate={canOperate} onEdit={handleEditComment} onDelete={handleDeleteComment} users={taskHubUsers}/>
             </div>
           </div>
         )}
@@ -2093,6 +2290,38 @@ export function TasksPage({ store, userProfile }) {
           <button onClick={handleSaveDefaults} disabled={savingDefaults} style={{ ...btnP, opacity:savingDefaults ? .5 : 1 }}>
             {savingDefaults ? 'Saving...' : 'Save Defaults'}
           </button>
+        </div>
+      </Modal>
+
+      {/* ═══ SAVE AS TEMPLATE MODAL ═══ */}
+      <Modal open={showSaveTemplate} onClose={() => setShowSaveTemplate(false)} title="Save as Template">
+        <FF label="Template Name *">
+          <input style={inp} value={saveTemplateForm.name} onChange={e => setSaveTemplateForm(f => ({ ...f, name: e.target.value }))} placeholder="Template name..."/>
+        </FF>
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
+          <input type="checkbox" id="tplAutoGen" checked={saveTemplateForm.autoGenerate} onChange={e => setSaveTemplateForm(f => ({ ...f, autoGenerate: e.target.checked }))} style={{ width:16, height:16, cursor:'pointer' }}/>
+          <label htmlFor="tplAutoGen" style={{ fontSize:13, color:B.textDark, fontFamily:f2, cursor:'pointer' }}>Auto-generate tasks on a recurring schedule</label>
+        </div>
+        {saveTemplateForm.autoGenerate && (
+          <>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+              <FF label="Frequency">
+                <select style={{ ...inp, cursor:'pointer' }} value={saveTemplateForm.autoGenerateFrequency} onChange={e => setSaveTemplateForm(f => ({ ...f, autoGenerateFrequency: e.target.value }))}>
+                  {RECURRENCE_OPTIONS.filter(([v]) => v).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+                </select>
+              </FF>
+              <FF label="First Generate On">
+                <input style={inp} type="date" value={saveTemplateForm.autoGenerateNextAt} onChange={e => setSaveTemplateForm(f => ({ ...f, autoGenerateNextAt: e.target.value }))}/>
+              </FF>
+            </div>
+            <p style={{ fontSize:12, color:B.textLight, margin:'0 0 14px', fontFamily:f2 }}>
+              A new task will be created from this template automatically on this date and then on the recurring schedule.
+            </p>
+          </>
+        )}
+        <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:4 }}>
+          <button onClick={() => setShowSaveTemplate(false)} style={btnS}>Cancel</button>
+          <button onClick={handleSaveTemplateSubmit} disabled={!saveTemplateForm.name.trim()} style={{ ...btnP, opacity:!saveTemplateForm.name.trim() ? .5 : 1 }}>Save Template</button>
         </div>
       </Modal>
 
