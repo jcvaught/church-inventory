@@ -6,6 +6,7 @@ import { FF } from '../../components/primitives/FF.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { localDateStr, generateRecurrenceDates } from '../../utils/date.js';
 import { printJobRoster } from '../../utils/print.js';
+import { exportJobsICS } from '../../utils/ical.js';
 
 function formatJobDate(dateStr) {
   if (!dateStr) return '—';
@@ -21,7 +22,9 @@ const JOB_STATUS_COLORS = {
   cancelled: { bg: '#F3F4F6', tx: '#6B7280', dot: '#9CA3AF' },
 };
 
-const emptyJob = () => ({ title: '', description: '', scheduledDate: '', scheduledTime: '', location: '', spotsTotal: 1, pay: '', status: 'open', jobLead: null, requiresWaiver: false, waiverText: '' });
+const emptyJob = () => ({ title: '', description: '', scheduledDate: '', scheduledTime: '', location: '', spotsTotal: 1, pay: '', status: 'open', jobLead: null, requiresWaiver: false, waiverText: '', requiredAccessTypes: [] });
+
+const ACCESS_TYPE_LABELS = { background_check: 'Background Check', key_assignment: 'Key Assignment', certification: 'Certification', custom: 'Custom' };
 
 const RECURRENCE_OPTIONS = [
   { v:'weekly', label:'Weekly' },
@@ -418,6 +421,9 @@ export function JobsPage({ store, userProfile }) {
     addJobListing, addJobListingSeries, updateJobListing, deleteJobListing, updateJobListingSeries, deleteJobListingSeries, deleteJobListingSeriesFrom,
     signUpForJob, withdrawFromJob, updateJobSignupAttendance,
     addJobAnnouncement, updateJobAnnouncement, deleteJobAnnouncement,
+    addTask,
+    accessPeople, accessRecords,
+    getJobSwapRequests, addJobSwapRequest, deleteJobSwapRequest,
     users, notificationConfig, config, settings,
   } = store;
   const isMobile = useContext(MobileCtx);
@@ -450,6 +456,14 @@ export function JobsPage({ store, userProfile }) {
   const [editJobSeriesGroupId, setEditJobSeriesGroupId] = useState(null);
   const [editJobFromDate, setEditJobFromDate] = useState('');
   const flashTimerRef = useRef(null);
+  const [showConvertToTaskModal, setShowConvertToTaskModal] = useState(false);
+  const [convertTaskForm, setConvertTaskForm] = useState({ name: '', dueDate: '', description: '' });
+  const [convertTaskSaving, setConvertTaskSaving] = useState(false);
+  const [showSwapModal, setShowSwapModal] = useState(false);
+  const [swapNote, setSwapNote] = useState('');
+  const [swapSaving, setSwapSaving] = useState(false);
+  const [swapRequests, setSwapRequests] = useState([]);
+  const [swapRequestsJobId, setSwapRequestsJobId] = useState(null);
 
   function flash(text, isError = false) {
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
@@ -459,6 +473,14 @@ export function JobsPage({ store, userProfile }) {
 
   // Cleanup flash timer on unmount
   useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current); }, []);
+
+  // Load swap requests when admin opens job detail
+  useEffect(() => {
+    if (!showJobDetail || !isAdminOrManager) { setSwapRequests([]); setSwapRequestsJobId(null); return; }
+    if (showJobDetail._docId === swapRequestsJobId) return;
+    setSwapRequestsJobId(showJobDetail._docId);
+    getJobSwapRequests(showJobDetail._docId).then(setSwapRequests).catch(() => {});
+  }, [showJobDetail, isAdminOrManager, getJobSwapRequests, swapRequestsJobId]);
 
   // Persist showPastJobs toggle
   useEffect(() => {
@@ -557,6 +579,7 @@ export function JobsPage({ store, userProfile }) {
       jobLead: job.jobLead || null,
       requiresWaiver: job.requiresWaiver || false,
       waiverText: job.waiverText || '',
+      requiredAccessTypes: job.requiredAccessTypes || [],
     });
     setIsRecurring(false);
     setRecurrenceFreq('weekly');
@@ -682,6 +705,22 @@ export function JobsPage({ store, userProfile }) {
   }
 
   async function handleSignUp(job) {
+    if ((job.requiredAccessTypes || []).length > 0) {
+      const linkedPerson = (accessPeople || []).find(p => p.linkedUserId === userId);
+      if (!linkedPerson) {
+        flash('You need a People Access record linked to your account to sign up for this job.', true);
+        return;
+      }
+      const todayS = localDateStr(new Date());
+      const myRecords = (accessRecords || []).filter(r => r.personId === linkedPerson._docId);
+      for (const reqType of job.requiredAccessTypes) {
+        const hasValid = myRecords.some(r => r.type === reqType && (!r.expiresAt || r.expiresAt >= todayS));
+        if (!hasValid) {
+          flash(`You need a valid ${ACCESS_TYPE_LABELS[reqType] || reqType} on file to sign up for this job.`, true);
+          return;
+        }
+      }
+    }
     if (job.requiresWaiver && job.waiverText) {
       const confirmed = window.confirm(`By signing up, you agree to the following:\n\n${job.waiverText}\n\nDo you agree?`);
       if (!confirmed) return;
@@ -742,6 +781,69 @@ export function JobsPage({ store, userProfile }) {
     try {
       await updateJobSignupAttendance(job._docId, uid, attended);
     } catch { flash('Failed to update attendance.', true); }
+  }
+
+  function openConvertToTask(job) {
+    setConvertTaskForm({ name: job.title || '', dueDate: job.scheduledDate || '', description: job.description || '' });
+    setShowConvertToTaskModal(true);
+  }
+
+  async function handleConvertToTask() {
+    if (!liveDetail || !convertTaskForm.name.trim()) return;
+    setConvertTaskSaving(true);
+    try {
+      const taskDocId = await addTask({
+        name: convertTaskForm.name.trim(),
+        description: convertTaskForm.description || '',
+        dueDate: convertTaskForm.dueDate || null,
+        priority: 'Medium',
+        status: 'Planning',
+        visibility: 'team',
+        assignees: [],
+        tags: [],
+        checklist: [],
+        sharedWith: [],
+        parentTaskId: null,
+        blockedBy: [],
+        linkedItemDocId: null,
+        linkedTicketDocId: null,
+        estimatedHours: null,
+        actualHours: null,
+        ministry: '',
+        linkedJobDocId: liveDetail._docId,
+      }, userId, userName);
+      await updateJobListing(liveDetail._docId, { linkedTaskDocId: taskDocId }, userId, userName);
+      setShowJobDetail(prev => ({ ...prev, linkedTaskDocId: taskDocId }));
+      setShowConvertToTaskModal(false);
+      flash('Task created and linked.');
+    } catch (err) {
+      flash(err?.message || 'Failed to create task.', true);
+    }
+    setConvertTaskSaving(false);
+  }
+
+  async function handleSubmitSwapRequest() {
+    if (!liveDetail) return;
+    setSwapSaving(true);
+    try {
+      await addJobSwapRequest(liveDetail._docId, userId, userName, swapNote.trim());
+      setShowSwapModal(false);
+      setSwapNote('');
+      flash('Swap request submitted. An admin will follow up.');
+    } catch {
+      flash('Failed to submit swap request.', true);
+    }
+    setSwapSaving(false);
+  }
+
+  async function handleDeleteSwapRequest(reqDocId) {
+    try {
+      await deleteJobSwapRequest(reqDocId);
+      setSwapRequests(prev => prev.filter(r => r._docId !== reqDocId));
+      flash('Swap request dismissed.');
+    } catch {
+      flash('Failed to dismiss request.', true);
+    }
   }
 
   // ── Announcement handlers ──
@@ -842,7 +944,13 @@ export function JobsPage({ store, userProfile }) {
               ))}
             </div>
             {isAdminOrManager && (
-              <button onClick={openNewJob} style={{ ...btnP, padding: '8px 16px', fontSize: 13, whiteSpace: 'nowrap' }}>+ Post Job</button>
+              <div style={{ display:'flex', gap:8 }}>
+                <button onClick={() => {
+                  const url = `${window.location.origin}?jobs=${userProfile?.churchId}&cn=${encodeURIComponent(config?.churchName || '')}`;
+                  navigator.clipboard.writeText(url).then(() => flash('Job board link copied!')).catch(() => flash('Could not copy link.', true));
+                }} style={{ ...btnS, padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }}>Share Board</button>
+                <button onClick={openNewJob} style={{ ...btnP, padding: '8px 16px', fontSize: 13, whiteSpace: 'nowrap' }}>+ Post Job</button>
+              </div>
             )}
           </div>
 
@@ -873,6 +981,7 @@ export function JobsPage({ store, userProfile }) {
             </span>
             <div style={{ display:'flex', gap:8 }}>
               <button onClick={() => printJobRoster(scheduleJobs, config?.churchName || '')} style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>Print Roster</button>
+              <button onClick={() => exportJobsICS(scheduleJobs.filter(j => j.scheduledDate), config?.churchName || '')} title="Export jobs to iCal (.ics)" style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>Export ICS</button>
               <button onClick={() => setShowPastJobs(v => !v)} style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>
                 {showPastJobs ? 'Hide Past Jobs' : 'Show Past Jobs'}
               </button>
@@ -1032,6 +1141,26 @@ export function JobsPage({ store, userProfile }) {
               </select>
             </FF>
           )}
+          {/* Compliance requirements */}
+          <div style={{ borderTop:'1px solid '+B.sand, paddingTop:14, marginTop:4 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:B.textLight, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:8 }}>Required Compliance (People Access)</div>
+            <div style={{ display:'flex', gap:14, flexWrap:'wrap' }}>
+              {Object.entries(ACCESS_TYPE_LABELS).map(([type, label]) => (
+                <label key={type} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer' }}>
+                  <input type="checkbox"
+                    checked={(jobForm.requiredAccessTypes || []).includes(type)}
+                    onChange={e => setJobForm(f => ({
+                      ...f,
+                      requiredAccessTypes: e.target.checked
+                        ? [...(f.requiredAccessTypes || []), type]
+                        : (f.requiredAccessTypes || []).filter(t => t !== type)
+                    }))}
+                    style={{ width:14, height:14 }} />
+                  <span style={{ fontSize:13, fontFamily:f2, color:B.textDark }}>{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
           {/* Waiver/consent */}
           <div style={{ borderTop:'1px solid '+B.sand, paddingTop:14, marginTop:4 }}>
             <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', marginBottom: jobForm.requiresWaiver ? 12 : 0 }}>
@@ -1225,6 +1354,33 @@ export function JobsPage({ store, userProfile }) {
               </div>
             </div>
           )}
+          {/* Swap requests (admin view) */}
+          {isAdminOrManager && swapRequests.length > 0 && (
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:B.textMid, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:8 }}>
+                Swap Requests ({swapRequests.length})
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {swapRequests.map(req => (
+                  <div key={req._docId} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'8px 10px', background:'#FEF3E8', borderRadius:8, border:'1px solid #FDE68A', gap:8 }}>
+                    <div>
+                      <span style={{ fontSize:13, fontFamily:f2, color:B.textDark, fontWeight:600 }}>{req.name}</span>
+                      {req.note && <div style={{ fontSize:12, color:B.textMid, fontFamily:f2, marginTop:2 }}>{req.note}</div>}
+                    </div>
+                    <button onClick={() => handleDeleteSwapRequest(req._docId)}
+                      style={{ ...btnS, fontSize:11, padding:'2px 8px', flexShrink:0 }}>Dismiss</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Linked task chip */}
+          {liveDetail.linkedTaskDocId && (
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14, padding:'8px 12px', borderRadius:8, background:'#EDF2FF', border:'1px solid #C7D2FE' }}>
+              <span style={{ fontSize:13, color:'#4F46E5', fontFamily:f1, fontWeight:700 }}>✓ Linked Task</span>
+              <span style={{ fontSize:12, color:'#4F46E5', fontFamily:'monospace' }}>{liveDetail.linkedTaskDocId.slice(0,8)}…</span>
+            </div>
+          )}
           {/* Action row */}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -1243,9 +1399,17 @@ export function JobsPage({ store, userProfile }) {
                       Notify Signups
                     </button>
                   )}
+                  {!liveDetail.linkedTaskDocId && (
+                    <button onClick={() => openConvertToTask(liveDetail)} style={{ ...btnS, fontSize: 13 }}>→ Task</button>
+                  )}
                 </>
               )}
             </div>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
+            {liveDetail.status === 'open' && isSignedUp(liveDetail) && !isAdminOrManager && (
+              <button onClick={() => { setSwapNote(''); setShowSwapModal(true); }}
+                style={{ ...btnS, fontSize:13, color:'#92400E', borderColor:'#FDE68A' }}>Request Swap</button>
+            )}
             {liveDetail.status === 'open' && (
               isSignedUp(liveDetail) ? (
                 <button onClick={() => handleWithdraw(liveDetail)} disabled={!!savingJobId}
@@ -1268,6 +1432,7 @@ export function JobsPage({ store, userProfile }) {
                 </button>
               )
             )}
+            </div>
           </div>
         </Modal>
       )}
@@ -1302,6 +1467,41 @@ export function JobsPage({ store, userProfile }) {
           </div>
         </Modal>
       )}
+
+      {/* ── Convert to Task Modal ── */}
+      <Modal open={showConvertToTaskModal} onClose={() => setShowConvertToTaskModal(false)} title="Convert to Task">
+        <FF label="Task Name *">
+          <input style={inp} value={convertTaskForm.name} onChange={e => setConvertTaskForm(f => ({ ...f, name: e.target.value }))} placeholder="Task name…" />
+        </FF>
+        <FF label="Due Date">
+          <input type="date" style={inp} value={convertTaskForm.dueDate} onChange={e => setConvertTaskForm(f => ({ ...f, dueDate: e.target.value }))} />
+        </FF>
+        <FF label="Description">
+          <textarea style={{ ...inp, minHeight:70, resize:'vertical' }} value={convertTaskForm.description} onChange={e => setConvertTaskForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional description…" />
+        </FF>
+        <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:8 }}>
+          <button onClick={() => setShowConvertToTaskModal(false)} style={btnS}>Cancel</button>
+          <button onClick={handleConvertToTask} disabled={convertTaskSaving || !convertTaskForm.name.trim()} style={{ ...btnP, opacity: (convertTaskSaving || !convertTaskForm.name.trim()) ? 0.5 : 1 }}>
+            {convertTaskSaving ? 'Creating…' : 'Create Task'}
+          </button>
+        </div>
+      </Modal>
+
+      {/* ── Swap Request Modal ── */}
+      <Modal open={showSwapModal} onClose={() => setShowSwapModal(false)} title="Request Replacement">
+        <p style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:12 }}>
+          Let an admin know you need a replacement for this job. They'll follow up with you.
+        </p>
+        <FF label="Note (optional)">
+          <textarea style={{ ...inp, minHeight:70, resize:'vertical' }} value={swapNote} onChange={e => setSwapNote(e.target.value)} placeholder="Reason you need a replacement…" />
+        </FF>
+        <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:8 }}>
+          <button onClick={() => setShowSwapModal(false)} style={btnS}>Cancel</button>
+          <button onClick={handleSubmitSwapRequest} disabled={swapSaving} style={{ ...btnP, opacity: swapSaving ? 0.5 : 1 }}>
+            {swapSaving ? 'Submitting…' : 'Submit Request'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

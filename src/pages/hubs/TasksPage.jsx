@@ -11,6 +11,7 @@ import { FF } from '../../components/primitives/FF.jsx';
 import { Spinner } from '../../components/primitives/Spinner.jsx';
 import { resizeImageForUpload } from '../../utils/imageResize.js';
 import { exportTasksCSV } from '../../utils/csv.js';
+import { exportTasksICS } from '../../utils/ical.js';
 import { localDateStr, calculateNextDue } from '../../utils/date.js';
 
 const STATUSES = ['Backlog', 'Planning', 'In Progress', 'On Hold', 'Complete', 'Cancelled'];
@@ -788,7 +789,7 @@ function TaskCalendar({ tasks, onTaskClick, isMobile }) {
 const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], parentTaskId:null, blockedBy:[], linkedItemDocId:null, linkedTicketDocId:null, estimatedHours:null, actualHours:null, ministry:'' });
 
 export function TasksPage({ store, userProfile }) {
-  const { tasks, items, maintenanceTickets, users, settings, config, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser, taskTemplates, addTaskTemplate, deleteTaskTemplate } = store;
+  const { tasks, items, maintenanceTickets, users, settings, config, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser, taskTemplates, addTaskTemplate, deleteTaskTemplate, addJobListing, addTicket } = store;
   const isMobile = useContext(MobileCtx);
 
   const userId = userProfile?.id || userProfile?.uid;
@@ -882,6 +883,13 @@ export function TasksPage({ store, userProfile }) {
   const checklistInputRef = useRef();
   const dragChecklistIdx = useRef(null);
   const isDirtyRef = useRef(false);
+
+  // Convert / cross-hub
+  const [showConvertToJobModal, setShowConvertToJobModal] = useState(false);
+  const [convertJobForm, setConvertJobForm] = useState({ title:'', scheduledDate:'', location:'', spotsTotal:1 });
+  const [convertJobSaving, setConvertJobSaving] = useState(false);
+  const [showCreateTicketModal, setShowCreateTicketModal] = useState(false);
+  const [createTicketSaving, setCreateTicketSaving] = useState(false);
 
   // Comments
   const [comments, setComments] = useState([]);
@@ -1546,6 +1554,62 @@ export function TasksPage({ store, userProfile }) {
     });
   }, [visibleTasks, canOperate]);
 
+  // ── Cross-hub: Convert task to job ──
+  function openConvertToJob() {
+    if (!showDetail) return;
+    setConvertJobForm({
+      title: showDetail.name || '',
+      scheduledDate: showDetail.dueDate || '',
+      location: '',
+      spotsTotal: 1,
+    });
+    setShowConvertToJobModal(true);
+  }
+
+  async function handleConvertToJob() {
+    if (!showDetail || !convertJobForm.title.trim()) return;
+    setConvertJobSaving(true);
+    try {
+      const jobDocId = await addJobListing({
+        ...convertJobForm,
+        spotsTotal: Math.max(1, parseInt(convertJobForm.spotsTotal) || 1),
+        pay: null,
+        status: 'open',
+        description: showDetail.description || '',
+        linkedTaskDocId: showDetail._docId,
+      }, userId, userName);
+      await updateTask(showDetail._docId, { linkedJobDocId: jobDocId }, userId, userName, showDetail.taskNumber);
+      setShowDetail(prev => ({ ...prev, linkedJobDocId: jobDocId }));
+      setShowConvertToJobModal(false);
+      flash('Job created and linked to this task.');
+    } catch {
+      flash('Failed to create job.', true);
+    }
+    setConvertJobSaving(false);
+  }
+
+  // ── Cross-hub: Create maintenance ticket from task ──
+  async function handleCreateTicket() {
+    if (!showDetail) return;
+    setCreateTicketSaving(true);
+    try {
+      const ticketDocId = await addTicket({
+        name: showDetail.name,
+        description: showDetail.description || '',
+        priority: showDetail.priority || 'Medium',
+        linkedTaskDocId: showDetail._docId,
+      }, userId, userName);
+      await updateTask(showDetail._docId, { linkedTicketDocId: ticketDocId }, userId, userName, showDetail.taskNumber);
+      setDetailEdits(d => ({ ...d, linkedTicketDocId: ticketDocId }));
+      setShowDetail(prev => ({ ...prev, linkedTicketDocId: ticketDocId }));
+      setShowCreateTicketModal(false);
+      flash('Maintenance ticket created and linked.');
+    } catch {
+      flash('Failed to create ticket.', true);
+    }
+    setCreateTicketSaving(false);
+  }
+
   // ── Saved filter views ──
   const savedFilters = useMemo(() => {
     const u = (users || []).find(u => u.id === userId);
@@ -1764,6 +1828,14 @@ export function TasksPage({ store, userProfile }) {
           style={{ padding:'7px 14px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:500 }}
         >
           Export CSV
+        </button>
+        <button
+          type="button"
+          onClick={() => exportTasksICS(filteredTasks.filter(t => t.dueDate), config?.churchName || '')}
+          title="Export tasks with due dates to iCal (.ics)"
+          style={{ padding:'7px 14px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:500 }}
+        >
+          Export ICS
         </button>
         <span style={{ color:B.textLight, fontSize:13, marginLeft:'auto' }}>
           {filteredTasks.length}{filteredTasks.length !== visibleTasks.length ? ` of ${visibleTasks.length}` : ''} task{visibleTasks.length !== 1 ? 's' : ''}
@@ -2206,12 +2278,22 @@ export function TasksPage({ store, userProfile }) {
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                 {(canOperate || showDetail.createdBy === userId) && <button onClick={handleDeleteTask} disabled={saving} style={{ ...btnD, fontSize:13, padding:'9px 14px', opacity:saving ? 0.5 : 1 }}>Delete</button>}
                 {canOperate && <button onClick={handleOpenSaveTemplate} style={{ ...btnS, fontSize:13, padding:'9px 14px' }}>Save as Template</button>}
+                {canOperate && !showDetail.linkedJobDocId && <button onClick={openConvertToJob} style={{ ...btnS, fontSize:13, padding:'9px 14px' }}>→ Job</button>}
+                {canOperate && !showDetail.linkedTicketDocId && <button onClick={() => setShowCreateTicketModal(true)} style={{ ...btnS, fontSize:13, padding:'9px 14px' }}>→ Ticket</button>}
                 <button onClick={closeDetail} style={btnS}>Cancel</button>
                 <button onClick={handleUpdateTask} disabled={saving || !detailEdits.name?.trim()} style={{ ...btnP, opacity:(saving || !detailEdits.name?.trim()) ? .5 : 1 }}>
                   {saving ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </div>
+
+            {/* Linked job chip */}
+            {showDetail.linkedJobDocId && (
+              <div style={{ marginBottom:12, padding:'8px 12px', borderRadius:8, background:'#EDF2FF', border:'1px solid #C7D2FE', display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:12, color:'#3730A3', fontFamily:f1, fontWeight:600 }}>💼 Linked Job</span>
+                <span style={{ fontSize:12, color:'#4F46E5', fontFamily:'monospace' }}>{showDetail.linkedJobDocId.slice(0,8)}…</span>
+              </div>
+            )}
 
             {/* Parent link */}
             {showDetail.parentTaskId && tasksByDocId[showDetail.parentTaskId] && (
@@ -2348,6 +2430,41 @@ export function TasksPage({ store, userProfile }) {
             ))}
           </div>
         )}
+      </Modal>
+
+      {/* ═══ CONVERT TO JOB MODAL ═══ */}
+      <Modal open={showConvertToJobModal} onClose={() => setShowConvertToJobModal(false)} title="Convert to Job">
+        <FF label="Job Title *">
+          <input style={inp} value={convertJobForm.title} onChange={e => setConvertJobForm(f => ({ ...f, title: e.target.value }))} placeholder="Job title…" />
+        </FF>
+        <FF label="Scheduled Date">
+          <input type="date" style={inp} value={convertJobForm.scheduledDate} onChange={e => setConvertJobForm(f => ({ ...f, scheduledDate: e.target.value }))} />
+        </FF>
+        <FF label="Location (optional)">
+          <input style={inp} value={convertJobForm.location} onChange={e => setConvertJobForm(f => ({ ...f, location: e.target.value }))} placeholder="Location…" />
+        </FF>
+        <FF label="Spots Available">
+          <input type="number" min={1} style={inp} value={convertJobForm.spotsTotal} onChange={e => setConvertJobForm(f => ({ ...f, spotsTotal: e.target.value }))} />
+        </FF>
+        <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:8 }}>
+          <button onClick={() => setShowConvertToJobModal(false)} style={btnS}>Cancel</button>
+          <button onClick={handleConvertToJob} disabled={convertJobSaving || !convertJobForm.title.trim()} style={{ ...btnP, opacity: (convertJobSaving || !convertJobForm.title.trim()) ? 0.5 : 1 }}>
+            {convertJobSaving ? 'Creating…' : 'Create Job'}
+          </button>
+        </div>
+      </Modal>
+
+      {/* ═══ CREATE TICKET FROM TASK MODAL ═══ */}
+      <Modal open={showCreateTicketModal} onClose={() => setShowCreateTicketModal(false)} title="Create Maintenance Ticket">
+        <p style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:16 }}>
+          Create a maintenance ticket from "<strong>{showDetail?.name}</strong>"?
+        </p>
+        <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+          <button onClick={() => setShowCreateTicketModal(false)} style={btnS}>Cancel</button>
+          <button onClick={handleCreateTicket} disabled={createTicketSaving} style={{ ...btnP, opacity: createTicketSaving ? 0.5 : 1 }}>
+            {createTicketSaving ? 'Creating…' : 'Create Ticket'}
+          </button>
+        </div>
       </Modal>
     </div>
   );

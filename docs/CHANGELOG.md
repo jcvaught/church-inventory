@@ -4,6 +4,19 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-04-25 — Tier 3 Features (Session 5)
+
+6 Tier 3 features: iCal export, cross-hub converts, compliance gate, swap requests, and public job board.
+
+- **FB-02** `src/utils/ical.js` (new) + `TasksPage` + `JobsPage` — iCal / Google Calendar export: new `ical.js` utility with `exportTasksICS` and `exportJobsICS`; "Export ICS" button in Tasks toolbar (exports tasks with due dates) and Schedule toolbar in Jobs; `.ics` download via Blob; all-day events use `DTSTART;VALUE=DATE` with DTEND = day+1 per iCal spec; timed events parse "2:00 PM" style strings to `YYYYMMDDTHHMMSS`
+- **FB-21** `TasksPage` + `JobsPage` + `useFirestore` — Cross-hub convert (job ↔ task): "→ Job" button in task detail modal (admin/manager) opens a mini-modal with title/date/location/spots; creates job via `addJobListing` then writes `linkedJobDocId` backref on task; "→ Task" button in job detail modal opens a mini-modal with name/due date/description; creates task via `addTask` then writes `linkedTaskDocId` backref on job; linked chips render in both detail modals; buttons hidden once linked
+- **FB-23** `TasksPage` + `useFirestore` — Auto-create maintenance ticket from task: "→ Ticket" button in task detail (admin/manager); confirmation modal; creates ticket via `addTicket` then writes `linkedTicketDocId` backref on task; ticket title/description pre-seeded from task; button hidden once linked
+- **FB-24** `JobsPage` + `useFirestore` — People Access compliance gate on job signup: admin can set `requiredAccessTypes[]` (background_check, key_assignment, certification, custom) checkboxes on each job form; before `signUpForJob`, client checks if user has a People Access person linked to their account and a valid (non-expired) record of each required type; blocks signup with a descriptive error message if not
+- **FB-13** `JobsPage` + `useFirestore` + `firestore.rules` — Job swap/replacement requests: signed-up members see "Request Swap" button in job detail → opens modal with optional note → writes to new `jobSwapRequests` subcollection; admin sees swap requests section in job detail modal with per-entry dismiss; new Firestore rules for `jobSwapRequests` (member create-own, admin/manager read+delete); `getJobSwapRequests`, `addJobSwapRequest`, `deleteJobSwapRequest` added to `useFirestore.js`; swap requests auto-load when admin opens job detail
+- **FB-01** `src/pages/PublicJobsPage.jsx` (new) + `App.jsx` + `firestore.rules` — Public job board for non-members: new `?jobs=CHURCH_ID&cn=ChurchName` route renders `PublicJobsPage` (unauthenticated); shows open job cards with title/description/date/location/pay/spots bar; roster names hidden; Sign Up buttons call `onGetStarted('register')`; CTA block at bottom; admin "Share Board" button in Job Board toolbar copies the URL to clipboard; `jobListings` Firestore rule updated to `allow read: if request.auth == null || isMember(churchId)`; rules deployed
+
+---
+
 ## 2026-04-25 — Tier 2 Tasks Features (Session 4)
 
 6 features from the Tasks session (FB-06, FB-08, FB-10, FB-14, FB-17, FB-25). Commit `5648b45`.

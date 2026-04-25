@@ -20,6 +20,7 @@ import { BarcodeScanner } from './components/primitives/BarcodeScanner.jsx';
 import { HelpPage } from './pages/HelpPage.jsx';
 import { BlogIndex } from './pages/BlogIndex.jsx';
 import { BlogPost } from './pages/BlogPost.jsx';
+import { PublicJobsPage } from './pages/PublicJobsPage.jsx';
 import { RES_STATUS } from './utils/constants.js';
 
 
@@ -426,6 +427,12 @@ export default function App() {
     const cn = p.get('cn');
     return churchId ? { churchId, churchName: cn ? decodeURIComponent(cn) : '' } : null;
   });
+  const [publicJobs] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    const churchId = p.get('jobs');
+    const cn = p.get('cn');
+    return churchId ? { churchId, churchName: cn ? decodeURIComponent(cn) : '' } : null;
+  });
   const [showHelp] = useState(() => new URLSearchParams(window.location.search).get('help') !== null);
   const [showAuth, setShowAuth] = useState(() => {
     const p = new URLSearchParams(window.location.search);
@@ -443,6 +450,7 @@ export default function App() {
   if (pathname.startsWith('/blog/')) return <BlogPost slug={pathname.replace('/blog/', '')} onGetStarted={handleGetStarted} />;
 
   if (publicRequest) return <PublicRequestPage churchId={publicRequest.churchId} churchName={publicRequest.churchName} />;
+  if (publicJobs) return <PublicJobsPage churchId={publicJobs.churchId} churchName={publicJobs.churchName} onGetStarted={handleGetStarted} />;
 
   if (showHelp) return <HelpPage onBack={() => window.history.back()} />;
 

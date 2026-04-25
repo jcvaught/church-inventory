@@ -1,0 +1,122 @@
+import { useState, useEffect } from 'react';
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { db } from '../firebase.js';
+import { B, f1, f2, btnP, btnS } from '../components/brand/tokens.js';
+import { FullLogo } from '../components/brand/Logo.jsx';
+import { Spinner } from '../components/primitives/Spinner.jsx';
+
+function formatJobDate(dateStr) {
+  if (!dateStr) return '—';
+  const [y, m, d] = dateStr.slice(0, 10).split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+export function PublicJobsPage({ churchId, churchName, onGetStarted }) {
+  const [jobs, setJobs] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    if (!churchId) return;
+    getDocs(query(
+      collection(db, 'churches', churchId, 'jobListings'),
+      where('status', '==', 'open'),
+      orderBy('scheduledDate')
+    ))
+      .then(snap => setJobs(snap.docs.map(d => ({ _docId: d.id, ...d.data() }))))
+      .catch(() => setErr('Could not load jobs. The link may be invalid.'));
+  }, [churchId]);
+
+  const displayName = churchName || 'Church';
+
+  return (
+    <div style={{ fontFamily: f2, minHeight: '100vh', background: `linear-gradient(170deg, ${B.cream} 0%, ${B.warmGray} 100%)` }}>
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+      <div style={{ background: `linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 60%, #2C4066 100%)`, padding: '18px 28px 24px', color: B.white }}>
+        <div style={{ maxWidth: 860, margin: '0 auto' }}>
+          <FullLogo size={32} light={true} />
+          <div style={{ marginTop: 16 }}>
+            <h1 style={{ fontFamily: f1, fontSize: 22, fontWeight: 700, color: B.white, margin: '0 0 4px' }}>
+              {displayName} — Job Board
+            </h1>
+            <p style={{ color: 'rgba(255,255,255,0.6)', margin: 0, fontSize: 14 }}>
+              Sign up to serve your community
+            </p>
+          </div>
+        </div>
+      </div>
+      <div style={{ height: 3, background: `linear-gradient(90deg, ${B.teal}, ${B.gold})` }}/>
+      <div style={{ maxWidth: 860, margin: '0 auto', padding: '28px 20px' }}>
+        {err && (
+          <div style={{ background: '#FEE8E8', border: '1px solid #FECACA', borderRadius: 10, padding: '12px 16px', color: B.red, fontFamily: f1, marginBottom: 20 }}>{err}</div>
+        )}
+        {jobs === null && !err && <Spinner />}
+        {jobs !== null && jobs.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '64px 20px', color: B.textLight, fontFamily: f2, fontSize: 15 }}>
+            No open jobs right now — check back soon!
+          </div>
+        )}
+        {jobs !== null && jobs.length > 0 && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14, marginBottom: 32 }}>
+              {jobs.map(job => {
+                const filled = (job.signups || []).length;
+                const total = job.spotsTotal || 1;
+                const isFull = filled >= total;
+                const pct = Math.min(100, (filled / total) * 100);
+                return (
+                  <div key={job._docId} style={{ background: B.white, borderRadius: 14, border: '1px solid ' + B.sand, padding: 18 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontFamily: 'monospace', color: B.textLight, background: B.warmGray, padding: '2px 6px', borderRadius: 4 }}>{job.jobNumber}</span>
+                      {isFull && <span style={{ fontSize: 11, fontWeight: 700, color: B.red, fontFamily: f1 }}>FULL</span>}
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: 15, fontFamily: f1, color: B.navy, marginBottom: 6 }}>{job.title}</div>
+                    {job.description && (
+                      <div style={{ fontSize: 13, color: B.textMid, fontFamily: f2, marginBottom: 8, lineHeight: 1.5 }}>{job.description}</div>
+                    )}
+                    <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 2 }}>
+                      📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' at ' + job.scheduledTime : ''}
+                    </div>
+                    {job.location && (
+                      <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 8 }}>📍 {job.location}</div>
+                    )}
+                    {job.pay != null && (
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#16A34A', fontFamily: f1, marginBottom: 10 }}>
+                        ${Number(job.pay).toFixed(2)} per person
+                      </div>
+                    )}
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 4 }}>
+                        <span>{filled}/{total} spot{total !== 1 ? 's' : ''} filled</span>
+                      </div>
+                      <div style={{ height: 6, borderRadius: 3, background: B.sand, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: pct + '%', background: isFull ? B.red : B.teal, borderRadius: 3 }}/>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => onGetStarted('register')}
+                      disabled={isFull}
+                      style={{ ...btnP, width: '100%', fontSize: 13, opacity: isFull ? 0.5 : 1, cursor: isFull ? 'not-allowed' : 'pointer' }}>
+                      {isFull ? 'Job Full' : 'Sign Up →'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ background: B.tealPale, border: '1px solid ' + B.tealLight, borderRadius: 12, padding: '16px 20px', textAlign: 'center' }}>
+              <div style={{ fontFamily: f1, fontWeight: 700, fontSize: 15, color: B.teal, marginBottom: 6 }}>
+                Ready to sign up?
+              </div>
+              <div style={{ fontSize: 13, color: B.textMid, fontFamily: f2, marginBottom: 12 }}>
+                Create a free account to sign up for jobs, track your schedule, and stay connected.
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button onClick={() => onGetStarted('register')} style={{ ...btnP, padding: '9px 20px', fontSize: 13 }}>Create Account</button>
+                <button onClick={() => onGetStarted('login')} style={{ ...btnS, padding: '9px 20px', fontSize: 13 }}>Sign In</button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

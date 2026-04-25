@@ -1094,6 +1094,33 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
+  // ── Job Swap Requests ──
+  const getJobSwapRequests = useCallback(async (jobDocId) => {
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'churches', churchId, 'jobSwapRequests'),
+        where('jobDocId', '==', jobDocId)
+      ));
+      return snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+    } catch (err) { handleErr(err); return []; }
+  }, [churchId]);
+
+  const addJobSwapRequest = useCallback(async (jobDocId, uid, name, note) => {
+    try {
+      const ref = await addDoc(collection(db, 'churches', churchId, 'jobSwapRequests'), {
+        jobDocId, uid, name: name || '', note: note || '',
+        createdAt: new Date().toISOString()
+      });
+      return ref.id;
+    } catch (err) { handleErr(err); throw err; }
+  }, [churchId]);
+
+  const deleteJobSwapRequest = useCallback(async (docId) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'jobSwapRequests', docId));
+    } catch (err) { handleErr(err); throw err; }
+  }, [churchId]);
+
   const addJobAnnouncement = useCallback(async (ann, userId, userName) => {
     try {
       const ref = await addDoc(collection(db, 'churches', churchId, 'jobAnnouncements'), {
@@ -1153,6 +1180,7 @@ export function useFirestore(churchId) {
     addJobListing, addJobListingSeries, updateJobListing, deleteJobListing, updateJobListingSeries, deleteJobListingSeries, deleteJobListingSeriesFrom,
     signUpForJob, withdrawFromJob, updateJobSignupAttendance,
     addJobAnnouncement, updateJobAnnouncement, deleteJobAnnouncement,
+    getJobSwapRequests, addJobSwapRequest, deleteJobSwapRequest,
     clearError
   };
 }
