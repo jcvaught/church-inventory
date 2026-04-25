@@ -4,6 +4,18 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-04-25 — Tier 2 Jobs Features (Session 3)
+
+5 features from the Jobs session (FB-04, FB-11, FB-15, FB-16, FB-20). FB-13 (job swap) deferred to Tier 3.
+
+- **FB-04** `JobsPage` + `useFirestore` + `functions/index.js` + `firestore.rules` — Waitlist when full: jobs add a `waitlist: [{uid, name, addedAt}]` array; "Join Waitlist" button when spots are full; "Leave Waitlist" / waitlist position for members; admin sees waitlist count on cards and a numbered waitlist section in the detail modal with per-entry removal; `withdrawFromJob` now handles both signups and waitlist entries; auto-promotion on withdrawal/admin-removal via new `promoteFromWaitlist` CF (atomic transaction + SendGrid email to promoted user); Firestore rule updated to allow member `waitlist`+`updatedAt` writes on open jobs
+- **FB-11** `JobsPage` — Inline edit from Schedule: desktop Schedule table gets an "Edit" column with a per-row Edit button (admin/manager only); clicking it opens the Edit Job modal directly, bypassing the detail modal
+- **FB-15** `JobsPage` — Volunteer Reports tab (admin/manager only): leaderboard table shows each volunteer's jobs signed up, attended count, no-show count, and total pay earned; derived from `jobListings` subscription in real time via `useMemo`
+- **FB-16** `JobsPage` + `useFirestore` — Attendance tracking: admin/manager can mark each signup as attended or no-show after the job date passes; toggles appear in the detail modal's signup list for past jobs; stored as `signups[].attended: bool`; attendance summary shown in Reports leaderboard
+- **FB-20** `JobsPage` — Per-job waiver/consent: optional `requiresWaiver` checkbox + `waiverText` field on job form; waiver text shown in job detail modal before signup; `window.confirm` gate before calling `signUpForJob`; `acknowledgedWaiverAt` timestamp stored per signup; admin sees 📋✓ / 📋? badge per signup in the detail modal
+
+---
+
 ## 2026-04-25 — Tier 1 Quick-Win Features (Session 2)
 
 7 features from the Opus feature suggestions (FB-05, FB-07, FB-09, FB-12, FB-18, FB-19, FB-22).
