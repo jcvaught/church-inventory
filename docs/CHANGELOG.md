@@ -4,6 +4,20 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-04-25 — Tier 1 Quick-Win Features (Session 2)
+
+7 features from the Opus feature suggestions (FB-05, FB-07, FB-09, FB-12, FB-18, FB-19, FB-22).
+
+- **FB-05** `JobsPage` + `functions/index.js` — Per-job lead override: new `jobLead: { uid, name }` field on jobs; select in job form; displayed in job detail modal metadata; `sendJobPosterNotification` notifies job lead in addition to poster + delegates, with email deduplication via `Set` to prevent duplicate sends when lead = delegate
+- **FB-07** `TasksPage` — Quick-add in Kanban: each column gets an inline text input at the bottom; pressing Enter or clicking `+` creates a task in that column with Medium priority and the user's default visibility, without opening the full Add modal
+- **FB-09** `TasksPage` — Saved filter views: `taskSavedFilters` array stored on `users/{uid}`; Save View button appears alongside Clear when any filter is active; loads live from the `users` subscription; chip row below the filter bar lets users one-click reload or delete named views
+- **FB-12** `TasksPage` — Bulk task assignment: assignee dropdown + Assign button in the bulk action bar; uses `Promise.allSettled` matching the existing bulk status pattern; skips tasks already assigned to the chosen user
+- **FB-18** `ActivityLogPage` — Hub filter: new `ACTION_HUB` constant maps all action strings to hub names; Hub select (All / Inventory / Supplies / Jobs / Tasks / Maintenance) added as the first filter column; grid expanded from 3 to 4 columns
+- **FB-19** `print.js` + `JobsPage` — Print-friendly roster: `printJobRoster(jobs, churchName)` function opens a styled HTML print window with a table of jobs and their signups; Print Roster button in Schedule tab toolbar alongside Show/Hide Past Jobs
+- **FB-22** `TasksPage` — Link task to item/ticket: `linkedItemDocId` and `linkedTicketDocId` fields on task documents; two selects (Link to Item / Link to Ticket) in both the Add Task and Task Detail modals; flows through `taskToEdits` + dirty-state tracking; inventory items and open maintenance tickets from the store are used to populate the selects
+
+---
+
 ## 2026-04-25 — Workflow Audit Bug Fixes (Session 1 / Tier 0)
 
 All 11 non-deferred findings from the 2026-04-25 full 35-workflow audit. See `docs/AUDIT-TASKS-JOBS-2026-04-25.md` for full details.

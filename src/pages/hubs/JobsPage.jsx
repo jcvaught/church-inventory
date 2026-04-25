@@ -5,6 +5,7 @@ import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { localDateStr, generateRecurrenceDates } from '../../utils/date.js';
+import { printJobRoster } from '../../utils/print.js';
 
 function formatJobDate(dateStr) {
   if (!dateStr) return '—';
@@ -20,7 +21,7 @@ const JOB_STATUS_COLORS = {
   cancelled: { bg: '#F3F4F6', tx: '#6B7280', dot: '#9CA3AF' },
 };
 
-const emptyJob = () => ({ title: '', description: '', scheduledDate: '', scheduledTime: '', location: '', spotsTotal: 1, pay: '', status: 'open' });
+const emptyJob = () => ({ title: '', description: '', scheduledDate: '', scheduledTime: '', location: '', spotsTotal: 1, pay: '', status: 'open', jobLead: null });
 
 const RECURRENCE_OPTIONS = [
   { v:'weekly', label:'Weekly' },
@@ -520,6 +521,7 @@ export function JobsPage({ store, userProfile }) {
       spotsTotal: job.spotsTotal || 1,
       pay: job.pay != null ? String(job.pay) : '',
       status: job.status || 'open',
+      jobLead: job.jobLead || null,
     });
     setIsRecurring(false);
     setRecurrenceFreq('weekly');
@@ -813,9 +815,12 @@ export function JobsPage({ store, userProfile }) {
             <span style={{ fontSize:14, fontFamily:f1, fontWeight:700, color:B.navy }}>
               {showPastJobs ? 'All jobs' : 'Upcoming jobs'} ({scheduleJobs.length})
             </span>
-            <button onClick={() => setShowPastJobs(v => !v)} style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>
-              {showPastJobs ? 'Hide Past Jobs' : 'Show Past Jobs'}
-            </button>
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={() => printJobRoster(scheduleJobs, config?.churchName || '')} style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>Print Roster</button>
+              <button onClick={() => setShowPastJobs(v => !v)} style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>
+                {showPastJobs ? 'Hide Past Jobs' : 'Show Past Jobs'}
+              </button>
+            </div>
           </div>
           {scheduleJobs.length === 0 ? (
             <div style={{ textAlign:'center', padding:'48px 20px', color:B.textLight, fontFamily:f2, fontSize:14 }}>No upcoming jobs.</div>
@@ -900,6 +905,18 @@ export function JobsPage({ store, userProfile }) {
           </div>
           <FF label="Location">
             <input style={inp} value={jobForm.location} onChange={e => setJobForm(f => ({ ...f, location: e.target.value }))} placeholder="e.g. Sanctuary" />
+          </FF>
+          <FF label="Job Lead (optional)">
+            <select style={{ ...inp, cursor: 'pointer' }} value={jobForm.jobLead?.uid || ''} onChange={e => {
+              const uid = e.target.value;
+              const u = (users || []).find(us => us.id === uid);
+              setJobForm(f => ({ ...f, jobLead: uid ? { uid, name: u?.name || uid } : null }));
+            }}>
+              <option value="">— None —</option>
+              {(users || []).filter(u => u.active !== false).sort((a, b) => (a.name||'').localeCompare(b.name||'')).map(u => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
           </FF>
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
@@ -1012,6 +1029,12 @@ export function JobsPage({ store, userProfile }) {
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: B.textLight, textTransform: 'uppercase', letterSpacing: .8, fontFamily: f1, marginBottom: 2 }}>Pay</div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: '#16A34A', fontFamily: f1 }}>${Number(liveDetail.pay).toFixed(2)} per person</div>
+              </div>
+            )}
+            {liveDetail.jobLead && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: B.textLight, textTransform: 'uppercase', letterSpacing: .8, fontFamily: f1, marginBottom: 2 }}>Job Lead</div>
+                <div style={{ fontSize: 14, color: B.textDark, fontFamily: f2 }}>{liveDetail.jobLead.name}</div>
               </div>
             )}
           </div>

@@ -1136,6 +1136,19 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
     .map(s => s.data())
     .filter(u => u.email && u.active !== false && ['admin', 'manager'].includes(u.role) && u.churchId === churchId);
 
+  // Per-job lead override: also notify the designated job lead if different from poster/actor
+  let jobLeadUser = null;
+  const jobLeadUid = job.jobLead?.uid;
+  if (jobLeadUid && jobLeadUid !== job.createdBy && jobLeadUid !== actorUid) {
+    const jobLeadSnap = await db.doc(`users/${jobLeadUid}`).get();
+    if (jobLeadSnap.exists) {
+      const jld = jobLeadSnap.data();
+      if (jld.email && jld.active !== false && jld.churchId === churchId) {
+        jobLeadUser = jld;
+      }
+    }
+  }
+
   const churchSnap = await db.doc(`churches/${churchId}/config/main`).get();
   const churchName = churchSnap.data()?.churchName || 'Your Church';
   const safeChurch = escapeHtml(churchName);
@@ -1185,8 +1198,11 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
     bodyText = `Your job "${job.title || 'Job'}" was cancelled by ${actorName || 'someone'}.\n\nOpen ChurchOpsHub for details.\n\n— ${churchName}`;
   }
 
+  const seenEmails = new Set();
+  const allNotifyRecipients = [poster, ...delegateUsers, ...(jobLeadUser ? [jobLeadUser] : [])];
+  const recipients = allNotifyRecipients.filter(u => { if (seenEmails.has(u.email)) return false; seenEmails.add(u.email); return true; });
   const results = await Promise.allSettled(
-    [poster, ...delegateUsers].map(u => sgMail.send({ to: u.email, from: FROM, subject, html: bodyHtml, text: bodyText }))
+    recipients.map(u => sgMail.send({ to: u.email, from: FROM, subject, html: bodyHtml, text: bodyText }))
   );
   results.forEach((r, i) => { if (r.status === 'rejected') console.error('sendJobPosterNotification: failed', { index: i, reason: r.reason?.message }); });
   await db.doc(`churches/${churchId}/jobListings/${jobDocId}`).update({ [`lastPosterNotifiedByActors.${actorKey}`]: new Date().toISOString() }).catch(() => {});

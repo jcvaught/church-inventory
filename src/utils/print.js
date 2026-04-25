@@ -46,6 +46,52 @@ export async function printLabel(item, churchName) {
   win.document.close();
 }
 
+export function printJobRoster(jobs, churchName) {
+  const org = escapeHtml(churchName) || 'ChurchOpsHub';
+  const rows = jobs.map(job => {
+    const parts = (job.scheduledDate || '').slice(0, 10).split('-').map(Number);
+    const dateStr = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' }) : '—';
+    const timeStr = job.scheduledTime ? ` at ${escapeHtml(job.scheduledTime)}` : '';
+    const signupList = (job.signups || []).map(s => escapeHtml(s.name)).join(', ') || '<em style="color:#aaa">No signups</em>';
+    return `<tr>
+      <td class="mono">${escapeHtml(job.jobNumber || '')}</td>
+      <td>${escapeHtml(job.title || '')}</td>
+      <td style="white-space:nowrap">${dateStr}${timeStr}</td>
+      <td>${escapeHtml(job.location || '—')}</td>
+      <td style="text-align:center">${(job.signups||[]).length}/${job.spotsTotal||1}</td>
+      <td>${signupList}</td>
+    </tr>`;
+  }).join('');
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write(`<!DOCTYPE html><html><head><title>Job Roster — ${org}</title><style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,sans-serif;font-size:12px;color:#1B2A4A;padding:32px}
+    h1{font-size:20px;font-weight:700;margin-bottom:4px}
+    .meta{font-size:11px;color:#8B93A1;margin-bottom:24px}
+    table{width:100%;border-collapse:collapse}
+    th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#8B93A1;padding:8px 10px;border-bottom:2px solid #2A7D6E;background:#F9F9F7}
+    td{padding:8px 10px;border-bottom:1px solid #F2F0EB;vertical-align:top}
+    tr:last-child td{border-bottom:none}
+    tr:nth-child(even) td{background:#FAFAF9}
+    .mono{font-family:monospace;letter-spacing:1px}
+    .no-print{margin-bottom:16px;display:flex;gap:8px}
+    @media print{body{padding:16px}.no-print{display:none}}
+  </style></head><body>
+  <h1>${org} — Job Roster</h1>
+  <div class="meta">Generated ${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})} · ${jobs.length} job${jobs.length !== 1 ? 's' : ''}</div>
+  <div class="no-print">
+    <button onclick="window.print()" style="padding:8px 18px;background:#2A7D6E;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">Print</button>
+    <button onclick="window.close()" style="padding:8px 18px;background:#eee;border:none;border-radius:6px;cursor:pointer;font-size:13px">Close</button>
+  </div>
+  <table>
+    <thead><tr><th>Job #</th><th>Title</th><th>Date &amp; Time</th><th>Location</th><th>Spots</th><th>Signed Up</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#aaa">No jobs to display.</td></tr>'}</tbody>
+  </table>
+  </body></html>`);
+  win.document.close();
+}
+
 export function printInventory(items, churchName, groupBy = "location") {
   const activeItems = items.filter(i => i.status !== "Disposed");
   const groups = {};

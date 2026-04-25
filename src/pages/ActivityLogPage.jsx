@@ -3,11 +3,20 @@ import { B, f1, inp, btnS } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { actionLabels, actionIcons, actionColors } from '../utils/activityLabels.js';
 
+const ACTION_HUB = {
+  add_item: "Inventory", edit_item: "Inventory", check_out: "Inventory", return: "Inventory", dispose: "Inventory", delete_item: "Inventory", mark_repair: "Inventory", mark_repaired: "Inventory",
+  add_supply: "Supplies", edit_supply: "Supplies", use_supply: "Supplies", restock: "Supplies", delete_supply: "Supplies",
+  post_job: "Jobs", update_job: "Jobs", delete_job: "Jobs", signup_job: "Jobs", withdraw_job: "Jobs", admin_remove_job: "Jobs", post_announcement: "Jobs", update_announcement: "Jobs", delete_announcement: "Jobs",
+  add_task: "Tasks", update_task: "Tasks", complete_task: "Tasks", delete_task: "Tasks", create_template: "Tasks", delete_template: "Tasks",
+  add_ticket: "Maintenance", update_ticket: "Maintenance",
+};
+
 export function ActivityLogPage({ store }) {
   const { activityLog } = store;
   const isMobile = useContext(MobileCtx);
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
+  const [hubFilter, setHubFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [expanded, setExpanded] = useState(null);
@@ -26,10 +35,11 @@ export function ActivityLogPage({ store }) {
           !JSON.stringify(l.details||{}).toLowerCase().includes(s)) return false;
     }
     if (actionFilter !== "all" && l.action !== actionFilter) return false;
+    if (hubFilter !== "all" && (ACTION_HUB[l.action] || "Other") !== hubFilter) return false;
     if (dateFrom && (l.timestamp||"").split("T")[0] < dateFrom) return false;
     if (dateTo && (l.timestamp||"").split("T")[0] > dateTo) return false;
     return true;
-  }), [activityLog, search, actionFilter, dateFrom, dateTo]);
+  }), [activityLog, search, actionFilter, hubFilter, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const safePage = Math.min(page, totalPages - 1);
@@ -52,9 +62,9 @@ export function ActivityLogPage({ store }) {
     ));
   }
 
-  function handleClearFilters() { setSearch(""); setActionFilter("all"); setDateFrom(""); setDateTo(""); setPage(0); setExpanded(null); }
+  function handleClearFilters() { setSearch(""); setActionFilter("all"); setHubFilter("all"); setDateFrom(""); setDateTo(""); setPage(0); setExpanded(null); }
 
-  const hasFilters = search || actionFilter !== "all" || dateFrom || dateTo;
+  const hasFilters = search || actionFilter !== "all" || hubFilter !== "all" || dateFrom || dateTo;
 
   return (
     <div>
@@ -70,7 +80,18 @@ export function ActivityLogPage({ store }) {
             <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>Search</label>
             <input style={inp} value={search} onChange={e=>{setSearch(e.target.value);setPage(0);setExpanded(null);}} placeholder="Item ID, person, details..." />
           </div>
-          <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr 1fr", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4, 1fr)", gap:10 }}>
+            <div>
+              <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>Hub</label>
+              <select style={{...inp, cursor:"pointer"}} value={hubFilter} onChange={e=>{setHubFilter(e.target.value);setPage(0);setExpanded(null);}}>
+                <option value="all">All Hubs</option>
+                <option value="Inventory">Inventory</option>
+                <option value="Supplies">Supplies</option>
+                <option value="Jobs">Job Hub</option>
+                <option value="Tasks">Tasks Hub</option>
+                <option value="Maintenance">Maintenance</option>
+              </select>
+            </div>
             <div>
               <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>Action</label>
               <select style={{...inp, cursor:"pointer"}} value={actionFilter} onChange={e=>{setActionFilter(e.target.value);setPage(0);setExpanded(null);}}>

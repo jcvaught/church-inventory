@@ -567,9 +567,10 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
   );
 }
 
-const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, onDrop, onStatusChange, isMobile, tasksByParent, tasksByDocId }) {
+const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, onDrop, onStatusChange, isMobile, tasksByParent, tasksByDocId, onQuickAdd }) {
   const sc = statusColors[status] || statusColors['Backlog'];
   const [dragOver, setDragOver] = useState(false);
+  const [quickAddName, setQuickAddName] = useState('');
   return (
     <div
       onDragOver={!isMobile && onDrop ? e => { e.preventDefault(); setDragOver(true); } : undefined}
@@ -592,6 +593,18 @@ const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, on
             })
         }
       </div>
+      {onQuickAdd && (
+        <div style={{ marginTop:8, display:'flex', gap:4 }}>
+          <input
+            value={quickAddName}
+            onChange={e => setQuickAddName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && quickAddName.trim()) { onQuickAdd(quickAddName); setQuickAddName(''); } }}
+            placeholder="Quick add..."
+            style={{ ...inp, flex:1, fontSize:12, padding:'6px 8px' }}
+          />
+          <button type="button" onClick={() => { if (quickAddName.trim()) { onQuickAdd(quickAddName); setQuickAddName(''); } }} style={{ ...btnS, padding:'6px 10px', fontSize:12 }}>+</button>
+        </div>
+      )}
     </div>
   );
 });
@@ -726,10 +739,10 @@ function TaskCalendar({ tasks, onTaskClick, isMobile }) {
   );
 }
 
-const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], parentTaskId:null, blockedBy:[] });
+const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], parentTaskId:null, blockedBy:[], linkedItemDocId:null, linkedTicketDocId:null });
 
 export function TasksPage({ store, userProfile }) {
-  const { tasks, users, settings, config, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser, taskTemplates, addTaskTemplate, deleteTaskTemplate } = store;
+  const { tasks, items, maintenanceTickets, users, settings, config, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser, taskTemplates, addTaskTemplate, deleteTaskTemplate } = store;
   const isMobile = useContext(MobileCtx);
 
   const userId = userProfile?.id || userProfile?.uid;
@@ -791,6 +804,7 @@ export function TasksPage({ store, userProfile }) {
   const [selectedTaskIds, setSelectedTaskIds] = useState(new Set());
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkAssigneeId, setBulkAssigneeId] = useState('');
   const [msg, setMsg] = useState(null);
   const [collapsedStatuses, setCollapsedStatuses] = useState(new Set());
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
@@ -877,6 +891,8 @@ export function TasksPage({ store, userProfile }) {
     if (JSON.stringify(detailEdits.sharedWith) !== JSON.stringify(detailSnapshot.sharedWith)) return true;
     if (JSON.stringify(detailEdits.checklist) !== JSON.stringify(detailSnapshot.checklist)) return true;
     if (JSON.stringify(detailEdits.blockedBy) !== JSON.stringify(detailSnapshot.blockedBy)) return true;
+    if ((detailEdits.linkedItemDocId ?? null) !== (detailSnapshot.linkedItemDocId ?? null)) return true;
+    if ((detailEdits.linkedTicketDocId ?? null) !== (detailSnapshot.linkedTicketDocId ?? null)) return true;
     return false;
   }, [detailEdits, detailSnapshot]);
 
@@ -946,6 +962,8 @@ export function TasksPage({ store, userProfile }) {
       checklist: task.checklist || [],
       parentTaskId: task.parentTaskId || null,
       blockedBy: task.blockedBy || [],
+      linkedItemDocId: task.linkedItemDocId || null,
+      linkedTicketDocId: task.linkedTicketDocId || null,
     };
   }
 
@@ -1036,6 +1054,8 @@ export function TasksPage({ store, userProfile }) {
         visibility: taskForm.visibility || 'team',
         sharedWith: taskForm.visibility === 'shared' ? taskForm.sharedWith : [],
         completedAt: null,
+        linkedItemDocId: taskForm.linkedItemDocId || null,
+        linkedTicketDocId: taskForm.linkedTicketDocId || null,
       }, userId, userName);
       if (photoFiles.length > 0 && docId) {
         try {
@@ -1259,7 +1279,7 @@ export function TasksPage({ store, userProfile }) {
     setSelectedTaskIds(new Set(topLevel.map(t => t._docId)));
   }
 
-  function clearSelection() { setSelectedTaskIds(new Set()); setBulkStatus(''); }
+  function clearSelection() { setSelectedTaskIds(new Set()); setBulkStatus(''); setBulkAssigneeId(''); }
 
   async function handleBulkStatusChange() {
     if (!bulkStatus || selectedTaskIds.size === 0) return;
@@ -1293,6 +1313,26 @@ export function TasksPage({ store, userProfile }) {
     setBulkSaving(false);
   }
 
+  async function handleBulkAssign() {
+    if (!bulkAssigneeId || selectedTaskIds.size === 0) return;
+    const assigneeUser = taskHubUsers.find(u => u.id === bulkAssigneeId);
+    if (!assigneeUser) return;
+    setBulkSaving(true);
+    try {
+      const results = await Promise.allSettled([...selectedTaskIds].map(docId => {
+        const task = tasksByDocId[docId];
+        if (!task) return Promise.resolve();
+        const existing = task.assignees || [];
+        if (existing.some(a => a.uid === bulkAssigneeId)) return Promise.resolve();
+        return updateTask(docId, { assignees: [...existing, { uid: bulkAssigneeId, name: assigneeUser.name }] }, userId, userName, task.taskNumber);
+      }));
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      flash(`Assigned ${assigneeUser.name} to ${succeeded} task${succeeded !== 1 ? 's' : ''}.`);
+      clearSelection();
+    } catch { flash('Bulk assign failed.', true); }
+    setBulkSaving(false);
+  }
+
   async function handleBulkDelete() {
     if (selectedTaskIds.size === 0) return;
     if (!window.confirm(`Delete ${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''}? This cannot be undone.`)) return;
@@ -1312,6 +1352,30 @@ export function TasksPage({ store, userProfile }) {
       clearSelection();
     } catch { flash('Bulk delete failed.', true); }
     setBulkSaving(false);
+  }
+
+  async function handleQuickAddTask(name, status) {
+    if (!name.trim()) return;
+    try {
+      await addTask({
+        name: name.trim(),
+        description: '',
+        priority: 'Medium',
+        status,
+        tags: [],
+        dueDate: null,
+        recurrence: null,
+        assignees: [],
+        checklist: [],
+        photos: [],
+        notes: null,
+        visibility: taskDefaults.visibility || 'team',
+        sharedWith: taskDefaults.visibility === 'shared' ? (taskDefaults.sharedWith || []) : [],
+        completedAt: null,
+        linkedItemDocId: null,
+        linkedTicketDocId: null,
+      }, userId, userName);
+    } catch { flash('Failed to add task.', true); }
   }
 
   async function handleSaveAsTemplate() {
@@ -1369,6 +1433,33 @@ export function TasksPage({ store, userProfile }) {
       return acc;
     }, { openCount: 0, inProgressCount: 0, completedThisMonth: 0, overdueCount: 0 });
   }, [visibleTasks]);
+
+  // ── Saved filter views ──
+  const savedFilters = useMemo(() => {
+    const u = (users || []).find(u => u.id === userId);
+    return u?.taskSavedFilters || [];
+  }, [users, userId]);
+
+  function handleSaveView() {
+    const name = window.prompt('Save this filter view as:');
+    if (!name?.trim()) return;
+    const view = { name: name.trim(), search: filterSearch, priority: filterPriority, status: filterStatus, assignee: filterAssignee, myTasks: filterMyTasks };
+    const current = (users || []).find(u => u.id === userId)?.taskSavedFilters || [];
+    updateUser(userId, { taskSavedFilters: [...current, view] }).catch(() => flash('Failed to save view.', true));
+  }
+
+  function handleDeleteSavedView(index) {
+    const current = (users || []).find(u => u.id === userId)?.taskSavedFilters || [];
+    updateUser(userId, { taskSavedFilters: current.filter((_, i) => i !== index) }).catch(() => flash('Failed to delete view.', true));
+  }
+
+  function handleLoadSavedView(view) {
+    setFilterSearch(view.search || '');
+    setFilterPriority(view.priority || '');
+    setFilterStatus(view.status || '');
+    setFilterAssignee(view.assignee || '');
+    setFilterMyTasks(!!view.myTasks);
+  }
 
   // ── Filtered tasks ──
   const filteredTasks = useMemo(() => {
@@ -1495,9 +1586,22 @@ export function TasksPage({ store, userProfile }) {
           My tasks
         </button>
         {(filterSearch || filterPriority || filterStatus || filterAssignee || filterMyTasks) && (
-          <button type="button" onClick={() => { setFilterSearch(''); setFilterPriority(''); setFilterStatus(''); setFilterAssignee(''); setFilterMyTasks(false); }} style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, cursor:'pointer' }}>Clear</button>
+          <>
+            <button type="button" onClick={() => { setFilterSearch(''); setFilterPriority(''); setFilterStatus(''); setFilterAssignee(''); setFilterMyTasks(false); }} style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, cursor:'pointer' }}>Clear</button>
+            <button type="button" onClick={handleSaveView} title="Save current filters as a named view" style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.teal, fontSize:13, cursor:'pointer' }}>Save View</button>
+          </>
         )}
       </div>
+      {savedFilters.length > 0 && (
+        <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
+          {savedFilters.map((v, i) => (
+            <span key={i} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 12px', borderRadius:20, background:B.tealPale, border:'1px solid '+B.tealLight, fontSize:12, fontFamily:f1, color:B.teal }}>
+              <button type="button" onClick={() => handleLoadSavedView(v)} style={{ background:'none', border:'none', cursor:'pointer', color:B.teal, fontSize:12, fontFamily:f1, fontWeight:600, padding:0 }}>{v.name}</button>
+              <button type="button" onClick={() => handleDeleteSavedView(i)} aria-label={`Delete saved view ${v.name}`} style={{ background:'none', border:'none', cursor:'pointer', color:B.teal, fontSize:14, lineHeight:1, padding:'0 0 0 2px' }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* View Toggle + Sort */}
       <div style={{ display:'flex', gap:8, marginBottom:18, alignItems:'center', flexWrap:'wrap' }}>
@@ -1569,7 +1673,7 @@ export function TasksPage({ store, userProfile }) {
       {viewMode === 'kanban' && visibleTasks.length > 0 && (
         <div style={{ display:'flex', gap:12, overflowX:isMobile ? 'hidden' : 'auto', flexDirection:isMobile ? 'column' : 'row', paddingBottom:8, alignItems:'flex-start' }}>
           {STATUSES.map(status => (
-            <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile} tasksByParent={tasksByParent} tasksByDocId={tasksByDocId}/>
+            <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile} tasksByParent={tasksByParent} tasksByDocId={tasksByDocId} onQuickAdd={name => handleQuickAddTask(name, status)}/>
           ))}
         </div>
       )}
@@ -1593,6 +1697,13 @@ export function TasksPage({ store, userProfile }) {
                   {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <button onClick={handleBulkStatusChange} disabled={bulkSaving || !bulkStatus} style={{ ...btnP, fontSize:12, padding:'5px 12px', opacity:(!bulkStatus || bulkSaving) ? .5 : 1 }}>Apply</button>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <select aria-label="Assign selected tasks to" value={bulkAssigneeId} onChange={e => setBulkAssigneeId(e.target.value)} style={{ ...inp, width:'auto', fontSize:12, padding:'5px 10px', cursor:'pointer' }}>
+                  <option value="">Assign to...</option>
+                  {taskHubUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+                <button onClick={handleBulkAssign} disabled={bulkSaving || !bulkAssigneeId} style={{ ...btnS, fontSize:12, padding:'5px 12px', opacity:(!bulkAssigneeId || bulkSaving) ? .5 : 1 }}>Assign</button>
               </div>
               {canOperate && <button onClick={handleBulkDelete} disabled={bulkSaving} style={{ ...btnD, fontSize:12, padding:'5px 12px', opacity:bulkSaving ? .5 : 1 }}>Delete Selected</button>}
               <button onClick={selectAllVisible} style={{ ...btnS, fontSize:12, padding:'4px 10px', marginLeft:'auto' }}>Select All</button>
@@ -1704,6 +1815,24 @@ export function TasksPage({ store, userProfile }) {
         <FF label="Blocked By (optional)">
           <BlockedByInput blockedBy={taskForm.blockedBy || []} onChange={blockedBy => setTaskForm(f => ({ ...f, blockedBy }))} tasks={visibleTasks}/>
         </FF>
+        <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
+          <FF label="Link to Item (optional)">
+            <select style={{ ...inp, cursor:'pointer' }} value={taskForm.linkedItemDocId || ''} onChange={e => setTaskForm(f => ({ ...f, linkedItemDocId: e.target.value || null }))}>
+              <option value="">— None —</option>
+              {(items || []).filter(i => i.status !== 'Disposed').sort((a,b) => (a.itemId||'').localeCompare(b.itemId||'')).map(i => (
+                <option key={i._docId} value={i._docId}>{i.itemId}{i.description ? ' — '+i.description.slice(0,40) : ''}</option>
+              ))}
+            </select>
+          </FF>
+          <FF label="Link to Ticket (optional)">
+            <select style={{ ...inp, cursor:'pointer' }} value={taskForm.linkedTicketDocId || ''} onChange={e => setTaskForm(f => ({ ...f, linkedTicketDocId: e.target.value || null }))}>
+              <option value="">— None —</option>
+              {(maintenanceTickets || []).filter(t => t.status !== 'Closed').sort((a,b) => (a.ticketNumber||'').localeCompare(b.ticketNumber||'')).map(t => (
+                <option key={t._docId} value={t._docId}>{t.ticketNumber}{t.title ? ' — '+t.title.slice(0,40) : ''}</option>
+              ))}
+            </select>
+          </FF>
+        </div>
         <FF label="Photos">
           <PhotoGrid photos={photoPreviews} onAdd={handlePhotoSelect} onRemove={handlePreviewRemove} uploading={false}/>
         </FF>
@@ -1775,6 +1904,24 @@ export function TasksPage({ store, userProfile }) {
             <FF label="Blocked By (optional)">
               <BlockedByInput blockedBy={detailEdits.blockedBy || []} onChange={blockedBy => setDetailEdits(d => ({ ...d, blockedBy }))} tasks={visibleTasks} currentTaskNumber={showDetail.taskNumber}/>
             </FF>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
+              <FF label="Link to Item (optional)">
+                <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.linkedItemDocId || ''} onChange={e => setDetailEdits(d => ({ ...d, linkedItemDocId: e.target.value || null }))}>
+                  <option value="">— None —</option>
+                  {(items || []).filter(i => i.status !== 'Disposed').sort((a,b) => (a.itemId||'').localeCompare(b.itemId||'')).map(i => (
+                    <option key={i._docId} value={i._docId}>{i.itemId}{i.description ? ' — '+i.description.slice(0,40) : ''}</option>
+                  ))}
+                </select>
+              </FF>
+              <FF label="Link to Ticket (optional)">
+                <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.linkedTicketDocId || ''} onChange={e => setDetailEdits(d => ({ ...d, linkedTicketDocId: e.target.value || null }))}>
+                  <option value="">— None —</option>
+                  {(maintenanceTickets || []).filter(t => t.status !== 'Closed').sort((a,b) => (a.ticketNumber||'').localeCompare(b.ticketNumber||'')).map(t => (
+                    <option key={t._docId} value={t._docId}>{t.ticketNumber}{t.title ? ' — '+t.title.slice(0,40) : ''}</option>
+                  ))}
+                </select>
+              </FF>
+            </div>
             <RichTextarea label="Notes" style={{ ...inp, minHeight:52, resize:'vertical' }} value={detailEdits.notes} onChange={v => setDetailEdits(d => ({ ...d, notes:v }))} placeholder="Additional notes..."/>
             <FF label="Checklist">
               <div style={{ border:'1px dashed '+B.sand, borderRadius:10, padding:'12px 14px' }}>
