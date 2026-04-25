@@ -155,7 +155,8 @@ service cloud.firestore {
     //    runTransaction in signUpForJob/withdrawFromJob enforces self-only semantics for
     //    honest callers; the ±1 delta constraint closes the practical attack surface. ──
     match /churches/{churchId}/jobListings/{docId} {
-      allow read:           if request.auth == null || isMember(churchId);
+      allow get:            if isMember(churchId);
+      allow list:           if (request.auth == null && resource.data.status == 'open') || isMember(churchId);
       allow create, delete: if isChurchAdminOrManager(churchId);
       allow update:         if isChurchAdminOrManager(churchId) || (
         isMember(churchId) &&
