@@ -4,6 +4,24 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-04-25 — Workflow Audit Bug Fixes (Session 1 / Tier 0)
+
+All 11 non-deferred findings from the 2026-04-25 full 35-workflow audit. See `docs/AUDIT-TASKS-JOBS-2026-04-25.md` for full details.
+
+- **F-01** `TasksPage` — `createNextRecurringTask`: roll back `nextRecurrenceCreatedAt` marker if `addTask` fails, so user can retry by re-completing the task
+- **F-02** `TasksPage` — Bulk status change: `Promise.all` → `Promise.allSettled` with partial-failure reporting ("X of Y tasks updated; Z failed")
+- **F-03** `TasksPage` — Bulk delete: same `Promise.allSettled` + partial-failure reporting
+- **F-04** `functions/index.js` — `sendJobReminders`: added per-church `notifEnabled` check (was missing; tasks reminders already had this)
+- **F-05** `functions/index.js` — `sendJobPosterNotification`: added `subHasHub(sub, 'jobs')` check alongside existing `notifEnabled` check
+- **F-06** `JobsPage` — Removed `'completed'` from `terminalStatuses`; marking a job Completed no longer triggers a "Job Cancelled" email to signups
+- **F-07** `functions/index.js` — `sendJobReminders`: now stamps `lastReminderSentDate` only on jobs where at least one email succeeded (mirrors `sendTaskDueReminders` pattern)
+- **F-08** `functions/index.js` — `sendJobAnnouncementEmails`: added `notifEnabled` server-side check (client-only guard was bypassable)
+- **F-09** `TasksPage` — `handleDeleteTask`: after deleting a task, queries for tasks that had it in `blockedBy` and removes the stale reference via `arrayRemove`
+- **F-11** `useFirestore` — `addTask` / `updateTask`: private and shared task names no longer written to activity log `details.name` (activity log is readable by all members)
+- **F-12** `useFirestore` + `JobsPage` — `deleteJobListing`: logs `JOB-###` (human-readable jobNumber) instead of an opaque Firestore docId
+
+---
+
 ## Completed Phases
 
 ### ✅ Phases 1–3
