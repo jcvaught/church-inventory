@@ -54,6 +54,10 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [inviteHubsInitialized, setInviteHubsInitialized] = useState(false);
   const [jobDelegates, setJobDelegates] = useState(() => userProfile?.jobPosterDelegates || []);
   const [savingDelegates, setSavingDelegates] = useState(false);
+  const [phoneInput, setPhoneInput] = useState(() => userProfile?.phone || '');
+  const [smsEnabled, setSmsEnabled] = useState(() => !!userProfile?.smsRemindersEnabled);
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [phoneSaved, setPhoneSaved] = useState(false);
 
   const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub', people_access: 'People Access Hub', tasks: 'Tasks Hub', jobs: 'Job Hub' };
   const churchHubs = subscription?.grandfathered || subscription?.plan === 'all_in'
@@ -205,12 +209,36 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const isManager = userProfile?.role === "manager";
   const managedMinistries = userProfile?.managedMinistries || [];
   const hasJobsHub = (subscription?.hubs || []).includes('jobs') || subscription?.plan === 'all_in' || subscription?.grandfathered;
+  const userHasJobsAccess = hasJobsHub && (!userProfile?.allowedHubs || userProfile.allowedHubs.includes('jobs'));
   const adminManagerUsers = (users || []).filter(u => ['admin', 'manager'].includes(u.role) && u.id !== userProfile?.uid && u.active !== false);
 
   async function handleSaveDelegates(next) {
     setSavingDelegates(true);
     try { await updateUser(userProfile.uid, { jobPosterDelegates: next }); setJobDelegates(next); } catch { /* ignore */ }
     setSavingDelegates(false);
+  }
+
+  function normalizePhone(raw) {
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length === 10) return '+1' + digits;
+    if (digits.length === 11 && digits[0] === '1') return '+' + digits;
+    return null;
+  }
+
+  async function handleSavePhone() {
+    const normalized = normalizePhone(phoneInput);
+    if (phoneInput.trim() && !normalized) return; // invalid format, don't save
+    setSavingPhone(true);
+    try {
+      await updateUser(userProfile.uid, {
+        phone: normalized || '',
+        smsRemindersEnabled: normalized ? smsEnabled : false,
+      });
+      if (!normalized) setSmsEnabled(false);
+      setPhoneSaved(true);
+      setTimeout(() => setPhoneSaved(false), 2000);
+    } catch { /* ignore */ }
+    setSavingPhone(false);
   }
 
   // ── People Access helpers (used for My Compliance card + Team badges) ──
@@ -369,6 +397,45 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
               </div>
             )}
             {jobDelegates.length >= 5 && <div style={{ fontSize:12, color:B.textLight, marginTop:6, fontFamily:f2 }}>Maximum 5 delegates.</div>}
+          </div>
+        )}
+
+        {/* SMS Reminders — visible to any user who has Jobs Hub access */}
+        {userHasJobsAccess && (
+          <div style={{ marginTop:16, paddingTop:16, borderTop:'1px solid '+B.sand, width:'100%' }}>
+            <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>SMS Job Reminders</div>
+            <div style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:10 }}>
+              Receive a text message the morning of any job you're signed up for.
+            </div>
+            <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+              <input
+                type="tel"
+                placeholder="(555) 555-5555"
+                value={phoneInput}
+                onChange={e => setPhoneInput(e.target.value)}
+                style={{ ...inp, width:160, fontSize:14 }}
+              />
+              <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, fontFamily:f2, color:B.textMid, cursor:'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={smsEnabled}
+                  disabled={!phoneInput.trim()}
+                  onChange={e => setSmsEnabled(e.target.checked)}
+                  style={{ accentColor:B.teal, width:15, height:15 }}
+                />
+                Enable SMS reminders
+              </label>
+              <button
+                onClick={handleSavePhone}
+                disabled={savingPhone}
+                style={{ ...btnP, padding:'7px 18px', fontSize:13, opacity:savingPhone?0.6:1 }}
+              >
+                {phoneSaved ? 'Saved!' : savingPhone ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+            <div style={{ fontSize:11, color:B.textLight, marginTop:8, fontFamily:f2, maxWidth:480 }}>
+              By enabling SMS reminders you consent to receive automated text messages from ChurchOpsHub. Message and data rates may apply. Reply STOP to opt out at any time.
+            </div>
           </div>
         )}
       </div>

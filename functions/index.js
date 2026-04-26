@@ -9,6 +9,9 @@ const { getAuth } = require('firebase-admin/auth');
 let sgMail;
 try { sgMail = require('@sendgrid/mail'); } catch { sgMail = null; }
 
+let twilioClient;
+try { twilioClient = require('twilio'); } catch { twilioClient = null; }
+
 initializeApp();
 
 // Allowed origins for Stripe redirect URLs (successUrl, cancelUrl, returnUrl)
@@ -338,6 +341,14 @@ function initSendGrid() {
   sgMail.setApiKey(apiKey);
   return true;
 }
+
+function getTwilioClient() {
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  if (!sid || !token || !twilioClient) return null;
+  return twilioClient(sid, token);
+}
+const TWILIO_FROM = process.env.TWILIO_FROM_NUMBER || '';
 
 const FROM = { email: 'churchopshub@gmail.com', name: 'ChurchOpsHub' };
 
@@ -1078,6 +1089,29 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
       emailJobRefs[i].forEach(ref => jobsWithSuccesses.add(ref));
     }
   });
+
+  // SMS reminders — sent to opted-in users alongside email (independent channel)
+  const tw = getTwilioClient();
+  if (tw && TWILIO_FROM) {
+    const smsTasks = [];
+    for (const userSnap of userSnaps) {
+      if (!userSnap.exists) continue;
+      const user = userSnap.data();
+      if (!user.phone || !user.smsRemindersEnabled || user.active === false) continue;
+      if (user.allowedHubs && !user.allowedHubs.includes('jobs')) continue;
+      const jobs = (remindersByUid[userSnap.id] || []).filter(j => j.churchId === user.churchId);
+      if (jobs.length === 0) continue;
+      const jobLines = jobs.map(j => `• ${j.title}${j.scheduledTime ? ' at ' + j.scheduledTime : ''}${j.location ? ' — ' + j.location : ''}`).join('\n');
+      const body = jobs.length === 1
+        ? `ChurchOpsHub: Reminder — you're signed up for "${jobs[0].title}" today${jobs[0].scheduledTime ? ' at ' + jobs[0].scheduledTime : ''}${jobs[0].location ? ' @ ' + jobs[0].location : ''}. Reply STOP to opt out.`
+        : `ChurchOpsHub: Reminder — you have ${jobs.length} jobs today:\n${jobLines}\n\nReply STOP to opt out.`;
+      smsTasks.push(
+        tw.messages.create({ to: user.phone, from: TWILIO_FROM, body })
+          .catch(err => console.error('sendJobReminders: SMS failed', { uid: userSnap.id, err: err?.message }))
+      );
+    }
+    if (smsTasks.length > 0) await Promise.allSettled(smsTasks);
+  }
 
   // Only stamp jobs where at least one email was successfully sent (F-07)
   await Promise.allSettled([...jobsWithSuccesses].map(ref => ref.update({ lastReminderSentDate: today })));
