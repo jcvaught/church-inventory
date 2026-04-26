@@ -4,6 +4,17 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-04-25 — Notable Gaps Polish (commit ad5e5a2)
+
+4 items from the post-audit "notable gaps" list.
+
+- **Task photo lightbox** — `PhotoGrid` gains a full-screen lightbox overlay; click any thumbnail to open; prev/next arrows, photo counter, Escape/arrow-key navigation; `cursor:zoom-in` on thumbnails; self-contained in `PhotoGrid` component (no TasksPage state added)
+- **Job Hub delegate discoverability** — `📧 Delegates` button added to Job Board toolbar (admin/manager); opens a modal with the same chip-toggle UI from Settings → Profile, so admins can manage notification delegates without leaving the hub; `updateUser` added to JobsPage store destructure; `adminManagerUsers` memo + `handleSaveDelegates` added
+- **Notes vs description clarity** — Placeholder text updated in both Add Task and Detail modals: description = "What needs to be done — scope, context, and acceptance criteria"; notes = "Follow-up reminders, reference links, or working notes"
+- **Recurring announcements** — `repeatWeekly` boolean field added to announcement schema; form gains "Repeat weekly" checkbox that auto-fills `expiresAt` to 7 days from today when checked; `generateRecurringTemplateTasks` CF now sweeps `jobAnnouncements` collection group daily and advances `expiresAt` +7 days for expired `repeatWeekly` announcements; `firestore.indexes.json` updated with `jobAnnouncements/repeatWeekly` collection-group field override; functions + indexes deployed
+
+---
+
 ## 2026-04-25 — Tier 3 Features (Session 5)
 
 6 Tier 3 features: iCal export, cross-hub converts, compliance gate, swap requests, and public job board.
