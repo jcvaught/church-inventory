@@ -18,6 +18,7 @@ import { ActivityLogPage } from './pages/ActivityLogPage.jsx';
 import { SettingsPage } from './pages/SettingsPage.jsx';
 import { BarcodeScanner } from './components/primitives/BarcodeScanner.jsx';
 import { HelpPage } from './pages/HelpPage.jsx';
+import { PrivacyPage } from './pages/PrivacyPage.jsx';
 import { BlogIndex } from './pages/BlogIndex.jsx';
 import { BlogPost } from './pages/BlogPost.jsx';
 import { PublicJobsPage } from './pages/PublicJobsPage.jsx';
@@ -373,7 +374,8 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
                     <li><strong>Google Firebase</strong> — database (Firestore), authentication, and file storage. Data is stored in US-based Google Cloud regions. <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer" style={{ color:B.teal }}>Firebase Privacy</a></li>
                     <li><strong>Stripe</strong> — payment processing. Only contacted when you subscribe to a paid plan. <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color:B.teal }}>Stripe Privacy</a></li>
                     <li><strong>Sentry</strong> — error monitoring. Receives error messages and stack traces when the app crashes. We configure Sentry to avoid including sensitive inventory content in error reports. <a href="https://sentry.io/privacy/" target="_blank" rel="noopener noreferrer" style={{ color:B.teal }}>Sentry Privacy</a></li>
-                    <li><strong>SendGrid (Twilio)</strong> — optional email notifications for reservation decisions, ticket assignments, and job announcements. Only used if your church administrator enables this feature. <a href="https://www.twilio.com/en-us/legal/privacy" target="_blank" rel="noopener noreferrer" style={{ color:B.teal }}>Twilio Privacy</a></li>
+                    <li><strong>SendGrid (Twilio)</strong> — email notifications for reservation decisions, ticket assignments, job announcements, and task reminders. Only used if your church administrator enables this feature. <a href="https://www.twilio.com/en-us/legal/privacy" target="_blank" rel="noopener noreferrer" style={{ color:B.teal }}>Twilio Privacy</a></li>
+                    <li><strong>Twilio Programmable Messaging</strong> — optional SMS reminders sent to users who have explicitly opted in via Settings. Phone numbers are transmitted to Twilio solely to deliver opted-in messages. Reply STOP to opt out at any time. <a href="https://www.twilio.com/en-us/legal/privacy" target="_blank" rel="noopener noreferrer" style={{ color:B.teal }}>Twilio Privacy</a></li>
                     <li><strong>Google Fonts</strong> — font files loaded from Google's servers on page load. Google may collect basic request data per their standard CDN policies.</li>
                   </ul>
                   <p>We do not share your data with any other third parties except as required by law.</p>
@@ -434,6 +436,7 @@ export default function App() {
     return churchId ? { churchId, churchName: cn ? decodeURIComponent(cn) : '' } : null;
   });
   const [showHelp] = useState(() => new URLSearchParams(window.location.search).get('help') !== null);
+  const [showPrivacy] = useState(() => new URLSearchParams(window.location.search).get('privacy') !== null);
   const [showAuth, setShowAuth] = useState(() => {
     const p = new URLSearchParams(window.location.search);
     return p.get('signup') !== null || p.get('invite') !== null;
@@ -453,6 +456,7 @@ export default function App() {
   if (publicJobs) return <PublicJobsPage churchId={publicJobs.churchId} churchName={publicJobs.churchName} onGetStarted={handleGetStarted} />;
 
   if (showHelp) return <HelpPage onBack={() => window.history.back()} />;
+  if (showPrivacy) return <PrivacyPage />;
 
   if (authLoading) return <Spinner />;
 

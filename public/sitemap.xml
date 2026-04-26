@@ -13,6 +13,12 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://churchopshub.com/?privacy</loc>
+    <lastmod>2026-04-26</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
     <loc>https://churchopshub.com/blog</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>weekly</changefreq>
