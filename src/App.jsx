@@ -19,6 +19,7 @@ import { SettingsPage } from './pages/SettingsPage.jsx';
 import { BarcodeScanner } from './components/primitives/BarcodeScanner.jsx';
 import { HelpPage } from './pages/HelpPage.jsx';
 import { PrivacyPage } from './pages/PrivacyPage.jsx';
+import { TermsPage } from './pages/TermsPage.jsx';
 import { BlogIndex } from './pages/BlogIndex.jsx';
 import { BlogPost } from './pages/BlogPost.jsx';
 import { PublicJobsPage } from './pages/PublicJobsPage.jsx';
@@ -437,6 +438,7 @@ export default function App() {
   });
   const [showHelp] = useState(() => new URLSearchParams(window.location.search).get('help') !== null);
   const [showPrivacy] = useState(() => new URLSearchParams(window.location.search).get('privacy') !== null);
+  const [showTerms] = useState(() => new URLSearchParams(window.location.search).get('terms') !== null);
   const [showAuth, setShowAuth] = useState(() => {
     const p = new URLSearchParams(window.location.search);
     return p.get('signup') !== null || p.get('invite') !== null;
@@ -457,6 +459,7 @@ export default function App() {
 
   if (showHelp) return <HelpPage onBack={() => window.history.back()} />;
   if (showPrivacy) return <PrivacyPage />;
+  if (showTerms) return <TermsPage />;
 
   if (authLoading) return <Spinner />;
 
