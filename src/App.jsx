@@ -1,4 +1,5 @@
 import { useState, useEffect, Component } from 'react';
+import * as Sentry from '@sentry/react';
 import { useAuth } from './useAuth.js';
 import { useFirestore } from './useFirestore.js';
 import { useSubscription } from './hooks/useSubscription.js';
@@ -29,6 +30,9 @@ import { RES_STATUS } from './utils/constants.js';
 class PageErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(e) { return { error: e }; }
+  componentDidCatch(error, info) {
+    Sentry.captureException(error, { contexts: { react: { componentStack: info.componentStack } } });
+  }
   render() {
     if (this.state.error) {
       return (

@@ -1085,13 +1085,19 @@ export function TasksPage({ store, userProfile }) {
 
   async function uploadPhotos(docId, files) {
     const urls = [];
+    let failed = 0;
     for (const file of files) {
-      const resized = await resizeImageForUpload(file);
-      const sRef = storageRef(storage, `churches/${churchId}/tasks/${docId}/${Date.now()}_${file.name}`);
-      const snap = await uploadBytes(sRef, resized);
-      urls.push(await getDownloadURL(snap.ref));
+      try {
+        const resized = await resizeImageForUpload(file);
+        const sRef = storageRef(storage, `churches/${churchId}/tasks/${docId}/${Date.now()}_${file.name}`);
+        const snap = await uploadBytes(sRef, resized);
+        urls.push(await getDownloadURL(snap.ref));
+      } catch (err) {
+        console.error('[ChurchOpsHub] task photo upload failed', { fileName: file.name, err });
+        failed++;
+      }
     }
-    return urls;
+    return { urls, failed };
   }
 
   // ── Handlers ──
@@ -1155,8 +1161,12 @@ export function TasksPage({ store, userProfile }) {
       }, userId, userName);
       if (photoFiles.length > 0 && docId) {
         try {
-          const urls = await uploadPhotos(docId, photoFiles);
-          await updateTask(docId, { photos: urls });
+          const { urls, failed } = await uploadPhotos(docId, photoFiles);
+          if (urls.length > 0) await updateTask(docId, { photos: urls });
+          if (failed > 0) {
+            if (urls.length === 0) flash('Photo upload failed — task saved without photos.', true);
+            else flash(`Uploaded ${urls.length} of ${urls.length + failed} photos; ${failed} failed.`, true);
+          }
         } catch { flash('Photo upload failed — task saved without photos.', true); }
       }
       if (canOperate && taskForm.tags.length > 0 && addTaskTags) {
@@ -1204,7 +1214,7 @@ export function TasksPage({ store, userProfile }) {
         for (const assignee of newlyAdded) {
           const assigneeUser = users.find(u => u.id === assignee.uid);
           if (!assigneeUser?.email) continue;
-          fn({ toEmail: assigneeUser.email, toName: assignee.name, churchName: config?.churchName || '', ticketNumber: showDetail.taskNumber, ticketName: detailEdits.name, assignedBy: userName }).catch(() => {});
+          fn({ toEmail: assigneeUser.email, toName: assignee.name, churchName: config?.churchName || '', ticketNumber: showDetail.taskNumber, ticketName: detailEdits.name, assignedBy: userName }).catch(err => { console.error('[ChurchOpsHub] CF sendTicketAssignedEmail failed', err); });
         }
       }
 
@@ -1236,7 +1246,7 @@ export function TasksPage({ store, userProfile }) {
       await addTaskComment(showDetail._docId, text, userId, userName, mentions.length ? mentions : undefined);
       if (mentions.length > 0 && notificationConfig?.enabled) {
         const fn = httpsCallable(getFunctions(), 'sendTaskMentionEmail');
-        fn({ churchId, taskNumber: showDetail.taskNumber, taskName: showDetail.name || '', commentText: text, mentionedUids: mentions, commentAuthorName: userName }).catch(() => {});
+        fn({ churchId, taskNumber: showDetail.taskNumber, taskName: showDetail.name || '', commentText: text, mentionedUids: mentions, commentAuthorName: userName }).catch(err => { console.error('[ChurchOpsHub] CF sendTaskMentionEmail failed', err); });
       }
       setNewComment('');
     } catch { flash('Failed to post comment.', true); }
@@ -1262,10 +1272,16 @@ export function TasksPage({ store, userProfile }) {
     if (!showDetail?._docId) return;
     setUploadingPhotos(true);
     try {
-      const newUrls = await uploadPhotos(showDetail._docId, files);
-      const updatedPhotos = [...(showDetail.photos || []), ...newUrls];
-      await updateTask(showDetail._docId, { photos: updatedPhotos });
-      setShowDetail(prev => ({ ...prev, photos: updatedPhotos }));
+      const { urls: newUrls, failed } = await uploadPhotos(showDetail._docId, files);
+      if (newUrls.length > 0) {
+        const updatedPhotos = [...(showDetail.photos || []), ...newUrls];
+        await updateTask(showDetail._docId, { photos: updatedPhotos });
+        setShowDetail(prev => ({ ...prev, photos: updatedPhotos }));
+      }
+      if (failed > 0) {
+        if (newUrls.length === 0) flash('Photo upload failed. Please try again.', true);
+        else flash(`Uploaded ${newUrls.length} of ${newUrls.length + failed} photos; ${failed} failed.`, true);
+      }
     } catch {
       flash('Photo upload failed. Please try again.', true);
     } finally {
@@ -1351,18 +1367,28 @@ export function TasksPage({ store, userProfile }) {
     if (!window.confirm(confirmMsg)) return;
     setSaving(true);
     try {
-      await Promise.allSettled(subtasks.map(st => deleteTask(st._docId, st, userId, userName)));
+      const subtaskResults = await Promise.allSettled(subtasks.map(st => deleteTask(st._docId, st, userId, userName)));
+      const subtaskFailed = subtaskResults.filter(r => r.status === 'rejected').length;
       const deletedTaskNumber = showDetail.taskNumber;
       await deleteTask(showDetail._docId, showDetail, userId, userName);
+      let blockedFailed = 0;
       if (deletedTaskNumber) {
         const blockedSnap = await getDocs(
           fsQuery(collection(db, 'churches', churchId, 'tasks'), where('blockedBy', 'array-contains', deletedTaskNumber))
         );
-        await Promise.allSettled(blockedSnap.docs.map(d => updateDoc(d.ref, { blockedBy: arrayRemove(deletedTaskNumber) })));
+        const blockedResults = await Promise.allSettled(blockedSnap.docs.map(d => updateDoc(d.ref, { blockedBy: arrayRemove(deletedTaskNumber) })));
+        blockedFailed = blockedResults.filter(r => r.status === 'rejected').length;
       }
       setShowDetail(null);
       setDetailEdits({});
-      flash('Task deleted.');
+      if (subtaskFailed === 0 && blockedFailed === 0) {
+        flash('Task deleted.');
+      } else {
+        const parts = [];
+        if (subtaskFailed > 0) parts.push(`${subtaskFailed} subtask${subtaskFailed !== 1 ? 's' : ''}`);
+        if (blockedFailed > 0) parts.push(`${blockedFailed} dependent task${blockedFailed !== 1 ? 's' : ''}`);
+        flash(`Task deleted. Cleanup of ${parts.join(' and ')} failed — refresh to verify.`, true);
+      }
     } catch {
       flash('Failed to delete task.', true);
     } finally {
@@ -1402,13 +1428,17 @@ export function TasksPage({ store, userProfile }) {
       ));
       const succeeded = results.filter(r => r.status === 'fulfilled').length;
       const failed = results.length - succeeded;
+      let recurFailed = 0;
       if (bulkStatus === 'Complete') {
-        await Promise.allSettled(
+        const recurResults = await Promise.allSettled(
           tasksToUpdate.filter(t => t.recurrence && t.status !== 'Complete').map(t => createNextRecurringTask(t))
         );
+        recurFailed = recurResults.filter(r => r.status === 'rejected').length;
       }
       if (failed > 0) {
         flash(`${succeeded} of ${results.length} tasks updated; ${failed} failed.`, true);
+      } else if (recurFailed > 0) {
+        flash(`${selectedTaskIds.size} tasks moved to ${bulkStatus}; ${recurFailed} recurring next-task creation${recurFailed !== 1 ? 's' : ''} failed.`, true);
       } else {
         flash(`${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''} moved to ${bulkStatus}.`);
       }

@@ -9,7 +9,7 @@ import { app, db } from '../firebase.js';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export function SettingsPage({ store, userProfile, subscription, user, canAdd, deleteAccount }) {
-  const { settings, config, users, accessPeople, accessRecords, rooms, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, loadErrors, addRoom, updateRoom, deleteRoom } = store;
+  const { settings, config, users, accessPeople, accessRecords, rooms, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, addRoom, updateRoom, deleteRoom } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
   const [newItem, setNewItem] = useState("");
@@ -26,8 +26,6 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [allSuggestions, setAllSuggestions] = useState(null);
   const [suggestionFilter, setSuggestionFilter] = useState("All");
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const [allErrors, setAllErrors] = useState(null);
-  const [loadingErrors, setLoadingErrors] = useState(false);
   const [allChurches, setAllChurches] = useState(null);
   const [loadingChurches, setLoadingChurches] = useState(false);
   const [ownerTab, setOwnerTab] = useState('suggestions');
@@ -155,13 +153,6 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     const results = await loadSuggestions();
     setAllSuggestions(results);
     setLoadingSuggestions(false);
-  }
-
-  async function handleLoadErrors() {
-    setLoadingErrors(true);
-    const results = await loadErrors();
-    setAllErrors(results);
-    setLoadingErrors(false);
   }
 
   async function handleLoadChurches() {
@@ -308,7 +299,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
       });
       window.location.href = data.url;
     } catch (err) {
-      setBillingError(err.message || 'Failed to start checkout. Please try again.');
+      setBillingError((err.message || 'Failed to start checkout.') + ' If this keeps happening, contact jcvaught@gmail.com.');
       setBillingLoading(false);
     }
   }
@@ -322,7 +313,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
       const { data } = await createPortal({ returnUrl: window.location.href });
       window.location.href = data.url;
     } catch (err) {
-      setBillingError(err.message || 'Failed to open billing portal. Please try again.');
+      setBillingError((err.message || 'Failed to open billing portal.') + ' If this keeps happening, contact jcvaught@gmail.com.');
       setBillingLoading(false);
     }
   }
@@ -807,7 +798,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
         <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginTop:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
           {/* Tab bar */}
           <div style={{ display:"flex", gap:8, marginBottom:18 }}>
-            {[['suggestions','Suggestions'],['errors','Error Log'],['churches','Churches']].map(([key, label]) => (
+            {[['suggestions','Suggestions'],['churches','Churches']].map(([key, label]) => (
               <button key={key} onClick={() => setOwnerTab(key)}
                 style={{ padding:"6px 18px", borderRadius:20, border:"1px solid "+(ownerTab===key?B.teal:B.sand), background:ownerTab===key?B.tealPale:B.white, color:ownerTab===key?B.teal:B.textMid, fontFamily:f1, fontWeight:600, fontSize:13, cursor:"pointer" }}>
                 {label}
@@ -861,35 +852,6 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                 </>
               )}
               {!allSuggestions && <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Click "Load" to see all submitted feedback.</p>}
-            </>
-          )}
-
-          {/* Error Log tab */}
-          {ownerTab === 'errors' && (
-            <>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-                <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Error Log</h3>
-                <button onClick={handleLoadErrors} disabled={loadingErrors} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>
-                  {loadingErrors ? "Loading…" : allErrors ? "Refresh" : "Load"}
-                </button>
-              </div>
-              {allErrors && (
-                allErrors.length === 0
-                  ? <p style={{ color:B.textLight, fontSize:14 }}>No errors logged.</p>
-                  : <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:480, overflowY:"auto" }}>
-                      {allErrors.map(e => (
-                        <div key={e.id} style={{ padding:"12px 14px", borderRadius:10, background:B.warmGray, borderLeft:"3px solid "+B.red }}>
-                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4, gap:8, flexWrap:"wrap" }}>
-                            <span style={{ fontSize:12, fontWeight:700, fontFamily:f1, color:B.red }}>Error</span>
-                            <span style={{ fontSize:11, color:B.textLight }}>{e.churchId} · {e.timestamp?.split("T")[0]} {e.timestamp?.split("T")[1]?.slice(0,5)}</span>
-                          </div>
-                          <p style={{ margin:"0 0 4px", fontSize:13, fontWeight:600, color:B.textDark, fontFamily:f1 }}>{e.message}</p>
-                          {e.stack && <pre style={{ margin:0, fontSize:11, color:B.textLight, fontFamily:"monospace", whiteSpace:"pre-wrap", wordBreak:"break-all" }}>{e.stack}</pre>}
-                        </div>
-                      ))}
-                    </div>
-              )}
-              {!allErrors && <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Click "Load" to see logged errors across all churches.</p>}
             </>
           )}
 

@@ -5,6 +5,13 @@ const { defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
+const Sentry = require('@sentry/node');
+
+Sentry.init({
+  dsn: 'https://92a9eb2a55b9544dd9e673291f57eff8@o4511040580091904.ingest.us.sentry.io/4511040584089600',
+  tracesSampleRate: 0.1,
+  environment: process.env.FUNCTIONS_EMULATOR ? 'development' : 'production',
+});
 
 let sgMail;
 try { sgMail = require('@sendgrid/mail'); } catch { sgMail = null; }
@@ -239,6 +246,7 @@ exports.stripeWebhook = onRequest(
       );
     } catch (err) {
       console.error('Webhook signature verification failed:', err.message);
+      Sentry.captureException(err);
       res.status(400).send('Invalid webhook signature');
       return;
     }
@@ -322,6 +330,7 @@ exports.stripeWebhook = onRequest(
       }
     } catch (err) {
       console.error('Webhook handler error:', err);
+      Sentry.captureException(err);
       res.status(500).send('Internal error');
       return;
     }
@@ -391,6 +400,7 @@ exports.sendWelcomeEmail = onDocumentCreated('churches/{churchId}', async (event
     adminName = authUser.displayName || null;
   } catch (err) {
     console.error('sendWelcomeEmail: could not fetch auth user', err);
+    Sentry.captureException(err);
     return;
   }
   if (!adminEmail) return;
@@ -435,6 +445,7 @@ exports.sendWelcomeEmail = onDocumentCreated('churches/{churchId}', async (event
     await churchRef.update({ welcomeEmailSentAt: 'sending' });
   } catch (err) {
     console.error('sendWelcomeEmail: failed to set sending sentinel', err?.message);
+    Sentry.captureException(err);
     return;
   }
 
@@ -443,6 +454,7 @@ exports.sendWelcomeEmail = onDocumentCreated('churches/{churchId}', async (event
     await churchRef.update({ welcomeEmailSentAt: new Date().toISOString() });
   } catch (err) {
     console.error('sendWelcomeEmail: send failed', err?.response?.body || err);
+    Sentry.captureException(err);
   }
 });
 
@@ -492,6 +504,7 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
         .get();
     } catch (err) {
       console.error('processTrialExpirations: activity log read failed', { churchId, err: err.message });
+      Sentry.captureException(err);
       continue;
     }
 
@@ -517,6 +530,7 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
       await subDoc.ref.update({ freeHubsSelected, status: 'active' });
     } catch (err) {
       console.error('processTrialExpirations: update failed', { churchId, err: err.message });
+      Sentry.captureException(err);
       continue;
     }
 
@@ -533,6 +547,7 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
       }
     } catch (err) {
       console.error('processTrialExpirations: could not fetch admin', { churchId, err: err.message });
+      Sentry.captureException(err);
     }
     if (!adminEmail) continue;
 
@@ -556,6 +571,7 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
       await sgMail.send({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject, html, text });
     } catch (err) {
       console.error('processTrialExpirations: trial-end email failed', { churchId, err: err?.response?.body || err });
+      Sentry.captureException(err);
     }
 
     // 7-day warning email (separate pass — send when 7 days remain)
@@ -611,6 +627,7 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
       await subDoc.ref.update({ trialWarningEmailSentAt: nowStr });
     } catch (err) {
       console.error('processTrialExpirations: warning email failed', { churchId, err: err?.response?.body || err });
+      Sentry.captureException(err);
     }
   }
 });
@@ -752,7 +769,7 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
     })
   ));
 
-  results.forEach((r, i) => { if (r.status === 'rejected') console.error('sendJobAnnouncementEmails: email failed', { index: i, reason: r.reason?.message }); });
+  results.forEach((r, i) => { if (r.status === 'rejected') { console.error('sendJobAnnouncementEmails: email failed', { index: i, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
   const sent = results.filter(r => r.status === 'fulfilled').length;
   return { sent };
 });
@@ -826,7 +843,7 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
     return sgMail.send({ to: user.email, from: FROM, subject, html, text });
   }));
 
-  results.forEach((r, i) => { if (r.status === 'rejected') console.error('sendJobCancelledEmails: email failed', { index: i, reason: r.reason?.message }); });
+  results.forEach((r, i) => { if (r.status === 'rejected') { console.error('sendJobCancelledEmails: email failed', { index: i, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
   const sent = results.filter(r => r.status === 'fulfilled').length;
 
   // Record send timestamp to prevent re-triggers within 1 hour
@@ -955,7 +972,7 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
 
   const results = await Promise.allSettled(emailTasks);
   results.forEach((r, i) => {
-    if (r.status === 'rejected') console.error('sendTaskDueReminders: email failed', { index: i, reason: r.reason?.message });
+    if (r.status === 'rejected') { console.error('sendTaskDueReminders: email failed', { index: i, reason: r.reason?.message }); Sentry.captureException(r.reason); }
   });
 
   // Only stamp tasks for which at least one email was successfully sent
@@ -1092,6 +1109,7 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
   results.forEach((r, i) => {
     if (r.status === 'rejected') {
       console.error('sendJobReminders: email failed', { index: i, reason: r.reason?.message });
+      Sentry.captureException(r.reason);
     } else {
       // At least one email succeeded for these jobs — mark them for stamping
       emailJobRefs[i].forEach(ref => jobsWithSuccesses.add(ref));
@@ -1115,7 +1133,7 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
         : `ChurchOpsHub: Reminder — you have ${jobs.length} jobs today:\n${jobLines}\n\nReply STOP to opt out.`;
       smsTasks.push(
         tw.messages.create({ to: user.phone, from: TWILIO_FROM, body })
-          .catch(err => console.error('sendJobReminders: SMS failed', { uid: userSnap.id, err: err?.message }))
+          .catch(err => { console.error('sendJobReminders: SMS failed', { uid: userSnap.id, err: err?.message }); Sentry.captureException(err); })
       );
     }
     if (smsTasks.length > 0) await Promise.allSettled(smsTasks);
@@ -1246,7 +1264,7 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
   const results = await Promise.allSettled(
     recipients.map(u => sgMail.send({ to: u.email, from: FROM, subject, html: bodyHtml, text: bodyText }))
   );
-  results.forEach((r, i) => { if (r.status === 'rejected') console.error('sendJobPosterNotification: failed', { index: i, reason: r.reason?.message }); });
+  results.forEach((r, i) => { if (r.status === 'rejected') { console.error('sendJobPosterNotification: failed', { index: i, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
   await db.doc(`churches/${churchId}/jobListings/${jobDocId}`).update({ [`lastPosterNotifiedByActors.${actorKey}`]: new Date().toISOString() }).catch(() => {});
   return { sent: results.filter(r => r.status === 'fulfilled').length };
 });
@@ -1361,6 +1379,7 @@ exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
     await sgMail.send({ to: user.email, from: FROM, subject, html, text });
   } catch (err) {
     console.error('promoteFromWaitlist: email failed', err?.message);
+    Sentry.captureException(err);
   }
   return { promoted: true, promotedName: promotedUser.name };
 });
@@ -1408,6 +1427,7 @@ exports.sendTaskMentionEmail = onCall({ cors: true }, async (req) => {
       sent++;
     } catch (err) {
       console.error('sendTaskMentionEmail: failed for', mentionedUid, err?.message);
+      Sentry.captureException(err);
     }
   }
   return { sent };
@@ -1498,6 +1518,7 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
       console.log(`generateRecurringTemplateTasks: created ${taskNumber} for church ${churchId}`);
     } catch (err) {
       console.error(`generateRecurringTemplateTasks: failed for church ${churchId} template ${templateDoc.id}`, err?.message);
+      Sentry.captureException(err);
     }
   }
 
@@ -1523,5 +1544,6 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
     }
   } catch (err) {
     console.error('generateRecurringTemplateTasks: announcement sweep failed', err?.message);
+    Sentry.captureException(err);
   }
 });

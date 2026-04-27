@@ -22,7 +22,7 @@ export function UpgradeGate({ hubName, hubLabel, hubPrice, hubDescription, hasHu
       });
       window.location.href = data.url;
     } catch (err) {
-      setError(err.message || 'Failed to start checkout. Please try again.');
+      setError((err.message || 'Failed to start checkout.') + ' If this keeps happening, contact jcvaught@gmail.com.');
       setLoading(false);
     }
   }

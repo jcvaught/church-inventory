@@ -701,13 +701,19 @@ export function MaintenancePage({ store, userProfile }) {
 
   async function uploadPhotos(docId, files) {
     const urls = [];
+    let failed = 0;
     for (const file of files) {
-      const resized = await resizeImageForUpload(file);
-      const storageRef = ref(storage, `churches/${churchId}/maintenance/${docId}/${Date.now()}_${file.name}`);
-      const snap = await uploadBytes(storageRef, resized);
-      urls.push(await getDownloadURL(snap.ref));
+      try {
+        const resized = await resizeImageForUpload(file);
+        const storageRef = ref(storage, `churches/${churchId}/maintenance/${docId}/${Date.now()}_${file.name}`);
+        const snap = await uploadBytes(storageRef, resized);
+        urls.push(await getDownloadURL(snap.ref));
+      } catch (err) {
+        console.error('[ChurchOpsHub] maintenance photo upload failed', { fileName: file.name, err });
+        failed++;
+      }
     }
-    return urls;
+    return { urls, failed };
   }
 
   // ── Handlers ──
@@ -739,8 +745,12 @@ export function MaintenancePage({ store, userProfile }) {
       }, userId, userName);
       if (photoFiles.length > 0 && docId) {
         try {
-          const urls = await uploadPhotos(docId, photoFiles);
-          await updateTicket(docId, { photos: urls });
+          const { urls, failed } = await uploadPhotos(docId, photoFiles);
+          if (urls.length > 0) await updateTicket(docId, { photos: urls });
+          if (failed > 0) {
+            if (urls.length === 0) flash('Photo upload failed — ticket saved without photos.', true);
+            else flash(`Uploaded ${urls.length} of ${urls.length + failed} photos; ${failed} failed.`, true);
+          }
         } catch { flash('Photo upload failed — ticket saved without photos.', true); }
       }
       if (ticketForm.tags.length > 0 && addMaintenanceTags) {
@@ -855,10 +865,16 @@ export function MaintenancePage({ store, userProfile }) {
     if (!showDetail?._docId) return;
     setUploadingPhotos(true);
     try {
-      const newUrls = await uploadPhotos(showDetail._docId, files);
-      const updatedPhotos = [...(showDetail.photos || []), ...newUrls];
-      await updateTicket(showDetail._docId, { photos: updatedPhotos });
-      setShowDetail(prev => ({ ...prev, photos: updatedPhotos }));
+      const { urls: newUrls, failed } = await uploadPhotos(showDetail._docId, files);
+      if (newUrls.length > 0) {
+        const updatedPhotos = [...(showDetail.photos || []), ...newUrls];
+        await updateTicket(showDetail._docId, { photos: updatedPhotos });
+        setShowDetail(prev => ({ ...prev, photos: updatedPhotos }));
+      }
+      if (failed > 0) {
+        if (newUrls.length === 0) flash('Photo upload failed. Please try again.', true);
+        else flash(`Uploaded ${newUrls.length} of ${newUrls.length + failed} photos; ${failed} failed.`, true);
+      }
     } catch {
       flash('Photo upload failed. Please try again.', true);
     } finally {

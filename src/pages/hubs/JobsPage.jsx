@@ -485,7 +485,7 @@ export function JobsPage({ store, userProfile }) {
     if (!showJobDetail || !isAdminOrManager) { setSwapRequests([]); setSwapRequestsJobId(null); return; }
     if (showJobDetail._docId === swapRequestsJobId) return;
     setSwapRequestsJobId(showJobDetail._docId);
-    getJobSwapRequests(showJobDetail._docId).then(setSwapRequests).catch(() => {});
+    getJobSwapRequests(showJobDetail._docId).then(setSwapRequests).catch(err => { console.error('[ChurchOpsHub] getJobSwapRequests failed', err); });
   }, [showJobDetail, isAdminOrManager, getJobSwapRequests, swapRequestsJobId]);
 
   // Persist showPastJobs toggle
@@ -497,7 +497,7 @@ export function JobsPage({ store, userProfile }) {
     if (!(notificationConfig?.enabled)) return;
     const fn = httpsCallable(getFunctions(), 'sendJobAnnouncementEmails');
     // Note: postedBy is now derived server-side from the caller's user profile
-    fn({ churchId: userProfile?.churchId, title, body }).catch(() => {});
+    fn({ churchId: userProfile?.churchId, title, body }).catch(err => { console.error('[ChurchOpsHub] CF sendJobAnnouncementEmails failed', err); });
   }
 
   // ── Derived state ──
@@ -649,13 +649,13 @@ export function JobsPage({ store, userProfile }) {
         await updateJobListing(editJobId, data, userId, userName);
         if (willNotify) {
           const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
-          fn({ churchId: userProfile?.churchId, jobDocId: editJobId }).catch(() => {});
+          fn({ churchId: userProfile?.churchId, jobDocId: editJobId }).catch(err => { console.error('[ChurchOpsHub] CF sendJobCancelledEmails failed', err); });
         }
         // Notify original poster if a co-admin cancelled their job
         if (jobForm.status === 'cancelled' && existingJob?.createdBy && existingJob.createdBy !== userId && notificationConfig?.enabled) {
           const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
           fn({ churchId: userProfile?.churchId, jobDocId: editJobId, event: 'cancellation', actorUid: userId, actorName: userName })
-            .catch(() => {});
+            .catch(err => { console.error('[ChurchOpsHub] CF sendJobPosterNotification (cancellation) failed', err); });
         }
         flash('Job updated.' + (willNotify ? ' Signups notified.' : ''));
         setShowNewJob(false);
@@ -684,7 +684,7 @@ export function JobsPage({ store, userProfile }) {
         if (result.data?.skipped) flash('Already notified recently — no new emails sent.');
         else flash('Signups notified.');
       })
-      .catch(() => flash('Failed to send notifications.', true));
+      .catch(err => { console.error('[ChurchOpsHub] CF sendJobCancelledEmails (notify) failed', err); flash('Failed to send notifications.', true); });
   }
 
   async function handleDeleteJob(job) {
@@ -759,9 +759,9 @@ export function JobsPage({ store, userProfile }) {
         flash('Removed from job.');
         if (notificationConfig?.enabled) {
           const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
-          fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'withdrawal', actorUid: userId, actorName: userName }).catch(() => {});
+          fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'withdrawal', actorUid: userId, actorName: userName }).catch(err => { console.error('[ChurchOpsHub] CF sendJobPosterNotification (withdrawal) failed', err); });
         }
-        httpsCallable(getFunctions(), 'promoteFromWaitlist')({ churchId: userProfile?.churchId, jobDocId: job._docId }).catch(() => {});
+        httpsCallable(getFunctions(), 'promoteFromWaitlist')({ churchId: userProfile?.churchId, jobDocId: job._docId }).catch(err => { console.error('[ChurchOpsHub] CF promoteFromWaitlist failed', err); });
       } else if (result?.wasOnWaitlist) {
         flash('Removed from waitlist.');
       }
@@ -781,9 +781,9 @@ export function JobsPage({ store, userProfile }) {
         flash('Removed.');
         if (notificationConfig?.enabled && job.createdBy !== userId) {
           const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
-          fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'admin_removal', actorUid: userId, actorName: userName, removedName: removed?.name || '' }).catch(() => {});
+          fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'admin_removal', actorUid: userId, actorName: userName, removedName: removed?.name || '' }).catch(err => { console.error('[ChurchOpsHub] CF sendJobPosterNotification (admin_removal) failed', err); });
         }
-        httpsCallable(getFunctions(), 'promoteFromWaitlist')({ churchId: userProfile?.churchId, jobDocId: job._docId }).catch(() => {});
+        httpsCallable(getFunctions(), 'promoteFromWaitlist')({ churchId: userProfile?.churchId, jobDocId: job._docId }).catch(err => { console.error('[ChurchOpsHub] CF promoteFromWaitlist failed', err); });
       } else if (result?.wasOnWaitlist) {
         flash('Removed from waitlist.');
       }

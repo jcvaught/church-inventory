@@ -35,12 +35,6 @@ export function useFirestore(churchId) {
   function handleErr(err) {
     console.error('[ChurchOpsHub]', err);
     setError(err.message);
-    addDoc(collection(db, 'errors'), {
-      message: err.message,
-      stack: err.stack?.split('\n').slice(0, 4).join('\n') || '',
-      churchId: churchId || 'unknown',
-      timestamp: new Date().toISOString()
-    }).catch(() => {});
   }
 
   // Subscribe to all collections
@@ -709,18 +703,6 @@ export function useFirestore(churchId) {
     }
   }, []);
 
-  const loadErrors = useCallback(async () => {
-    try {
-      const snap = await getDocs(query(collection(db, 'errors'), orderBy('timestamp', 'desc'), limit(200)));
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    } catch (err) {
-      // Use console.error + setError only here (not handleErr) to avoid writing to the errors collection while loading it
-      console.error('[ChurchOpsHub] loadErrors failed', err);
-      setError(err.message);
-      return [];
-    }
-  }, []);
-
   // ── Vendors ──
   const addVendor = useCallback(async (vendor) => {
     try {
@@ -1187,7 +1169,7 @@ export function useFirestore(churchId) {
     addBundle, updateBundle, deleteBundle,
     updateNotificationConfig,
     addAudit, updateAudit,
-    submitSuggestion, loadSuggestions, loadErrors,
+    submitSuggestion, loadSuggestions,
     publicRequests, dismissPublicRequest,
     accessPeople, accessRecords,
     addAccessPerson, updateAccessPerson, archiveAccessPerson,

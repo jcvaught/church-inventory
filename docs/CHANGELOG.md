@@ -4,6 +4,20 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-04-27 — Error Handling Gap Closure
+
+Surgical sweep to close the highest-value error-handling gaps after a three-agent audit. Verified before fixing: Sentry's default integrations already capture `window.onerror` + unhandled rejections (browser) and `process.uncaughtException` + `process.unhandledRejection` (node), so no global handler wiring needed. The real gaps were React boundary forwarding, swallowed CF error catches, server-side capture, and partial-failure UX.
+
+- **React boundary → Sentry** — `App.jsx:29-46`: `PageErrorBoundary` gains `componentDidCatch(error, info)` that calls `Sentry.captureException(error, { contexts: { react: { componentStack: info.componentStack } } })`. React errors don't trigger `window.onerror`, so this was the only hole in browser-side capture.
+- **Stop swallowing CF call errors** — replaced 11 `.catch(() => {})` patterns on `httpsCallable(...)` calls with logged catches that emit `console.error('[ChurchOpsHub] CF <name> failed', err)`. Sentry's `captureConsoleIntegration({ levels: ['error'] })` then forwards them. Sites: `JobsPage.jsx` (8 sites — sendJobAnnouncementEmails, sendJobCancelledEmails ×2, sendJobPosterNotification ×3, promoteFromWaitlist ×2; plus getJobSwapRequests Firestore call); `TasksPage.jsx` (sendTicketAssignedEmail, sendTaskMentionEmail).
+- **Removed unused `errors` Firestore collection** — `useFirestore.js:35-44` `handleErr` no longer writes to top-level `errors`; `loadErrors` callback removed; `firestore.rules` `match /errors/{docId}` block removed; `SettingsPage.jsx` Owner-tab "Error Log" panel + state + handler removed (the panel was owner-only and the data fully duplicated Sentry, which already captures via `captureConsoleIntegration`). Drops one Firestore write per error.
+- **`@sentry/node` on Cloud Functions** — `functions/package.json` adds `@sentry/node`; `functions/index.js` initializes Sentry at module load with the same DSN as the browser SDK (different SDK metadata routes them correctly), `tracesSampleRate: 0.1`, env tagged from `FUNCTIONS_EMULATOR`. 20 existing `console.error` sites now have `Sentry.captureException(err)` (or `r.reason` for `Promise.allSettled` rejection paths) appended. Default integrations include `onUncaughtExceptionIntegration` + `onUnhandledRejectionIntegration`, so any unhandled throw outside an explicit catch is also captured automatically.
+- **Partial-failure UX on remaining `Promise.allSettled` sites** — `TasksPage.jsx`: `handleDeleteTask` now reports subtask + dependent-task cleanup failure counts (`'Task deleted. Cleanup of N dependent tasks failed — refresh to verify.'`); `handleBulkStatusChange` now reports recurring-next-task creation failures separately from the primary-status-change failure count.
+- **Per-file photo upload errors** — `uploadPhotos` in `TasksPage.jsx` and `MaintenancePage.jsx` no longer aborts on the first per-file failure. Returns `{ urls, failed }` instead of `urls[]`; per-file failures `console.error` (so Sentry captures them with file name); callers flash partial-success messages (`'Uploaded X of Y photos; Z failed.'`). Three caller updates per page (handleAddTask/handleAddTicket + handleDetailPhotoAdd).
+- **Stripe error UX** — `UpgradeGate.jsx` and `SettingsPage.jsx` (checkout + portal): error toasts now append `'If this keeps happening, contact jcvaught@gmail.com.'` so users have a recovery path instead of a dead-end generic message.
+
+---
+
 ## 2026-04-27 — Tasks + Jobs Hub Bug Sweep #4
 
 Nine bugs surfaced by a parallel three-agent sweep; verified against current code (several agent claims dropped as incorrect — login `uid` already set, waitlist auto-promotion already wired, ICS UID stability is correct per RFC 5545, `generateRecurringTemplateTasks` already idempotent).
