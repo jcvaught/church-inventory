@@ -63,7 +63,7 @@ export function useAuth() {
         try {
           const profileDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (profileDoc.exists()) {
-            setUserProfile({ id: firebaseUser.uid, ...profileDoc.data() });
+            setUserProfile({ id: firebaseUser.uid, uid: firebaseUser.uid, ...profileDoc.data() });
           } else {
             setUserProfile(null); // Authenticated but no profile yet
           }
@@ -160,7 +160,7 @@ export function useAuth() {
         lastLogin: new Date().toISOString()
       };
       await setDoc(doc(db, 'users', cred.user.uid), profile);
-      setUserProfile({ id: cred.user.uid, ...profile });
+      setUserProfile({ id: cred.user.uid, uid: cred.user.uid, ...profile });
       await sendEmailVerification(cred.user).catch(() => {});
 
       return { success: true };
@@ -208,7 +208,7 @@ export function useAuth() {
         lastLogin: new Date().toISOString()
       };
       await setDoc(doc(db, 'users', cred.user.uid), profile);
-      setUserProfile({ id: cred.user.uid, ...profile });
+      setUserProfile({ id: cred.user.uid, uid: cred.user.uid, ...profile });
       await sendEmailVerification(cred.user).catch(() => {});
 
       return { success: true };
@@ -232,7 +232,7 @@ export function useAuth() {
       const profileDoc = await getDoc(doc(db, 'users', cred.user.uid));
       if (profileDoc.exists()) {
         await setDoc(doc(db, 'users', cred.user.uid), { lastLogin: new Date().toISOString() }, { merge: true });
-        setUserProfile({ id: cred.user.uid, ...profileDoc.data() });
+        setUserProfile({ id: cred.user.uid, uid: cred.user.uid, ...profileDoc.data() });
       }
       return { success: true };
     } catch (err) {
@@ -254,7 +254,7 @@ export function useAuth() {
       const profileDoc = await getDoc(doc(db, 'users', cred.user.uid));
       if (profileDoc.exists()) {
         await setDoc(doc(db, 'users', cred.user.uid), { lastLogin: new Date().toISOString() }, { merge: true });
-        setUserProfile({ id: cred.user.uid, ...profileDoc.data() });
+        setUserProfile({ id: cred.user.uid, uid: cred.user.uid, ...profileDoc.data() });
         return { success: true };
       } else {
         // Google user exists in Auth but not in our DB — needs to register
@@ -297,7 +297,7 @@ export function useAuth() {
         lastLogin: new Date().toISOString()
       };
       await setDoc(doc(db, 'users', auth.currentUser.uid), profile);
-      setUserProfile({ id: auth.currentUser.uid, ...profile });
+      setUserProfile({ id: auth.currentUser.uid, uid: auth.currentUser.uid, ...profile });
       return { success: true };
     } catch (err) {
       setError(err.message);

@@ -558,7 +558,7 @@ export function PeopleAccessPage({ store, userProfile }) {
 
       {/* ═══════════════════════════ PERSON DETAIL MODAL ══════════════════ */}
       {detailPerson && (
-        <Modal onClose={() => setDetailPersonId(null)}>
+        <Modal open onClose={() => setDetailPersonId(null)}>
           <div style={{ maxWidth: 680, width: '100%' }}>
             {/* Person header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 20 }}>
@@ -713,7 +713,7 @@ export function PeopleAccessPage({ store, userProfile }) {
 
       {/* ═══════════════════════════ ADD/EDIT PERSON MODAL ════════════════ */}
       {showAddPerson && (
-        <Modal onClose={() => setShowAddPerson(false)}>
+        <Modal open onClose={() => setShowAddPerson(false)}>
           <h3 style={{ margin: '0 0 20px', fontSize: 18, fontFamily: f1, color: B.navy }}>
             {editPerson ? 'Edit Person' : 'Add Person'}
           </h3>
@@ -759,7 +759,7 @@ export function PeopleAccessPage({ store, userProfile }) {
 
       {/* ═══════════════════════════ ADD/EDIT RECORD MODAL ════════════════ */}
       {showAddRecord && detailPerson && (
-        <Modal onClose={() => setShowAddRecord(false)}>
+        <Modal open onClose={() => setShowAddRecord(false)}>
           <h3 style={{ margin: '0 0 4px', fontSize: 18, fontFamily: f1, color: B.navy }}>
             {editRecord ? 'Edit Record' : 'Add Record'}
           </h3>
@@ -848,7 +848,7 @@ export function PeopleAccessPage({ store, userProfile }) {
 
       {/* ══════════════════════════ CONFIRM ARCHIVE ═══════════════════════ */}
       {confirmArchive && (
-        <Modal onClose={() => setConfirmArchive(null)}>
+        <Modal open onClose={() => setConfirmArchive(null)}>
           <h3 style={{ margin: '0 0 12px', fontFamily: f1, color: B.navy }}>Archive Person?</h3>
           <p style={{ margin: '0 0 20px', fontSize: 14, fontFamily: f2, color: B.textMid }}>
             {confirmArchive.name} will be moved to the archived list. Their records will be preserved.
@@ -862,7 +862,7 @@ export function PeopleAccessPage({ store, userProfile }) {
 
       {/* ══════════════════════════ CONFIRM DELETE RECORD ═════════════════ */}
       {confirmDeleteRecord && (
-        <Modal onClose={() => setConfirmDeleteRecord(null)}>
+        <Modal open onClose={() => setConfirmDeleteRecord(null)}>
           <h3 style={{ margin: '0 0 12px', fontFamily: f1, color: B.navy }}>Delete Record?</h3>
           <p style={{ margin: '0 0 20px', fontSize: 14, fontFamily: f2, color: B.textMid }}>
             This will permanently remove the {TYPE_LABELS[confirmDeleteRecord.type] || 'record'} entry. This cannot be undone.
@@ -876,7 +876,7 @@ export function PeopleAccessPage({ store, userProfile }) {
 
       {/* ══════════════════════════ BULK ENTRY MODAL ══════════════════════ */}
       {showBulkEntry && (
-        <Modal onClose={() => setShowBulkEntry(false)}>
+        <Modal open onClose={() => setShowBulkEntry(false)}>
           <div style={{ maxWidth: 700, width: '100%' }}>
             <h3 style={{ margin: '0 0 4px', fontSize: 18, fontFamily: f1, color: B.navy }}>Bulk Entry</h3>
             <p style={{ margin: '0 0 20px', fontSize: 13, color: B.textLight, fontFamily: f2 }}>

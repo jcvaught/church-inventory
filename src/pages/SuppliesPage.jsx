@@ -360,7 +360,7 @@ export function SuppliesPage({ store, userProfile }) {
       )}
 
       {/* ═══ ADD SUPPLY MODAL ═══ */}
-      <Modal open={showAdd} onClose={()=>{ setShowAdd(false); setSupForm(emptySupply); setSupIdTouched(false); setPhotoFile(null); setPhotoPreview(null); }} title="Add New Supply">
+      <Modal open={showAdd} onClose={()=>{ setShowAdd(false); setSupForm(emptySupply); setSupIdTouched(false); setPhotoPreview(null); }} title="Add New Supply">
         <FF label="Description">
           <input style={inp} value={supForm.description} onChange={e=>{const d=e.target.value;setSupForm(f=>{const u={...f,description:d};if(!supIdTouched)u.supplyId=generateId(d,supplies.map(s=>s.supplyId));return u;});}} placeholder="e.g. AA Batteries" autoFocus/>
           <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", marginTop:8 }}>

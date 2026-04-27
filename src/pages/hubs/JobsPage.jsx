@@ -719,7 +719,7 @@ export function JobsPage({ store, userProfile }) {
 
   async function handleSignUp(job) {
     if ((job.requiredAccessTypes || []).length > 0) {
-      const linkedPerson = (accessPeople || []).find(p => p.linkedUserId === userId);
+      const linkedPerson = (accessPeople || []).find(p => p.userId === userId);
       if (!linkedPerson) {
         flash('You need a People Access record linked to your account to sign up for this job.', true);
         return;
@@ -727,7 +727,7 @@ export function JobsPage({ store, userProfile }) {
       const todayS = localDateStr(new Date());
       const myRecords = (accessRecords || []).filter(r => r.personId === linkedPerson._docId);
       for (const reqType of job.requiredAccessTypes) {
-        const hasValid = myRecords.some(r => r.type === reqType && (!r.expiresAt || r.expiresAt >= todayS));
+        const hasValid = myRecords.some(r => r.type === reqType && (!r.expiryDate || r.expiryDate >= todayS));
         if (!hasValid) {
           flash(`You need a valid ${ACCESS_TYPE_LABELS[reqType] || reqType} on file to sign up for this job.`, true);
           return;

@@ -581,7 +581,7 @@ const getEmptyTicket = () => ({ name:'', description:'', priority:'Medium', tags
 const getEmptyVendor = () => ({ name:'', phone:'', email:'', specialty:'', notes:'' });
 
 export function MaintenancePage({ store, userProfile }) {
-  const { items, maintenanceTickets, vendors, users, settings, notificationConfig, loading, addTicket, updateTicket, deleteTicket, addTicketComment, updateTicketComment, deleteTicketComment, addMaintenanceTags, addVendor, updateVendor, deleteVendor } = store;
+  const { config, items, maintenanceTickets, vendors, users, settings, notificationConfig, loading, addTicket, updateTicket, deleteTicket, addTicketComment, updateTicketComment, deleteTicketComment, addMaintenanceTags, addVendor, updateVendor, deleteVendor } = store;
   const isMobile = useContext(MobileCtx);
 
   const userId = userProfile?.id || userProfile?.uid;
