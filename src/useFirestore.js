@@ -490,7 +490,13 @@ export function useFirestore(churchId) {
 
   const deleteTicket = useCallback(async (docId) => {
     try {
-      await deleteDoc(doc(db, 'churches', churchId, 'maintenanceTickets', docId));
+      const ref = doc(db, 'churches', churchId, 'maintenanceTickets', docId);
+      const snap = await getDoc(ref);
+      const linkedTaskDocId = snap.exists() ? snap.data()?.linkedTaskDocId : null;
+      await deleteDoc(ref);
+      if (linkedTaskDocId) {
+        updateDoc(doc(db, 'churches', churchId, 'tasks', linkedTaskDocId), { linkedTicketDocId: null }).catch(() => {});
+      }
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
@@ -555,6 +561,8 @@ export function useFirestore(churchId) {
     try {
       const taskNumber = typeof task === 'string' ? task : (task?.taskNumber || docId);
       const photoUrls = typeof task === 'object' ? (task?.photos || []) : [];
+      const linkedJobDocId = typeof task === 'object' ? task?.linkedJobDocId : null;
+      const linkedTicketDocId = typeof task === 'object' ? task?.linkedTicketDocId : null;
       const commentsSnap = await getDocs(collection(db, 'churches', churchId, 'tasks', docId, 'comments'));
       const batch = writeBatch(db);
       commentsSnap.docs.forEach(d => batch.delete(d.ref));
@@ -564,6 +572,12 @@ export function useFirestore(churchId) {
         await Promise.allSettled(photoUrls.map(url => {
           try { return deleteObject(stRef(storage, url)); } catch { return Promise.resolve(); }
         }));
+      }
+      if (linkedJobDocId) {
+        updateDoc(doc(db, 'churches', churchId, 'jobListings', linkedJobDocId), { linkedTaskDocId: null }).catch(() => {});
+      }
+      if (linkedTicketDocId) {
+        updateDoc(doc(db, 'churches', churchId, 'maintenanceTickets', linkedTicketDocId), { linkedTaskDocId: null }).catch(() => {});
       }
       if (userId) await logActivity('delete_task', taskNumber, userId, userName, {});
     } catch (err) { handleErr(err); throw err; }
@@ -941,7 +955,13 @@ export function useFirestore(churchId) {
 
   const deleteJobListing = useCallback(async (docId, userId, userName, jobNumber) => {
     try {
-      await deleteDoc(doc(db, 'churches', churchId, 'jobListings', docId));
+      const ref = doc(db, 'churches', churchId, 'jobListings', docId);
+      const snap = await getDoc(ref);
+      const linkedTaskDocId = snap.exists() ? snap.data()?.linkedTaskDocId : null;
+      await deleteDoc(ref);
+      if (linkedTaskDocId) {
+        updateDoc(doc(db, 'churches', churchId, 'tasks', linkedTaskDocId), { linkedJobDocId: null }).catch(() => {});
+      }
       if (userId) await logActivity('delete_job', jobNumber || docId, userId, userName, {});
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);

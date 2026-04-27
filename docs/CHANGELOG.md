@@ -4,6 +4,21 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-04-27 — Tasks + Jobs Hub Bug Sweep #4
+
+Nine bugs surfaced by a parallel three-agent sweep; verified against current code (several agent claims dropped as incorrect — login `uid` already set, waitlist auto-promotion already wired, ICS UID stability is correct per RFC 5545, `generateRecurringTemplateTasks` already idempotent).
+
+- **Missing composite index for recurring-series queries** — `firestore.indexes.json` gains `(recurrenceGroupId ASC, scheduledDate ASC)` on `jobListings` (COLLECTION scope). `updateJobListingSeries` and `deleteJobListingSeriesFrom` would have failed in production with "index required".
+- **Welcome email duplicate-send race** — `functions/index.js` `sendWelcomeEmail` now writes a `welcomeEmailSentAt: 'sending'` sentinel *before* `sgMail.send()`; the existing line-381 idempotency guard now short-circuits any CF retry between send-success and timestamp-update.
+- **Compliance gate only checked first linked accessPerson** — `JobsPage.jsx` `handleSignUp` now uses `filter()` to evaluate every accessPerson linked to the user (rare but possible from data migration); records are unioned across all linked persons before the requiredAccessTypes check.
+- **`promoteFromWaitlist` bypassed compliance + status checks** — CF now (a) refuses to promote into a non-`open` job (cancelled/closed) and (b) re-validates each waitlisted user's current `accessRecords` against the job's `requiredAccessTypes`. Ineligible users are *skipped* (left on waitlist) and the next eligible user is promoted instead. Pre-fetches accessPeople + accessRecords once outside the transaction.
+- **Task detail modal stayed open with stale data on remote delete** — `TasksPage.jsx` `onSnapshot` now closes the modal and flashes "This task was deleted by another user" when the task disappears (previously it returned early and left the user looking at stale data, with saves potentially applying to the wrong doc).
+- **Kanban reorder silently dropped failed writes** — `handleReorder` now counts `Promise.allSettled` rejections and flashes "Failed to reorder X of Y tasks — refresh to see correct order" on partial failure, matching the bulk-action partial-failure pattern from the 2026-04-25 audit fixes.
+- **Cross-hub convert (→ Job and → Ticket) lacked rollback on backref failure** — `handleConvertToJob` and `handleCreateTicket` now wrap the second `updateTask` call in a try/catch; if the backref write fails, the just-created peer doc is deleted to avoid an orphan. If even cleanup fails, the toast names the orphan docId for manual cleanup.
+- **Orphaned `linked*DocId` backrefs when peer deleted** — `deleteTask`, `deleteJobListing`, and `deleteTicket` in `useFirestore.js` now clear the reciprocal backref on the peer doc as a fire-and-forget step. `deleteTicket` and `deleteJobListing` fetch the doc first to discover the backref; `deleteTask` reads it from the passed `task` arg. UI no longer shows dead "Linked" chips after a peer is removed.
+
+---
+
 ## 2026-04-26 — Walkthrough Bug Fixes (commits e59c275, f72a4fe)
 
 **Phase 1 — Critical bugs**

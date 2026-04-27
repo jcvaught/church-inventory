@@ -719,13 +719,14 @@ export function JobsPage({ store, userProfile }) {
 
   async function handleSignUp(job) {
     if ((job.requiredAccessTypes || []).length > 0) {
-      const linkedPerson = (accessPeople || []).find(p => p.userId === userId);
-      if (!linkedPerson) {
+      const linkedPersons = (accessPeople || []).filter(p => p.userId === userId);
+      if (linkedPersons.length === 0) {
         flash('You need a People Access record linked to your account to sign up for this job.', true);
         return;
       }
       const todayS = localDateStr(new Date());
-      const myRecords = (accessRecords || []).filter(r => r.personId === linkedPerson._docId);
+      const linkedIds = new Set(linkedPersons.map(p => p._docId));
+      const myRecords = (accessRecords || []).filter(r => linkedIds.has(r.personId));
       for (const reqType of job.requiredAccessTypes) {
         const hasValid = myRecords.some(r => r.type === reqType && (!r.expiryDate || r.expiryDate >= todayS));
         if (!hasValid) {

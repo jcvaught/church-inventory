@@ -817,7 +817,7 @@ function TaskCalendar({ tasks, onTaskClick, isMobile }) {
 const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], parentTaskId:null, blockedBy:[], linkedItemDocId:null, linkedTicketDocId:null, estimatedHours:null, actualHours:null, ministry:'' });
 
 export function TasksPage({ store, userProfile }) {
-  const { tasks, items, maintenanceTickets, users, settings, config, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser, taskTemplates, addTaskTemplate, deleteTaskTemplate, addJobListing, addTicket } = store;
+  const { tasks, items, maintenanceTickets, users, settings, config, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser, taskTemplates, addTaskTemplate, deleteTaskTemplate, addJobListing, addTicket, deleteJobListing, deleteTicket } = store;
   const isMobile = useContext(MobileCtx);
 
   const userId = userProfile?.id || userProfile?.uid;
@@ -949,7 +949,12 @@ export function TasksPage({ store, userProfile }) {
     const unsub = onSnapshot(
       doc(db, 'churches', churchId, 'tasks', showDetail._docId),
       snap => {
-        if (!snap.exists()) return;
+        if (!snap.exists()) {
+          if (initialRef.current) { initialRef.current = false; return; }
+          setShowDetail(null);
+          flash('This task was deleted by another user.', true);
+          return;
+        }
         if (initialRef.current) { initialRef.current = false; return; } // skip first fire
         const remote = { _docId: snap.id, ...snap.data() };
         if (isDirtyRef.current) {
@@ -1461,9 +1466,11 @@ export function TasksPage({ store, userProfile }) {
     const reordered = [...columnTasks];
     const [moved] = reordered.splice(fromIdx, 1);
     reordered.splice(toIdx, 0, moved);
-    await Promise.allSettled(reordered.map((t, i) =>
+    const results = await Promise.allSettled(reordered.map((t, i) =>
       updateDoc(doc(db, 'churches', churchId, 'tasks', t._docId), { sortOrder: i })
     ));
+    const failed = results.filter(r => r.status === 'rejected').length;
+    if (failed > 0) flash(`Failed to reorder ${failed} of ${reordered.length} tasks — refresh to see correct order.`, true);
   }
 
   async function handleQuickAddTask(name, status) {
@@ -1597,8 +1604,9 @@ export function TasksPage({ store, userProfile }) {
   async function handleConvertToJob() {
     if (!showDetail || !convertJobForm.title.trim()) return;
     setConvertJobSaving(true);
+    let jobDocId = null;
     try {
-      const jobDocId = await addJobListing({
+      jobDocId = await addJobListing({
         ...convertJobForm,
         spotsTotal: Math.max(1, parseInt(convertJobForm.spotsTotal) || 1),
         pay: null,
@@ -1606,12 +1614,23 @@ export function TasksPage({ store, userProfile }) {
         description: showDetail.description || '',
         linkedTaskDocId: showDetail._docId,
       }, userId, userName);
-      await updateTask(showDetail._docId, { linkedJobDocId: jobDocId }, userId, userName, showDetail.taskNumber);
+      try {
+        await updateTask(showDetail._docId, { linkedJobDocId: jobDocId }, userId, userName, showDetail.taskNumber);
+      } catch (linkErr) {
+        // Backref failed — roll back the orphan job so we don't leave dangling state.
+        try {
+          await deleteJobListing(jobDocId, userId, userName, convertJobForm.title);
+          flash('Failed to link the new job — rolled back.', true);
+        } catch {
+          flash(`Failed to link the new job. Orphaned job ${jobDocId.slice(0,8)}… needs manual cleanup.`, true);
+        }
+        throw linkErr;
+      }
       setShowDetail(prev => ({ ...prev, linkedJobDocId: jobDocId }));
       setShowConvertToJobModal(false);
       flash('Job created and linked to this task.');
     } catch {
-      flash('Failed to create job.', true);
+      if (!jobDocId) flash('Failed to create job.', true);
     }
     setConvertJobSaving(false);
   }
@@ -1620,20 +1639,31 @@ export function TasksPage({ store, userProfile }) {
   async function handleCreateTicket() {
     if (!showDetail) return;
     setCreateTicketSaving(true);
+    let ticketDocId = null;
     try {
-      const ticketDocId = await addTicket({
+      ticketDocId = await addTicket({
         name: showDetail.name,
         description: showDetail.description || '',
         priority: showDetail.priority || 'Medium',
         linkedTaskDocId: showDetail._docId,
       }, userId, userName);
-      await updateTask(showDetail._docId, { linkedTicketDocId: ticketDocId }, userId, userName, showDetail.taskNumber);
+      try {
+        await updateTask(showDetail._docId, { linkedTicketDocId: ticketDocId }, userId, userName, showDetail.taskNumber);
+      } catch (linkErr) {
+        try {
+          await deleteTicket(ticketDocId);
+          flash('Failed to link the new ticket — rolled back.', true);
+        } catch {
+          flash(`Failed to link the new ticket. Orphaned ticket ${ticketDocId.slice(0,8)}… needs manual cleanup.`, true);
+        }
+        throw linkErr;
+      }
       setDetailEdits(d => ({ ...d, linkedTicketDocId: ticketDocId }));
       setShowDetail(prev => ({ ...prev, linkedTicketDocId: ticketDocId }));
       setShowCreateTicketModal(false);
       flash('Maintenance ticket created and linked.');
     } catch {
-      flash('Failed to create ticket.', true);
+      if (!ticketDocId) flash('Failed to create ticket.', true);
     }
     setCreateTicketSaving(false);
   }

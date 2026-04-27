@@ -430,6 +430,14 @@ exports.sendWelcomeEmail = onDocumentCreated('churches/{churchId}', async (event
 
   const text = `Hi ${firstName},\n\nWelcome to ChurchOpsHub! Your church "${churchData.churchName}" is set up and ready to go.\n\nYour 90-day free trial is active — all paid hubs are unlocked through ${trialEndStr}. No credit card needed.\n\nA few things to get started:\n- Add your first items in the Inventory tab\n- Invite your team with church code: ${churchData.churchCode || ''}\n- Explore the Hubs tab — Maintenance, Tasks, Job Hub, and more\n- Set up your locations and ministries in Settings\n\nHelp Center: https://churchopshub.com/?help\n\nFeel free to reply with any questions.\n\n— John Vaught\nChurchOpsHub`;
 
+  // Set sentinel BEFORE send so a CF retry between send-success and update can't dual-send.
+  try {
+    await churchRef.update({ welcomeEmailSentAt: 'sending' });
+  } catch (err) {
+    console.error('sendWelcomeEmail: failed to set sending sentinel', err?.message);
+    return;
+  }
+
   try {
     await sgMail.send({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject, html, text });
     await churchRef.update({ welcomeEmailSentAt: new Date().toISOString() });
@@ -1263,20 +1271,54 @@ exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
   let promotedUser = null;
   let jobData = null;
 
+  // Pre-read job once to know if compliance pre-fetch is needed.
+  const preSnap = await jobRef.get();
+  if (!preSnap.exists) return { promoted: false };
+  const preData = preSnap.data();
+  if (preData.status !== 'open') return { promoted: false };
+  const requiredTypes = preData.requiredAccessTypes || [];
+
+  // If compliance gating is on, fetch the church's accessPeople + accessRecords
+  // once so we can re-validate each waitlisted user before promotion.
+  let accessPeople = [];
+  let accessRecords = [];
+  if (requiredTypes.length > 0) {
+    const [peopleSnap, recordsSnap] = await Promise.all([
+      db.collection(`churches/${churchId}/accessPeople`).get(),
+      db.collection(`churches/${churchId}/accessRecords`).get(),
+    ]);
+    accessPeople = peopleSnap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+    accessRecords = recordsSnap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+  }
+  const todayS = new Date().toISOString().slice(0, 10);
+  const isEligible = (uid) => {
+    if (requiredTypes.length === 0) return true;
+    const linkedIds = new Set(accessPeople.filter(p => p.userId === uid).map(p => p._docId));
+    if (linkedIds.size === 0) return false;
+    const myRecords = accessRecords.filter(r => linkedIds.has(r.personId));
+    return requiredTypes.every(reqType =>
+      myRecords.some(r => r.type === reqType && (!r.expiryDate || r.expiryDate >= todayS))
+    );
+  };
+
   await db.runTransaction(async (t) => {
     const snap = await t.get(jobRef);
     if (!snap.exists) return;
     const data = snap.data();
+    if (data.status !== 'open') return;
     const waitlist = data.waitlist || [];
     const signups = data.signups || [];
     if (waitlist.length === 0) return;
     if (signups.length >= (data.spotsTotal || 1)) return;
-    const [first, ...rest] = waitlist;
-    promotedUser = first;
+    const idx = waitlist.findIndex(w => isEligible(w.uid));
+    if (idx === -1) return;
+    const promoted = waitlist[idx];
+    const newWaitlist = waitlist.filter((_, i) => i !== idx);
+    promotedUser = promoted;
     jobData = data;
     t.update(jobRef, {
-      signups: [...signups, { uid: first.uid, name: first.name, signedUpAt: first.addedAt || new Date().toISOString() }],
-      waitlist: rest,
+      signups: [...signups, { uid: promoted.uid, name: promoted.name, signedUpAt: promoted.addedAt || new Date().toISOString() }],
+      waitlist: newWaitlist,
       updatedAt: new Date().toISOString()
     });
   });

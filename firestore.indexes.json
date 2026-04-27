@@ -7,6 +7,14 @@
         { "fieldPath": "scheduledDate", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "jobListings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recurrenceGroupId", "order": "ASCENDING" },
+        { "fieldPath": "scheduledDate", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
