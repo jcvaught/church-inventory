@@ -4,6 +4,31 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-04-26 — Walkthrough Bug Fixes (commits e59c275, f72a4fe)
+
+**Phase 1 — Critical bugs**
+
+- `src/useAuth.js` — all 6 `setUserProfile` calls now include `uid` alias alongside `id`; fixes 7 downstream broken features: Settings SMS/delegate save, My Compliance card display, PeopleAccess `createdBy`/`recordedBy`, App.jsx auto-link
+- `src/pages/SuppliesPage.jsx` — removed undeclared `setPhotoFile(null)` call in Add Supply modal `onClose` (crashed on close)
+- `src/pages/hubs/MaintenancePage.jsx` — added `config` to store destructure; fixes `config is not defined` crash when saving a ticket with a new assignee
+- `src/pages/hubs/PeopleAccessPage.jsx` — added `open` prop to all 6 `<Modal>` instances; the entire People Access Hub was silently read-only
+- `src/pages/hubs/JobsPage.jsx` — `handleSignUp` gating: `p.linkedUserId` → `p.userId`, `r.expiresAt` → `r.expiryDate`; access-gated sign-ups were always rejected even for qualified members
+- `src/components/primitives/UpgradeGate.jsx` — replaced `mailto:` buttons with real Stripe `createCheckoutSession` checkout; updated copy from "30-day trial" to "Cancel anytime in Settings"
+
+**Phase 2 — High-value medium issues**
+
+- `src/pages/ReservationsPage.jsx` — replaced local `generateRecurrenceDates` with shared util from `date.js`; fixes `setMonth` month-end rollover bug (Jan 31 + monthly was → Mar 3 instead of Feb 28)
+- `src/pages/hubs/AccountabilityPage.jsx` — audit progress now persisted to localStorage (keyed by `churchId`); refreshing mid-audit no longer loses work
+- `src/pages/HubsPage.jsx` + `src/App.jsx` — hub card grid fades while subscription loads to prevent active→inactive flicker on hard refresh
+- `src/utils/ical.js` — DTEND now bumps to next day when job end hour wraps past midnight (23:00 job no longer creates negative-duration events)
+- `src/pages/ItemsPage.jsx` — Add Item modal stays open with error on photo upload failure instead of silently saving without photo; "In Use" removed from status filter (never set by UI)
+- `src/pages/hubs/JobsPage.jsx` / `src/App.jsx` / `src/pages/PublicJobsPage.jsx` — Share Board URL now includes `&cc=CHURCH_CODE`; public Sign Up button pre-fills church code in registration form
+- `src/pages/hubs/MaintenancePage.jsx` — added `recurringChildCreatedAt` guard to prevent duplicate recurring child tickets when drag+modal-save race occurs
+- `src/App.jsx` — store error toast auto-dismiss bumped from 5s to 10s
+- `firestore.rules` — waitlist updates now enforce ±1 size constraint server-side (previously client-only); deployed 2026-04-26
+
+---
+
 ## 2026-04-26 — Twilio SMS Reminders + Legal Pages (commits b1409d9, 6b9bd6e, 1f7104e, 9a9b372)
 
 **FB-03: SMS job reminders (Jobs Hub only)**
