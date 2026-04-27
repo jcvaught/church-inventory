@@ -4,6 +4,24 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-04-26 — Twilio SMS Reminders + Legal Pages (commits b1409d9, 6b9bd6e, 1f7104e, 9a9b372)
+
+**FB-03: SMS job reminders (Jobs Hub only)**
+
+- `functions/index.js` — `twilio` npm package added; `getTwilioClient()` + `TWILIO_FROM` helpers added; `sendJobReminders` CF extended with SMS sweep after the email sweep: iterates the same user set, skips users without `phone`/`smsRemindersEnabled`, sends one SMS per opted-in user via `twilio.messages.create`; uses `Promise.allSettled` (non-blocking alongside email); SMS body includes job title/time/location + "Reply STOP to opt out"
+- `src/pages/SettingsPage.jsx` — My Profile card gains SMS opt-in section (gated on `userHasJobsAccess`): phone number input, "Enable SMS reminders" checkbox (disabled until phone entered), Save button with "Saved!" flash, TCPA consent disclosure; `normalizePhone()` normalizes to E.164 on save; `phoneInput`/`smsEnabled`/`savingPhone`/`phoneSaved` state; `handleSavePhone()` saves `phone` + `smsRemindersEnabled` to `users/{uid}` via `updateUser`; clears `smsRemindersEnabled` if phone is cleared
+- `functions/.env` — `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` added (gitignored)
+
+**Privacy + Terms standalone pages**
+
+- `src/pages/PrivacyPage.jsx` (new) — Full privacy policy at `?privacy`; includes SMS section 6 with explicit no-share clause ("No mobile information will be shared with third parties for marketing"), BOLD STOP/HELP, sending number, opt-out retention note; correct `<h2>` heading hierarchy; `window.history.back()` nav
+- `src/pages/TermsPage.jsx` (new) — Full ToS at `?terms`; Section 7 SMS Communications has all Twilio A2P required fields: program name, description, sending number (+1 571-540-7100), frequency (1–5/week), rates disclosure, BOLD HELP/STOP, support contact; Section 7 added to survival clause; `window.history.back()` nav
+- `src/App.jsx` — `?privacy` and `?terms` routes added; `PrivacyPage`/`TermsPage` imported; existing auth-modal privacy section updated with Twilio SMS entry
+- `public/sitemap.xml` — `?privacy` and `?terms` added
+- Twilio A2P 10DLC registration submitted (Brand registered, Campaign pending approval ~1-3 days); phone number +1 571-540-7100; Impact Access Program pending nonprofit approval
+
+---
+
 ## 2026-04-25 — Notable Gaps Polish (commit ad5e5a2)
 
 4 items from the post-audit "notable gaps" list.
