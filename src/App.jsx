@@ -434,7 +434,8 @@ export default function App() {
     const p = new URLSearchParams(window.location.search);
     const churchId = p.get('jobs');
     const cn = p.get('cn');
-    return churchId ? { churchId, churchName: cn ? decodeURIComponent(cn) : '' } : null;
+    const cc = p.get('cc');
+    return churchId ? { churchId, churchName: cn ? decodeURIComponent(cn) : '', churchCode: cc ? decodeURIComponent(cc) : '' } : null;
   });
   const [showHelp] = useState(() => new URLSearchParams(window.location.search).get('help') !== null);
   const [showPrivacy] = useState(() => new URLSearchParams(window.location.search).get('privacy') !== null);
@@ -455,7 +456,7 @@ export default function App() {
   if (pathname.startsWith('/blog/')) return <BlogPost slug={pathname.replace('/blog/', '')} onGetStarted={handleGetStarted} />;
 
   if (publicRequest) return <PublicRequestPage churchId={publicRequest.churchId} churchName={publicRequest.churchName} />;
-  if (publicJobs) return <PublicJobsPage churchId={publicJobs.churchId} churchName={publicJobs.churchName} onGetStarted={handleGetStarted} />;
+  if (publicJobs) return <PublicJobsPage churchId={publicJobs.churchId} churchName={publicJobs.churchName} churchCode={publicJobs.churchCode} onGetStarted={handleGetStarted} />;
 
   if (showHelp) return <HelpPage onBack={() => window.history.back()} />;
   if (showPrivacy) return <PrivacyPage />;
@@ -476,7 +477,7 @@ function AppShell({ authHook }) {
   const [verifyBannerDismissed, setVerifyBannerDismissed] = useState(false);
   const [resentVerify, setResentVerify] = useState(false);
   const store = useFirestore(userProfile.churchId);
-  const { subscription, hasHub, canAddUser, trialDaysRemaining } = useSubscription(userProfile.churchId);
+  const { subscription, loading: subscriptionLoading, hasHub, canAddUser, trialDaysRemaining } = useSubscription(userProfile.churchId);
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false);
   const [tab, setTab] = useState(() => {
     if (new URLSearchParams(window.location.search).get('item')) return 'inventory';
@@ -498,10 +499,10 @@ function AppShell({ authHook }) {
     }
   }, []);
 
-  // Auto-clear store errors after 5 seconds
+  // Auto-clear store errors after 10 seconds
   useEffect(() => {
     if (!store.error) return;
-    const t = setTimeout(() => store.clearError(), 5000);
+    const t = setTimeout(() => store.clearError(), 10000);
     return () => clearTimeout(t);
   }, [store.error]);
 
@@ -685,6 +686,7 @@ function AppShell({ authHook }) {
             hubKey={hubKey}
             onOpenHub={openHub}
             hasHub={hasHub}
+            subscriptionLoading={subscriptionLoading}
             userCanSeeHub={userCanSeeHub}
             onGoToSettings={() => setTab('settings')}
           />

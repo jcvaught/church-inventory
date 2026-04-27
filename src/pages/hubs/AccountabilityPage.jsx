@@ -1,4 +1,4 @@
-import { useState, useMemo, useContext } from 'react';
+import { useState, useMemo, useContext, useEffect } from 'react';
 import { B, f1, f2, inp, btnP, btnS } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
@@ -25,10 +25,19 @@ export function AccountabilityPage({ store, userProfile }) {
   const isMobile = useContext(MobileCtx);
   const { items, activityLog, audits, addAudit, settings } = store;
 
+  const churchId = userProfile?.churchId;
+  const auditProgressKey = churchId ? `audit_progress_${churchId}` : null;
+
   // Audit flow
   const [auditStep, setAuditStep] = useState('list'); // list | setup | scanning
-  const [auditLocation, setAuditLocation] = useState('');
-  const [auditProgress, setAuditProgress] = useState({});
+  const [auditLocation, setAuditLocation] = useState(() => {
+    if (!churchId) return '';
+    try { return localStorage.getItem(`audit_location_${churchId}`) || ''; } catch { return ''; }
+  });
+  const [auditProgress, setAuditProgress] = useState(() => {
+    if (!churchId) return {};
+    try { const s = localStorage.getItem(`audit_progress_${churchId}`); return s ? JSON.parse(s) : {}; } catch { return {}; }
+  });
   const [saving, setSaving] = useState(false);
   const [flash, setFlash] = useState(null);
 
@@ -39,6 +48,23 @@ export function AccountabilityPage({ store, userProfile }) {
   const [chainItem, setChainItem] = useState(null);
 
   function showFlash(msg, isError = false) { setFlash({ text: msg, isError }); setTimeout(() => setFlash(null), 5000); }
+
+  useEffect(() => {
+    if (!auditProgressKey) return;
+    if (Object.keys(auditProgress).length === 0) {
+      localStorage.removeItem(auditProgressKey);
+      localStorage.removeItem(`audit_location_${churchId}`);
+    } else {
+      localStorage.setItem(auditProgressKey, JSON.stringify(auditProgress));
+      if (auditLocation) localStorage.setItem(`audit_location_${churchId}`, auditLocation);
+    }
+  }, [auditProgress, auditProgressKey, auditLocation, churchId]);
+
+  function resetAudit() {
+    setAuditStep('list');
+    setAuditLocation('');
+    setAuditProgress({});
+  }
 
   const isAdmin = userProfile?.role === 'admin';
   const isManager = userProfile?.role === 'manager';
@@ -99,9 +125,7 @@ export function AccountabilityPage({ store, userProfile }) {
     }, userProfile.id, userProfile.name);
     setSaving(false);
     showFlash(`Audit complete — ${discrepancies.length} discrepanc${discrepancies.length === 1 ? 'y' : 'ies'} found`);
-    setAuditStep('list');
-    setAuditLocation('');
-    setAuditProgress({});
+    resetAudit();
   }
 
   function exportInsuranceCSV() {
@@ -161,7 +185,7 @@ export function AccountabilityPage({ store, userProfile }) {
     return (
       <div>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20, flexWrap:'wrap' }}>
-          <button onClick={() => { setAuditStep('list'); setAuditLocation(''); setAuditProgress({}); }} style={{ ...btnS, padding:'8px 14px', fontSize:13 }}>← Back</button>
+          <button onClick={resetAudit} style={{ ...btnS, padding:'8px 14px', fontSize:13 }}>← Back</button>
           <div style={{ flex:1 }}>
             <h2 style={{ margin:0, fontFamily:f1, fontSize:20, color:B.navy }}>Audit: {auditLocation}</h2>
             <p style={{ margin:'4px 0 0', color:B.textLight, fontSize:13 }}>{confirmedCount} of {auditItems.length} items reviewed</p>
@@ -317,7 +341,7 @@ export function AccountabilityPage({ store, userProfile }) {
       )}
 
       {/* Setup modal */}
-      <Modal open={auditStep === 'setup'} onClose={() => { setAuditStep('list'); setAuditLocation(''); }} title="Start New Audit">
+      <Modal open={auditStep === 'setup'} onClose={resetAudit} title="Start New Audit">
         <FF label="Location to Audit">
           <select value={auditLocation} onChange={e => setAuditLocation(e.target.value)} style={inp}>
             <option value="">Select a location...</option>

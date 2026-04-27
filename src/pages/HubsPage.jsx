@@ -94,7 +94,7 @@ function HubContent({ hubKey, store, userProfile }) {
   return null;
 }
 
-export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, userCanSeeHub, onGoToSettings }) {
+export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscriptionLoading, userCanSeeHub, onGoToSettings }) {
   const isMobile = useContext(MobileCtx);
   const def = HUB_DEFS.find(h => h.key === hubKey);
 
@@ -140,7 +140,7 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, userCa
           Extend ChurchOpsHub with paid add-ons for your church's specific needs.
         </p>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, opacity: subscriptionLoading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
         {HUB_DEFS.filter(hub => !(hub.key === 'people_access' && userProfile?.role === 'user')).map(hub => {
           const active = hasHub(hub.key);
           const canSee = active && userCanSeeHub(hub.key);

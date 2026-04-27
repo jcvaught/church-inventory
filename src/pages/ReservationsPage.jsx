@@ -6,7 +6,7 @@ import { FF } from '../components/primitives/FF.jsx';
 import { Stat } from '../components/primitives/Stat.jsx';
 import { exportReservationsCSV } from '../utils/csv.js';
 import { ITEM_STATUS, RES_STATUS, RESOURCE_TYPE } from '../utils/constants.js';
-import { localDateStr } from '../utils/date.js';
+import { localDateStr, generateRecurrenceDates } from '../utils/date.js';
 
 export function ReservationsPage({ store, userProfile }) {
   const { items, settings, reservations, users, rooms, notificationConfig, config, addReservation, updateReservation, checkOutItem, logActivity } = store;
@@ -71,28 +71,6 @@ export function ReservationsPage({ store, userProfile }) {
     } catch { /* non-blocking */ }
   }
 
-  function generateRecurrenceDates(startDate, returnDate, freq, endDate) {
-    const dates = [];
-    const current = new Date(startDate + 'T00:00:00');
-    const end = new Date(endDate + 'T00:00:00');
-    const retOffset = returnDate ? (new Date(returnDate + 'T00:00:00') - new Date(startDate + 'T00:00:00')) : 0;
-    while (true) {
-      if (freq === 'weekly') current.setDate(current.getDate() + 7);
-      else if (freq === 'biweekly') current.setDate(current.getDate() + 14);
-      else if (freq === 'monthly') {
-      const day = current.getDate();
-      current.setMonth(current.getMonth() + 1);
-      const lastDay = new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate();
-      if (current.getDate() !== day) current.setDate(lastDay);
-    }
-      if (current > end) break;
-      const ev = localDateStr(current);
-      const ret = returnDate ? localDateStr(new Date(current.getTime() + retOffset)) : '';
-      dates.push({ eventDate: ev, returnDate: ret });
-    }
-    return dates;
-  }
-
   async function handleAdd() {
     const isRoom = resourceType === RESOURCE_TYPE.ROOM;
     if (isRoom ? !form.roomDocId : !form.itemDocId) return;
@@ -139,8 +117,15 @@ export function ReservationsPage({ store, userProfile }) {
         notes: form.notes,
       };
       if (recurring && recurrenceEnd && recurrenceEnd > form.eventDate) {
-        const extraDates = generateRecurrenceDates(form.eventDate, form.returnDate, recurrenceFreq, recurrenceEnd);
-        const allDates = [{ eventDate: form.eventDate, returnDate: form.returnDate }, ...extraDates];
+        const retOffset = form.returnDate
+          ? (new Date(form.returnDate + 'T00:00:00') - new Date(form.eventDate + 'T00:00:00'))
+          : 0;
+        const allEventDates = generateRecurrenceDates(form.eventDate, recurrenceFreq, recurrenceEnd);
+        const allDates = allEventDates.map(evDate => ({
+          eventDate: evDate,
+          returnDate: form.returnDate ? localDateStr(new Date(new Date(evDate + 'T00:00:00').getTime() + retOffset)) : '',
+        }));
+        const extraDates = allDates.slice(1);
         for (const d of allDates) {
           const dStart = d.eventDate;
           const dEnd = d.returnDate || d.eventDate;
@@ -163,7 +148,7 @@ export function ReservationsPage({ store, userProfile }) {
         for (const d of extraDates) {
           await addReservation({ ...baseRes, eventDate: d.eventDate, returnDate: d.returnDate, recurrenceGroupId: groupId, recurrenceFreq }, userId, userName);
         }
-        flash(`Reservation series created (${1 + extraDates.length} occurrences)!`);
+        flash(`Reservation series created (${allDates.length} occurrences)!`);
       } else {
         await addReservation(baseRes, userId, userName);
         flash("Reservation requested!");
@@ -410,7 +395,7 @@ export function ReservationsPage({ store, userProfile }) {
             </div>
           )}
           {recurring && recurrenceEnd && recurrenceEnd > form.eventDate && (() => {
-            const count = generateRecurrenceDates(form.eventDate, form.returnDate, recurrenceFreq, recurrenceEnd).length + 1;
+            const count = generateRecurrenceDates(form.eventDate, recurrenceFreq, recurrenceEnd).length;
             return <div style={{ marginTop:8, paddingLeft:26, fontSize:13, color:B.teal, fontWeight:600 }}>→ {count} reservation{count!==1?"s":""} will be created</div>;
           })()}
         </div>

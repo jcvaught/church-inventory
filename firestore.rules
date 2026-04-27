@@ -168,8 +168,10 @@ service cloud.firestore {
             request.resource.data.signups.size() == resource.data.signups.size() - 1) &&
            request.resource.data.signups.size() <= resource.data.spotsTotal)
           ||
-          // Join / leave waitlist (±1 size enforcement via transaction in useFirestore.js)
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['waitlist', 'updatedAt'])
+          // Join / leave waitlist (±1 size enforced here and in client transaction)
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['waitlist', 'updatedAt']) &&
+           (request.resource.data.waitlist.size() == resource.data.waitlist.size() + 1 ||
+            request.resource.data.waitlist.size() == resource.data.waitlist.size() - 1))
         )
       );
     }

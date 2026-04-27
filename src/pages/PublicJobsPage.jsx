@@ -11,7 +11,14 @@ function formatJobDate(dateStr) {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export function PublicJobsPage({ churchId, churchName, onGetStarted }) {
+export function PublicJobsPage({ churchId, churchName, churchCode, onGetStarted }) {
+  function goRegister() {
+    if (churchCode) {
+      window.location.href = `/?invite=${encodeURIComponent(churchCode)}`;
+    } else {
+      onGetStarted('register');
+    }
+  }
   const [jobs, setJobs] = useState(null);
   const [err, setErr] = useState(null);
 
@@ -93,7 +100,7 @@ export function PublicJobsPage({ churchId, churchName, onGetStarted }) {
                       </div>
                     </div>
                     <button
-                      onClick={() => onGetStarted('register')}
+                      onClick={goRegister}
                       disabled={isFull}
                       style={{ ...btnP, width: '100%', fontSize: 13, opacity: isFull ? 0.5 : 1, cursor: isFull ? 'not-allowed' : 'pointer' }}>
                       {isFull ? 'Job Full' : 'Sign Up →'}
@@ -110,7 +117,7 @@ export function PublicJobsPage({ churchId, churchName, onGetStarted }) {
                 Create a free account to sign up for jobs, track your schedule, and stay connected.
               </div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button onClick={() => onGetStarted('register')} style={{ ...btnP, padding: '9px 20px', fontSize: 13 }}>Create Account</button>
+                <button onClick={goRegister} style={{ ...btnP, padding: '9px 20px', fontSize: 13 }}>Create Account</button>
                 <button onClick={() => onGetStarted('login')} style={{ ...btnS, padding: '9px 20px', fontSize: 13 }}>Sign In</button>
               </div>
             </div>

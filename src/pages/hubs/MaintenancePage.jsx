@@ -793,8 +793,9 @@ export function MaintenancePage({ store, userProfile }) {
         }
       }
 
-      // Auto-create next recurring ticket on completion
-      if (isNowComplete && !wasComplete && detailEdits.recurrence) {
+      // Auto-create next recurring ticket on completion (guard against double-fire if drag+save race)
+      const liveTicket = maintenanceTickets.find(t => t._docId === showDetail._docId);
+      if (isNowComplete && !wasComplete && detailEdits.recurrence && !liveTicket?.recurringChildCreatedAt) {
         const nextDue = calculateNextDue(detailEdits.dueDate, detailEdits.recurrence);
         const linkedItem2 = activeItems.find(i => i._docId === detailEdits.linkedItemDocId);
         await addTicket({
@@ -921,6 +922,7 @@ export function MaintenancePage({ store, userProfile }) {
     await updateTicket(docId, {
       status: newStatus,
       completedAt: isNowComplete && !wasComplete ? new Date().toISOString() : (isNowComplete ? ticket.completedAt : null),
+      ...(isNowComplete && !wasComplete && ticket.recurrence ? { recurringChildCreatedAt: new Date().toISOString() } : {}),
     });
     if (isNowComplete && !wasComplete && ticket.recurrence) {
       const nextDue = calculateNextDue(ticket.dueDate, ticket.recurrence);

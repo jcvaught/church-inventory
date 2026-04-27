@@ -76,7 +76,10 @@ export function exportJobsICS(jobs, churchName) {
     if (dtTime) {
       events.push(`DTSTART:${dtTime}`);
       const h = parseInt(dtTime.slice(9, 11));
-      events.push(`DTEND:${dtTime.slice(0, 9)}${String((h + 1) % 24).padStart(2, '0')}${dtTime.slice(11)}`);
+      const endH = h + 1;
+      let endDate = dtTime.slice(0, 8);
+      if (endH >= 24) endDate = addOneDay(endDate);
+      events.push(`DTEND:${endDate}T${String(endH % 24).padStart(2, '0')}${dtTime.slice(11)}`);
     } else {
       events.push(`DTSTART;VALUE=DATE:${dateOnly}`);
       events.push(`DTEND;VALUE=DATE:${addOneDay(dateOnly)}`);

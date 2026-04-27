@@ -266,7 +266,13 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
         const sRef = storageRef(storage, `churches/${userProfile.churchId}/items/${itemForm.itemId.trim()}-${Date.now()}`);
         await uploadBytes(sRef, resized, { contentType: 'image/jpeg' });
         photoUrl = await getDownloadURL(sRef);
-      } catch { flash('Photo upload failed — item saved without photo.'); }
+      } catch {
+        setPhotoFile(null);
+        setPhotoPreview(null);
+        setSaving(false);
+        flash('Photo upload failed. Remove the photo or try a smaller image, then save again.');
+        return;
+      }
     }
     await addItem({
       itemId: itemForm.itemId.trim(),
@@ -636,7 +642,6 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
             <option value="all">All Statuses ({counts.all})</option>
             <option value={ITEM_STATUS.AVAILABLE}>Available ({counts[ITEM_STATUS.AVAILABLE]})</option>
             <option value={ITEM_STATUS.CHECKED_OUT}>Checked Out ({counts[ITEM_STATUS.CHECKED_OUT]})</option>
-            <option value={ITEM_STATUS.IN_USE}>In Use ({counts[ITEM_STATUS.IN_USE]})</option>
             <option value={ITEM_STATUS.UNDER_REPAIR}>Under Repair ({counts[ITEM_STATUS.UNDER_REPAIR]})</option>
           </select>
           {locations.length > 0 && (

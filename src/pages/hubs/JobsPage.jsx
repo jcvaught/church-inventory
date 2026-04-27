@@ -961,7 +961,7 @@ export function JobsPage({ store, userProfile }) {
               <div style={{ display:'flex', gap:8 }}>
                 <button onClick={() => setShowDelegatesModal(true)} style={{ ...btnS, padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }} title="Manage who receives your job notification emails">📧 Delegates</button>
                 <button onClick={() => {
-                  const url = `${window.location.origin}?jobs=${userProfile?.churchId}&cn=${encodeURIComponent(config?.churchName || '')}`;
+                  const url = `${window.location.origin}?jobs=${userProfile?.churchId}&cn=${encodeURIComponent(config?.churchName || '')}&cc=${encodeURIComponent(config?.churchCode || '')}`;
                   navigator.clipboard.writeText(url).then(() => flash('Job board link copied!')).catch(() => flash('Could not copy link.', true));
                 }} style={{ ...btnS, padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }}>Share Board</button>
                 <button onClick={openNewJob} style={{ ...btnP, padding: '8px 16px', fontSize: 13, whiteSpace: 'nowrap' }}>+ Post Job</button>
