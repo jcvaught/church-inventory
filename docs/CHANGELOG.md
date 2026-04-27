@@ -58,7 +58,7 @@ Nine bugs surfaced by a parallel three-agent sweep; verified against current cod
 - `src/pages/TermsPage.jsx` (new) — Full ToS at `?terms`; Section 7 SMS Communications has all Twilio A2P required fields: program name, description, sending number (+1 571-540-7100), frequency (1–5/week), rates disclosure, BOLD HELP/STOP, support contact; Section 7 added to survival clause; `window.history.back()` nav
 - `src/App.jsx` — `?privacy` and `?terms` routes added; `PrivacyPage`/`TermsPage` imported; existing auth-modal privacy section updated with Twilio SMS entry
 - `public/sitemap.xml` — `?privacy` and `?terms` added
-- Twilio A2P 10DLC registration in progress: Brand registered 2026-04-26 ✓; Campaign submitted 2026-04-27 (Low Volume Mixed use case) — pending Twilio review (~1-3 days); Phone Number registration to follow once Campaign approved; sending number +1 571-540-7100; Impact Access Program pending nonprofit approval
+- Twilio A2P 10DLC registration in progress: TrustHub Business Profile approved 2026-04-27 ✓ (Bundle SID BU99f73c04fee0f43472f86f6bdd2a77fb); Brand registered 2026-04-26 ✓; Campaign submitted 2026-04-27 (Low Volume Mixed use case) — pending Twilio review (~1-3 days); Phone Number registration to follow once Campaign approved; sending number +1 571-540-7100. Twilio.org Impact Access program **approved** 2026-04-27 — $100 nonprofit credit + discounted pricing applied to the Fairfax Church of Christ account
 
 ---
 
