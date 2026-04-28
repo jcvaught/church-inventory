@@ -19,7 +19,7 @@ npm run lint:fix  # ESLint with auto-fix
 npm run analyze   # Build + open bundle size visualizer in browser (dist/bundle-stats.html)
 ```
 
-**Run `npm run build` and fix any errors before pushing.** Run `npm run lint` regularly — the baseline is 0 errors, 66 intentional `exhaustive-deps` warnings. Any new errors should be fixed before committing.
+**Run `npm run build` and fix any errors before pushing.** Run `npm run lint` regularly — the baseline is 0 errors, ~45 intentional `exhaustive-deps` warnings. Any new errors should be fixed before committing.
 
 ### Deployment
 
@@ -41,7 +41,7 @@ src/
 ├── useAuth.js                 ← Firebase Auth hook (email/password + Google, church setup/join)
 ├── useFirestore.js            ← All Firestore CRUD as a single hook (incl. maintenance)
 ├── firebase.js                ← Firebase app init; exports `db`, `auth`, `googleProvider`, `storage`
-├── main.jsx                   ← React entry point
+├── main.jsx                   ← React entry point; initializes Sentry (@sentry/react v10) with browserTracing + captureConsole({levels:['error']}) — defaults also catch window.onerror, unhandled rejections, and breadcrumbs
 ├── hooks/
 │   ├── useMobile.js           ← MobileCtx + useWindowWidth (breakpoint 768px)
 │   └── useSubscription.js     ← Subscription state hook: hasHub(), canAddUser(), isTrialing()
@@ -95,7 +95,7 @@ public/
 └── google254ab6f07b8682a3.html ← Google Search Console ownership verification file
 functions/
 ├── index.js                   ← Cloud Functions: createCheckoutSession, createPortalSession, stripeWebhook, sendReservationEmail, sendTicketAssignedEmail, sendJobAnnouncementEmails, sendJobCancelledEmails, sendJobReminders (scheduled 8am Central daily — emails all signups; also sends SMS to users with phone+smsRemindersEnabled via Twilio), sendJobPosterNotification (onCall — poster + delegates notified on withdrawal or co-admin cancellation; 30s double-fire guard), sendTaskDueReminders (scheduled 8am Central daily — collectionGroup query on tasks.dueDate), sendTaskMentionEmail (onCall — notifies mentioned users when @name appears in task comment), generateRecurringTemplateTasks (scheduled 8am Central daily — creates tasks from templates with autoGenerate==true; also advances repeatWeekly job announcements), promoteFromWaitlist (onCall — moves first waitlist entry to signups, sends email), sendWelcomeEmail (Firestore onCreate trigger on churches/{churchId}), processTrialExpirations (scheduled 2am Central daily — trial expiry + 7-day warning emails); shared subHasHub() helper used by all hub-gating CFs (all email via SendGrid; SENDGRID_API_KEY in functions/.env; SMS via Twilio Programmable Messaging — TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER in functions/.env; sender: churchopshub@gmail.com; replyTo: jcvaught@gmail.com on welcome/trial emails)
-└── package.json               ← Node 18, firebase-functions v4, firebase-admin v12, stripe v14
+└── package.json               ← Node 22, firebase-functions v4, firebase-admin v12, stripe v14, @sentry/node (server-side error capture, same DSN as browser; defaults catch process uncaughtException + unhandledRejection)
 ```
 
 ### Data Flow
