@@ -1265,4 +1265,346 @@ The data you create in month one will pay off for years. Maintenance history tha
 Your building serves your mission. Managing it well is how you protect that service.
     `.trim(),
   },
+
+  {
+    slug: 'free-church-inventory-template',
+    title: 'Free Church Inventory Template (Excel & Google Sheets)',
+    description: 'Download a free, ready-to-use church inventory template for Excel and Google Sheets. Includes columns for location, ministry, condition, and checkout status — plus tips for outgrowing it.',
+    date: '2026-04-27',
+    keywords: 'church inventory template, free church inventory spreadsheet, church asset list template, church equipment template',
+    content: `
+## Why You Need an Inventory Template (Even If It's Temporary)
+
+If your church has nothing tracking its physical assets right now, you have two real choices: start with a spreadsheet today, or wait until you can implement a "real" system later. The honest answer is to start now with a spreadsheet — and then graduate to dedicated software once your team feels the spreadsheet's limits firsthand.
+
+A good template gives you the structure you'd otherwise spend hours building yourself. It also surfaces the questions you need to answer up front: How will you categorize items? What fields actually matter? How will you handle checkout and condition tracking? Below is the template we recommend, the columns you actually need, and what to do when the spreadsheet starts breaking down.
+
+## Get the Free Template
+
+We offer a free, ready-to-use church inventory template you can copy into Google Sheets or download as an Excel file. Sign up for a free ChurchOpsHub account at churchopshub.com and we'll point you to the template — no credit card required, no sales calls. The template comes pre-filled with sample data so you can see how it works, and instructions in the first tab walk you through customizing it for your church.
+
+## What Columns the Template Includes
+
+Every column in the template was chosen because it answers a question someone in your church will actually ask. Here is what each one tracks and why it matters.
+
+### Item Name and Description
+
+The Item Name should be specific enough to identify the item without ambiguity. "Projector" is too vague. "Sony VPL-PHZ12 Projector — Main Sanctuary" tells you exactly which one. The Description column is for additional detail: model numbers, capacity, distinguishing features, or notes about installation.
+
+### Category and Ministry
+
+Category groups items for browsing — Audio, Video, Lighting, Furniture, Kitchen, Vehicles, Tools, Office. Ministry tracks ownership: who paid for it and who has primary responsibility. An audio mixer might be in the Audio category but owned by the Worship ministry. Tracking both lets you sort by either dimension.
+
+### Location and Storage Detail
+
+Location tells someone where to physically find the item. "Storage Closet B" is helpful; "AV Closet — Room 214, top shelf" is more helpful. Use this column liberally. The single most common reason inventory systems fail is that locations are too vague to be useful.
+
+### Status and Condition
+
+Status is the current state: Available, Checked Out, In Use, Under Repair, Disposed. Condition is the quality: New, Good, Fair, Poor, Needs Repair. Status changes constantly. Condition changes slowly. Both matter.
+
+### Quantity, Serial Number, and Purchase Date
+
+Quantity matters for items you have multiples of (chairs, microphones, cables). Serial number is critical for warranty claims, theft reports, and insurance documentation. Purchase Date and Original Cost help you make informed decisions about repair versus replace, and they create a basic depreciation record for your finance team.
+
+### Checked Out To and Return By
+
+These two columns are the simplest way to track checkout in a spreadsheet. When someone borrows something, write their name and the return date. When it comes back, clear the cells. It is not as good as a real system that logs history — but it is much better than nothing.
+
+### Notes and Last Updated
+
+Notes is for everything else: maintenance history, known issues, upgrade plans, links to manuals. Last Updated tells you whether a row is fresh or stale. If a row hasn't been touched in a year, it probably needs a check.
+
+## How to Use the Template Effectively
+
+A template only helps if it gets used. Three habits make the difference.
+
+First, do a one-time inventory walk. Block out a half-day, walk through your storage spaces with a phone or tablet, and enter every item. Skip nothing. Take a photo of each item and store it in a shared folder named after the row's Item Name. The first walk is painful. After that, you maintain.
+
+Second, assign one owner per category. The Audio category belongs to your tech director. The Kitchen category belongs to whoever runs hospitality. The Vehicles category belongs to facilities. Owners are responsible for keeping their rows accurate. Without owners, the spreadsheet drifts within a month.
+
+Third, schedule a quarterly audit. Every three months, walk through and verify the spreadsheet matches reality. Update statuses, fix typos, mark missing items, and add anything new. The audit takes an hour or two and prevents the spreadsheet from sliding into uselessness.
+
+## When to Outgrow the Template
+
+Templates work for small inventories and small teams. They start to break when more than a few people need to update items at once, when checkout volume grows past a handful per week, when you need approval workflows, when you need automatic history tracking, or when you need mobile access from the storage room rather than the office.
+
+If any of those apply, it's time to move to dedicated inventory software. The data you've entered in the template is not wasted — most systems, including ours, accept CSV imports from Excel or Google Sheets directly. The structure you built carries over.
+
+## Start Today
+
+Whichever path you choose — spreadsheet template or dedicated software — the goal is the same: stop losing equipment, stop buying duplicates, stop wasting volunteer time. A simple template is enough to start. ChurchOpsHub's Inventory Hub is free for up to ten users with no time limit if you'd rather skip the spreadsheet phase entirely.
+
+Your future self will thank you either way.
+    `.trim(),
+  },
+
+  {
+    slug: 'sortly-alternatives-for-churches',
+    title: 'Sortly Alternatives for Churches: 5 Better Options in 2026',
+    description: 'Sortly is popular for small business inventory, but churches have different needs. Here are five Sortly alternatives that better fit volunteer-run, multi-ministry church operations.',
+    date: '2026-04-30',
+    keywords: 'sortly alternatives, sortly for churches, church inventory app, sortly competitors, alternatives to sortly',
+    content: `
+## Why Churches Look Beyond Sortly
+
+Sortly is a well-known small-business inventory app that many churches try first. It is genuinely good software — clean mobile interface, QR code scanning, photo support — and the free tier handles up to a hundred items, which feels like enough for a small church.
+
+The problems show up later. The free tier is too small for any church that owns more than a sanctuary's worth of microphones, cables, instruments, kitchen supplies, and folding tables. Paid tiers start around twenty-nine dollars per month for a single user, scale up quickly with team size, and add up fast for a nonprofit budget. Sortly is also built around a generic small-business mindset: warehouses, retail, contractors. It does not understand ministry-based ownership, volunteer roles, reservation conflicts between worship and youth, or any of the patterns that make church inventory unique.
+
+If Sortly didn't fit, here are five alternatives worth evaluating.
+
+## 1. ChurchOpsHub
+
+ChurchOpsHub is built specifically for churches. The Inventory Hub is free for up to ten users with no time limit and no item cap, which removes the most common reason churches outgrow Sortly's free tier within weeks. Items can be tagged by ministry and location, photos are supported, and checkout flows are designed around volunteers rather than warehouse staff.
+
+What sets it apart for church use: ministries are first-class objects, not just tags. You can scope items to specific ministries, restrict who can edit them, and run reservations across ministry calendars. Paid hubs add maintenance ticketing, room reservations, public request forms, audit tools, and a job board for teen volunteers — features Sortly does not offer at any price.
+
+Best for: churches that want a single tool for inventory plus the operational hubs around it.
+
+## 2. Asset Panda
+
+Asset Panda is enterprise asset management software with a strong feature set: deep custom fields, configurable workflows, and robust reporting. It is the right answer for a church with dedicated facilities staff and a budget large enough to absorb enterprise pricing.
+
+The downside: Asset Panda is built for organizations with full-time administrators. Setup is involved, the interface assumes some IT background, and pricing is quote-only — which usually means more than most churches want to spend. If you already have a paid Asset Panda contract from your school or denomination, it can work for the church too. Otherwise, the complexity rarely pays off.
+
+Best for: churches with full-time facilities staff and an existing enterprise relationship.
+
+## 3. Snipe-IT
+
+Snipe-IT is open-source asset management. If your church has a tech-savvy volunteer who can host and maintain a server, Snipe-IT gives you a powerful inventory system at no software cost. It handles checkout, custodianship, depreciation, and license tracking.
+
+The catch: someone has to run it. Self-hosting means a server bill, security updates, backups, and the responsibility for fixing things when they break. There is also a paid hosted version at modest cost, which removes the self-hosting burden but still leaves you with software that was not designed around church-specific workflows.
+
+Best for: churches with a volunteer who genuinely enjoys managing infrastructure.
+
+## 4. Airtable
+
+Airtable is not strictly an inventory tool. It is a flexible database with spreadsheet-style editing, custom views, and automation. Many churches build inventory templates inside Airtable because it lets them shape the database around their own categories, ministries, and processes.
+
+The strength is flexibility. The weakness is that you are building the system yourself. There is no native checkout flow, no audit trail, no church-specific features — just whatever you construct. The free tier is generous but excludes attachments above small limits, and paid plans add up at five to ten dollars per user per month.
+
+Best for: churches with a database-savvy volunteer who wants to design their own system.
+
+## 5. inFlow Inventory
+
+inFlow is small-business inventory software focused on stock tracking, purchase orders, and sales. Some churches use it for consumable supply tracking — communion elements, paper goods, kitchen supplies — because of its strong ordering and reorder-point features.
+
+The mismatch: inFlow assumes you are buying items, holding them, and either selling them or using them up. Churches do that with consumables, but the model breaks down for fixed assets that get checked out and returned. You can force it to work for both, but you'll be fighting the software.
+
+Best for: churches with significant ordering and consumables operations and a separate plan for fixed assets.
+
+## Choosing Between Them
+
+Three questions narrow it down quickly.
+
+How many items do you actually have? If you're under a hundred and never expect to grow, Sortly's free tier is fine. If you have hundreds, look elsewhere — the free tier won't fit and the paid tiers cost too much for what you get.
+
+Does ministry-based organization matter to you? If your inventory naturally divides by Worship, Youth, Children's, Hospitality, and Facilities — and you need different people managing each — generic tools will frustrate you. Church-specific software is worth the look.
+
+Will volunteers actually use it? Volunteers do not read manuals. If the tool is not obvious in five minutes on a phone, it will not get used. Test the mobile checkout flow before you commit. The fanciest feature set is worthless if no one logs anything.
+
+## What We Recommend
+
+For most churches looking for a Sortly alternative, ChurchOpsHub is the closest direct replacement: free for the inventory features, ministry-aware, mobile-friendly, and built for volunteer-run organizations. You can be tracking your equipment within an hour of signing up at churchopshub.com.
+
+If your needs are bigger — full enterprise IT, complex workflows, large staff — Asset Panda is worth a quote. If you have a database hobbyist on staff, Airtable can be shaped to fit. For most others, picking the tool built for your context is faster and cheaper than bending a generic tool into shape.
+    `.trim(),
+  },
+
+  {
+    slug: 'church-av-equipment-inventory',
+    title: 'Church AV Equipment Inventory: How to Track Soundboards, Mics, and Cables',
+    description: 'Audio and video gear is the most expensive, most-borrowed, and most-lost equipment in a church. Here is a practical system for tracking soundboards, microphones, cables, and the rest.',
+    date: '2026-05-04',
+    keywords: 'church av equipment inventory, church audio equipment tracking, church sound equipment inventory, church tech team inventory',
+    content: `
+## Why AV Inventory Is Different
+
+Audio and visual equipment is the worst-case scenario for church inventory. It is the most expensive category — a single console can cost more than a year of staff health benefits. It is the most-borrowed category — every event, retreat, outdoor service, and youth night needs something. And it is the most-lost category, because cables and adapters are small, identical-looking, and disappear into bags without anyone noticing.
+
+Generic inventory advice doesn't fully apply. AV gear needs its own approach. Here's a practical system that works for churches running a Sunday service plus several events a month.
+
+## Start With a Categorical Inventory
+
+Before you tag anything, group your AV inventory into categories. The categories below cover almost everything a church owns.
+
+### Consoles and Mixers
+
+Audio consoles, video switchers, lighting boards, broadcast mixers. Big-ticket items, usually fixed in place. Track these one-by-one with full serial numbers, model numbers, firmware version notes, and warranty documentation. Photograph the rear panel showing all connections — this saves you when something gets unplugged and no one remembers what went where.
+
+### Microphones
+
+Wired mics, wireless handhelds, lavaliers, headsets, choir mics, instrument mics. Group by type but track individually. Wireless systems need extra fields: which transmitter pairs with which receiver, what frequency range, what battery type. Number each microphone with a small label and use the same number on its case and clip.
+
+### Speakers and Monitors
+
+Mains, subs, fills, in-ears, stage monitors, floor wedges, portable PA systems. Track power requirements, cable types needed, and which mounting hardware belongs with which speaker. A speaker without its bracket is a storage problem.
+
+### Cables and Adapters
+
+This is where most churches give up. The volume is overwhelming and items look identical. Don't try to track every individual cable. Instead, track quantities by type: how many XLR cables of various lengths, how many quarter-inch instrument cables, how many HDMI cables, how many adapters of each kind.
+
+Use color-coded labels or zip ties to mark length tiers. Run an annual cable audit: pull every cable from every bag and case, count by type, and update the totals. Test for continuity while you're at it.
+
+### Stands and Mounts
+
+Mic stands, speaker stands, camera tripods, lighting trees, cable hangers. Track quantity per type. Tape a number on each one. The labels will fall off and you'll re-do them annually — that is fine.
+
+### Cameras and Video
+
+Cameras, lenses, capture devices, wireless video kits, monitors, recorders, tripods. Track these like consoles: individually, with full serial and model numbers and original cost.
+
+### Lighting
+
+Fixtures, dimmers, controllers, gels, gobos, hazers. Track fixtures individually if they're expensive (moving heads, intelligent fixtures) or by quantity if they're commodity (basic LED pars, gels).
+
+### Cases and Bags
+
+Often forgotten. Each case or bag should be numbered, and items inside should be tagged with their case number. A wireless mic kit in Case 7 should have all its mics, receivers, and antennas labeled with "Case 7" stickers. When something gets put back in the wrong case, you find it on the next audit.
+
+## Pick the Right Tracking Granularity
+
+Not every item needs the same depth of tracking. Use this rule: if losing one would cost more than fifty dollars to replace, track it individually. If losing one is annoying but cheap, track it by quantity. Cables are by quantity. Wireless mics are individual. Adapters are by quantity. Lighting fixtures depend on the model.
+
+This rule keeps your inventory manageable. A church with twenty thousand dollars of AV gear might have three hundred individually-tracked items and another two hundred items lumped into quantity counts.
+
+## Use Cases and Check Out by Case
+
+Every event need maps to a set of equipment. Build cases or bags around those needs: the "Outdoor Service" bag, the "Youth Retreat" kit, the "Wedding" cable run. Each case has a printed contents list inside the lid.
+
+Check out the case, not the individual items. The contents list and the photo on file tell you what should be inside. Check it back in the same way: open the case, verify against the list, flag anything missing. This is dramatically faster than logging twenty cables individually and dramatically more accurate than logging just "AV stuff."
+
+## Photograph Everything
+
+Every item gets a photograph. Every case gets a photograph of its contents laid out. Every rack gets a photograph of the back panel. Every wall plate gets a photograph showing what plugs into it.
+
+These photos pay off in three places. Insurance claims after a theft or fire need photographic documentation; without it, you'll be paid for "audio equipment" rather than the specific gear you lost. New volunteers learning the system can identify equipment they've never touched. And when something goes missing, a photo lets you describe it accurately to whoever might have it.
+
+## Build a Pre-Service Checklist
+
+Inventory is not just about accounting for items — it is about making Sunday morning work. Build a pre-service checklist that goes through every position: front of house, monitors, broadcast, lighting, cameras. Each position has its own checklist of items to verify present and working before the service starts.
+
+Tie the checklist to your inventory. Items on the checklist that are missing or broken should generate a maintenance ticket immediately, not a scribbled note that gets lost.
+
+## Audit After Every Big Event
+
+The two highest-risk moments for AV gear are the load-out after an event and the load-back-in to storage. Build an audit step into both.
+
+After an outdoor service or retreat, before the team disperses, walk through the case and verify the contents. Anything missing should be searched for now, not next week when no one remembers where they were standing.
+
+A monthly audit at the AV team's regular meeting catches what slips through. Fifteen minutes per category is enough.
+
+## Make It a Tech Team Practice, Not a Burden
+
+The reason AV inventory fails is that it feels like extra work for an already-volunteer team. The fix is to design the system so that tracking happens during normal flow rather than alongside it.
+
+Check out the case when you grab it for an event. Snap a phone photo of the case contents at strike. Update one line in the inventory tool while you're already standing at the storage shelf. None of these actions adds more than a minute, and the alternative — replacing missing gear, fighting over availability, scrambling Sunday morning when something is gone — costs hours.
+
+Your tech team protects the most expensive ministry equipment in the building. A simple inventory practice protects them in return.
+    `.trim(),
+  },
+
+  {
+    slug: 'vbs-supply-planning-checklist',
+    title: 'VBS Supply Planning: A Complete Inventory Checklist for Vacation Bible School',
+    description: 'Vacation Bible School runs on supplies — crafts, snacks, decorations, curriculum, signage. Here is a complete planning checklist and inventory approach so you do not run short mid-week.',
+    date: '2026-05-07',
+    keywords: 'vbs supply checklist, vbs inventory, vacation bible school planning, vbs supply list, vbs planning checklist',
+    content: `
+## Why VBS Supply Planning Is Its Own Discipline
+
+Vacation Bible School compresses a year of children's ministry into one week. Volunteers are inexperienced, the schedule is rigid, and a missing crate of construction paper at nine in the morning on Wednesday becomes an immediate crisis. The cost of poor planning is felt in real time, not in a budget review months later.
+
+Good VBS planning starts with a complete supply inventory and a structured purchase plan. This guide walks through what to track, when to start, and how to avoid the most common shortages.
+
+## Start Twelve Weeks Out
+
+The single most useful change you can make to your VBS planning is starting earlier. Twelve weeks is the right minimum for a typical week-long VBS serving fifty to two hundred kids. Less than that and you'll pay rush shipping, accept whatever's in stock instead of what you wanted, and discover gaps too late to fix them cheaply.
+
+Twelve weeks gives you time to inventory existing supplies, identify gaps against your curriculum requirements, place orders with normal shipping, recruit volunteers, train teachers, and run a full walk-through of every station before week one.
+
+## Inventory What You Already Have
+
+Before buying anything, walk through your existing children's ministry supplies and document what's already there. Most churches own more than they remember. A good inventory walk turns up most of the basics.
+
+### Craft Supplies
+
+Crayons, markers, glue sticks, scissors, construction paper, tape, string, paint brushes, googly eyes, pipe cleaners, paper plates, paper cups, plastic spoons. These are the workhorse craft supplies. Inventory by quantity. Note expiration dates on glue and markers — old supplies are often dried out and need replacement even if they look full.
+
+### Decorations
+
+Decoration carryovers from prior VBS themes. Banners, foam shapes, fabric, props, costume pieces. These accumulate over years and most are reusable in some form. A box labeled "VBS 2023 — Jungle theme" might contain trees and vines that work for any outdoor theme.
+
+### Curriculum Materials
+
+Curriculum materials from the prior year. Leader guides, music, videos, sample crafts, signs. Save these for reference even if you're using a new theme this year — the next time the rotation comes around, you'll thank yourself.
+
+### Snack and Kitchen Supplies
+
+Plates, napkins, cups, juice pitchers, coolers, serving tongs, table coverings. Track quantities and condition.
+
+### Audiovisual Gear
+
+Portable speakers, wireless microphones, projector for opening and closing assemblies, music playback device, batteries, extension cords. Most of this lives in your church's main inventory and needs to be reserved for VBS week, not pulled the morning of.
+
+## Match Your Curriculum to Your Inventory
+
+Every VBS curriculum publisher provides a master supply list. Print it, walk it through your inventory, and mark what you have versus what you need. Be honest — five glue sticks for a station that needs forty kids each making something is "not enough," not "we have glue sticks."
+
+Then build three columns: Have, Need to Buy, Need to Borrow. The Borrow column is often forgotten. Many supplies — extra folding tables, large coolers, microphones, popup canopies — can come from your normal church inventory or from another local church. Plan borrowing early, not the night before.
+
+## Build a Daily Supply Checklist by Station
+
+Each VBS station has its own daily needs. Build a checklist per station that the station leader runs through before kids arrive each day. The structure looks like this.
+
+Station name. Day of week. Required supplies for today's lesson with quantities. Required equipment for today's lesson. Setup tasks complete. Any issues from yesterday.
+
+Have the station leader sign off each morning. The signed checklists are also your record for next year — you'll know exactly what was used and what was leftover.
+
+## Plan for the Most Common Shortages
+
+Three categories run out most often. Plan extra capacity for all three.
+
+### Snacks
+
+Kids eat more than you think, especially when running between active stations. Buy at least twenty percent more than your headcount times daily snack count suggests. Leftover non-perishables go to next year or to your regular children's ministry storage.
+
+### Craft Consumables
+
+Glue, markers, construction paper, tape. The "we have enough" estimate is wrong every year. Buy thirty percent more than the curriculum says, and store the surplus for general children's ministry use after VBS ends.
+
+### First Aid
+
+Bandages, ice packs, hand sanitizer, antiseptic wipes. The first-aid bag empties faster during VBS than any other week of the year. Stock heavy. The cost is small and the alternative is sending a volunteer to a store mid-morning.
+
+## Track Decorations and Set Pieces by Storage Location
+
+Decorations are bulky, theme-specific, and easy to lose between years. Photograph each finished decoration before you take it down at the end of the week. Tag every storage bin with its theme, the year, and the contents. Store bins together so future-you can find them.
+
+When you reuse a theme three years later, the photos show you what the room looked like. The bin labels tell you what's in each container. This single habit saves hours of digging and lets future leaders set up faster than you did.
+
+## Print a Master Day-by-Day Supply Document
+
+The week-of document everyone needs is a single printed sheet per day showing today's schedule, each station's supply checklist for the day, snack and beverage counts, closing assembly supplies, end-of-day cleanup tasks, and prep tasks for tomorrow.
+
+Hand a copy to each station leader and post copies in the volunteer break area. When a question arises mid-morning — "do we have enough markers for the second rotation?" — the answer is on the sheet, not in someone's head.
+
+## Debrief and Inventory Again After VBS
+
+The day after VBS ends, while memory is fresh, do a debrief. What ran out? What was overbought? What was missing from the master list that you had to scramble to find? What worked well that you want to keep?
+
+Write the answers down. Inventory the leftovers and put them away in labeled bins. Add the debrief notes to the bin so next year's planner finds them.
+
+The point of the debrief is not perfection. It is so that next year's team is not starting from scratch. Each VBS should be a little less chaotic than the last, and the only way that happens is by capturing lessons learned in writing.
+
+## Use Inventory Software for the Crossover Items
+
+Items that get used during VBS and the rest of the year — speakers, microphones, folding tables, coolers, first-aid kits, projectors — should live in your church's main inventory system, not a VBS-only spreadsheet. Reserve them for VBS week through your normal reservation process so other ministries see the conflict early.
+
+ChurchOpsHub's Inventory Hub is free for up to ten users and handles this case directly: tag items with both Children's Ministry and the VBS event, reserve them in advance, and check them out the morning of setup. After VBS, returns happen the same day so the gear is available for Sunday.
+
+The thing every veteran VBS coordinator says: the week itself is fun. The planning is what makes the week fun rather than exhausting. Spend the time up front.
+    `.trim(),
+  },
 ];

@@ -4,6 +4,19 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-04-27 — 4 New SEO Blog Posts
+
+Added four search-targeted posts to `src/data/blogPosts.js` and registered them in `public/sitemap.xml`. Topics chosen for ranking potential on a small domain — templates and comparisons rank fastest; long-tail "[X] inventory" posts target lower-competition niches.
+
+- **`free-church-inventory-template`** (2026-04-27) — keyword target: "church inventory template" / "free church inventory spreadsheet". Magnet post — describes columns, usage, when to outgrow.
+- **`sortly-alternatives-for-churches`** (2026-04-30) — keyword target: "sortly alternatives" / "alternatives to sortly". Compares ChurchOpsHub, Asset Panda, Snipe-IT, Airtable, inFlow.
+- **`church-av-equipment-inventory`** (2026-05-04) — keyword target: "church av equipment inventory" / "church audio equipment tracking". Practical system: categories, granularity rule, case-based checkout.
+- **`vbs-supply-planning-checklist`** (2026-05-07) — keyword target: "vbs supply checklist" / "vbs inventory". Seasonal — published with lead time for May/June searches before VBS season.
+
+Brings total published posts to 16. Build verified clean.
+
+---
+
 ## 2026-04-27 — Error Handling Gap Closure
 
 Surgical sweep to close the highest-value error-handling gaps after a three-agent audit. Verified before fixing: Sentry's default integrations already capture `window.onerror` + unhandled rejections (browser) and `process.uncaughtException` + `process.unhandledRejection` (node), so no global handler wiring needed. The real gaps were React boundary forwarding, swallowed CF error catches, server-side capture, and partial-failure UX.
