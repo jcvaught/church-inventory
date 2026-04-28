@@ -4,6 +4,22 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-04-28 — twilioInbound Webhook (STOP/START Sync)
+
+Closes the deferred follow-up from the SMS audit. When users reply STOP at the carrier level, Twilio auto-blocks further sends but our local `smsRemindersEnabled` flag stayed `true` — the Settings UI showed "enrolled" while messages silently dropped.
+
+- **New CF: `twilioInbound`** — `functions/index.js`. HTTP webhook (`onRequest`) at `https://us-central1-church-inventory-9615c.cloudfunctions.net/twilioInbound`. Validates `X-Twilio-Signature` against `TWILIO_AUTH_TOKEN` (already in `functions/.env`); rejects unsigned requests with 403.
+  - STOP / STOPALL / UNSUBSCRIBE / CANCEL / END / QUIT → set `smsRemindersEnabled = false` on every `users` doc with matching phone.
+  - START / YES / UNSTOP → set `smsRemindersEnabled = true`.
+  - Empty TwiML response (`<Response/>`) — carrier confirmation messages and HELP autoresponse handled by Twilio Messaging Service Advanced Opt-Out (configured in Twilio Console; see backlog memory `project_churchopshub_help_verify`).
+- **New collection: `smsOptOuts`** — every STOP/START event recorded with phone, action, keyword, matched-user count, and timestamp. Retained indefinitely per Privacy §7 commitment to honor opt-out requests.
+- **`firestore.rules`** — `match /smsOptOuts/{docId}`: owner-only read (`jcvaught@gmail.com`, `jvaught@fxcc.org`); no client writes (Admin SDK only via the CF).
+- **TODO: configure webhook URL in Twilio Console** → Messaging Service → Integration → "Send a webhook" → paste the function URL above with method `POST`. Without this step the CF exists but Twilio won't call it.
+
+Smoke-tested: unsigned `curl` POST returns 403. Live signature-validated requests will only come from Twilio.
+
+---
+
 ## 2026-04-28 — SMS Audit Fixes
 
 Audit of texting code/UI surfaced six issues; fixed five (skipped international support per product decision; deferred STOP-webhook + Twilio Console HELP verification).

@@ -284,5 +284,13 @@ service cloud.firestore {
       allow read:   if request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
     }
 
+    // ── SMS opt-out audit log — Admin SDK writes only; owner-only read ────────
+    // Populated by twilioInbound CF when users reply STOP/START. Retained
+    // indefinitely per Privacy Policy commitment to honor opt-out requests.
+    match /smsOptOuts/{docId} {
+      allow read: if request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
+      allow create, update, delete: if false;
+    }
+
   }
 }

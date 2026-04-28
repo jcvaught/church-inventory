@@ -1547,3 +1547,77 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
     Sentry.captureException(err);
   }
 });
+
+// ── twilioInbound ─────────────────────────────────────────────────────────
+// Twilio inbound SMS webhook. Syncs users.smsRemindersEnabled when users reply
+// STOP / START keywords so our UI matches the carrier-level opt-out state.
+// Carrier confirmation messages and HELP responses are handled by Twilio
+// Messaging Service Advanced Opt-Out (configured in Twilio Console).
+exports.twilioInbound = onRequest({ cors: false }, async (req, res) => {
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!authToken || !twilioClient) {
+    res.status(503).type('text/xml').send('<Response/>');
+    return;
+  }
+
+  const signature = req.headers['x-twilio-signature'];
+  const url = `https://${req.headers.host}${req.originalUrl}`;
+  const params = req.body || {};
+
+  let valid = false;
+  try {
+    valid = twilioClient.validateRequest(authToken, signature, url, params);
+  } catch { valid = false; }
+
+  if (!valid) {
+    console.warn('twilioInbound: invalid signature', { from: params.From });
+    res.status(403).send('Forbidden');
+    return;
+  }
+
+  const from = String(params.From || '').trim();
+  const body = String(params.Body || '').trim().toUpperCase();
+
+  if (!from) {
+    res.status(200).type('text/xml').send('<Response/>');
+    return;
+  }
+
+  const STOP_KEYWORDS = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'];
+  const START_KEYWORDS = ['START', 'YES', 'UNSTOP'];
+  const isStop = STOP_KEYWORDS.includes(body);
+  const isStart = START_KEYWORDS.includes(body);
+
+  if (!isStop && !isStart) {
+    res.status(200).type('text/xml').send('<Response/>');
+    return;
+  }
+
+  try {
+    const db = getFirestore();
+    const userSnaps = await db.collection('users').where('phone', '==', from).get();
+    const updates = userSnaps.docs.map(doc => doc.ref.update({
+      smsRemindersEnabled: isStart ? true : false,
+    }));
+    const results = await Promise.allSettled(updates);
+    const failed = results.filter(r => r.status === 'rejected').length;
+
+    await db.collection('smsOptOuts').add({
+      phone: from,
+      action: isStop ? 'opt_out' : 'opt_in',
+      keyword: body,
+      matchedUsers: userSnaps.size,
+      failedUpdates: failed,
+      timestamp: FieldValue.serverTimestamp(),
+      source: 'twilio_inbound',
+    });
+
+    console.log('twilioInbound', { action: isStop ? 'opt_out' : 'opt_in', matched: userSnaps.size, failed });
+  } catch (err) {
+    console.error('twilioInbound: failed to sync', err?.message);
+    Sentry.captureException(err);
+    // Still return 200 so Twilio doesn't retry — opt-out at carrier level is what counts for compliance.
+  }
+
+  res.status(200).type('text/xml').send('<Response/>');
+});
