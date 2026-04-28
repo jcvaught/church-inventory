@@ -252,7 +252,8 @@ service cloud.firestore {
         );
 
       // Self-updates are allowed but cannot change role, churchId, active, or allowedHubs.
-      // Admins in the same church can update anything (role, active, allowedHubs, etc.).
+      // Admins in the same church can update role, active, allowedHubs, etc. — but cannot
+      // change another user's phone or smsRemindersEnabled (TCPA: SMS opt-in must be the user's).
       allow update: if request.auth != null && (
         (
           request.auth.uid == userId
@@ -261,7 +262,12 @@ service cloud.firestore {
           && request.resource.data.active == resource.data.active
           && request.resource.data.get('allowedHubs', null) == resource.data.get('allowedHubs', null)
         )
-        || (userIsAdmin() && userChurchId() == resource.data.churchId)
+        || (
+          userIsAdmin()
+          && userChurchId() == resource.data.churchId
+          && request.resource.data.get('phone', '') == resource.data.get('phone', '')
+          && request.resource.data.get('smsRemindersEnabled', false) == resource.data.get('smsRemindersEnabled', false)
+        )
       );
 
       // Self-delete or admin in same church

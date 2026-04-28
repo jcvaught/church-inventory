@@ -4,6 +4,25 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-04-28 — SMS Audit Fixes
+
+Audit of texting code/UI surfaced six issues; fixed five (skipped international support per product decision; deferred STOP-webhook + Twilio Console HELP verification).
+
+- **SMS body cost bug** — `functions/index.js:1130-1133`: replaced `•` and `—` with ASCII (`-`). Em-dash and bullet are outside GSM-7, forcing UCS-2 encoding which drops segment size from 160 → 70 chars. Typical reminder was billing as 2-3 segments instead of 1; now 1 segment.
+- **Settings UI didn't sync after `userProfile` loaded** — `SettingsPage.jsx:55-58`: lazy `useState` initializer ran once on mount; if profile was null at that moment, the form stayed blank forever. Replaced with the in-render conditional-update pattern (tracking `prevSyncedPhone`/`prevSyncedSms`) per React docs. Also fixed: phone now displays formatted `(555) 123-4567` instead of raw `+15551234567` via new `formatPhoneDisplay()` helper.
+- **Silent no-op on invalid phone** — `SettingsPage.jsx:handleSavePhone`: previously `if (!normalized) return;` with no feedback. Now sets `phoneError` state with explicit message ("Enter a valid US or Canada number..."), rendered in red below the input row; input border turns red on error; error clears on typing.
+- **No "remove phone" affordance** — added explicit Remove button (only shown when `userProfile.phone` exists) that clears phone and disables SMS in one action.
+- **Admin could modify another user's phone/SMS opt-in** — `firestore.rules:256-272`: admin-update branch now requires `request.resource.data.phone == resource.data.phone` and same for `smsRemindersEnabled`. TCPA: SMS opt-in must come from the user, not be set on their behalf. Self-update branch unchanged (admins can still update their own phone).
+- **Help text** — added "US and Canada numbers only" to consent disclaimer.
+
+Deployed: rules + sendJobReminders CF.
+
+**Deferred follow-ups:**
+- STOP webhook sync — when user replies STOP, Twilio auto-blocks but local `smsRemindersEnabled` stays `true` (UI shows "enrolled" while messages are silently dropped). Needs a new `twilioInbound` HTTPS function + Twilio Messaging Service webhook config.
+- HELP autoresponse — Privacy/Terms promise "reply HELP". Verify configured in Twilio Console (Messaging Service → Opt-Out Management → Advanced Opt-Out Keywords) before next A2P review.
+
+---
+
 ## 2026-04-27 — 4 New SEO Blog Posts
 
 Added four search-targeted posts to `src/data/blogPosts.js` and registered them in `public/sitemap.xml`. Topics chosen for ranking potential on a small domain — templates and comparisons rank fastest; long-tail "[X] inventory" posts target lower-competition niches.

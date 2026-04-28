@@ -8,6 +8,18 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app, db } from '../firebase.js';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 
+function formatPhoneDisplay(e164) {
+  if (!e164) return '';
+  const digits = String(e164).replace(/\D/g, '');
+  if (digits.length === 11 && digits[0] === '1') {
+    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return String(e164);
+}
+
 export function SettingsPage({ store, userProfile, subscription, user, canAdd, deleteAccount }) {
   const { settings, config, users, accessPeople, accessRecords, rooms, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, addRoom, updateRoom, deleteRoom } = store;
   const isMobile = useContext(MobileCtx);
@@ -52,10 +64,20 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [inviteHubsInitialized, setInviteHubsInitialized] = useState(false);
   const [jobDelegates, setJobDelegates] = useState(() => userProfile?.jobPosterDelegates || []);
   const [savingDelegates, setSavingDelegates] = useState(false);
-  const [phoneInput, setPhoneInput] = useState(() => userProfile?.phone || '');
+  const [phoneInput, setPhoneInput] = useState(() => formatPhoneDisplay(userProfile?.phone));
   const [smsEnabled, setSmsEnabled] = useState(() => !!userProfile?.smsRemindersEnabled);
   const [savingPhone, setSavingPhone] = useState(false);
   const [phoneSaved, setPhoneSaved] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
+  const [prevSyncedPhone, setPrevSyncedPhone] = useState(userProfile?.phone);
+  const [prevSyncedSms, setPrevSyncedSms] = useState(userProfile?.smsRemindersEnabled);
+
+  if (prevSyncedPhone !== userProfile?.phone || prevSyncedSms !== userProfile?.smsRemindersEnabled) {
+    setPrevSyncedPhone(userProfile?.phone);
+    setPrevSyncedSms(userProfile?.smsRemindersEnabled);
+    setPhoneInput(formatPhoneDisplay(userProfile?.phone));
+    setSmsEnabled(!!userProfile?.smsRemindersEnabled);
+  }
 
   const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub', people_access: 'People Access Hub', tasks: 'Tasks Hub', jobs: 'Job Hub' };
   const churchHubs = subscription?.grandfathered || subscription?.plan === 'all_in'
@@ -217,18 +239,47 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   }
 
   async function handleSavePhone() {
-    const normalized = normalizePhone(phoneInput);
-    if (phoneInput.trim() && !normalized) return; // invalid format, don't save
+    setPhoneError('');
+    const trimmed = phoneInput.trim();
+    if (!trimmed) {
+      setSavingPhone(true);
+      try {
+        await updateUser(userProfile.uid, { phone: '', smsRemindersEnabled: false });
+        setSmsEnabled(false);
+        setPhoneSaved(true);
+        setTimeout(() => setPhoneSaved(false), 2000);
+      } catch { setPhoneError('Failed to save. Try again.'); }
+      setSavingPhone(false);
+      return;
+    }
+    const normalized = normalizePhone(trimmed);
+    if (!normalized) {
+      setPhoneError('Enter a valid US or Canada number (10 digits, e.g. (555) 123-4567).');
+      return;
+    }
     setSavingPhone(true);
     try {
       await updateUser(userProfile.uid, {
-        phone: normalized || '',
-        smsRemindersEnabled: normalized ? smsEnabled : false,
+        phone: normalized,
+        smsRemindersEnabled: smsEnabled,
       });
-      if (!normalized) setSmsEnabled(false);
+      setPhoneInput(formatPhoneDisplay(normalized));
       setPhoneSaved(true);
       setTimeout(() => setPhoneSaved(false), 2000);
-    } catch { /* ignore */ }
+    } catch { setPhoneError('Failed to save. Try again.'); }
+    setSavingPhone(false);
+  }
+
+  async function handleRemovePhone() {
+    setPhoneError('');
+    setSavingPhone(true);
+    try {
+      await updateUser(userProfile.uid, { phone: '', smsRemindersEnabled: false });
+      setPhoneInput('');
+      setSmsEnabled(false);
+      setPhoneSaved(true);
+      setTimeout(() => setPhoneSaved(false), 2000);
+    } catch { setPhoneError('Failed to remove. Try again.'); }
     setSavingPhone(false);
   }
 
@@ -403,8 +454,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                 type="tel"
                 placeholder="(555) 555-5555"
                 value={phoneInput}
-                onChange={e => setPhoneInput(e.target.value)}
-                style={{ ...inp, width:160, fontSize:14 }}
+                onChange={e => { setPhoneInput(e.target.value); if (phoneError) setPhoneError(''); }}
+                style={{ ...inp, width:160, fontSize:14, borderColor: phoneError ? B.red : undefined }}
               />
               <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, fontFamily:f2, color:B.textMid, cursor:'pointer' }}>
                 <input
@@ -423,9 +474,21 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
               >
                 {phoneSaved ? 'Saved!' : savingPhone ? 'Saving…' : 'Save'}
               </button>
+              {userProfile?.phone && (
+                <button
+                  onClick={handleRemovePhone}
+                  disabled={savingPhone}
+                  style={{ ...btnS, padding:'7px 14px', fontSize:13, opacity:savingPhone?0.6:1 }}
+                >
+                  Remove
+                </button>
+              )}
             </div>
+            {phoneError && (
+              <div style={{ fontSize:12, color:B.red, marginTop:6, fontFamily:f2 }}>{phoneError}</div>
+            )}
             <div style={{ fontSize:11, color:B.textLight, marginTop:8, fontFamily:f2, maxWidth:480 }}>
-              By enabling SMS reminders you consent to receive automated text messages from ChurchOpsHub. Message and data rates may apply. Reply STOP to opt out at any time.
+              By enabling SMS reminders you consent to receive automated text messages from ChurchOpsHub. US and Canada numbers only. Message and data rates may apply. Reply STOP to opt out at any time.
             </div>
           </div>
         )}

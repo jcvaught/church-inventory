@@ -1127,10 +1127,10 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
       if (user.allowedHubs && !user.allowedHubs.includes('jobs')) continue;
       const jobs = (remindersByUid[userSnap.id] || []).filter(j => j.churchId === user.churchId);
       if (jobs.length === 0) continue;
-      const jobLines = jobs.map(j => `• ${j.title}${j.scheduledTime ? ' at ' + j.scheduledTime : ''}${j.location ? ' — ' + j.location : ''}`).join('\n');
+      const jobLines = jobs.map(j => `- ${j.title}${j.scheduledTime ? ' at ' + j.scheduledTime : ''}${j.location ? ' - ' + j.location : ''}`).join('\n');
       const body = jobs.length === 1
-        ? `ChurchOpsHub: Reminder — you're signed up for "${jobs[0].title}" today${jobs[0].scheduledTime ? ' at ' + jobs[0].scheduledTime : ''}${jobs[0].location ? ' @ ' + jobs[0].location : ''}. Reply STOP to opt out.`
-        : `ChurchOpsHub: Reminder — you have ${jobs.length} jobs today:\n${jobLines}\n\nReply STOP to opt out.`;
+        ? `ChurchOpsHub: Reminder - you're signed up for "${jobs[0].title}" today${jobs[0].scheduledTime ? ' at ' + jobs[0].scheduledTime : ''}${jobs[0].location ? ' @ ' + jobs[0].location : ''}. Reply STOP to opt out.`
+        : `ChurchOpsHub: Reminder - you have ${jobs.length} jobs today:\n${jobLines}\n\nReply STOP to opt out.`;
       smsTasks.push(
         tw.messages.create({ to: user.phone, from: TWILIO_FROM, body })
           .catch(err => { console.error('sendJobReminders: SMS failed', { uid: userSnap.id, err: err?.message }); Sentry.captureException(err); })
