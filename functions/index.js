@@ -1561,7 +1561,10 @@ exports.twilioInbound = onRequest({ cors: false }, async (req, res) => {
   }
 
   const signature = req.headers['x-twilio-signature'];
-  const url = `https://${req.headers.host}${req.originalUrl}`;
+  // Cloud Run hostname (*.run.app) differs from the cloudfunctions.net URL Twilio called,
+  // so the request's host header doesn't match what Twilio signed against. Use the
+  // configured public URL directly.
+  const url = 'https://us-central1-church-inventory-9615c.cloudfunctions.net/twilioInbound';
   const params = req.body || {};
 
   let valid = false;
@@ -1570,7 +1573,7 @@ exports.twilioInbound = onRequest({ cors: false }, async (req, res) => {
   } catch { valid = false; }
 
   if (!valid) {
-    console.warn('twilioInbound: invalid signature', { from: params.From });
+    console.warn('twilioInbound: invalid signature', { from: params.From, host: req.headers.host });
     res.status(403).send('Forbidden');
     return;
   }
