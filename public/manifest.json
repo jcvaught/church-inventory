@@ -1,7 +1,7 @@
 {
   "name": "ChurchOpsHub",
   "short_name": "ChurchOpsHub",
-  "description": "Inventory management for churches",
+  "description": "The operations platform built for churches",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -24,7 +24,7 @@ export function BlogIndex({ onGetStarted }) {
     <div style={{ fontFamily: f2, color: B.textDark, background: B.cream, minHeight: '100vh' }}>
       <SEO
         title="Blog — ChurchOpsHub"
-        description="Resources, best practices, and guides for church inventory management and asset tracking."
+        description="Resources, best practices, and guides for running your church operations."
         canonical="/blog"
         ogType="website"
       />

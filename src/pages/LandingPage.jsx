@@ -54,7 +54,7 @@ export function LandingPage({ onGetStarted }) {
       name: 'ChurchOpsHub',
       applicationCategory: 'BusinessApplication',
       operatingSystem: 'Web',
-      description: 'Free church inventory and asset management platform. Track equipment, supplies, reservations, maintenance, and more.',
+      description: 'The operations platform built for churches. Track inventory, supplies, reservations, maintenance, and more.',
       url: 'https://churchopshub.com',
       offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
       featureList: [
@@ -87,8 +87,8 @@ export function LandingPage({ onGetStarted }) {
   return (
     <div style={{ fontFamily: f2, color: B.textDark, background: B.cream }}>
       <SEO
-        title="Church Inventory Management Software — Free | ChurchOpsHub"
-        description="ChurchOpsHub is free church inventory management software. Track equipment, supplies, reservations, maintenance tickets, and team compliance — all in one place."
+        title="Church Operations Platform — Free Inventory & More | ChurchOpsHub"
+        description="ChurchOpsHub is the operations platform built for churches. Track inventory, supplies, reservations, maintenance tickets, and team compliance — all in one place."
         canonical="/"
         jsonLd={jsonLd}
       />
@@ -159,8 +159,8 @@ export function LandingPage({ onGetStarted }) {
             margin: '0 0 16px', lineHeight: 1.7,
             maxWidth: 540, marginLeft: 'auto', marginRight: 'auto',
           }}>
-            ChurchOpsHub is the free inventory system built for churches — with optional hubs for
-            maintenance, insights, scheduling, and accountability when you're ready to grow.
+            ChurchOpsHub is the operations platform built for churches — start with free inventory,
+            then add maintenance, insights, scheduling, and accountability when you're ready to grow.
           </p>
           <p style={{
             fontSize: mob ? 13 : 15, color: 'rgba(255,255,255,0.4)',

@@ -191,7 +191,7 @@ export function HelpPage({ onBack }) {
     <div style={{ fontFamily: f2, color: B.textDark, background: B.cream, minHeight: '100vh' }}>
       <SEO
         title="Help Center — ChurchOpsHub"
-        description="Find answers about ChurchOpsHub church inventory management. Guides for inventory, supplies, reservations, maintenance, and more."
+        description="Find answers about ChurchOpsHub. Guides for inventory, supplies, reservations, maintenance, jobs, tasks, and more."
         canonical="/?help"
         jsonLd={faqJsonLd}
       />

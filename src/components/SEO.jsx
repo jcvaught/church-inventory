@@ -4,8 +4,8 @@ const BASE_URL = 'https://churchopshub.com';
 const DEFAULT_OG_IMAGE = `${BASE_URL}/og-image.png`;
 
 export function SEO({ title, description, canonical, ogImage, ogType = 'website', jsonLd }) {
-  const fullTitle = title || 'ChurchOpsHub — Simple Inventory Management for Churches';
-  const fullDescription = description || 'ChurchOpsHub is the free inventory and asset management system built for churches — track equipment, supplies, reservations, and more.';
+  const fullTitle = title || 'ChurchOpsHub — The Operations Platform for Churches';
+  const fullDescription = description || 'ChurchOpsHub is the operations platform built for churches — track inventory, supplies, reservations, maintenance, and more.';
   const canonicalUrl = canonical ? `${BASE_URL}${canonical}` : BASE_URL;
   const image = ogImage || DEFAULT_OG_IMAGE;
 
