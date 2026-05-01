@@ -31,7 +31,7 @@ To deploy Firestore/Storage rules: `./node_modules/.bin/firebase deploy --only f
 
 ## Architecture
 
-This is a single-page React 18 + Vite PWA — **ChurchOpsHub** — a multi-tenant church inventory management system backed by Firebase (Firestore + Auth).
+This is a single-page React 18 + Vite PWA — **ChurchOpsHub** — a multi-tenant operations platform for churches backed by Firebase (Firestore + Auth). Free inventory hub plus paid hubs for maintenance, insights, coordination, accountability, people access, tasks, and jobs. Tagline: *"Run Your Church"*.
 
 ### File Layout
 

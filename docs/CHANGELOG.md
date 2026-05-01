@@ -4,6 +4,25 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-04-30 — Tagline Repositioning: Operations Platform, Not Just Inventory
+
+Product has outgrown the "inventory management" framing. Logo subtitle, browser title, SEO meta, manifest, and landing-page copy now describe ChurchOpsHub as the operations platform built for churches, with the new tagline **"Run Your Church"** under the logo.
+
+- **`src/components/brand/Logo.jsx:28`** — `FullLogo` subtitle (most visible spot — appears in app top nav, blog header/footer, Privacy/Terms/Help, and on invite signup pages): `INVENTORY MANAGEMENT` → `RUN YOUR CHURCH`.
+- **`index.html`** — browser tab title and meta description.
+- **`public/manifest.json`** — PWA install prompt description.
+- **`src/components/SEO.jsx`** — default title/description used wherever a page doesn't override them.
+- **`src/pages/LandingPage.jsx`** — SoftwareApplication JSON-LD description, hero subhead, SEO `<title>` and `<meta description>`.
+- **`src/pages/HelpPage.jsx`**, **`src/pages/BlogIndex.jsx`** — meta descriptions.
+
+**Intentionally not changed:**
+- `src/data/blogPosts.js` — every post uses "inventory management" / "asset tracking" as deliberate SEO keyword targets. Touching them loses ranking.
+- LandingPage line ~201: *"The core inventory hub is free with no time limit"* — this paragraph specifically describes the FREE tier, which IS the inventory hub. Accurate as-is.
+- App tab labels like "Inventory" — that tab is still the inventory tab.
+- `functions/index.js` AI-vision prompt for photo descriptions — references "inventory items" appropriately for context.
+
+---
+
 ## 2026-04-28 — twilioInbound Webhook (STOP/START Sync)
 
 Closes the deferred follow-up from the SMS audit. When users reply STOP at the carrier level, Twilio auto-blocks further sends but our local `smsRemindersEnabled` flag stayed `true` — the Settings UI showed "enrolled" while messages silently dropped.
