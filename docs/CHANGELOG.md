@@ -33,9 +33,10 @@ Closes the deferred follow-up from the SMS audit. When users reply STOP at the c
   - Empty TwiML response (`<Response/>`) — carrier confirmation messages and HELP autoresponse handled by Twilio Messaging Service Advanced Opt-Out (configured in Twilio Console; see backlog memory `project_churchopshub_help_verify`).
 - **New collection: `smsOptOuts`** — every STOP/START event recorded with phone, action, keyword, matched-user count, and timestamp. Retained indefinitely per Privacy §7 commitment to honor opt-out requests.
 - **`firestore.rules`** — `match /smsOptOuts/{docId}`: owner-only read (`jcvaught@gmail.com`, `jvaught@fxcc.org`); no client writes (Admin SDK only via the CF).
-- **TODO: configure webhook URL in Twilio Console** → Messaging Service → Integration → "Send a webhook" → paste the function URL above with method `POST`. Without this step the CF exists but Twilio won't call it.
+- **Webhook URL configured in Twilio Console** (2026-04-28) → set on the bare phone number's "A message comes in" → Webhook (Phone Numbers → Manage → +1 571-540-7100 → Configure → Messaging Configuration), since `+1 571-540-7100` is not attached to either of the auto-created Messaging Services.
+- **Signature validation URL hardcoding fix** (commit `b0d425d`) — first live STOP from a real phone failed validation. Cloud Functions 2nd gen runs on Cloud Run, so `req.headers.host` returned the internal `*.run.app` hostname rather than the `cloudfunctions.net` URL Twilio computed the signature against. Replaced `https://${req.headers.host}${req.originalUrl}` with the hardcoded public URL. Verified: subsequent STOP from real phone validated and produced `twilioInbound { action: 'opt_out', matched: 0, failed: 0 }`.
 
-Smoke-tested: unsigned `curl` POST returns 403. Live signature-validated requests will only come from Twilio.
+Initial smoke test: unsigned `curl` POST returns 403. Live test: real STOP from a phone validates and updates `users.smsRemindersEnabled` + writes audit row to `smsOptOuts`.
 
 ---
 
