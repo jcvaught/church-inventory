@@ -446,6 +446,7 @@ export function JobsPage({ store, userProfile }) {
   const [saving, setSaving] = useState(false);
   const [savingJobId, setSavingJobId] = useState(null);
   const [msg, setMsg] = useState(null);
+  const [reportsScope, setReportsScope] = useState('90d'); // 'all' | '90d' | '30d'
   const [showPastJobs, setShowPastJobs] = useState(() => {
     try { return localStorage.getItem('jobs_showPast') === 'true'; } catch { return false; }
   });
@@ -516,8 +517,15 @@ export function JobsPage({ store, userProfile }) {
   }
 
   const leaderboard = useMemo(() => {
+    const cutoff = (() => {
+      if (reportsScope === 'all') return null;
+      const d = new Date();
+      d.setDate(d.getDate() - (reportsScope === '30d' ? 30 : 90));
+      return localDateStr(d);
+    })();
     const stats = {};
     (jobListings || []).forEach(job => {
+      if (cutoff && job.scheduledDate && job.scheduledDate < cutoff) return;
       (job.signups || []).forEach(s => {
         if (!stats[s.uid]) stats[s.uid] = { uid: s.uid, name: s.name, jobs: 0, attended: 0, noShow: 0, totalPay: 0 };
         stats[s.uid].jobs++;
@@ -526,7 +534,7 @@ export function JobsPage({ store, userProfile }) {
       });
     });
     return Object.values(stats).sort((a, b) => b.attended - a.attended || b.jobs - a.jobs || a.name.localeCompare(b.name));
-  }, [jobListings]);
+  }, [jobListings, reportsScope]);
 
   const filteredJobs = useMemo(() => {
     let jobs = jobListings || [];
@@ -729,6 +737,21 @@ export function JobsPage({ store, userProfile }) {
   }
 
   async function handleSignUp(job) {
+    // Capacity-first: if the job is full, ask the user up front whether they
+    // want to join the waitlist before running compliance/waiver gates.
+    // Avoids the confusing "you need a Background Check" error for a job they
+    // wouldn't have fit into anyway (Jobs Hub audit #11).
+    const isFull = (job.signups || []).length >= (job.spotsTotal || 1);
+    const onWaitlistAlready = (job.waitlist || []).some(w => w.uid === userId);
+    if (isFull && !onWaitlistAlready) {
+      const wl = (job.waitlist || []).length;
+      if (wl >= 50) {
+        flash('This job is full and the waitlist is at capacity.', true);
+        return;
+      }
+      const ok = window.confirm(`This job is full. ${wl > 0 ? `${wl} other${wl !== 1 ? 's' : ''} on the waitlist. ` : ''}Join the waitlist?`);
+      if (!ok) return;
+    }
     if ((job.requiredAccessTypes || []).length > 0) {
       const linkedPersons = (accessPeople || []).filter(p => p.userId === userId);
       if (linkedPersons.length === 0) {
@@ -756,7 +779,9 @@ export function JobsPage({ store, userProfile }) {
       if (result?.error) flash(result.error, true);
       else if (result?.wasWaitlisted) flash("You've been added to the waitlist!");
       else flash('You signed up!');
-    } catch { flash('Sign-up failed. Please try again.', true); }
+    } catch (err) {
+      flash(err?.message ? `Sign-up failed: ${err.message}` : 'Sign-up failed. Please try again.', true);
+    }
     finally { setSavingJobId(null); }
   }
 
@@ -1079,7 +1104,19 @@ export function JobsPage({ store, userProfile }) {
       {/* ── Reports ── */}
       {view === 'reports' && isAdminOrManager && (
         <div>
-          <h3 style={{ fontFamily:f1, fontSize:18, fontWeight:700, color:B.navy, marginBottom:16 }}>Volunteer Leaderboard</h3>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:12 }}>
+            <h3 style={{ fontFamily:f1, fontSize:18, fontWeight:700, color:B.navy, margin:0 }}>Volunteer Leaderboard</h3>
+            <div style={{ display:'flex', gap:6 }}>
+              {[['30d','Last 30 days'],['90d','Last 90 days'],['all','All time']].map(([v,label]) => (
+                <button
+                  key={v}
+                  onClick={() => setReportsScope(v)}
+                  style={{ padding:'6px 12px', borderRadius:20, border:'1px solid '+(reportsScope===v?B.teal:B.sand), background:reportsScope===v?B.tealPale:B.white, color:reportsScope===v?B.teal:B.textMid, fontFamily:f1, fontWeight:600, fontSize:12, cursor:'pointer' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           {leaderboard.length === 0 ? (
             <div style={{ textAlign:'center', padding:'48px 20px', color:B.textLight, fontFamily:f2, fontSize:14 }}>No signup data yet.</div>
           ) : (
@@ -1107,6 +1144,11 @@ export function JobsPage({ store, userProfile }) {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+          {leaderboard.length > 0 && (
+            <div style={{ marginTop:10, fontSize:12, color:B.textLight, fontFamily:f2 }}>
+              Pay Earned counts only signups marked Attended. Jobs without an attendance decision contribute to Jobs but not Pay.
             </div>
           )}
         </div>

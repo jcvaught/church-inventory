@@ -172,10 +172,13 @@ service cloud.firestore {
             request.resource.data.signups.size() == resource.data.signups.size() - 1) &&
            request.resource.data.signups.size() <= resource.data.spotsTotal)
           ||
-          // Join / leave waitlist (±1 size enforced here and in client transaction)
+          // Join / leave waitlist (±1 size enforced here and in client transaction).
+          // Hard-cap at 50 to keep the doc under the 1MB Firestore limit and
+          // close a denial-of-service vector (Jobs Hub audit, 2026-05-06 #10).
           (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['waitlist', 'updatedAt']) &&
            (request.resource.data.waitlist.size() == resource.data.waitlist.size() + 1 ||
-            request.resource.data.waitlist.size() == resource.data.waitlist.size() - 1))
+            request.resource.data.waitlist.size() == resource.data.waitlist.size() - 1) &&
+           request.resource.data.waitlist.size() <= 50)
         )
       );
     }
