@@ -10,6 +10,14 @@
     },
     {
       "collectionGroup": "jobListings",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "scheduledDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "jobListings",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "recurrenceGroupId", "order": "ASCENDING" },

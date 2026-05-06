@@ -912,8 +912,16 @@ export function useFirestore(churchId) {
     try {
       // Capture jobNumber before stripping so the activity log shows JOB-### not a docId.
       const jobNumberForLog = updates.jobNumber;
-      // Strip fields that must never be overwritten via a plain update.
-      const { createdBy: _cb, createdByName: _cbn, jobNumber: _jn, signups: _s, ...safeUpdates } = updates;
+      // Strip server-managed and identity fields. A stale doc passed in as
+      // `updates` would otherwise clobber waitlist state, dedupe stamps, or
+      // recurrence metadata.
+      const {
+        createdBy: _cb, createdByName: _cbn, jobNumber: _jn,
+        signups: _s, waitlist: _w,
+        cancellationEmailSentAt: _ce, lastReminderSentDate: _lr, lastPosterNotifiedByActors: _lp,
+        recurrenceGroupId: _rg, recurrenceFreq: _rf, seriesEndDate: _se,
+        ...safeUpdates
+      } = updates;
 
       // If spotsTotal is being reduced, run a transaction to verify it doesn't go below current signup count.
       if (safeUpdates.spotsTotal !== undefined) {
@@ -951,17 +959,26 @@ export function useFirestore(churchId) {
   }, [churchId]);
 
   // Updates all series jobs with scheduledDate >= fromDate atomically via runTransaction.
+  // Returns { count, affected: [{docId, signupCount}] } so callers can fan out
+  // per-job side effects (e.g. firing sendJobCancelledEmails on a series cancel).
   const updateJobListingSeries = useCallback(async (groupId, fromDate, updates, userId, userName) => {
     try {
-      const { createdBy: _cb, createdByName: _cbn, jobNumber: _jn, signups: _s, scheduledDate: _sd, ...safeUpdates } = updates;
+      const {
+        createdBy: _cb, createdByName: _cbn, jobNumber: _jn,
+        signups: _s, waitlist: _w, scheduledDate: _sd,
+        cancellationEmailSentAt: _ce, lastReminderSentDate: _lr, lastPosterNotifiedByActors: _lp,
+        recurrenceGroupId: _rg, recurrenceFreq: _rf, seriesEndDate: _se,
+        ...safeUpdates
+      } = updates;
       // Fetch refs first (outside transaction — query can't run inside a transaction)
       const snap = await getDocs(query(
         collection(db, 'churches', churchId, 'jobListings'),
         where('recurrenceGroupId', '==', groupId),
         where('scheduledDate', '>=', fromDate)
       ));
-      if (snap.empty) return { count: 0 };
+      if (snap.empty) return { count: 0, affected: [] };
       const refs = snap.docs.map(d => d.ref);
+      const affected = [];
       await runTransaction(db, async (t) => {
         const docs = await Promise.all(refs.map(ref => t.get(ref)));
         if (safeUpdates.spotsTotal !== undefined) {
@@ -974,10 +991,15 @@ export function useFirestore(churchId) {
           }
         }
         const now = new Date().toISOString();
-        docs.forEach(d => { if (d.exists()) t.update(d.ref, { ...safeUpdates, updatedAt: now }); });
+        affected.length = 0;
+        docs.forEach(d => {
+          if (!d.exists()) return;
+          t.update(d.ref, { ...safeUpdates, updatedAt: now });
+          affected.push({ docId: d.id, signupCount: (d.data().signups || []).length });
+        });
       });
       await logActivity('update_job', `${updates.title || groupId} (series ×${refs.length})`, userId, userName, { title: updates.title });
-      return { count: refs.length };
+      return { count: refs.length, affected };
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
@@ -1031,8 +1053,12 @@ export function useFirestore(churchId) {
         jobTitle = data.title || '';
         jobNumber = data.jobNumber || docId;
         if (signups.length >= (data.spotsTotal || 1)) {
+          const waitlistEntry = { uid: userId, name: userName, addedAt: new Date().toISOString() };
+          // Capture waiver acknowledgement at waitlist join so the audit trail
+          // survives the eventual promotion to signups.
+          if (data.requiresWaiver) waitlistEntry.acknowledgedWaiverAt = new Date().toISOString();
           t.update(jobRef, {
-            waitlist: [...waitlist, { uid: userId, name: userName, addedAt: new Date().toISOString() }],
+            waitlist: [...waitlist, waitlistEntry],
             updatedAt: new Date().toISOString()
           });
           wasWaitlisted = true;

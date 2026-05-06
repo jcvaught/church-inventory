@@ -639,9 +639,20 @@ export function JobsPage({ store, userProfile }) {
       if (editJobId && seriesEditScope === 'future' && editJobSeriesGroupId) {
         // Series edit — apply changes to this and all future jobs
         if (isGoingTerminal) {
-          if (!window.confirm(`Change status to "${jobForm.status}" for this and all future jobs in the series? Signups will not be automatically notified.`)) { setSaving(false); return; }
+          if (!window.confirm(`Change status to "${jobForm.status}" for this and all future jobs in the series? Existing signups will be emailed.`)) { setSaving(false); return; }
         }
-        const { count } = await updateJobListingSeries(editJobSeriesGroupId, editJobFromDate, data, userId, userName);
+        const { count, affected } = await updateJobListingSeries(editJobSeriesGroupId, editJobFromDate, data, userId, userName);
+        // On a series cancellation, fan out per-job emails to existing signups.
+        // sendJobCancelledEmails has a 1-hour debounce so a re-fire is safe.
+        if (jobForm.status === 'cancelled' && affected) {
+          const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
+          affected
+            .filter((a) => a.signupCount > 0)
+            .forEach((a) => {
+              fn({ churchId: userProfile?.churchId, jobDocId: a.docId })
+                .catch((err) => console.error('[ChurchOpsHub] CF sendJobCancelledEmails (series) failed', err));
+            });
+        }
         flash(`${count} job${count !== 1 ? 's' : ''} updated.`);
         setShowNewJob(false);
         setEditJobId(null);

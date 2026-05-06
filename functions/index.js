@@ -1040,6 +1040,42 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
   }
 });
 
+// ── closePastJobs ─────────────────────────────────────────────────────────
+// Runs daily at 2:00 AM Central time. Flips any `open` job whose
+// scheduledDate is strictly before today to `completed`. Without this,
+// past-but-unfinished jobs stay in the "Open" filter forever and members
+// can still attempt to sign up (Jobs Hub audit, 2026-05-06 #7).
+exports.closePastJobs = onSchedule({ schedule: '0 2 * * *', timeZone: 'America/Chicago' }, async () => {
+  const db = getFirestore();
+  const today = (() => {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  })();
+
+  let total = 0;
+  const cgSnap = await db.collectionGroup('jobListings')
+    .where('status', '==', 'open')
+    .where('scheduledDate', '<', today)
+    .get();
+  if (cgSnap.empty) {
+    console.log('closePastJobs: nothing to close.');
+    return;
+  }
+
+  // Batch in chunks of 400 to stay under the 500-write limit.
+  const docs = cgSnap.docs;
+  for (let i = 0; i < docs.length; i += 400) {
+    const chunk = docs.slice(i, i + 400);
+    const batch = db.batch();
+    chunk.forEach((d) => {
+      batch.update(d.ref, { status: 'completed', updatedAt: new Date().toISOString() });
+    });
+    await batch.commit();
+    total += chunk.length;
+  }
+  console.log(`closePastJobs: closed ${total} past jobs.`);
+});
+
 // ── sendJobReminders ──────────────────────────────────────────────────────
 // Runs every morning at 8:00 AM Central time.
 // Finds all jobs scheduled for today across all churches and emails each signup.
@@ -1387,8 +1423,16 @@ exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
     const newWaitlist = waitlist.filter((_, i) => i !== idx);
     promotedUser = promoted;
     jobData = data;
+    const promotedSignup = {
+      uid: promoted.uid,
+      name: promoted.name,
+      signedUpAt: promoted.addedAt || new Date().toISOString(),
+    };
+    // Carry waiver acknowledgement forward from the waitlist entry so the
+    // audit trail survives promotion (Jobs Hub audit, 2026-05-06 #6).
+    if (promoted.acknowledgedWaiverAt) promotedSignup.acknowledgedWaiverAt = promoted.acknowledgedWaiverAt;
     t.update(jobRef, {
-      signups: [...signups, { uid: promoted.uid, name: promoted.name, signedUpAt: promoted.addedAt || new Date().toISOString() }],
+      signups: [...signups, promotedSignup],
       waitlist: newWaitlist,
       updatedAt: new Date().toISOString()
     });
@@ -1397,14 +1441,16 @@ exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
   if (!promotedUser) return { promoted: false };
   if (!initSendGrid()) return { promoted: true, promotedName: promotedUser.name };
 
-  const [churchSnap, subSnap, notifSnap, userSnap] = await Promise.all([
+  const [churchSnap, subSnap, userSnap] = await Promise.all([
     db.doc(`churches/${churchId}/config/main`).get(),
     db.doc(`churches/${churchId}/config/subscription`).get(),
-    db.doc(`churches/${churchId}/config/notifications`).get(),
     db.doc(`users/${promotedUser.uid}`).get(),
   ]);
 
-  if (!notifSnap.data()?.enabled) return { promoted: true, promotedName: promotedUser.name };
+  // The promotion email is transactional ("you're now signed up"), not a
+  // marketing notification. Don't gate it on the church-wide notifications
+  // toggle — recipients need to know they took a confirmed spot. The
+  // hub-active and per-user checks below still apply (Jobs Hub audit #8).
   if (!subHasHub(subSnap.data() || {}, 'jobs')) return { promoted: true, promotedName: promotedUser.name };
 
   const user = userSnap.data();
