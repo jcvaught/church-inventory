@@ -996,7 +996,9 @@ export function JobsPage({ store, userProfile }) {
               {showPastJobs ? 'All jobs' : 'Upcoming jobs'} ({scheduleJobs.length})
             </span>
             <div style={{ display:'flex', gap:8 }}>
-              <button onClick={() => printJobRoster(scheduleJobs, config?.churchName || '')} style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>Print Roster</button>
+              {(isAdminOrManager || rosterVisibility !== 'admin') && (
+                <button onClick={() => printJobRoster(scheduleJobs, config?.churchName || '')} style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>Print Roster</button>
+              )}
               <button onClick={() => exportJobsICS(scheduleJobs.filter(j => j.scheduledDate), config?.churchName || '')} title="Export jobs to iCal (.ics)" style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>Export ICS</button>
               <button onClick={() => setShowPastJobs(v => !v)} style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>
                 {showPastJobs ? 'Hide Past Jobs' : 'Show Past Jobs'}

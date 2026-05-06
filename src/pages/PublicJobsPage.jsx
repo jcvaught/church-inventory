@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { db } from '../firebase.js';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { B, f1, f2, btnP, btnS } from '../components/brand/tokens.js';
 import { FullLogo } from '../components/brand/Logo.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
@@ -24,12 +23,9 @@ export function PublicJobsPage({ churchId, churchName, churchCode, onGetStarted 
 
   useEffect(() => {
     if (!churchId) return;
-    getDocs(query(
-      collection(db, 'churches', churchId, 'jobListings'),
-      where('status', '==', 'open'),
-      orderBy('scheduledDate')
-    ))
-      .then(snap => setJobs(snap.docs.map(d => ({ _docId: d.id, ...d.data() }))))
+    const fn = httpsCallable(getFunctions(), 'getPublicJobs');
+    fn({ churchId })
+      .then(res => setJobs(res.data?.jobs || []))
       .catch(() => setErr('Could not load jobs. The link may be invalid.'));
   }, [churchId]);
 
@@ -66,7 +62,7 @@ export function PublicJobsPage({ churchId, churchName, churchCode, onGetStarted 
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14, marginBottom: 32 }}>
               {jobs.map(job => {
-                const filled = (job.signups || []).length;
+                const filled = job.signupCount ?? 0;
                 const total = job.spotsTotal || 1;
                 const isFull = filled >= total;
                 const pct = Math.min(100, (filled / total) * 100);

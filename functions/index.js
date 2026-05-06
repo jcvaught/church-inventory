@@ -158,6 +158,59 @@ exports.getChurchStats = onCall(
   }
 );
 
+// ── getPublicJobs ─────────────────────────────────────────────────────────
+// Public, unauthenticated read for the shareable PublicJobsPage. Strips
+// signups[], waitlist[], attendance, and any other PII before returning so
+// teen names are never exposed to anyone with the share link. Replaces the
+// previous direct-Firestore listener path that leaked names to anyone with
+// raw SDK access (Jobs Hub audit, 2026-05-06).
+exports.getPublicJobs = onCall(
+  { cors: true },
+  async (req) => {
+    const churchId = (req.data && req.data.churchId) || '';
+    if (!churchId || typeof churchId !== 'string') {
+      throw new HttpsError('invalid-argument', 'churchId is required.');
+    }
+
+    const db = getFirestore();
+    const churchSnap = await db.collection('churches').doc(churchId).get();
+    if (!churchSnap.exists) {
+      throw new HttpsError('not-found', 'Church not found.');
+    }
+
+    const subSnap = await db.collection('churches').doc(churchId).collection('config').doc('subscription').get();
+    if (!subHasHub(subSnap.data() || {}, 'jobs')) {
+      // Hub inactive — return empty list rather than leak that the church exists.
+      return { jobs: [] };
+    }
+
+    const jobsSnap = await db
+      .collection('churches').doc(churchId).collection('jobListings')
+      .where('status', '==', 'open')
+      .orderBy('scheduledDate')
+      .get();
+
+    const jobs = jobsSnap.docs.map((doc) => {
+      const x = doc.data();
+      return {
+        _docId: doc.id,
+        jobNumber: x.jobNumber || null,
+        title: x.title || '',
+        description: x.description || '',
+        scheduledDate: x.scheduledDate || null,
+        scheduledTime: x.scheduledTime || null,
+        location: x.location || '',
+        pay: x.pay ?? null,
+        spotsTotal: x.spotsTotal || 1,
+        signupCount: Array.isArray(x.signups) ? x.signups.length : 0,
+        status: x.status || 'open',
+      };
+    });
+
+    return { jobs };
+  }
+);
+
 // ── createCheckoutSession ─────────────────────────────────────────────────
 // Called from the frontend with { item: 'maintenance'|'insights'|...|'all_in' }
 // Returns { url } — redirect the browser to this URL.

@@ -156,7 +156,11 @@ service cloud.firestore {
     //    honest callers; the ±1 delta constraint closes the practical attack surface. ──
     match /churches/{churchId}/jobListings/{docId} {
       allow get:            if isMember(churchId);
-      allow list:           if (request.auth == null && resource.data.status == 'open') || isMember(churchId);
+      // Public job-board reads are routed through the `getPublicJobs` callable
+      // (functions/index.js) so signups[]/waitlist[] are stripped before the
+      // response. Direct unauthenticated list/get is blocked here to prevent
+      // raw-SDK PII pulls (Jobs Hub audit, 2026-05-06).
+      allow list:           if isMember(churchId);
       allow create, delete: if isChurchAdminOrManager(churchId);
       allow update:         if isChurchAdminOrManager(churchId) || (
         isMember(churchId) &&
