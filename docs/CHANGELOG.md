@@ -4,6 +4,58 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-06 — Jobs Hub Pre-Rollout Audit + Blog #20 + Task Sharing Backfill
+
+Pre-rollout audit of the Jobs Hub before opening it to real teens/parents at FXCC. 14 findings across four severity tiers; 13 actionable items shipped in three commits today, one was a non-issue.
+
+### 🔴 Critical (4 / 4 shipped)
+
+1. **`waitlist: []` initialized on new jobs** — `useFirestore.js:898` and `:873`. The Firestore rule on `jobListings` checks `request.resource.data.waitlist.size() == resource.data.waitlist.size() ± 1` against a missing field, so the first waitlist join on any new job was silently rejected. Both `addJobListing` and `addJobListingSeries` now write `waitlist: []` alongside `signups: []`.
+
+2. **Public job-board signup leak fixed** — `firestore.rules:159` previously allowed unauthenticated `list` of any open `jobListing`, and the docs include `signups[]` / `waitlist[]` arrays with teen names. `PublicJobsPage.jsx` didn't render names, but raw SDK pulls did. Replaced the public-list path with a new callable Cloud Function `getPublicJobs(churchId)` that strips `signups`/`waitlist`/attendance and returns only display fields + a `signupCount` number. Rule now requires `isMember` for `list`/`get`. `PublicJobsPage` updated to call the CF instead of querying Firestore directly.
+
+3. **Composite index for the public-board query** — `where('status','==','open') + orderBy('scheduledDate')` on a single-collection scope needed a `COLLECTION` (not `COLLECTION_GROUP`) index. Added to `firestore.indexes.json`. Note: the Firebase CLI silently no-op'd the COLLECTION-scope deploy (known quirk — it considers an existing same-fields `COLLECTION_GROUP` index to "cover" the query), so the index was created via `gcloud firestore indexes composite create` directly. Index is READY.
+
+4. **Print Roster gated** — `JobsPage.jsx:999`. Wrapped the button in `(isAdminOrManager || rosterVisibility !== 'admin')` so non-admins can't dump teen names regardless of the church's `jobsRosterVisibility` setting.
+
+### 🟠 High (5 / 5 shipped)
+
+5. **Series cancellation now notifies signups.** `updateJobListingSeries` returns `{ count, affected: [{docId, signupCount}] }` so `JobsPage.handleSaveJob` can fan out per-job `sendJobCancelledEmails` calls after a cancel. The 1-hour debounce in the CF makes re-fires safe. Confirm dialog copy updated from "Signups will not be automatically notified" → "Existing signups will be emailed."
+
+6. **`acknowledgedWaiverAt` audit trail survives waitlist promotion.** `signUpForJob` writes the timestamp onto the waitlist entry when the job requires a waiver; `promoteFromWaitlist` (CF) carries it onto the resulting signup entry.
+
+7. **`closePastJobs` scheduled CF.** Daily 2am Central, `collectionGroup('jobListings')` where `status == 'open'` and `scheduledDate < today` → batch flip to `completed`. Without this, past-but-unfinished jobs accumulated in the Open filter forever and remained sign-up-able. Required a new `COLLECTION_GROUP` composite index on `status, scheduledDate` (also created via gcloud directly).
+
+8. **`promoteFromWaitlist` email no longer gated on church-wide notifications toggle.** Removed the `if (!notifSnap.data()?.enabled) return ...` early-return — the promotion email is transactional ("you're now signed up"), not a marketing notification. Hub-active and per-user opt-out checks still apply.
+
+9. **`updateJobListing` + `updateJobListingSeries` strip server-managed fields defensively.** Both now strip `waitlist`, `cancellationEmailSentAt`, `lastReminderSentDate`, `lastPosterNotifiedByActors`, and recurrence metadata. A future caller passing a stale doc as `updates` can no longer clobber dedupe stamps or recurrence config.
+
+### 🟡 Medium (3 / 3 shipped)
+
+10. **Waitlist hard-capped at 50 entries** — `firestore.rules:172`. Closes a denial-of-service vector (1MB doc cliff) and an unbounded-growth pattern.
+
+11. **Capacity check before compliance** — `JobsPage.handleSignUp`. Reordered so a user trying to sign up for a full job sees "this job is full — join the waitlist?" before any compliance/waiver gate fires. Avoids the confusing "you need a Background Check" error for a job they wouldn't have fit into anyway. Also catches the new waitlist cap up front.
+
+12. **Reports leaderboard date-scoped + pay footnote.** New scope selector (Last 30 days / Last 90 days / All time, defaults to 90 days). Filter applies cutoff against `job.scheduledDate` before aggregating. Footnote explains that Pay Earned only counts signups marked Attended, so unmarked signups read $0/— by design.
+
+### 🟢 Low (1 / 1 shipped)
+
+13. **Sign-up errors surface their message.** `handleSignUp`'s catch now prefixes `err.message` instead of swallowing it behind a generic "Sign-up failed."
+
+### Non-issue
+
+14. **`jobSwapRequests` rule** — already enforced `request.resource.data.uid == request.auth.uid` correctly. No change.
+
+### New Cloud Functions
+- **`getPublicJobs`** (onCall, no auth) — sanitized public job board read.
+- **`closePastJobs`** (scheduled 2am Central) — auto-close past `open` jobs.
+
+### Other today
+- **Task sharing backfill** — 15 of Jill's ClickUp-imported tasks had `sharedWith: ['<uid>']` (flat strings) instead of `[{uid, name}]` objects, so the `TasksPage` `visibleTasks` filter silently failed and John couldn't see them. Backfilled the data shape directly in Firestore. Then John's 26 private tasks were converted to `shared` with Jill (and 4 team tasks left alone), and both users' `taskDefaultVisibility` / `taskDefaultSharedWith` were updated to share with each other on new tasks. Memory `project_churchopshub_task_import.md` updated with the shape gotcha so future imports won't reintroduce it.
+- **Blog post** — "Church Workday Planning: How to Run an All-Hands Cleanup That Actually Gets Done" (`church-workday-planning`, 2026-05-05). Practical evergreen post; soft plug for Tasks Hub + Inventory Hub for recurring workday templating. Sitemap updated.
+
+---
+
 ## 2026-04-30 — Tagline Repositioning: Operations Platform, Not Just Inventory
 
 Product has outgrown the "inventory management" framing. Logo subtitle, browser title, SEO meta, manifest, and landing-page copy now describe ChurchOpsHub as the operations platform built for churches, with the new tagline **"Run Your Church"** under the logo.
