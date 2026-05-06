@@ -1607,4 +1607,133 @@ ChurchOpsHub's Inventory Hub is free for up to ten users and handles this case d
 The thing every veteran VBS coordinator says: the week itself is fun. The planning is what makes the week fun rather than exhausting. Spend the time up front.
     `.trim(),
   },
+
+  {
+    slug: 'church-workday-planning',
+    title: "Church Workday Planning: How to Run an All-Hands Cleanup That Actually Gets Done",
+    description: "Most church workdays end with half the list undone, two-thirds of the volunteers gone by 11am, and a tool no one can find. Here is a planning system that gets the work finished without burning anyone out.",
+    date: '2026-05-05',
+    keywords: 'church workday, church cleanup day, church work day planning, church volunteer workday, church facility maintenance day',
+    content: `
+## What Goes Wrong on a Typical Church Workday
+
+Most church workdays follow the same pattern. The bulletin announces a Saturday workday two weeks out. A team of well-meaning volunteers shows up at 8am with coffee. The pastor or trustee reads off a list of projects from a clipboard. People scatter. By 10:30am, half the projects haven't been started because no one knew where the tools were. By 11:30am, a third of the volunteers have left for soccer games. By 1pm, the leader is finishing the last few jobs alone — annoyed, tired, and quietly resolved to skip next year's workday.
+
+The problem is not that volunteers don't care. The problem is that workdays are usually run as if showing up is the hard part. It isn't. Showing up is the easy part. Turning a roomful of willing people into actual completed projects in five hours is the hard part, and it almost never happens by accident.
+
+This post lays out a planning system that does the hard part on purpose. Use it the next time you schedule a church cleanup day, fall workday, post-VBS reset, or any other time you have a stack of projects and a window to get them done.
+
+## The Three-Week Lead Time
+
+A successful church workday starts being planned three weeks before it happens. Less than three weeks and you are scrambling. More than three weeks and you forget what you decided.
+
+Here is the calendar:
+
+**Three weeks out:** Walk the property and the building with a notepad. Write down every project that needs doing. Then triage the list — what *must* get done this workday, what *should* get done if there is time, and what is wishful thinking. Cut the list by half. You will be tempted to keep everything. Don't.
+
+**Two weeks out:** Sort the surviving projects into categories — outdoor, indoor, repair, painting, cleaning, organizing. Assign a *project lead* to each category. The project lead is responsible for one thing: making sure their category's projects can actually start at 8am. They gather supplies, identify tools, and confirm the work area is accessible.
+
+**One week out:** Send a sign-up to the congregation listing the project categories and asking volunteers to indicate which one they want to join. People are far more committed when they pick their assignment than when they show up and get assigned.
+
+**Day before:** Walk the property one more time with each project lead. Confirm tools are staged. Confirm supplies are bought. Confirm someone is on coffee duty. The day before is too late to fix structural problems but the perfect time to fix small ones.
+
+## Cut the Project List in Half
+
+This is the single most important rule of church workday planning, and it is the rule almost every leader breaks. The list of projects you walked the property and wrote down on the first pass is too long. Always.
+
+The reason is psychological. You see all the things that need doing and your brain refuses to leave any of them out. But a list with 22 projects on it is a list that ends with 14 projects done and 8 abandoned. A list with 11 projects on it ends with 11 projects done — *and* people leaving feeling proud instead of guilty.
+
+Decide ruthlessly. The criteria for keeping a project on the list:
+
+1. **Will it actually be finished by 1pm?** A four-day painting job is not a workday project. Break it down or save it for another time.
+2. **Can a non-expert volunteer do it?** "Replace the boiler thermostat" is not a workday project. "Rake the courtyard" is.
+3. **Is the supply list under $200?** If a project requires major purchases, plan it as its own event, not a workday item.
+4. **Will someone notice if it gets done?** If no one will ever know, the project is not motivating volunteers. Skip it.
+
+Projects that don't pass all four criteria go on a separate list — the "month-of-Saturdays" list — and get scheduled individually with the right small team and budget.
+
+## The Project Lead System
+
+A church workday with one leader running everything is a workday that ends with that leader alone in the parking lot at 2pm. A church workday with five project leads is a workday that ends with five smaller groups finishing and going home together.
+
+A *project lead* is responsible for one project category — outdoor, kitchen, sanctuary, classrooms, grounds, or whatever divisions make sense for your day. Their job:
+
+- **Before the day:** Walk the area, write the project list, confirm supplies and tools, identify any safety considerations.
+- **Morning of:** Greet their volunteers, give a five-minute orientation to the projects, assign people to specific tasks.
+- **During the day:** Keep their team moving, answer questions, decide when something is "done enough."
+- **End of day:** Walk the area with a checklist, return tools to the right place, report what got done.
+
+The project lead does not need to be the most skilled person in their category. They need to be organized and willing to delegate. A retired teacher with no construction experience can be a great outdoor project lead if they're willing to read a checklist and keep people on task.
+
+This system also solves the "the pastor is doing everything" problem. If the pastor is the only one with authority to assign work, the workday will collapse the moment the pastor steps away to handle a phone call. With project leads, every category keeps moving regardless of where the pastor is.
+
+## The Tool and Supply Pre-Stage
+
+The single biggest cause of wasted volunteer time on a workday is people standing around looking for tools and supplies. The fix is mechanical: the day before the workday, every project's tools and supplies are physically staged at the work area.
+
+A tarp on the lawn for outdoor tools. A folding table by the kitchen for cleaning supplies. A bin in each classroom for the supplies that classroom needs. Each station gets a printed list of what's in it and what each project needs.
+
+Why this matters: when a volunteer asks "where's the screwdriver?" at 8:15am, the cost is not just the screwdriver hunt. It is the loss of momentum for everyone watching. Five minutes looking for a tool turns into ten minutes of standing around chatting because no one knows what to start without the tool. By 9am you have lost half an hour of total volunteer-hours, and the day never recovers its early energy.
+
+Pre-staging avoids the entire problem. When volunteers arrive, the supplies are already there. They start working immediately. The momentum carries.
+
+For churches with an inventory or tasks system, this is the moment to use it. Tag every tool and supply needed for the workday in advance. Print the list. Walk it down the day before, check off each item as you stage it, and note anything missing. If you are using ChurchOpsHub's Inventory Hub or Tasks Hub, you can build a checklist once and reuse it every workday — the supplies don't change much from year to year.
+
+## Assigning People on Arrival
+
+The fifteen minutes between 7:55am and 8:10am is the most important window of the day. This is when volunteers either get plugged into a job or wander away.
+
+A few rules:
+
+**No standing around at 8am.** When a volunteer walks in, they get a name tag, a coffee, and an immediate assignment. Not "we're starting at 8:15." Right now. Even if the work isn't urgent, *moving* is urgent.
+
+**Match people to projects, not the other way around.** If a 70-year-old retired teacher shows up, do not put her on the roof-painting team because that's where you're short. Put her in the children's classroom organizing crew. People work better at the work that fits them.
+
+**Group by household when possible.** Couples and families want to work together. Splitting them up to "balance teams" is a mistake — they leave together, so put them on a project they can finish together.
+
+**Keep teams small.** Four to six people per project is the sweet spot. Larger teams have somebody standing around at all times. Smaller teams burn out the few people doing all the work.
+
+## The Coffee, Donuts, and Lunch Rule
+
+Three meals — coffee on arrival, donuts at 10am, lunch at noon. This is not optional. The food is not a perk; it is the structure of the day.
+
+Coffee on arrival anchors people's expectation that they're going to be there a while. Donuts at 10am is the natural break point — people stretch, regroup, and start the second half of the morning. Lunch at noon is the social payoff. Volunteers stay through lunch much more often than they stay through "and we'll wrap up around 1pm with no real ending."
+
+Lunch should be in a clean place — fellowship hall, not the parking lot. Use real plates and utensils when feasible. The half-hour around the table is when relationships happen, where the next workday gets planned, and where the post-mortem happens informally. Skipping lunch to save time is a false economy.
+
+## Closing the Day on Time
+
+A church workday ends at 1pm or 2pm. Pick a time and announce it on the morning sign-up. When the time comes, *end the day* — even if a project is unfinished.
+
+Why this matters: volunteers commit to a window. If the window keeps stretching, they feel trapped, and they remember next year. If the window holds — if you announced 1pm and the day ends at 1pm — they leave feeling like they spent exactly the time they signed up for. They sign up again next year.
+
+Unfinished projects roll forward. Either the project lead schedules a small-team follow-up, or the project goes back into the regular maintenance rotation. Do not guilt-trip the people who left at 1pm into staying.
+
+The closing checklist:
+
+1. Each project lead walks their area and reports what got done and what didn't.
+2. Tools return to their proper storage locations (this is where pre-staged inventory pays off — tools have a home to go back to).
+3. Trash is taken out, not piled by the dumpster.
+4. The leader thanks the volunteers publicly, by name where possible.
+5. The volunteers go home.
+
+A two-sentence email or text the next day, summarizing what got done and thanking the team again, is worth more than any morning announcement. People remember being thanked.
+
+## The Year-Over-Year Improvement Loop
+
+The first time you run a church workday this way, it will feel like a lot of overhead. By the third time, the project list is a copy-paste job, the project leads know what to do, the supply checklists are saved, and the day runs itself.
+
+The trick is writing things down. After every workday, the project leads send a short list of what they wish had been different — supplies that were missing, tools that broke, projects that took longer than expected. Save that list. Use it as the starting point for next year's planning.
+
+If your church uses a task management or inventory tool, this is exactly the kind of recurring work it was built for. ChurchOpsHub's Tasks Hub lets you save a workday template — projects, supplies, assigned people — and regenerate it for each workday. The Inventory Hub tracks the tools so the day-before pre-stage is a checklist instead of a memory test. Either way, the principle is the same: capture the lessons. Don't make next year's leader rediscover them.
+
+## The Bottom Line
+
+A church workday is not magic. It is a small operation that runs well or runs badly depending on how thoroughly you planned it three weeks ago. The leaders who say "our workday went great" are usually the ones who cut the project list in half, recruited project leads, pre-staged the supplies, and ended the day on time.
+
+Volunteers will return for a well-run workday. They will not return for a chaotic one. The work that gets done is not the only outcome that matters — the volunteers' impression of how the day was run is what determines whether they show up next time.
+
+Plan the day, then trust the volunteers to do the work.
+    `.trim(),
+  },
 ];
