@@ -665,7 +665,7 @@ export function JobsPage({ store, userProfile }) {
         setShowNewJob(false);
         setEditJobId(null);
       } else if (editJobId) {
-        await updateJobListing(editJobId, data, userId, userName);
+        await updateJobListing(editJobId, data, userId, userName, existingJob?.jobNumber);
         if (willNotify) {
           const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
           fn({ churchId: userProfile?.churchId, jobDocId: editJobId }).catch(err => { console.error('[ChurchOpsHub] CF sendJobCancelledEmails failed', err); });
@@ -902,7 +902,7 @@ export function JobsPage({ store, userProfile }) {
         ministry: '',
         linkedJobDocId: liveDetail._docId,
       }, userId, userName);
-      await updateJobListing(liveDetail._docId, { linkedTaskDocId: taskDocId }, userId, userName);
+      await updateJobListing(liveDetail._docId, { linkedTaskDocId: taskDocId }, userId, userName, liveDetail.jobNumber);
       setShowJobDetail(prev => ({ ...prev, linkedTaskDocId: taskDocId }));
       setShowConvertToTaskModal(false);
       flash('Task created and linked.');

@@ -908,10 +908,11 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
-  const updateJobListing = useCallback(async (docId, updates, userId, userName) => {
+  const updateJobListing = useCallback(async (docId, updates, userId, userName, jobNumber) => {
     try {
-      // Capture jobNumber before stripping so the activity log shows JOB-### not a docId.
-      const jobNumberForLog = updates.jobNumber;
+      // Capture jobNumber so the activity log shows JOB-### not a docId.
+      // Prefer the explicit param; fall back to updates.jobNumber if a caller passes it.
+      const jobNumberForLog = jobNumber || updates.jobNumber;
       // Strip server-managed and identity fields. A stale doc passed in as
       // `updates` would otherwise clobber waitlist state, dedupe stamps, or
       // recurrence metadata.
