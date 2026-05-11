@@ -408,6 +408,7 @@ Rule only enforces `request.resource.data.uid == request.auth.uid`. A member not
 | F-fix-2 | Sentry's ingest hosts were not in the `connect-src` CSP — error telemetry blocked in prod. Added `https://*.ingest.sentry.io` and `https://*.sentry.io`. | 71b127e |
 | F-fix-3 | `handleDeleteJob`, `handleDeleteSeries`, `handleDeleteSeriesFrom` hard-deleted jobs without firing `sendJobCancelledEmails` — volunteers were silently stranded. The soft-cancel path (status → cancelled) already emails, but Delete didn't. Now confirms with signup count, awaits the CF before the delete commits, and respects the 1-hour CF debounce if a soft-cancel preceded the delete. | 0370294 |
 | F-fix-4 | `update_job` activity-log entries logged the raw Firestore docId (e.g. `0K4Ofucik7to01NTRKkt`) instead of `JOB-###`. `updateJobListing` read `updates.jobNumber` but neither caller ever passed it. Added `jobNumber` as an explicit 5th parameter (mirroring `deleteJobListing`) and threaded it through both `handleSaveJob` and the convert-to-task path. Discovered during §2 of the manual test pass. | 9c95dd5 |
+| F-fix-5 | Job Lead dropdown in the New/Edit Job modal listed every active user in the church, including users without Jobs Hub access in `allowedHubs`. Made the filter only include users who can actually see the Jobs Hub (`role === 'admin'` OR `allowedHubs` contains `'jobs'`). Discovered during §3 of the manual test pass. | (pending push) |
 
 ---
 

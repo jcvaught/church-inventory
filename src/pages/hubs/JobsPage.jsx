@@ -1225,9 +1225,13 @@ export function JobsPage({ store, userProfile }) {
               setJobForm(f => ({ ...f, jobLead: uid ? { uid, name: u?.name || uid } : null }));
             }}>
               <option value="">— None —</option>
-              {(users || []).filter(u => u.active !== false).sort((a, b) => (a.name||'').localeCompare(b.name||'')).map(u => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
+              {(users || [])
+                .filter(u => u.active !== false)
+                .filter(u => u.role === 'admin' || (u.allowedHubs || []).includes('jobs'))
+                .sort((a, b) => (a.name||'').localeCompare(b.name||''))
+                .map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
             </select>
           </FF>
           <div style={{ display: 'flex', gap: 12 }}>
