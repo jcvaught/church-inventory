@@ -283,6 +283,16 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJ
         <div onClick={e => e.stopPropagation()}>
           {(() => {
             const isSaving = savingJobId === job._docId;
+            // Past-dated open jobs are awaiting the 2am closePastJobs cron.
+            // Show a disabled "Past" indicator instead of an enabled Sign Up button.
+            if (overdue && !signed && !onWaitlist) {
+              return (
+                <button disabled
+                  style={{ ...btnS, fontSize: 12, padding: '6px 12px', color: B.textLight, width: '100%', cursor: 'default', opacity: 0.6 }}>
+                  Past — signups closed
+                </button>
+              );
+            }
             return signed ? (
               <button onClick={() => onWithdraw(job)} disabled={!!savingJobId}
                 style={{ ...btnS, fontSize: 12, padding: '6px 12px', color: B.red, borderColor: '#FECACA', width: '100%' }}>
@@ -540,11 +550,14 @@ export function JobsPage({ store, userProfile }) {
     let jobs = jobListings || [];
     if (statusFilter === 'mine') jobs = jobs.filter(j => isSignedUp(j));
     else if (statusFilter !== 'all') jobs = jobs.filter(j => j.status === statusFilter);
+    // Open filter: hide past-dated open jobs (awaiting closePastJobs cron at 2am Central)
+    // so members can't sign up for jobs that have already happened.
+    if (statusFilter === 'open') jobs = jobs.filter(j => !j.scheduledDate || j.scheduledDate >= todayStr);
     return [...jobs].sort((a, b) =>
       (a.scheduledDate || '').localeCompare(b.scheduledDate || '') ||
       (b.createdAt || '').localeCompare(a.createdAt || '')
     );
-  }, [jobListings, statusFilter, userId]);
+  }, [jobListings, statusFilter, userId, todayStr]);
 
   const visibleAnnouncements = useMemo(() => {
     // >= means announcement is visible ON the expiry day (inclusive). Admins see it disappear the next day.
@@ -777,6 +790,13 @@ export function JobsPage({ store, userProfile }) {
   }
 
   async function handleSignUp(job) {
+    // Past-dated open jobs are a transient state — they'll be closed by the
+    // closePastJobs cron at 2am Central, but until then they're still status=open
+    // and would otherwise be signup-able. Reject explicitly.
+    if (job.scheduledDate && job.scheduledDate < todayStr) {
+      flash('This job has already happened and is no longer open for signups.', true);
+      return;
+    }
     // Capacity-first: if the job is full, ask the user up front whether they
     // want to join the waitlist before running compliance/waiver gates.
     // Avoids the confusing "you need a Background Check" error for a job they
@@ -1535,6 +1555,11 @@ export function JobsPage({ store, userProfile }) {
                 <button onClick={() => handleWithdraw(liveDetail)} disabled={!!savingJobId}
                   style={{ ...btnS, color:'#92400E', borderColor:'#FDE68A', background:'#FFF9C4', fontSize:13 }}>
                   {savingJobId === liveDetail._docId ? '…' : 'Leave Waitlist'}
+                </button>
+              ) : isPastJob ? (
+                <button disabled
+                  style={{ ...btnS, fontSize: 13, color: B.textLight, cursor: 'default', opacity: 0.6 }}>
+                  Past — signups closed
                 </button>
               ) : !isFull(liveDetail) ? (
                 <button onClick={() => handleSignUp(liveDetail)} disabled={!!savingJobId} style={{ ...btnP, fontSize: 13 }}>
