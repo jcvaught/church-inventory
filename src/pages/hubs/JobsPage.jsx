@@ -706,10 +706,32 @@ export function JobsPage({ store, userProfile }) {
       .catch(err => { console.error('[ChurchOpsHub] CF sendJobCancelledEmails (notify) failed', err); flash('Failed to send notifications.', true); });
   }
 
+  // Fires sendJobCancelledEmails for each affected job that has signups.
+  // Awaited so the CF reads the still-existing doc before the delete commits.
+  // The CF has a 1-hour debounce, so a soft-cancel-then-delete won't double-fire.
+  async function notifySignupsForDelete(affectedJobs) {
+    if (!notificationConfig?.enabled) return;
+    const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
+    const withSignups = affectedJobs.filter(j => (j.signups || []).length > 0);
+    if (withSignups.length === 0) return;
+    await Promise.allSettled(withSignups.map(j =>
+      fn({ churchId: userProfile?.churchId, jobDocId: j._docId })
+        .catch(err => { console.error('[ChurchOpsHub] CF sendJobCancelledEmails (pre-delete) failed', err); })
+    ));
+  }
+
   async function handleDeleteJob(job) {
     if (!isAdminOrManager) return;
-    if (!window.confirm(`Delete "${job.title}"? This cannot be undone.`)) return;
+    const signupCount = (job.signups || []).length;
+    const willNotify = signupCount > 0 && notificationConfig?.enabled;
+    const confirmMsg = signupCount > 0
+      ? (willNotify
+          ? `Delete "${job.title}"? ${signupCount} signup${signupCount !== 1 ? 's' : ''} will be emailed about the cancellation. This cannot be undone.`
+          : `Delete "${job.title}"? ${signupCount} signup${signupCount !== 1 ? 's' : ''} will NOT be notified (notifications are off). This cannot be undone.`)
+      : `Delete "${job.title}"? This cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
     try {
+      await notifySignupsForDelete([job]);
       await deleteJobListing(job._docId, userId, userName, job.jobNumber);
       setShowJobDetail(null);
       flash('Job deleted.');
@@ -718,8 +740,17 @@ export function JobsPage({ store, userProfile }) {
 
   async function handleDeleteSeries(job) {
     if (!isAdminOrManager) return;
-    if (!window.confirm(`Delete the entire recurring series for "${job.title}"? All jobs in this series will be permanently deleted.`)) return;
+    const seriesJobs = (jobListings || []).filter(j => j.recurrenceGroupId === job.recurrenceGroupId);
+    const signupCount = seriesJobs.reduce((sum, j) => sum + (j.signups || []).length, 0);
+    const willNotify = signupCount > 0 && notificationConfig?.enabled;
+    const confirmMsg = signupCount > 0
+      ? (willNotify
+          ? `Delete the entire recurring series for "${job.title}"? ${signupCount} signup${signupCount !== 1 ? 's' : ''} across ${seriesJobs.length} job${seriesJobs.length !== 1 ? 's' : ''} will be emailed about the cancellation.`
+          : `Delete the entire recurring series for "${job.title}"? ${signupCount} signup${signupCount !== 1 ? 's' : ''} will NOT be notified (notifications are off).`)
+      : `Delete the entire recurring series for "${job.title}"? All jobs in this series will be permanently deleted.`;
+    if (!window.confirm(confirmMsg)) return;
     try {
+      await notifySignupsForDelete(seriesJobs);
       await deleteJobListingSeries(job.recurrenceGroupId, userId, userName);
       setShowJobDetail(null);
       flash('Series deleted.');
@@ -728,8 +759,17 @@ export function JobsPage({ store, userProfile }) {
 
   async function handleDeleteSeriesFrom(job) {
     if (!isAdminOrManager) return;
-    if (!window.confirm(`Delete "${job.title}" and all future jobs in this series? Past jobs are kept.`)) return;
+    const seriesJobs = (jobListings || []).filter(j => j.recurrenceGroupId === job.recurrenceGroupId && j.scheduledDate >= job.scheduledDate);
+    const signupCount = seriesJobs.reduce((sum, j) => sum + (j.signups || []).length, 0);
+    const willNotify = signupCount > 0 && notificationConfig?.enabled;
+    const confirmMsg = signupCount > 0
+      ? (willNotify
+          ? `Delete "${job.title}" and all future jobs in this series? ${signupCount} signup${signupCount !== 1 ? 's' : ''} across ${seriesJobs.length} job${seriesJobs.length !== 1 ? 's' : ''} will be emailed about the cancellation.`
+          : `Delete "${job.title}" and all future jobs in this series? ${signupCount} signup${signupCount !== 1 ? 's' : ''} will NOT be notified (notifications are off).`)
+      : `Delete "${job.title}" and all future jobs in this series? Past jobs are kept.`;
+    if (!window.confirm(confirmMsg)) return;
     try {
+      await notifySignupsForDelete(seriesJobs);
       await deleteJobListingSeriesFrom(job.recurrenceGroupId, job.scheduledDate, userId, userName);
       setShowJobDetail(null);
       flash('This and future series jobs deleted.');
