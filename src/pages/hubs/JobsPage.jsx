@@ -1095,7 +1095,24 @@ export function JobsPage({ store, userProfile }) {
               {(isAdminOrManager || rosterVisibility !== 'admin') && (
                 <button onClick={() => printJobRoster(scheduleJobs, config?.churchName || '')} style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>Print Roster</button>
               )}
-              <button onClick={() => exportJobsICS(scheduleJobs.filter(j => j.scheduledDate), config?.churchName || '')} title="Export jobs to iCal (.ics)" style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>Export ICS</button>
+              <button
+                onClick={() => exportJobsICS(
+                  scheduleJobs.filter(j => j.scheduledDate && (j.signups || []).some(s => s.uid === userId)),
+                  config?.churchName || '',
+                  { calendarLabel: 'My Jobs', filenamePrefix: 'my-jobs' }
+                )}
+                title="Export jobs you've signed up for to iCal (.ics)"
+                style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>
+                Export My Signups
+              </button>
+              {isAdminOrManager && (
+                <button
+                  onClick={() => exportJobsICS(scheduleJobs.filter(j => j.scheduledDate), config?.churchName || '')}
+                  title="Export the full church job calendar to iCal (.ics)"
+                  style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>
+                  Export All
+                </button>
+              )}
               <button onClick={() => setShowPastJobs(v => !v)} style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>
                 {showPastJobs ? 'Hide Past Jobs' : 'Show Past Jobs'}
               </button>

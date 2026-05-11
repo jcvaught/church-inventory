@@ -67,7 +67,7 @@ export function exportTasksICS(tasks, churchName) {
   downloadICS(buildICS(`Tasks — ${churchName || 'ChurchOpsHub'}`, events), `tasks-${localDateStr(new Date())}.ics`);
 }
 
-export function exportJobsICS(jobs, churchName) {
+export function exportJobsICS(jobs, churchName, { calendarLabel = 'Jobs', filenamePrefix = 'jobs' } = {}) {
   const events = [];
   (jobs || []).filter(j => j.scheduledDate).forEach(job => {
     const dtTime = timeToICS(job.scheduledDate, job.scheduledTime);
@@ -94,5 +94,5 @@ export function exportJobsICS(jobs, churchName) {
     events.push(`UID:${escICS(job.jobNumber || job._docId)}@churchopshub-jobs`);
     events.push('END:VEVENT');
   });
-  downloadICS(buildICS(`Jobs — ${churchName || 'ChurchOpsHub'}`, events), `jobs-${localDateStr(new Date())}.ics`);
+  downloadICS(buildICS(`${calendarLabel} — ${churchName || 'ChurchOpsHub'}`, events), `${filenamePrefix}-${localDateStr(new Date())}.ics`);
 }
