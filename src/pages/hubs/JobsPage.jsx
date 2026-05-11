@@ -478,6 +478,8 @@ export function JobsPage({ store, userProfile }) {
   const [showDelegatesModal, setShowDelegatesModal] = useState(false);
   const [jobDelegates, setJobDelegates] = useState(() => userProfile?.jobPosterDelegates || []);
   const [savingDelegates, setSavingDelegates] = useState(false);
+  const [showPrintRosterModal, setShowPrintRosterModal] = useState(false);
+  const [printRosterSelectedIds, setPrintRosterSelectedIds] = useState(() => new Set());
 
   function flash(text, isError = false) {
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
@@ -1092,8 +1094,16 @@ export function JobsPage({ store, userProfile }) {
               {showPastJobs ? 'All jobs' : 'Upcoming jobs'} ({scheduleJobs.length})
             </span>
             <div style={{ display:'flex', gap:8 }}>
-              {(isAdminOrManager || rosterVisibility !== 'admin') && (
-                <button onClick={() => printJobRoster(scheduleJobs, config?.churchName || '')} style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>Print Roster</button>
+              {isAdminOrManager && (
+                <button
+                  onClick={() => {
+                    setPrintRosterSelectedIds(new Set(scheduleJobs.map(j => j._docId)));
+                    setShowPrintRosterModal(true);
+                  }}
+                  title="Choose which jobs to print rosters for"
+                  style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>
+                  Print Rosters…
+                </button>
               )}
               <button
                 onClick={() => exportJobsICS(
@@ -1554,6 +1564,9 @@ export function JobsPage({ store, userProfile }) {
                   {!liveDetail.linkedTaskDocId && (
                     <button onClick={() => openConvertToTask(liveDetail)} style={{ ...btnS, fontSize: 13 }}>→ Task</button>
                   )}
+                  <button onClick={() => printJobRoster([liveDetail], config?.churchName || '')} title="Print this job's roster" style={{ ...btnS, fontSize: 13 }}>
+                    🖨 Print Roster
+                  </button>
                 </>
               )}
             </div>
@@ -1671,6 +1684,68 @@ export function JobsPage({ store, userProfile }) {
           {jobDelegates.length >= 5 && <p style={{ fontSize: 12, color: B.textLight, fontFamily: f2, marginTop: 8, marginBottom: 0 }}>Maximum 5 delegates.</p>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
             <button onClick={() => setShowDelegatesModal(false)} style={btnS}>Done</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Print Rosters Selection Modal ── */}
+      {showPrintRosterModal && (
+        <Modal open title="Print Rosters" onClose={() => setShowPrintRosterModal(false)} maxWidth={520}>
+          <p style={{ fontSize: 13, color: B.textMid, fontFamily: f2, marginTop: 0, marginBottom: 14 }}>
+            Select which jobs to include in the printed roster. Defaults to all visible jobs.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span style={{ fontSize: 12, color: B.textLight, fontFamily: f1, fontWeight: 600 }}>
+              {printRosterSelectedIds.size} of {scheduleJobs.length} selected
+            </span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setPrintRosterSelectedIds(new Set(scheduleJobs.map(j => j._docId)))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontFamily: f1, color: B.teal, fontWeight: 600 }}>
+                Select All
+              </button>
+              <span style={{ color: B.textLight, fontSize: 12 }}>·</span>
+              <button onClick={() => setPrintRosterSelectedIds(new Set())}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontFamily: f1, color: B.teal, fontWeight: 600 }}>
+                Select None
+              </button>
+            </div>
+          </div>
+          <div style={{ maxHeight: 360, overflowY: 'auto', border: '1px solid ' + B.sand, borderRadius: 8, padding: 4 }}>
+            {scheduleJobs.length === 0 ? (
+              <div style={{ padding: 20, textAlign: 'center', color: B.textLight, fontSize: 13, fontFamily: f2 }}>No jobs to print.</div>
+            ) : scheduleJobs.map(j => {
+              const checked = printRosterSelectedIds.has(j._docId);
+              return (
+                <label key={j._docId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', cursor: 'pointer', borderRadius: 6, background: checked ? 'rgba(42,125,110,0.06)' : 'transparent' }}>
+                  <input type="checkbox" checked={checked} onChange={() => {
+                    setPrintRosterSelectedIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(j._docId)) next.delete(j._docId);
+                      else next.add(j._docId);
+                      return next;
+                    });
+                  }} />
+                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: B.textLight, background: B.warmGray, padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>{j.jobNumber}</span>
+                  <span style={{ flex: 1, fontSize: 13, fontFamily: f2, color: B.textDark }}>{j.title}</span>
+                  <span style={{ fontSize: 12, fontFamily: f2, color: B.textLight, flexShrink: 0 }}>
+                    {formatJobDate(j.scheduledDate)} · {(j.signups || []).length}/{j.spotsTotal || 1}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <button onClick={() => setShowPrintRosterModal(false)} style={btnS}>Cancel</button>
+            <button
+              disabled={printRosterSelectedIds.size === 0}
+              onClick={() => {
+                const selected = scheduleJobs.filter(j => printRosterSelectedIds.has(j._docId));
+                printJobRoster(selected, config?.churchName || '');
+                setShowPrintRosterModal(false);
+              }}
+              style={{ ...btnP, opacity: printRosterSelectedIds.size === 0 ? 0.5 : 1, cursor: printRosterSelectedIds.size === 0 ? 'not-allowed' : 'pointer' }}>
+              Print {printRosterSelectedIds.size} Roster{printRosterSelectedIds.size !== 1 ? 's' : ''}
+            </button>
           </div>
         </Modal>
       )}
