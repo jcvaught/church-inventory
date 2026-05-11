@@ -1156,7 +1156,7 @@ export function JobsPage({ store, userProfile }) {
 
       {/* ── New / Edit Job Modal ── */}
       {showNewJob && (
-        <Modal title={editJobId ? 'Edit Job' : 'Post a Job'} onClose={() => { setShowNewJob(false); setEditJobId(null); }} maxWidth={560}>
+        <Modal open title={editJobId ? 'Edit Job' : 'Post a Job'} onClose={() => { setShowNewJob(false); setEditJobId(null); }} maxWidth={560}>
           <FF label="Job Title *">
             <input style={inp} value={jobForm.title} onChange={e => setJobForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Reset chairs in sanctuary" autoFocus />
           </FF>
@@ -1306,7 +1306,7 @@ export function JobsPage({ store, userProfile }) {
 
       {/* ── Job Detail Modal ── */}
       {liveDetail && (
-        <Modal title={liveDetail.jobNumber + ' — ' + liveDetail.title} onClose={() => setShowJobDetail(null)} maxWidth={540}>
+        <Modal open title={liveDetail.jobNumber + ' — ' + liveDetail.title} onClose={() => setShowJobDetail(null)} maxWidth={540}>
           <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
             <JobStatusBadge status={liveDetail.status} />
             {liveDetail.recurrenceGroupId && (
@@ -1510,7 +1510,7 @@ export function JobsPage({ store, userProfile }) {
 
       {/* ── New / Edit Announcement Modal ── */}
       {showNewAnn && (
-        <Modal title={editAnnId ? 'Edit Announcement' : 'Post Announcement'} onClose={() => { setShowNewAnn(false); setEditAnnId(null); }} maxWidth={520}>
+        <Modal open title={editAnnId ? 'Edit Announcement' : 'Post Announcement'} onClose={() => { setShowNewAnn(false); setEditAnnId(null); }} maxWidth={520}>
           <FF label="Title *">
             <input style={inp} value={annForm.title} onChange={e => setAnnForm(f => ({ ...f, title: e.target.value }))} placeholder="Announcement title" autoFocus />
           </FF>
@@ -1558,7 +1558,7 @@ export function JobsPage({ store, userProfile }) {
 
       {/* ── Notification Delegates Modal ── */}
       {showDelegatesModal && (
-        <Modal title="Job Notification Delegates" onClose={() => setShowDelegatesModal(false)} maxWidth={480}>
+        <Modal open title="Job Notification Delegates" onClose={() => setShowDelegatesModal(false)} maxWidth={480}>
           <p style={{ fontSize: 13, color: B.textMid, fontFamily: f2, marginTop: 0, marginBottom: 16 }}>
             These co-admins/managers receive the same withdrawal and cancellation notifications you do for jobs you post.
           </p>
