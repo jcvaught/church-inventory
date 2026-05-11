@@ -298,3 +298,135 @@ The "updated by another team member" banner only activates in the task detail mo
 **Tasks Hub (W1–W20):** All 20 workflows covered. C1: W1,W2,W4,W5,W7,W9,W12. C2: W1,W2,W4,W5,W6,W10,W16,W17. C3: W2,W19. C4: W3,W5,W9,W12,W18. C5: W4,W7,W8,W9,W11. C6: W13,W14,W15. C7: W1,W2,W4,W10,W20.
 
 **Jobs Hub (A–O):** All 15 workflows covered. C1: A,B,C,D,E,F,G. C2: A,B,C,E,F,G,H,I,J,K. C3: C,G,H,I,J,N. C4: D,F,G. C5: B,D,E. C6: K,L,M. C7: A,B,C,D,E,F,G,H,J,O.
+
+---
+
+## Findings — added 2026-05-11 (pre-rollout review)
+
+Triggered by a static review run just before the manual test pass for the 2026-05-06 rollout. The first manual click (+ Post Job) was already broken by a missing `open` prop on the Modal — fixed live (commit 71b127e). To avoid more surprises, three parallel deep-dive reviews were run across `JobsPage.jsx`, the Jobs Cloud Functions, and `firestore.rules` + Jobs CRUD. Findings that did NOT block today's test against the seed church (`6cksNI9Uv8h0jXptdTESnXTXFgF3-church`, which has `config/notifications.enabled = true`) are deferred and logged below. One finding (hard-delete cancellation emails) was high-impact enough to fix in the same session (commit 0370294).
+
+### [HIGH] F-14 — `config/notifications` missing-doc default is "disabled"
+
+**Workflows:** Jobs J (announcement), G (withdraw), H (admin remove), C (co-admin cancel)
+**File:line:** `functions/index.js` — `sendJobAnnouncementEmails` (~line 781) and `sendJobPosterNotification` (~line 1257)
+
+Both CFs gate on `notifSnap.data()?.enabled`. If the church has never visited Settings → Notifications, `config/notifications` doesn't exist; `.data()` is undefined and the `?.` short-circuits to falsy. Every email silently returns `{ sent: 0 }` with no diagnostic.
+
+**Risk:** Fresh churches that haven't opened the notifications setting page never receive Jobs Hub emails. There's no UX hint the toggle exists in an off state by default. Likely to surface as "your app doesn't send emails" support tickets.
+
+**Fix direction:** Treat the missing doc as `enabled: true` (notifications-on is the safer default — users explicitly opted in by enabling the Jobs Hub). Alternatively, write `enabled: true` at church creation time so the doc always exists.
+
+---
+
+### [HIGH] F-15 — `sendJobPosterNotification` double-fire guard timestamp written after sends (race)
+
+**Workflows:** Jobs G (withdraw), H (admin remove), C (co-admin cancel)
+**File:line:** `functions/index.js` — `sendJobPosterNotification` (~line 1267 read, ~line 1357 write)
+
+The 30-second double-fire guard reads `job.lastPosterNotifiedByActors[actorUid]` at the top of the function but only writes the new timestamp via `t.update(...)` AFTER `Promise.allSettled` of all SendGrid calls completes. Two near-simultaneous calls (UI double-click, network retry, parallel CF invocations) both pass the guard read and both fire emails.
+
+**Risk:** Double emails on rapid withdrawal/cancel. The UI debounces via `saving` state in most paths, so frequency is low in practice — but the CF should not depend on client-side debounce.
+
+**Fix direction:** Open a Firestore transaction at the top, read the timestamp, write a new "in-progress" timestamp inside the same transaction, then send emails after the transaction commits. Or simpler: write the timestamp immediately before the SendGrid calls (accept a small window where a crash leaves a stamped doc without sent emails — preferable to double-emailing).
+
+---
+
+### [HIGH] F-16 — `firestore.rules` admin update branch has no field whitelist
+
+**Workflows:** Jobs B (edit), E (delete), F (sign up), H (admin remove)
+**File:line:** `firestore.rules:165` (admin/manager branch of `jobListings/{docId}` update)
+
+The admin/manager update branch is currently `isChurchAdminOrManager(churchId)` with no `affectedKeys().hasOnly([...])` restriction. Any admin client (or compromised admin token) can directly POST `signups`, `waitlist`, `attendance`, `cancellationEmailSentAt`, `lastPosterNotifiedByActors`, etc. — bypassing the transactional helpers in `useFirestore.js` that maintain invariants like:
+- waiver-acknowledgement audit fields preserved across waitlist promotion
+- attendance flips only for the named uid, not stomping the whole array
+- spotsTotal cap enforced
+
+The page-level helpers (`updateJobListing` / `updateJobListingSeries`) already strip server-managed fields before write — defense-in-depth on the rules side is the gap.
+
+**Risk:** Buggy admin client or malicious admin can wipe waiver audit trails, stomp attendance, or bypass spots enforcement. Not a regression — this was the original posture.
+
+**Fix direction:** Tighten the admin branch to `request.resource.data.diff(resource.data).affectedKeys().hasOnly([...editable whitelist])` with explicit exclusions for `signups`, `waitlist`, `attendance`, `createdBy`, `createdByName`, `jobNumber`, `recurrenceGroupId`, `cancellationEmailSentAt`, `lastPosterNotifiedByActors`, `lastReminderSentDate`. Requires careful enumeration and a quick test pass against legitimate admin edit flows before shipping.
+
+---
+
+### [MEDIUM] F-17 — `promoteFromWaitlist` silently swallows email when subscription lapses mid-flow
+
+**Workflows:** Jobs F (signup) → waitlist auto-promotion
+**File:line:** `functions/index.js` — `promoteFromWaitlist` (~line 1454)
+
+The function runs the promotion transaction (moves `waitlist[0]` → `signups`) and only THEN checks `subHasHub(sub, 'jobs')`. If the church's Jobs subscription expired between the original signup and the promotion, the volunteer is silently promoted but never emailed about it.
+
+**Risk:** Volunteer shows up at a job they don't know they're on (or doesn't show up because they never got the email).
+
+**Fix direction:** Check `subHasHub` BEFORE the promotion transaction — if false, refuse to promote and leave the waitlist intact. Or send the email anyway since it's a transactional notice for a person who already opted in (the docstring at line ~1245 explicitly calls the email "transactional" and not gated on the notification toggle for the same reason).
+
+---
+
+### [MEDIUM] F-18 — `signUpForJob` doesn't precheck 50-entry waitlist cap
+
+**Workflows:** Jobs F (signup)
+**File:line:** `src/useFirestore.js:1037-1079`
+
+The transaction checks `signups.length >= spotsTotal` and pushes to `waitlist` if full, but doesn't check the rule's `waitlist.size() > 50` cap. On a full job with 50 already waitlisted, the commit fails with a generic permission-denied that `handleErr` swallows; the user sees a vague "Sign-up failed. Please try again."
+
+**Risk:** Confusing UX in the unlikely 50+ waitlist case.
+
+**Fix direction:** Add `if ((job.waitlist || []).length >= 50) throw new Error('Waitlist is full (50 max).')` in the transaction. Surface a specific error in the catch.
+
+---
+
+### [LOW] F-19 — `jobSwapRequests` create rule doesn't verify caller is signed up to the job
+
+**Workflows:** Jobs F (swap request)
+**File:line:** `firestore.rules:187-191`
+
+Rule only enforces `request.resource.data.uid == request.auth.uid`. A member not signed up to the job can still post a swap request. Rules can't cheaply read another doc's `signups` array, so an enforcement option would be expensive.
+
+**Risk:** Low-impact spam vector. Admins see + dismiss in the job detail modal; ignored swap requests have no side effect.
+
+**Fix direction:** Accept and document the limitation. Alternative: have the client refuse to create the request if `!isSignedUp(job)` (already done at line ~870 of JobsPage); the rule is purely defense-in-depth.
+
+---
+
+### [LOW] F-20 — JobsPage cosmetic noise
+
+**File:line:** various
+
+- `src/pages/hubs/JobsPage.jsx:744` — `isFull` declared as a local `const` inside `handleSignUp`, shadowing the outer derived `isFull` function at line 507. Rename local to `jobIsFull`.
+- `src/pages/hubs/JobsPage.jsx:42` — `JobChip` accepts `todayStr` prop but never uses it. Dead prop.
+- `src/pages/hubs/TasksPage.jsx:973` — stale `eslint-disable react-hooks/exhaustive-deps` comment (ESLint already flags it as unused).
+
+**Fix direction:** Pure cleanup. No functional impact.
+
+---
+
+### Fixed in same session (not deferred)
+
+| ID | What | Commit |
+|---|---|---|
+| F-fix-1 | 4 modals in `JobsPage.jsx` (New/Edit Job, Job Detail, New/Edit Announcement, Delegates) called `<Modal>` without an `open` prop — every click silently rendered nothing. Added `open` shorthand + taught `Modal` to accept a `maxWidth` prop. | 71b127e |
+| F-fix-2 | Sentry's ingest hosts were not in the `connect-src` CSP — error telemetry blocked in prod. Added `https://*.ingest.sentry.io` and `https://*.sentry.io`. | 71b127e |
+| F-fix-3 | `handleDeleteJob`, `handleDeleteSeries`, `handleDeleteSeriesFrom` hard-deleted jobs without firing `sendJobCancelledEmails` — volunteers were silently stranded. The soft-cancel path (status → cancelled) already emails, but Delete didn't. Now confirms with signup count, awaits the CF before the delete commits, and respects the 1-hour CF debounce if a soft-cancel preceded the delete. | 0370294 |
+
+---
+
+### Updated CF Guard Parity Matrix (post-F-14 fix would close all gaps)
+
+| Cloud Function | `subHasHub` | `notifEnabled` | Missing-doc default |
+|---|---|---|---|
+| `sendJobAnnouncementEmails` | ✅ | ❌ client-only **(F-08)** | ❌ silent fail **(F-14)** |
+| `sendJobCancelledEmails` | ✅ | ✅ | ❌ silent fail **(F-14)** |
+| `sendJobReminders` | ✅ | ❌ **(F-04)** | n/a (F-04 covers) |
+| `sendJobPosterNotification` | ❌ **(F-05)** | ✅ | ❌ silent fail **(F-14)** |
+| `promoteFromWaitlist` | ✅ (but post-transaction **(F-17)**) | n/a — transactional by design | n/a |
+
+---
+
+### Priority for next cleanup commit
+
+Recommended order if a single follow-up commit addresses these:
+1. **F-14** (missing-doc default) — broadest user-visible impact; one-line fix per CF
+2. **F-16** (rules whitelist) — biggest security tightening; touches one rule + needs a regression test on admin edit
+3. **F-15** (double-fire race) — small risk, small fix; bundle with F-14
+4. **F-17** (waitlist promotion email) — one-line guard reorder
+5. **F-18, F-19, F-20** — cleanup; can be deferred indefinitely
