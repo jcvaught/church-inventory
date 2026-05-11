@@ -388,6 +388,28 @@ Rule only enforces `request.resource.data.uid == request.auth.uid`. A member not
 
 ---
 
+### [HIGH] F-21 — Admins with empty `allowedHubs` array are excluded from job emails
+
+**Workflows:** Jobs J (announcement broadcast), F (signup confirmations), N (reminders), waitlist promotion
+**File:line:** `functions/index.js:798, 884, 1168, 1216, 1458`
+
+The `allowedHubs` filters in five Cloud Functions distinguish between **absent** and **empty array**:
+- Line 798: `(!u.allowedHubs || u.allowedHubs.includes('jobs'))` — `[]` is truthy so `!u.allowedHubs` is `false`; combined with `[].includes('jobs') === false` → recipient excluded.
+- Lines 884, 1168, 1216, 1458: `if (user.allowedHubs && !user.allowedHubs.includes('jobs'))` — `[]` is truthy, `![]+.includes('jobs')` is `true` → user skipped.
+
+In this codebase, admins are commonly stored with `allowedHubs: []` to mean "all hubs implicit." In Fairfax Church of Christ specifically:
+- John Vaught (admin): `allowedHubs: []` — currently filtered out of all job emails
+- Nancy Vaught (admin): `allowedHubs: []` — same
+- Jill Bitgood (admin): `allowedHubs: [..., 'jobs']` — receives normally
+
+Impact: announcement broadcasts miss 2 of 3 admins; cancelled-job emails, reminders, and waitlist-promotion emails skip those admins if they ever sign up for a job.
+
+**Fix direction:** Bake an `effectiveHasHub(user, 'jobs')` helper into `functions/index.js` that returns `true` if `user.role === 'admin'` OR `allowedHubs` is missing/empty OR `allowedHubs.includes('jobs')`. Replace the five inline filters. Mirror to the Tasks-hub filters (lines 990, 1516) since they share the same pattern.
+
+**Why not fix in this session:** Member A test account was created with `allowedHubs: ['jobs']` and Jill is the announcement-receiving admin, so today's flow won't be affected.
+
+---
+
 ### [LOW] F-20 — JobsPage cosmetic noise
 
 **File:line:** various
