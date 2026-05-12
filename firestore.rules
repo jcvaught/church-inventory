@@ -15,14 +15,18 @@ service cloud.firestore {
     function isChurchAdminOrManager(churchId) { return isMember(churchId) && userIsAdminOrManager(); }
 
     // ── Church parent doc ─────────────────────────────────────────────────────
-    // Any authenticated user can list (needed for join-by-church-code query).
-    // Creator or existing member can get. Only admin can update/delete.
+    // H-02 / Phase D from the 2026-05-12 audit: `allow list` removed. The
+    // join-by-church-code lookup that previously needed list permission is now
+    // routed through the `lookupChurchByCode` callable (functions/index.js) so
+    // the server returns only the matched churchId and no other data. The
+    // self-creator-check at registration uses a direct getDoc on
+    // churches/{creator-uid}-church which is permitted by the `allow get`
+    // self-creator branch below.
     match /churches/{churchId} {
       allow get:    if request.auth != null && (
                       request.auth.uid + '-church' == churchId ||
                       userChurchId() == churchId
                     );
-      allow list:   if request.auth != null;
       allow create: if request.auth != null && request.auth.uid + '-church' == churchId;
       allow update, delete: if isChurchAdmin(churchId);
     }
