@@ -1249,26 +1249,46 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
     throw new HttpsError('permission-denied', 'Not a member of this church.');
   }
 
-  const [notifSnap, subSnap, jobSnap] = await Promise.all([
+  const [notifSnap, subSnap] = await Promise.all([
     db.doc(`churches/${churchId}/config/notifications`).get(),
     db.doc(`churches/${churchId}/config/subscription`).get(),
-    db.doc(`churches/${churchId}/jobListings/${jobDocId}`).get(),
   ]);
   if (!notifSnap.data()?.enabled) return { sent: 0 };
   if (!subHasHub(subSnap.data() || {}, 'jobs')) return { sent: 0 };
-  if (!jobSnap.exists) return { sent: 0 };
-  const job = jobSnap.data();
 
-  // Skip self-notification
-  if (actorUid === job.createdBy) return { sent: 0 };
-
-  // 30-second double-fire guard — scoped per actorUid so concurrent withdrawals from different people aren't suppressed
+  // F-15: read the 30-second double-fire guard AND stamp the timestamp inside
+  // the same transaction so two near-simultaneous calls can't both pass the
+  // guard. Trade-off: if the function crashes between the stamp and the
+  // SendGrid calls, the next 30 seconds of legit retries are suppressed — a
+  // single dropped notification window is preferable to double-emailing.
   const actorKey = actorUid || 'unknown';
-  const lastNotifByActors = job.lastPosterNotifiedByActors || {};
-  const lastNotif = lastNotifByActors[actorKey];
-  if (lastNotif && Date.now() - new Date(lastNotif).getTime() < 30 * 1000) {
-    return { sent: 0, skipped: true };
+  const jobRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}`);
+  let job = null;
+  let guardSkipped = false;
+  try {
+    await db.runTransaction(async (t) => {
+      const snap = await t.get(jobRef);
+      if (!snap.exists) return;
+      const data = snap.data();
+      // Skip self-notification (poster is also the actor)
+      if (actorUid === data.createdBy) { job = null; return; }
+      const lastNotif = (data.lastPosterNotifiedByActors || {})[actorKey];
+      if (lastNotif && Date.now() - new Date(lastNotif).getTime() < 30 * 1000) {
+        guardSkipped = true;
+        return;
+      }
+      // Stamp now, before send. If sends fail, the next retry within 30s
+      // will be suppressed by this stamp; that's the F-15 trade-off.
+      t.update(snap.ref, { [`lastPosterNotifiedByActors.${actorKey}`]: new Date().toISOString() });
+      job = data;
+    });
+  } catch (err) {
+    console.error('sendJobPosterNotification: guard transaction failed', err);
+    Sentry.captureException(err);
+    return { sent: 0, error: 'guard-failed' };
   }
+  if (guardSkipped) return { sent: 0, skipped: true };
+  if (!job) return { sent: 0 };
 
   const posterSnap = await db.doc(`users/${job.createdBy}`).get();
   if (!posterSnap.exists) return { sent: 0 };
@@ -1354,7 +1374,7 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
     recipients.map(u => sgMail.send({ to: u.email, from: FROM, subject, html: bodyHtml, text: bodyText }))
   );
   results.forEach((r, i) => { if (r.status === 'rejected') { console.error('sendJobPosterNotification: failed', { index: i, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
-  await db.doc(`churches/${churchId}/jobListings/${jobDocId}`).update({ [`lastPosterNotifiedByActors.${actorKey}`]: new Date().toISOString() }).catch(() => {});
+  // Timestamp already stamped pre-send inside the F-15 transaction.
   return { sent: results.filter(r => r.status === 'fulfilled').length };
 });
 
