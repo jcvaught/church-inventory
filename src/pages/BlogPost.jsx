@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { B, f1, f2, btnP, btnS } from '../components/brand/tokens.js';
 import { FullLogo } from '../components/brand/Logo.jsx';
 import { SEO } from '../components/SEO.jsx';
@@ -8,48 +10,45 @@ function formatDate(iso) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
-function renderContent(markdown) {
-  const lines = markdown.split('\n');
-  const elements = [];
-  let key = 0;
+const mdStyles = {
+  h2: { fontFamily: f1, fontSize: 22, fontWeight: 700, color: B.navy, margin: '36px 0 14px', lineHeight: 1.3 },
+  h3: { fontFamily: f1, fontSize: 17, fontWeight: 700, color: B.navy, margin: '28px 0 10px', lineHeight: 1.4 },
+  subHeader: { fontSize: 16, fontFamily: f1, fontWeight: 700, color: B.navy, margin: '22px 0 8px', lineHeight: 1.5 },
+  p: { fontSize: 16, color: B.textMid, margin: '0 0 18px', lineHeight: 1.75, wordBreak: 'break-word' },
+  a: { color: B.teal, textDecoration: 'underline', textUnderlineOffset: 2, textDecorationThickness: 1 },
+  ul: { fontSize: 16, color: B.textMid, margin: '0 0 18px', paddingLeft: 24, lineHeight: 1.75 },
+  ol: { fontSize: 16, color: B.textMid, margin: '0 0 18px', paddingLeft: 24, lineHeight: 1.75 },
+  li: { margin: '0 0 8px' },
+  strong: { fontWeight: 700, color: B.navy },
+  em: { fontStyle: 'italic' },
+  blockquote: { borderLeft: `3px solid ${B.teal}`, margin: '22px 0', padding: '4px 0 4px 20px', fontStyle: 'italic', color: B.textMid, fontSize: 17, lineHeight: 1.7 },
+  code: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 14, background: B.sand, padding: '2px 6px', borderRadius: 4, color: B.navy },
+  pre: { background: B.navy, color: B.cream, padding: 16, borderRadius: 8, overflowX: 'auto', fontSize: 14, lineHeight: 1.6, margin: '20px 0' },
+  hr: { border: 'none', borderTop: `1px solid ${B.sand}`, margin: '32px 0' },
+};
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.trim()) {
-      key++;
-      continue;
-    }
-    if (line.startsWith('## ')) {
-      elements.push(
-        <h2 key={key++} style={{
-          fontFamily: f1, fontSize: 22, fontWeight: 700,
-          color: B.navy, margin: '36px 0 14px', lineHeight: 1.3,
-        }}>
-          {line.slice(3)}
-        </h2>
-      );
-    } else if (line.startsWith('### ')) {
-      elements.push(
-        <h3 key={key++} style={{
-          fontFamily: f1, fontSize: 17, fontWeight: 700,
-          color: B.navy, margin: '28px 0 10px', lineHeight: 1.4,
-        }}>
-          {line.slice(4)}
-        </h3>
-      );
-    } else {
-      elements.push(
-        <p key={key++} style={{
-          fontSize: 16, color: B.textMid, margin: '0 0 18px', lineHeight: 1.75, wordBreak: 'break-word',
-        }}>
-          {line}
-        </p>
-      );
-    }
-  }
-
-  return elements;
-}
+const mdComponents = {
+  h2: (props) => <h2 style={mdStyles.h2} {...props} />,
+  h3: (props) => <h3 style={mdStyles.h3} {...props} />,
+  p: ({ node, ...props }) => {
+    const isStrongOnly = node?.children?.length === 1 && node.children[0]?.tagName === 'strong';
+    return <p style={isStrongOnly ? mdStyles.subHeader : mdStyles.p} {...props} />;
+  },
+  a: ({ href, ...props }) => {
+    const isExternal = href?.startsWith('http://') || href?.startsWith('https://');
+    return <a href={href} style={mdStyles.a} {...(isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {})} {...props} />;
+  },
+  ul: (props) => <ul style={mdStyles.ul} {...props} />,
+  ol: (props) => <ol style={mdStyles.ol} {...props} />,
+  li: (props) => <li style={mdStyles.li} {...props} />,
+  strong: (props) => <strong style={mdStyles.strong} {...props} />,
+  em: (props) => <em style={mdStyles.em} {...props} />,
+  blockquote: (props) => <blockquote style={mdStyles.blockquote} {...props} />,
+  code: ({ inline, ...props }) => inline === false
+    ? <pre style={mdStyles.pre}><code {...props} /></pre>
+    : <code style={mdStyles.code} {...props} />,
+  hr: () => <hr style={mdStyles.hr} />,
+};
 
 export function BlogPost({ slug, onGetStarted }) {
   const [w, setW] = useState(window.innerWidth);
@@ -165,7 +164,9 @@ export function BlogPost({ slug, onGetStarted }) {
 
         {/* Content */}
         <div>
-          {renderContent(post.content)}
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+            {post.content}
+          </ReactMarkdown>
         </div>
 
         {/* Divider */}
@@ -193,14 +194,20 @@ export function BlogPost({ slug, onGetStarted }) {
           </button>
         </div>
 
-        {/* Related posts */}
-        {BLOG_POSTS.filter(p => p.slug !== post.slug).length > 0 && (
+        {/* Related posts — 3 most recent */}
+        {(() => {
+          const relatedPosts = BLOG_POSTS
+            .filter(p => p.slug !== post.slug)
+            .slice()
+            .sort((a, b) => b.date.localeCompare(a.date))
+            .slice(0, 3);
+          return relatedPosts.length > 0 && (
           <div style={{ marginTop: 56 }}>
             <h3 style={{ fontFamily: f1, fontSize: 18, fontWeight: 700, color: B.navy, marginBottom: 20 }}>
-              More Articles
+              Keep Reading
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {BLOG_POSTS.filter(p => p.slug !== post.slug).map(related => (
+              {relatedPosts.map(related => (
                 <a key={related.slug} href={`/blog/${related.slug}`} style={{ textDecoration: 'none' }}>
                   <div style={{
                     background: B.white, borderRadius: 12, padding: '20px 24px',
@@ -218,7 +225,8 @@ export function BlogPost({ slug, onGetStarted }) {
               ))}
             </div>
           </div>
-        )}
+          );
+        })()}
       </main>
 
       {/* FOOTER */}

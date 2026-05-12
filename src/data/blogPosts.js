@@ -112,7 +112,7 @@ You can technically run all of this in Google Sheets. People do. The question is
 
 Spreadsheets handle the scheduling part fine. Where they break is everywhere else. Spreadsheets don't text or email — so you have to. Forever. They can't broadcast a slot to a sub list and accept the first response — so you have to. At 9 PM on Saturday. When two volunteers want to trade, in a spreadsheet they ask you, you edit two cells, and you tell them it's done. In software, they do it themselves and you get a notification. When a new person joins the team, in a spreadsheet you collect their info, add them to the list, share the link, maybe forget. In software, they self-register, see the open slots, and sign up. And spreadsheets get attached to one person's account; when they leave, the sheet may or may not get transferred cleanly. Software with proper org-level access doesn't have that problem.
 
-The threshold where software becomes worth it is lower than people think. If you have more than about 20 active volunteers, more than two roles to fill, or more than one weekly service to schedule for, the time you spend on manual coordination will exceed the cost of software within a couple of months.
+The threshold where software becomes worth it is lower than people think. If you have more than about 20 active volunteers, more than two roles to fill, or more than one weekly service to schedule for, the time you spend on manual coordination will exceed the cost of software within a couple of months. If you're shopping, our writeup on [the best church management software for small churches](/blog/best-church-management-software-small-churches) walks through what to evaluate.
 
 ## Common Mistakes That Kill Systems
 
@@ -146,7 +146,7 @@ If you build it well, the question stops being "is the schedule working?" and st
 
 ## Where ChurchOpsHub Fits
 
-ChurchOpsHub is the Run-Your-Church operations platform we build, with hubs for the operations a small-to-mid-sized church actually runs — Inventory, Tasks, Jobs, People Access, Coordination, and more. The Jobs Hub specifically handles volunteer scheduling: volunteers self-sign-up for open slots, accept assignments on their phones, request swaps without going through an admin, and get automated reminders by email and SMS. There's a waitlist with auto-promotion when someone cancels — the recovery problem solved structurally rather than depending on a coordinator at 9 PM on Saturday.
+ChurchOpsHub is the Run-Your-Church operations platform we build, with hubs for the operations a small-to-mid-sized church actually runs — Inventory, Tasks, Jobs, People Access, Coordination, and more. The Jobs Hub specifically handles volunteer scheduling: volunteers self-sign-up for open slots, accept assignments on their phones, request swaps without going through an admin, and get automated reminders by email and SMS. There's a waitlist with auto-promotion when someone cancels — the recovery problem solved structurally rather than depending on a coordinator at 9 PM on Saturday. If your volunteers are also handling church equipment, the [Equipment Accountability piece](/blog/church-volunteer-equipment-accountability) covers the related side of this.
 
 Inventory is free with no time limit. The Jobs Hub is $7/month per church (or part of the $29/month All-In bundle). New churches get a 90-day free trial on every paid hub.
 
