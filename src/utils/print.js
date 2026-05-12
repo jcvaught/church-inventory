@@ -1,4 +1,6 @@
-import QRCode from 'qrcode';
+// Audit overnight 2026-05-12 / Perf #7: qrcode is ~50KB minified and only
+// fires on printLabel (one of many print operations). Dynamic import keeps
+// it out of the main bundle.
 
 export function escapeHtml(str) {
   if (str == null) return '';
@@ -12,6 +14,7 @@ export function escapeHtml(str) {
 
 export async function printLabel(item, churchName) {
   const appUrl = window.location.origin + window.location.pathname.replace(/\/+$/, '') + '?item=' + encodeURIComponent(item.itemId);
+  const { default: QRCode } = await import('qrcode');
   const qrSrc = await QRCode.toDataURL(appUrl, { width: 200, margin: 2 });
   const win = window.open('', '_blank');
   if (!win) return;

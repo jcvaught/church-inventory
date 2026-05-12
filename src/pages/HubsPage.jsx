@@ -1,14 +1,26 @@
-import { useContext } from 'react';
+import { useContext, lazy, Suspense } from 'react';
 import { B, f1, f2, btnP } from '../components/brand/tokens.js';
 import { UpgradeGate } from '../components/primitives/UpgradeGate.jsx';
+import { Spinner } from '../components/primitives/Spinner.jsx';
 import { MobileCtx } from '../hooks/useMobile.js';
-import { InsightsPage } from './hubs/InsightsPage.jsx';
-import { MaintenancePage } from './hubs/MaintenancePage.jsx';
-import { CoordinationPage } from './hubs/CoordinationPage.jsx';
-import { AccountabilityPage } from './hubs/AccountabilityPage.jsx';
-import { PeopleAccessPage } from './hubs/PeopleAccessPage.jsx';
-import { TasksPage } from './hubs/TasksPage.jsx';
-import { JobsPage } from './hubs/JobsPage.jsx';
+
+// Audit overnight 2026-05-12 / Perf #7: hub pages were all eagerly imported,
+// loading recharts + the full Tasks/Insights/People-Access surface even for
+// free-tier inventory-only churches. Lazy-load each hub so the main bundle
+// drops by ~200 KB gzipped and TTI on mobile improves accordingly.
+const InsightsPage      = lazy(() => import('./hubs/InsightsPage.jsx').then(m => ({ default: m.InsightsPage })));
+const MaintenancePage   = lazy(() => import('./hubs/MaintenancePage.jsx').then(m => ({ default: m.MaintenancePage })));
+const CoordinationPage  = lazy(() => import('./hubs/CoordinationPage.jsx').then(m => ({ default: m.CoordinationPage })));
+const AccountabilityPage = lazy(() => import('./hubs/AccountabilityPage.jsx').then(m => ({ default: m.AccountabilityPage })));
+const PeopleAccessPage  = lazy(() => import('./hubs/PeopleAccessPage.jsx').then(m => ({ default: m.PeopleAccessPage })));
+const TasksPage         = lazy(() => import('./hubs/TasksPage.jsx').then(m => ({ default: m.TasksPage })));
+const JobsPage          = lazy(() => import('./hubs/JobsPage.jsx').then(m => ({ default: m.JobsPage })));
+
+const HubLoadingFallback = () => (
+  <div style={{ display:'flex', justifyContent:'center', alignItems:'center', padding:'80px 20px' }}>
+    <Spinner />
+  </div>
+);
 
 const HUB_DEFS = [
   {
@@ -84,14 +96,16 @@ const UPGRADE_PRICES = {
 };
 
 function HubContent({ hubKey, store, userProfile }) {
-  if (hubKey === 'insights') return <InsightsPage store={store} userProfile={userProfile} />;
-  if (hubKey === 'maintenance') return <MaintenancePage store={store} userProfile={userProfile} />;
-  if (hubKey === 'coordination') return <CoordinationPage store={store} userProfile={userProfile} />;
-  if (hubKey === 'accountability') return <AccountabilityPage store={store} userProfile={userProfile} />;
-  if (hubKey === 'people_access') return <PeopleAccessPage store={store} userProfile={userProfile} />;
-  if (hubKey === 'tasks') return <TasksPage store={store} userProfile={userProfile} />;
-  if (hubKey === 'jobs') return <JobsPage store={store} userProfile={userProfile} />;
-  return null;
+  let page = null;
+  if (hubKey === 'insights') page = <InsightsPage store={store} userProfile={userProfile} />;
+  else if (hubKey === 'maintenance') page = <MaintenancePage store={store} userProfile={userProfile} />;
+  else if (hubKey === 'coordination') page = <CoordinationPage store={store} userProfile={userProfile} />;
+  else if (hubKey === 'accountability') page = <AccountabilityPage store={store} userProfile={userProfile} />;
+  else if (hubKey === 'people_access') page = <PeopleAccessPage store={store} userProfile={userProfile} />;
+  else if (hubKey === 'tasks') page = <TasksPage store={store} userProfile={userProfile} />;
+  else if (hubKey === 'jobs') page = <JobsPage store={store} userProfile={userProfile} />;
+  if (!page) return null;
+  return <Suspense fallback={<HubLoadingFallback />}>{page}</Suspense>;
 }
 
 export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscriptionLoading, userCanSeeHub, onGoToSettings }) {

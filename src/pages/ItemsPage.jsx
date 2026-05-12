@@ -13,7 +13,7 @@ import { exportItemsCSV } from '../utils/csv.js';
 import { localDateStr } from '../utils/date.js';
 import { canManageItem } from '../utils/roleHelpers.js';
 import { ITEM_STATUS } from '../utils/constants.js';
-import QRCode from 'qrcode';
+// qrcode imported dynamically in the QR-generation effect below — keeps it out of the main bundle.
 
 function generateId(description, existingIds) {
   const skip = new Set(['a','an','the','of','in','for','and','or','to']);
@@ -75,7 +75,12 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   useEffect(() => {
     if (!showDetail) { setDetailQrUrl(''); return; }
     const itemUrl = window.location.origin + window.location.pathname.replace(/\/+$/, '') + '?item=' + encodeURIComponent(showDetail.itemId);
-    QRCode.toDataURL(itemUrl, { width: 200, margin: 2 }).then(setDetailQrUrl).catch(() => setDetailQrUrl(''));
+    let cancelled = false;
+    import('qrcode').then(({ default: QRCode }) => {
+      if (cancelled) return;
+      QRCode.toDataURL(itemUrl, { width: 200, margin: 2 }).then((u) => { if (!cancelled) setDetailQrUrl(u); }).catch(() => { if (!cancelled) setDetailQrUrl(''); });
+    }).catch(() => { if (!cancelled) setDetailQrUrl(''); });
+    return () => { cancelled = true; };
   }, [showDetail?.itemId]);
 
   // Deep-link: open item from ?item= URL param
