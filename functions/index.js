@@ -443,7 +443,13 @@ function getTwilioClient() {
 }
 const TWILIO_FROM = process.env.TWILIO_FROM_NUMBER || '';
 
-const FROM = { email: 'churchopshub@gmail.com', name: 'ChurchOpsHub' };
+// F-24 from the 2026-05-12 overnight audit: moved sender from the Gmail-as-
+// sender pattern (churchopshub@gmail.com, which Gmail's DMARC p=reject blocks
+// from third-party DKIM alignment) to the SendGrid-authenticated custom domain
+// churchopshub.com. Verified 2026-05-12 with SPF + DKIM + DMARC (p=none) records
+// on Vercel DNS. The previous Gmail Single Sender Verification is intentionally
+// left active in SendGrid as an emergency fallback for ~24h after this deploy.
+const FROM = { email: 'noreply@churchopshub.com', name: 'ChurchOpsHub' };
 
 // Shared hub-access check used by all hub-gating Cloud Functions.
 // Mirrors the client-side hasHub() logic in useSubscription.js.
