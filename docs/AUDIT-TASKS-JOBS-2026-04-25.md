@@ -1,5 +1,38 @@
 # Tasks + Jobs Hub Workflow Audit — 2026-04-25
 
+> ## 📰 Morning Briefing — 2026-05-12 (overnight audit + backlog work)
+>
+> Eight backlog items shipped while you slept (F-fix-12 through F-fix-19) plus two security-tightenings (C-02, C-03). Seven parallel deep-audit agents returned ~80 new findings across security, race conditions, email plumbing, error resilience, mobile/a11y, performance, and data-model integrity. The most pressing items follow.
+>
+> **Tonight's shipped work (eight backlog items):**
+>
+> | Commit | What |
+> |---|---|
+> | 7d14c6a | F-fix-12: F-20 cosmetic cleanup (shadowed isFull, dead JobChip prop, stale eslint comment) |
+> | a3ff40c | F-fix-13: F-18 waitlist 50-cap precheck in signUpForJob |
+> | e230f51 | F-fix-14: F-17 promoteFromWaitlist gates on subscription pre-transaction |
+> | a1801d3 | F-fix-15: F-15 double-fire guard race in sendJobPosterNotification — stamp inside transaction |
+> | 3245c32 | F-fix-16: F-14 missing config/notifications doc defaults to enabled |
+> | d5a1ebc | F-fix-17: F-21 effectiveHasHub helper applied to 7 CF sites (admins with allowedHubs:[] now included) |
+> | 302f1ca | F-fix-18: NEW — C-02 (gate Stripe CFs to admin) + C-03 (sendTaskMentionEmail churchId check) |
+> | b0e20a8 + REST API patch | F-fix-19: F-23 CG indexes deployed for tasks.dueDate + taskTemplates.autoGenerate |
+>
+> **High-priority new findings that need your sign-off before shipping** (rules changes, sender domain swap, data-model migration — I deliberately did not touch these autonomously):
+>
+> 1. **🔴 C-01 (security)** — `firestore.rules` admin-update branch on `users/{uid}` lets an admin change another user's (or own) `churchId` to ANY value → cross-tenant data leak. Add `request.resource.data.churchId == resource.data.churchId` to the admin branch.
+> 2. **🔴 F-22 / D-RC-2 (data model)** — `firestore.rules` member-branch of `jobListings` evaluates `resource.data.signups.size()` directly, which throws on missing fields. Pre-phase job docs (if any exist) silently lock out non-admin signup. Add `'signups' in resource.data && …` guards, or do a one-shot backfill.
+> 3. **🔴 H-02 (security)** — `firestore.rules` `churches` collection has `allow list: if request.auth != null` → any authed user dumps every church code → joins any church. Drop list permission, replace with a CF `lookupChurchByCode`.
+> 4. **🔴 F-24 (email deliverability)** — Sender is `churchopshub@gmail.com`. Gmail's DMARC policy `p=reject` means most messages will go to spam. Move to a custom domain (`noreply@churchopshub.com` with SPF + DKIM + DMARC) before the Jobs Hub rollout reaches its target audience. **Until this is done, deliverability is poor.**
+> 5. **🟠 F-fix-19 confirmation** — Verify the new CG indexes built successfully by checking the next scheduled CF run at 8am Central. Also stamp `completedAt` on `closePastJobs` job updates (see F-RC-3 in the consolidated section).
+>
+> **Pre-rollout recommendation (refined from last night):**
+> 1. Resume UAT §4–§11 in the morning (the eight tonight's fixes should help several sections pass).
+> 2. Apply the four 🔴 items above as a single follow-up commit (rules + sender swap).
+> 3. Pick 2–3 of the highest-leverage items from the consolidated findings below (e.g., handleErr Sentry capture, lazy-load heavy hub pages).
+> 4. Then ship.
+>
+> Full consolidated findings appear in **"Overnight Audit — 2026-05-12 (7-agent parallel review)"** section below. The shipped F-fix-12 through F-fix-19 entries are appended to the Fixed-in-Session table further down.
+
 Scope: All 20 Tasks Hub workflows and 15 Jobs Hub workflows (35 total). Read-only audit across `firestore.rules`, `functions/index.js`, `src/useFirestore.js`, `src/pages/hubs/TasksPage.jsx`, and `src/pages/hubs/JobsPage.jsx`. No code was changed during this audit session.
 
 ## Executive Summary
@@ -467,6 +500,167 @@ Impact: announcement broadcasts miss 2 of 3 admins; cancelled-job emails, remind
 | F-fix-9 | CSP was missing `https://*.cloudfunctions.net` and `https://*.run.app` from `connect-src`, so every `httpsCallable(getFunctions(), …)` invocation was silently blocked browser-side. Cloud Run gen2 logs confirmed zero client-invoked CF activity in the last 24h despite active testing (announcement post in §1, withdrawal in §3) — only scheduled CFs fired. This had been silently broken pre-rollout but went unnoticed because Sentry's CSP was ALSO blocked (F-fix-2) so the errors never surfaced. Discovered during §3 step 7 when the admin withdrawal email never arrived. | 7cf366f |
 | F-fix-10 | Edit Job → Spots field silently clamped 0 (or blank) to 1 via `Math.max(1, ...)` before validation, so users typing 0 to test the "can't reduce below current signups" guard got no error and an apparent no-op save. Added an explicit pre-clamp check that flashes `"Spots must be at least 1."` and aborts save when the raw input is < 1. Discovered during §3 step 8 of the manual test pass. | 7cf4295 |
 | F-fix-11 | Flash banner rendered inline at the top of the JobsPage content (z-index auto). When any Modal was open (Modal uses fixed-position backdrop at z-index 1000), every flash message — including the F-fix-10 "Spots must be at least 1." just shipped — was rendered behind the modal and completely invisible. Made the flash banner fixed-position at the top of the viewport with z-index 1100, centered, with shadow and width clamp for legibility. Discovered immediately after F-fix-10 deploy when user reported "no error message it just doesn't save" with the Spots=0 edit. | aa0f5b1 |
+| F-fix-12 | F-20 cosmetic cleanup: renamed shadowed `isFull` local in `handleSignUp` to `jobIsFull`; removed dead `todayStr` prop from `JobChip` definition + call site; removed stale `eslint-disable react-hooks/exhaustive-deps` from `TasksPage:973`. | 7d14c6a |
+| F-fix-13 | F-18 waitlist 50-cap precheck. `signUpForJob` previously hit a generic permission-denied at the rule layer when the waitlist was at 50; users saw "Sign-up failed. Please try again." Added explicit pre-write check inside the transaction that surfaces "This job is full and the waitlist is at capacity (50 max)." | a3ff40c |
+| F-fix-14 | F-17 `promoteFromWaitlist` now gates on the church's Jobs Hub subscription BEFORE running the promotion transaction. Previously, if the sub lapsed between waitlist join and promotion, the user was silently moved to signups[] without any email. Now returns `{ promoted: false, reason: 'hub-inactive' }`. | e230f51 |
+| F-fix-15 | F-15 double-fire guard race in `sendJobPosterNotification`. The 30s guard timestamp was written AFTER `Promise.allSettled` sends, so two near-simultaneous calls both passed the read-guard and both fired emails. Moved the read+stamp into a Firestore transaction at the top of the function. Trade-off: a single dropped notification on SendGrid failure inside the 30s window, in exchange for no double-emails on rapid clicks. | a1801d3 |
+| F-fix-16 | F-14 `config/notifications` missing-doc default. Five CFs gated on `notifSnap.data()?.enabled` which evaluates falsy for a missing doc, so fresh churches that never opened the settings page received ZERO emails. Now default-on: only an explicit `enabled: false` disables. Sites updated: `sendJobAnnouncementEmails`, `sendJobPosterNotification`, `sendTaskMentionEmail`, plus both `notifEnabled` / `jobNotifEnabled` cache helpers. | 3245c32 |
+| F-fix-17 | F-21 `effectiveHasHub(user, hubName)` helper. Replaces the `(!u.allowedHubs \|\| u.allowedHubs.includes(hub))` / `(u.allowedHubs && !u.allowedHubs.includes(hub))` patterns across 7 sites. Admins are now always considered to have access (even with `allowedHubs: []`). John and Nancy were previously excluded from all job emails because of this. | d5a1ebc |
+| F-fix-18 | **NEW (from overnight security audit, not in original deferred list)** — C-02: `createCheckoutSession` and `createPortalSession` only required `req.auth`. Any user could open the Stripe billing portal and cancel the subscription. Now require `role === 'admin'`. C-03: `sendTaskMentionEmail` accepted arbitrary `churchId` from the caller without verifying membership — enabled cross-tenant phishing under the ChurchOpsHub sender brand. Now verifies caller is a member of churchId, and skips mentioned users whose churchId doesn't match. | 302f1ca |
+| F-fix-19 | F-23 missing CG indexes. `firestore.indexes.json` declared a COLLECTION_GROUP fieldOverride for `tasks.dueDate`, but `firebase deploy --only firestore:indexes` silently no-op'd applying it (matches the project's known `feedback_firebase_collection_index` pitfall). Patched directly via the Firestore Admin REST API using gcloud auth tokens. Added a `taskTemplates.autoGenerate` override to indexes.json for consistency + applied the same way. Will fix the daily 8am `sendTaskDueReminders` + `generateRecurringTemplateTasks` FAILED_PRECONDITION errors. | b0e20a8 + REST API patch |
+
+---
+
+## Overnight Audit — 2026-05-12 (7-agent parallel review)
+
+Seven specialized review agents ran in parallel on `~/apps/church-inventory` while the user slept. Each focused on one dimension. Combined ~80 new findings; the top severity items are listed here. Less-severe and confidence-flagged items are in the individual agent transcripts (not included in this doc due to length — pull from the tool-run history if needed).
+
+> **Numbering note:** The agents independently coined F-numbers (F-23 SendGrid, F-24 Gmail-sender, F-25–F-40 email, C-01–C-03 security, H-01–H-04, M-01–M-08, L-01–L-04). To avoid collision with this doc's existing F-14 through F-21 (and the morning-briefing references to F-22 / F-23 / F-24), I've **preserved the agents' numbering inside their sections** rather than renumber globally. References in the morning briefing use the agents' original tags.
+
+### A. Security & multi-tenant isolation
+
+#### 🔴 C-01 — Admin can move users (or self) into another church via churchId update
+`firestore.rules:264-278`. Admin-update branch on `users/{uid}` only checks `userChurchId() == resource.data.churchId` (existing doc's church), NOT `request.resource.data.churchId == resource.data.churchId`. Admin in church A writes `{ churchId: '<churchB-id>' }` on themselves → next auth check makes them an admin in church B → read/write all of B's data. **Fix needs your sign-off — touches rules.**
+
+#### 🔴 C-02 — Stripe CFs not role-gated → SHIPPED in F-fix-18
+Previously any user could open the billing portal and cancel the subscription.
+
+#### 🔴 C-03 — `sendTaskMentionEmail` accepts arbitrary churchId → SHIPPED in F-fix-18
+
+#### 🟠 H-01 — `sendReservationEmail` + `sendTicketAssignedEmail` are unscoped email oracles
+Both only require `req.auth` and accept arbitrary `toEmail`/template variables. Phishing relay primitive. **Fix:** add `churchId` param + caller membership check + role gate + recipient-in-church check.
+
+#### 🟠 H-02 — `churches` collection fully listable
+`firestore.rules:25` allows `list` to any authed user. They can dump every church code → join any church via signup flow. **Fix:** drop list permission, replace with `lookupChurchByCode` CF.
+
+#### 🟠 H-03 — `?invite=CODE&hubs=...` lets joiner self-set `allowedHubs`
+`src/App.jsx:57-63`. The user-create rule doesn't validate `allowedHubs`. A teen registering with crafted URL can opt into hubs the admin didn't grant. Constrained by church-level subscription, but defeats the per-user hub gate. **Fix:** drop the `hubs` URL param OR validate at create-time.
+
+#### 🟠 H-04 — Admin-update branch on `users/{uid}` allows changing other users' `email`/`role`/`active`/`name`
+Same field-whitelist gap as F-16 (jobListings). Admin can rewrite a user's `email`, propagating into the email CFs that read `user.email` server-side. **Fix needs sign-off — rules change.**
+
+### B. Race conditions & concurrency
+
+#### 🔴 F-RC-1 — `removePeopleAccessRequirement` read-then-write outside transaction
+`useFirestore.js:839-847`. Two admins removing two different requirements concurrently → second write resurrects the first removal. **Fix:** wrap in `runTransaction`.
+
+#### 🔴 F-RC-2 — `handleReorder` kanban drag fans out N parallel writes
+`TasksPage.jsx:1499`. Two users reordering same column concurrently → inconsistent sortOrder integers. **Fix:** use `writeBatch` for atomic per-column update.
+
+#### 🟠 F-RC-3 — `withdrawFromJob` → `promoteFromWaitlist` fire-and-forget
+`JobsPage.jsx:862-869`. If the user closes the tab between the withdrawal commit and the CF call, the promotion never fires. **Fix:** `await` the CF call (already in try/catch).
+
+#### 🟠 F-RC-4 — `processTrialExpirations` non-atomic vs. Stripe webhook
+`functions/index.js:541-588`. Cron read-validate-update can race with a webhook write to the same sub doc. **Fix:** wrap in `runTransaction`.
+
+#### 🟠 F-RC-6 — `generateRecurringTemplateTasks` not idempotent
+`functions/index.js:1583-1616`. The task-creation transaction commits, then the template's `autoGenerateNextAt` is updated. A crash between → cron retry creates a duplicate task. **Fix:** move the template advance inside the same transaction.
+
+### C. Email + SMS plumbing
+
+#### 🔴 F-23 (agent's numbering, NOT this doc's F-23) — `sendJobCancelledEmails` 1-hour debounce can suppress legitimate notifications
+`functions/index.js:863-905`. `cancellationEmailSentAt` is never cleared on `status: cancelled → open` transitions. Re-cancel within 1 hour → new signups silently never notified. **Fix:** clear the timestamp on the open transition OR drop the debounce.
+
+#### 🔴 F-24 — Gmail-from sender → spam-folder delivery risk
+`functions/index.js:415`. `from: 'churchopshub@gmail.com'` cannot DMARC-align because `gmail.com` publishes `p=reject`. ~50%+ of messages will land in spam, especially at Microsoft/Outlook addresses. **Fix:** move sender to custom domain with SPF + DKIM + DMARC. THE biggest deliverability risk in the audit.
+
+#### 🟠 F-26 — No `List-Unsubscribe` headers on any email
+Gmail bulk-sender requirements (Feb 2024) require this for any sender. Spam-score risk + future-volume compliance risk.
+
+#### 🟠 F-32 — Waitlist users not emailed on cancellation
+`sendJobCancelledEmails` only emails `signups[]`. Waitlisted teens sit on a dead waitlist forever.
+
+#### 🟡 F-39 — `sendTicketAssignedEmail` subject lies when fired from TasksPage
+Subject says "Maintenance Ticket Assigned — TSK-042" — wrong hub. **Fix:** add `kind` field, branch subject.
+
+### D. Error resilience
+
+#### 🔴 #1 (handleErr) — `useFirestore.js` chokepoint missing Sentry capture
+Single helper that runs after every Firestore write swallows errors via `console.error` only. Sentry's `captureConsole` catches the string but loses stack/code. Adding `Sentry.captureException(err)` in `handleErr` instruments ~80 mutations at once — biggest leverage.
+
+#### 🔴 #2 — `createNextRecurringTask` rollback path has no Sentry
+`TasksPage.jsx:1104-1138`. If both the task create AND rollback fail, the source task is permanently marked "next created" and the recurrence silently drops forever.
+
+#### 🟠 #3 — Every `httpsCallable(...).catch(...)` in JobsPage is console-only
+9+ instances. F-22 played out exactly this way — every email "send" silently failed for months because the telemetry was console-only.
+
+#### 🟠 #11 — `useSubscription` `onSnapshot` swallows errors
+If the subscription doc gets permission-denied, the app falls back to "free plan" silently — paying customer locked out without alerting.
+
+#### 🟠 #13 — No Firestore offline persistence enabled
+`src/firebase.js:22` uses `getFirestore(app)` defaults. PWA users on flaky cell connectivity get no offline mode. `runTransaction` writes fail outright when offline.
+
+### E. Mobile UX + accessibility
+
+#### 🔴 C-1 — Admin ✕ buttons in roster are 22×16pt (under 44pt)
+Mis-tap rate will be high. Admins managing teen rosters from phones will accidentally remove the wrong teen.
+
+#### 🔴 C-2 — Job detail action row collapses to 3+ rows on small phones
+5–7 buttons including Delete buttons immediately adjacent to Edit. **Fix:** move destructive actions into a "More…" overflow on mobile.
+
+#### 🔴 C-3 — Flash messages ignore `env(safe-area-inset-top)`
+Notched iPhones hide success/error feedback behind the URL bar.
+
+#### 🟠 H-3 — Mobile bottom nav overflows: Hubs/Settings off-screen on iPhones < 400px
+**This is the single biggest mobile-blocker for the Jobs Hub rollout** — teens can't reach the Job Hub from the bottom nav without realizing they need to swipe.
+
+#### 🟠 H-1 — Modal lacks focus trap, Escape handler, and `role="dialog"`/`aria-modal`
+Combined with the F-fix-11 z-index fix this means modals work but aren't accessible.
+
+#### 🟠 H-6 — Required form fields lack `aria-required` / `aria-invalid` / `htmlFor`
+Pervasive — every form in the app is affected.
+
+### F. Performance & data scale
+
+#### 🔴 #1 (activityLog) — Unbounded `onSnapshot` subscription
+`useFirestore.js:73-78`. ~36k docs after 2 years at 50 actions/day. Every member loading the app pays full-collection-read cost. **Top perf win:** paginate to `limit(100)`. ~30 min of work, cuts mount reads 99% for aging churches.
+
+#### 🔴 #1 (jobListings) — Same pattern
+~520 docs over 2 years of weekly-recurring. **Fix:** filter to `scheduledDate >= sixMonthsAgo`.
+
+#### 🔴 #3 (signups[] array bloat) — 200+ signup-rewrite contention
+Every signup/withdraw rewrites the whole array. At ~6,500 entries hits the 1MB doc limit. **Fix at scale:** move to subcollection with `signupCount` denormalized.
+
+#### 🔴 #4 — `sendTaskDueReminders` reads every task across all tenants daily
+No status filter or upper-bound date floor. At 1k churches this is a real Firestore bill.
+
+#### 🟠 #7 — Bundle size: lazy-load `recharts`, `qrcode`, and hub pages
+~213 KB gzipped reduction possible.
+
+### G. Data model integrity
+
+#### 🔴 #1 — Series-deletes don't clean up linked-task back-refs
+`useFirestore.js:1008-1036`. `deleteJobListing` cleans `linkedTaskDocId`; `deleteJobListingSeries` and `deleteJobListingSeriesFrom` don't. Linked tasks keep stale `linkedJobDocId` after series wipe.
+
+#### 🔴 #2 — `firestore.rules` member-branch reads `resource.data.signups.size()` without `'signups' in` guard
+Pre-phase jobs missing the field permanently lock out non-admin signups. **Fix needs sign-off — rules change.** Combined backfill of `signups: []`, `waitlist: []`, `requiredAccessTypes: []`, `requiresWaiver: false` on legacy docs is the safe path.
+
+#### 🟠 #5 — Strip-list drift between `updateJobListing` and `updateJobListingSeries`
+Two functions strip the same 8 fields by hand. Any new server-managed field WILL be missed. **Fix:** extract `SERVER_MANAGED_JOB_FIELDS` constant.
+
+---
+
+## Prioritized Fix Queue (post-overnight, for next session)
+
+Items that need user sign-off (rules / sender / data migration):
+1. **C-01 + H-04 + Data model #2** — Bundle into one rules-tightening commit: pin churchId on admin update, add field whitelist to user admin update, add `'signups' in` guards on jobListings member rule, drop churches list permission. Test against existing UAT flow before merging.
+2. **F-24 sender domain swap** — Pre-launch deliverability gate. Custom domain + SPF/DKIM/DMARC. ~1–2 hours of DNS + SendGrid Domain Authentication setup.
+3. **Pre-phase jobs backfill** — One-shot Node script using Admin SDK to write defaults for legacy job docs.
+
+Items I'm comfortable shipping autonomously in a follow-up batch (next session) if you give the go-ahead:
+4. F-RC-1 (`removePeopleAccessRequirement` txn)
+5. F-RC-3 (`promoteFromWaitlist` await)
+6. F-RC-6 (`generateRecurringTemplateTasks` template advance in same txn)
+7. F-RC-4 (`processTrialExpirations` txn)
+8. F-23/agent (cancellationEmailSentAt clear on open transition)
+9. F-32 (waitlist users emailed on cancellation)
+10. F-39 (sendTicketAssignedEmail kind field)
+11. handleErr Sentry capture
+12. F-fix-19 verification (check 8am CT next run)
+13. Bundle splitting (lazy-load hub pages + recharts + qrcode)
+14. activityLog pagination
+
+Mobile/a11y items (H-3 bottom-nav, C-1 ✕ buttons, H-1 modal focus trap, etc.) — bundle into a dedicated "Mobile rollout-readiness" commit. Lower risk but multi-file UX work.
 
 ---
 
