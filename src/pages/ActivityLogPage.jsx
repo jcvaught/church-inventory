@@ -3,6 +3,11 @@ import { B, f1, inp, btnS } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { actionLabels, actionIcons, actionColors } from '../utils/activityLabels.js';
 
+// Audit overnight 2026-05-12 / Perf #1: the activityLog subscription is
+// capped at 100 most-recent entries to avoid unbounded reads. Older entries
+// load on demand via store.loadOlderActivityLog when the user clicks the
+// "Load older" button below.
+
 const ACTION_HUB = {
   add_item: "Inventory", edit_item: "Inventory", check_out: "Inventory", return: "Inventory", dispose: "Inventory", delete_item: "Inventory", mark_repair: "Inventory", mark_repaired: "Inventory",
   add_supply: "Supplies", edit_supply: "Supplies", use_supply: "Supplies", restock: "Supplies", delete_supply: "Supplies",
@@ -12,7 +17,7 @@ const ACTION_HUB = {
 };
 
 export function ActivityLogPage({ store }) {
-  const { activityLog } = store;
+  const { activityLog, loadOlderActivityLog } = store;
   const isMobile = useContext(MobileCtx);
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
@@ -21,12 +26,36 @@ export function ActivityLogPage({ store }) {
   const [dateTo, setDateTo] = useState("");
   const [expanded, setExpanded] = useState(null);
   const [page, setPage] = useState(0);
+  const [olderEntries, setOlderEntries] = useState([]);   // appended pages of older entries
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [reachedEnd, setReachedEnd] = useState(false);
   const perPage = 25;
 
+  // Merge the live (capped-at-100) feed with whatever older pages the user
+  // has explicitly loaded. Dedupe by _docId in case an entry briefly appears
+  // in both as the live cap shifts.
+  const allEntries = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const e of activityLog) { if (e._docId && !seen.has(e._docId)) { seen.add(e._docId); out.push(e); } }
+    for (const e of olderEntries) { if (e._docId && !seen.has(e._docId)) { seen.add(e._docId); out.push(e); } }
+    return out;
+  }, [activityLog, olderEntries]);
 
-  const uniqueActions = useMemo(() => [...new Set(activityLog.map(l => l.action))].sort(), [activityLog]);
+  async function handleLoadOlder() {
+    if (loadingOlder || reachedEnd) return;
+    const oldest = allEntries[allEntries.length - 1];
+    if (!oldest?.timestamp) { setReachedEnd(true); return; }
+    setLoadingOlder(true);
+    const next = await loadOlderActivityLog(oldest.timestamp, 100);
+    setLoadingOlder(false);
+    if (next.length === 0) { setReachedEnd(true); return; }
+    setOlderEntries(prev => [...prev, ...next]);
+  }
 
-  const filtered = useMemo(() => activityLog.filter(l => {
+  const uniqueActions = useMemo(() => [...new Set(allEntries.map(l => l.action))].sort(), [allEntries]);
+
+  const filtered = useMemo(() => allEntries.filter(l => {
     if (search) {
       const s = search.toLowerCase();
       if (!(l.itemId||"").toLowerCase().includes(s) &&
@@ -39,7 +68,7 @@ export function ActivityLogPage({ store }) {
     if (dateFrom && (l.timestamp||"").split("T")[0] < dateFrom) return false;
     if (dateTo && (l.timestamp||"").split("T")[0] > dateTo) return false;
     return true;
-  }), [activityLog, search, actionFilter, hubFilter, dateFrom, dateTo]);
+  }), [allEntries, search, actionFilter, hubFilter, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const safePage = Math.min(page, totalPages - 1);
@@ -163,6 +192,20 @@ export function ActivityLogPage({ store }) {
             <button disabled={safePage===0} onClick={()=>setPage(safePage-1)} style={{ ...btnS, padding:"6px 14px", fontSize:12, opacity:safePage===0?.5:1 }}>← Prev</button>
             <span style={{ fontSize:13, color:B.textMid, fontFamily:f1 }}>Page {safePage+1} of {totalPages}</span>
             <button disabled={safePage>=totalPages-1} onClick={()=>setPage(safePage+1)} style={{ ...btnS, padding:"6px 14px", fontSize:12, opacity:safePage>=totalPages-1?.5:1 }}>Next →</button>
+          </div>
+        )}
+
+        {/* Load older entries from Firestore (one-shot, no real-time) */}
+        {!reachedEnd && safePage >= totalPages - 1 && (
+          <div style={{ display:"flex", justifyContent:"center", padding:"12px 22px", borderTop: totalPages > 1 ? "none" : "1px solid "+B.sand }}>
+            <button onClick={handleLoadOlder} disabled={loadingOlder} style={{ ...btnS, padding:"8px 18px", fontSize:13, opacity: loadingOlder ? 0.6 : 1 }}>
+              {loadingOlder ? "Loading…" : "Load older entries"}
+            </button>
+          </div>
+        )}
+        {reachedEnd && (
+          <div style={{ textAlign:"center", padding:"12px 22px", fontSize:12, color:B.textLight, fontFamily:f1, borderTop: totalPages > 1 ? "none" : "1px solid "+B.sand }}>
+            End of activity log
           </div>
         )}
       </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   doc, setDoc, getDoc, deleteDoc, getDocs,
-  collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction, writeBatch
+  collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction, writeBatch, startAfter
 } from 'firebase/firestore';
 import * as Sentry from '@sentry/react';
 import { db, storage } from './firebase.js';
@@ -78,13 +78,20 @@ export function useFirestore(churchId) {
       checkDone();
     }, (err) => { handleErr(err); checkDone(); }));
 
-    // Activity Log
-    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'activityLog'), (snap) => {
-      const logs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
-      logs.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
-      setActivityLog(logs);
-      checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    // Activity Log — capped at 100 most-recent entries to avoid unbounded
+    // reads as churches age. Audit overnight 2026-05-12 / Perf #1:
+    // unbounded subscription was costing ~14M reads/month for a 2-year-old
+    // 100-user church on app-mount alone. The page's "Load older" button
+    // calls loadOlderActivityLog() below for one-shot deeper fetches.
+    unsubs.push(onSnapshot(
+      query(collection(db, 'churches', churchId, 'activityLog'), orderBy('timestamp', 'desc'), limit(100)),
+      (snap) => {
+        const logs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+        setActivityLog(logs);
+        checkDone();
+      },
+      (err) => { handleErr(err); checkDone(); }
+    ));
 
     // Reservations
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'reservations'), (snap) => {
@@ -1205,10 +1212,29 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
+  // Pair with the capped activityLog subscription. Returns the next N
+  // entries strictly OLDER than the supplied beforeTimestamp via a one-shot
+  // getDocs (no live updates — those would re-introduce the unbounded-read
+  // cost the cap exists to prevent).
+  const loadOlderActivityLog = useCallback(async (beforeTimestamp, batchSize = 100) => {
+    if (!churchId || !beforeTimestamp) return [];
+    try {
+      const q = query(
+        collection(db, 'churches', churchId, 'activityLog'),
+        orderBy('timestamp', 'desc'),
+        startAfter(beforeTimestamp),
+        limit(batchSize)
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+    } catch (err) { handleErr(err); return []; }
+  }, [churchId]);
+
   return {
     config, settings, items, supplies, activityLog, reservations, users,
     maintenanceTickets, vendors, bundles, notificationConfig, audits, tasks,
     loading, error,
+    loadOlderActivityLog,
     updateSettings, updateConfig,
     addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem,
     addSupply, updateSupply, useSupply, restockSupply, deleteSupply,
