@@ -388,6 +388,36 @@ Rule only enforces `request.resource.data.uid == request.auth.uid`. A member not
 
 ---
 
+### [HIGH] F-22 — SendGrid 403 Forbidden on all transactional emails
+
+**Workflows:** all CFs that call `sgMail.send`
+**File:line:** `functions/index.js:415` (sender config), surfaced in `sendJobPosterNotification` (~line 1355)
+
+After F-fix-9 unblocked the CSP and CFs started actually invoking, the first job-poster-notification call returned `Error: Forbidden` from `@sendgrid/client`. Sentry captured it; Cloud Run logs confirm: `sendJobPosterNotification: failed { index: 0, reason: 'Forbidden' }` at 2026-05-12T00:31:20 UTC.
+
+This affects every transactional email path: welcome, trial expiry, reservation, ticket assignment, job announcement broadcast, job cancellation, job poster notification, waitlist promotion, task mention, task due reminders, job reminders.
+
+Most likely cause: SendGrid Single Sender Verification on `churchopshub@gmail.com` is no longer valid (expired, revoked, or never re-verified after a SendGrid policy change). Less likely: API key in `functions/.env` lost its `mail.send` scope.
+
+**Risk:** Zero outbound email until fixed. The Jobs Hub rollout was about to ship in this state — every notification path silently broken because the Sentry CSP block (F-fix-2) hid the failures until just now.
+
+**Fix direction:** Admin action, no code change. In SendGrid dashboard → Sender Authentication → re-verify `churchopshub@gmail.com`. Confirm the API key in `functions/.env` has `mail.send` full-access scope. Smoke-test by triggering one withdrawal email.
+
+---
+
+### [MEDIUM] F-23 — Scheduled CFs failing with FAILED_PRECONDITION (likely missing index)
+
+**Workflows:** task due reminders (8am Central), recurring template generation (8am Central)
+**File:line:** `functions/index.js` — `sendTaskDueReminders` (~line 910), `generateRecurringTemplateTasks`
+
+Today's 13:00 UTC scheduled batch failed with `Error: 9 FAILED_PRECONDITION` on both `sendtaskduereminders` and `generaterecurringtemplatetasks`. Per CLAUDE.md feedback (`feedback_index_deploy_rules`), this matches the pattern of a missing collectionGroup composite index — likely deployed-then-blown-away by a `firestore:rules`-only deploy.
+
+**Risk:** Members not getting task due reminders; recurring task templates not spawning instances. Tangential to the Jobs Hub rollout but worth checking.
+
+**Fix direction:** `gcloud logging read` the exact precondition message to identify which query and which index is missing, then deploy the index via `gcloud firestore indexes composite create …` per the project's pattern (avoiding `firebase deploy --only firestore:indexes` per the known no-op CG-vs-collection bug).
+
+---
+
 ### [HIGH] F-21 — Admins with empty `allowedHubs` array are excluded from job emails
 
 **Workflows:** Jobs J (announcement broadcast), F (signup confirmations), N (reminders), waitlist promotion
