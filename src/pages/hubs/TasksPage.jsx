@@ -970,7 +970,7 @@ export function TasksPage({ store, userProfile }) {
       }
     );
     return () => { unsub(); setRemoteUpdate(null); };
-  }, [showDetail?._docId, churchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showDetail?._docId, churchId]);
 
   // ── Dirty-state tracking ──
   const isDetailDirtyNow = useMemo(() => {

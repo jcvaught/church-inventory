@@ -39,7 +39,7 @@ const emptyAnn = () => ({ title: '', body: '', expiresAt: '', pinned: false, rep
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-const JobChip = memo(function JobChip({ job, onJobClick, todayStr }) {
+const JobChip = memo(function JobChip({ job, onJobClick }) {
   const sc = JOB_STATUS_COLORS[job.status] || JOB_STATUS_COLORS.open;
   const filled = (job.signups || []).length;
   const total = job.spotsTotal || 1;
@@ -179,7 +179,7 @@ function JobCalendar({ jobs, onJobClick, isMobile, todayStr: todayStrProp }) {
             <div key={idx}
               style={{ minHeight:88, background:day.isCurrentMonth ? B.white : '#F8F8FA', borderRadius:8, border:'1px solid '+(isToday ? B.teal : B.sand), padding:'5px 6px', outline:isToday ? '2px solid '+B.teal : 'none', outlineOffset:'-1px' }}>
               <div style={{ fontSize:12, fontWeight:isToday ? 800 : 500, color:isToday ? B.teal : day.isCurrentMonth ? B.textDark : B.textLight, fontFamily:f1, marginBottom:3, textAlign:'right' }}>{day.date.getDate()}</div>
-              {(isExpanded ? dayJobs : visible).map(j => <JobChip key={j._docId} job={j} todayStr={todayStr} onJobClick={onJobClick}/>)}
+              {(isExpanded ? dayJobs : visible).map(j => <JobChip key={j._docId} job={j} onJobClick={onJobClick}/>)}
               {!isExpanded && overflow > 0 && (
                 <button
                   onClick={() => setExpandedDay(ds)}
@@ -810,9 +810,9 @@ export function JobsPage({ store, userProfile }) {
     // want to join the waitlist before running compliance/waiver gates.
     // Avoids the confusing "you need a Background Check" error for a job they
     // wouldn't have fit into anyway (Jobs Hub audit #11).
-    const isFull = (job.signups || []).length >= (job.spotsTotal || 1);
+    const jobIsFull = (job.signups || []).length >= (job.spotsTotal || 1);
     const onWaitlistAlready = (job.waitlist || []).some(w => w.uid === userId);
-    if (isFull && !onWaitlistAlready) {
+    if (jobIsFull && !onWaitlistAlready) {
       const wl = (job.waitlist || []).length;
       if (wl >= 50) {
         flash('This job is full and the waitlist is at capacity.', true);
