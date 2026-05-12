@@ -235,7 +235,15 @@ function SpotsBar({ job }) {
 }
 
 const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJobId, signed, full, onWaitlist, showRoster, onDetail, onWithdraw, onSignUp }) {
+  // M-3 from the 2026-05-12 audit: skip hover affordances on mobile.
+  // Otherwise a tap triggers onMouseEnter and the card stays in "hover"
+  // state ("stuck hover") until the user taps elsewhere.
+  const isMobile = useContext(MobileCtx);
   const overdue = job.scheduledDate && job.scheduledDate < todayStr && job.status === 'open';
+  const hoverHandlers = isMobile ? {} : {
+    onMouseEnter: (e) => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(27,42,74,0.1)'; },
+    onMouseLeave: (e) => { e.currentTarget.style.boxShadow = 'none'; },
+  };
   return (
     <div
       role="button" tabIndex={0}
@@ -243,8 +251,7 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJ
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDetail(job); } }}
       aria-label={`${job.title} — ${job.status}`}
       style={{ background: B.white, borderRadius: 14, border: '1px solid ' + (overdue ? '#FECACA' : B.sand), padding: 18, cursor: 'pointer', transition: 'box-shadow 0.15s' }}
-      onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(27,42,74,0.1)'}
-      onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+      {...hoverHandlers}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <div style={{ display:'flex', alignItems:'center', gap:6 }}>
           <span style={{ fontSize: 11, fontFamily: 'monospace', color: B.textLight, background: B.warmGray, padding: '2px 6px', borderRadius: 4 }}>{job.jobNumber}</span>
@@ -1032,11 +1039,13 @@ export function JobsPage({ store, userProfile }) {
 
   return (
     <div>
-      {/* Flash messages — fixed-position so they appear above modals (z-index 1100 > Modal's 1000) */}
+      {/* Flash messages — fixed-position so they appear above modals (z-index 1100 > Modal's 1000).
+          C-3 from the 2026-05-12 audit: top offset uses env(safe-area-inset-top) so notched iPhones
+          don't hide the banner behind the URL bar / notch. */}
       {msg && (
-        <div style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', zIndex:1100, maxWidth:'min(560px, calc(100vw - 32px))', minWidth:'280px', display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError?'#FEE8E8':B.tealPale, border:`1px solid ${msg.isError?'#FECACA':B.tealLight}`, borderRadius:10, padding:'10px 16px', fontSize:14, fontWeight:600, color:msg.isError?B.red:B.teal, boxShadow:'0 4px 16px rgba(27,42,74,0.18)' }}>
+        <div style={{ position:'fixed', top:'calc(env(safe-area-inset-top, 0px) + 16px)', left:'50%', transform:'translateX(-50%)', zIndex:1100, maxWidth:'min(560px, calc(100vw - 32px))', minWidth:'280px', display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError?'#FEE8E8':B.tealPale, border:`1px solid ${msg.isError?'#FECACA':B.tealLight}`, borderRadius:10, padding:'10px 16px', fontSize:14, fontWeight:600, color:msg.isError?B.red:B.teal, boxShadow:'0 4px 16px rgba(27,42,74,0.18)' }}>
           <span>{msg.text}</span>
-          <button onClick={()=>setMsg(null)} aria-label="Dismiss message" style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button>
+          <button onClick={()=>setMsg(null)} aria-label="Dismiss message" style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:18, lineHeight:1, marginLeft:8, padding:'6px 10px', fontWeight:700 }}>&times;</button>
         </div>
       )}
 
@@ -1048,11 +1057,13 @@ export function JobsPage({ store, userProfile }) {
         </div>
       )}
 
-      {/* View tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+      {/* View tabs — H-4 from the 2026-05-12 audit: on mobile use a single
+          horizontal-scroll row instead of wrap-to-N-rows so we don't push
+          content way below the fold. */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: isMobile ? 'nowrap' : 'wrap', overflowX: isMobile ? 'auto' : 'visible', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', paddingBottom: isMobile ? 4 : 0 }}>
         {[['jobs', '💼 Job Board'], ['schedule', '📋 Schedule'], ['calendar', '📅 Calendar'], ['announcements', '📢 Announcements'], ...(isAdminOrManager ? [['reports', '📊 Reports']] : [])].map(([v, label]) => (
           <button key={v} onClick={() => setView(v)}
-            style={{ padding: '8px 18px', borderRadius: 20, border: '1px solid ' + (view === v ? B.teal : B.sand), background: view === v ? B.tealPale : B.white, color: view === v ? B.teal : B.textMid, fontFamily: f1, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            style={{ padding: '8px 18px', borderRadius: 20, border: '1px solid ' + (view === v ? B.teal : B.sand), background: view === v ? B.tealPale : B.white, color: view === v ? B.teal : B.textMid, fontFamily: f1, fontWeight: 700, fontSize: 13, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
             {label}
           </button>
         ))}
@@ -1063,10 +1074,10 @@ export function JobsPage({ store, userProfile }) {
         <div>
           {/* Toolbar */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', gap: 6, flex: 1, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 6, flex: 1, flexWrap: isMobile ? 'nowrap' : 'wrap', overflowX: isMobile ? 'auto' : 'visible', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
               {[['mine','My Jobs'],['open','Open'],['closed','Closed'],['completed','Completed'],['cancelled','Cancelled'],['all','All']].map(([v, label]) => (
                 <button key={v} onClick={() => setStatusFilter(v)}
-                  style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid ' + (statusFilter === v ? B.teal : B.sand), background: statusFilter === v ? 'rgba(42,125,110,0.1)' : B.white, color: statusFilter === v ? B.teal : B.textMid, fontSize: 13, fontWeight: 600, fontFamily: f1, cursor: 'pointer' }}>
+                  style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid ' + (statusFilter === v ? B.teal : B.sand), background: statusFilter === v ? 'rgba(42,125,110,0.1)' : B.white, color: statusFilter === v ? B.teal : B.textMid, fontSize: 13, fontWeight: 600, fontFamily: f1, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
                   {label}
                 </button>
               ))}
@@ -1492,7 +1503,7 @@ export function JobsPage({ store, userProfile }) {
                           )}
                           {isAdminOrManager && (
                             <button onClick={() => handleAdminRemoveSignup(liveDetail, s.uid)}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.red, fontSize: 12, fontFamily: f1, padding: '2px 6px' }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.red, fontSize: 14, fontFamily: f1, padding: '8px 12px', minWidth: 44, minHeight: 44, lineHeight: 1, borderRadius: 6 }}
                               aria-label={'Remove ' + s.name}>✕</button>
                           )}
                         </div>
@@ -1524,7 +1535,7 @@ export function JobsPage({ store, userProfile }) {
                       <span style={{ fontSize:11, color:B.textLight, marginRight:6 }}>#{i+1}</span>{w.name}
                     </span>
                     <button onClick={() => handleAdminRemoveSignup(liveDetail, w.uid)}
-                      style={{ background:'none', border:'none', cursor:'pointer', color:B.red, fontSize:12, fontFamily:f1, padding:'2px 6px' }}
+                      style={{ background:'none', border:'none', cursor:'pointer', color:B.red, fontSize:14, fontFamily:f1, padding:'8px 12px', minWidth:44, minHeight:44, lineHeight:1, borderRadius:6 }}
                       aria-label={'Remove '+w.name+' from waitlist'}>✕</button>
                   </div>
                 ))}

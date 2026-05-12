@@ -700,10 +700,10 @@ function AppShell({ authHook }) {
 
       {/* Error toast */}
       {store.error && (
-        <div style={{ position:"fixed", bottom: isMobile ? 96 : 24, left:"50%", transform:"translateX(-50%)", zIndex:300, background:"#1E1E1E", color:"#fff", borderRadius:12, padding:"12px 20px", display:"flex", alignItems:"center", gap:14, boxShadow:"0 4px 20px rgba(0,0,0,0.3)", maxWidth:"90vw", minWidth:280 }}>
-          <span style={{ fontSize:16 }}>⚠️</span>
+        <div style={{ position:"fixed", bottom: isMobile ? "calc(96px + env(safe-area-inset-bottom, 0px))" : 24, left:"50%", transform:"translateX(-50%)", zIndex:300, background:"#1E1E1E", color:"#fff", borderRadius:12, padding:"12px 20px", display:"flex", alignItems:"center", gap:14, boxShadow:"0 4px 20px rgba(0,0,0,0.3)", maxWidth:"90vw", minWidth:280 }}>
+          <span style={{ fontSize:16 }} aria-hidden="true">⚠️</span>
           <span style={{ fontSize:13, fontFamily:f1, fontWeight:500, flex:1 }}>{store.error}</span>
-          <button onClick={() => store.clearError()} style={{ background:"none", border:"none", color:"rgba(255,255,255,0.6)", cursor:"pointer", fontSize:18, lineHeight:1, padding:0 }}>×</button>
+          <button onClick={() => store.clearError()} aria-label="Dismiss error" style={{ background:"none", border:"none", color:"rgba(255,255,255,0.6)", cursor:"pointer", fontSize:20, lineHeight:1, padding:"6px 10px" }}>×</button>
         </div>
       )}
 
@@ -720,9 +720,14 @@ function AppShell({ authHook }) {
         </div>
       )}
 
-      {/* Mobile Bottom Nav */}
+      {/* Mobile Bottom Nav — H-3 from the 2026-05-12 audit: previously
+          each tab was `flex: 0 0 64px` which made the bar 448px wide and
+          overflow-scroll on any iPhone narrower than that — Hubs and Settings
+          slid off-screen on iPhone SE / 12 mini (320-375px) and teens never
+          discovered the Jobs Hub. Now `flex: 1` so all 7 tabs share the width
+          evenly and the row always fits the viewport. */}
       {isMobile && (
-        <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:200, background:B.white, borderTop:"1px solid "+B.sand, display:"flex", overflowX:"auto", scrollbarWidth:"none", paddingBottom:"env(safe-area-inset-bottom, 0px)" }}>
+        <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:200, background:B.white, borderTop:"1px solid "+B.sand, display:"flex", paddingBottom:"env(safe-area-inset-bottom, 0px)" }}>
           {[
             ["dashboard","Home","🏠"],
             ["inventory","Items","📦"],
@@ -737,9 +742,9 @@ function AppShell({ authHook }) {
               else{setTab(k);}
               setMenuOpen(false);
             }}
-              style={{ flex:"0 0 64px", padding:"8px 2px 6px", border:"none", background:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:tab===k?B.teal:B.textLight, position:"relative" }}>
-              <span style={{ fontSize:20 }}>{icon}</span>
-              <span style={{ fontSize:9, fontWeight:700, fontFamily:f1, letterSpacing:.3 }}>{label}</span>
+              style={{ flex:"1 1 0", minWidth:0, padding:"8px 2px 6px", border:"none", background:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:tab===k?B.teal:B.textLight, position:"relative" }}>
+              <span style={{ fontSize:20 }} aria-hidden="true">{icon}</span>
+              <span style={{ fontSize:10, fontWeight:700, fontFamily:f1, letterSpacing:.3 }}>{label}</span>
               {k==="supplies"&&lowStock.length>0&&<span style={{ position:"absolute", top:4, right:"calc(50% - 16px)", background:B.red, color:"#fff", borderRadius:10, padding:"0 4px", fontSize:9, fontWeight:700, minWidth:14, textAlign:"center" }}>{lowStock.length}</span>}
               {k==="reservations"&&pendingRes.length>0&&<span style={{ position:"absolute", top:4, right:"calc(50% - 16px)", background:B.gold, color:"#fff", borderRadius:10, padding:"0 4px", fontSize:9, fontWeight:700, minWidth:14, textAlign:"center" }}>{pendingRes.length}</span>}
             </button>

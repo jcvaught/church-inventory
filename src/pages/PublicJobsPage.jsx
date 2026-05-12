@@ -113,8 +113,9 @@ export function PublicJobsPage({ churchId, churchName, churchCode, onGetStarted 
                 Create a free account to sign up for jobs, track your schedule, and stay connected.
               </div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button onClick={goRegister} style={{ ...btnP, padding: '9px 20px', fontSize: 13 }}>Create Account</button>
-                <button onClick={() => onGetStarted('login')} style={{ ...btnS, padding: '9px 20px', fontSize: 13 }}>Sign In</button>
+                {/* M-7 from the 2026-05-12 audit: bump primary CTAs to 44pt tap target. */}
+                <button onClick={goRegister} style={{ ...btnP, padding: '12px 24px', fontSize: 14, minHeight: 44 }}>Create Account</button>
+                <button onClick={() => onGetStarted('login')} style={{ ...btnS, padding: '12px 24px', fontSize: 14, minHeight: 44 }}>Sign In</button>
               </div>
             </div>
           </>
