@@ -1054,6 +1054,13 @@ export function useFirestore(churchId) {
         jobTitle = data.title || '';
         jobNumber = data.jobNumber || docId;
         if (signups.length >= (data.spotsTotal || 1)) {
+          // Mirror the firestore.rules waitlist cap (size() > 50) so the user
+          // gets a specific error instead of a generic permission-denied that
+          // handleErr would swallow into 'Sign-up failed. Please try again.'
+          if (waitlist.length >= 50) {
+            errorMsg = 'This job is full and the waitlist is at capacity (50 max).';
+            return;
+          }
           const waitlistEntry = { uid: userId, name: userName, addedAt: new Date().toISOString() };
           // Capture waiver acknowledgement at waitlist join so the audit trail
           // survives the eventual promotion to signups.
