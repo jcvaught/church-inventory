@@ -429,6 +429,17 @@ function subHasHub(sub, hubName) {
   return (sub.hubs || []).includes(hubName);
 }
 
+// F-21: unified per-user hub access check.
+// - Admins always have access regardless of allowedHubs (matches client UI default).
+// - Non-admins with missing/undefined allowedHubs default to access (legacy users).
+// - Non-admins with an array (including empty) must list the hub explicitly.
+function effectiveHasHub(user, hubName) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (!Array.isArray(user.allowedHubs)) return true;
+  return user.allowedHubs.includes(hubName);
+}
+
 // ── sendWelcomeEmail ──────────────────────────────────────────────────────
 // Firestore onCreate trigger: fires when a new church document is created.
 // Sends a personal welcome email to the church admin.
@@ -798,7 +809,7 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
   const churchName = churchSnap.data()?.churchName || 'Your Church';
   const recipients = usersSnap.docs
     .map(d => ({ ...d.data(), uid: d.id }))
-    .filter(u => u.email && u.active !== false && (!u.allowedHubs || u.allowedHubs.includes('jobs')));
+    .filter(u => u.email && u.active !== false && effectiveHasHub(u, 'jobs'));
 
   if (recipients.length === 0) return { sent: 0 };
 
@@ -883,8 +894,8 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
     if (!snap.exists) return Promise.resolve();
     const user = snap.data();
     if (!user.email || user.active === false || user.churchId !== churchId) return Promise.resolve();
-    // Respect per-user hub access: skip users who don't have jobs in their allowedHubs
-    if (user.allowedHubs && !user.allowedHubs.includes('jobs')) return Promise.resolve();
+    // Respect per-user hub access; F-21 helper treats admin/missing-array as access.
+    if (!effectiveHasHub(user, 'jobs')) return Promise.resolve();
     const safeName = escapeHtml(user.name || 'there');
     const html = `<p>Hi ${safeName},</p>
 <p>We wanted to let you know that a job you signed up for has been <strong>cancelled</strong>:</p>
@@ -990,8 +1001,8 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
     if (!userSnap.exists) continue;
     const user = userSnap.data();
     if (!user.email || user.active === false) continue;
-    // Respect per-user hub access: skip users who don't have tasks in their allowedHubs
-    if (user.allowedHubs && !user.allowedHubs.includes('tasks')) continue;
+    // Respect per-user hub access; F-21 helper treats admin/missing-array as access.
+    if (!effectiveHasHub(user, 'tasks')) continue;
 
     // Only send tasks belonging to the user's own church
     const tasks = (tasksByAssignee[userSnap.id] || []).filter(t => t.churchId === user.churchId);
@@ -1169,8 +1180,8 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     if (!userSnap.exists) continue;
     const user = userSnap.data();
     if (!user.email || user.active === false) continue;
-    // Respect per-user hub access: skip users who don't have jobs in their allowedHubs
-    if (user.allowedHubs && !user.allowedHubs.includes('jobs')) continue;
+    // Respect per-user hub access; F-21 helper treats admin/missing-array as access.
+    if (!effectiveHasHub(user, 'jobs')) continue;
     // Only send jobs that belong to the user's own church
     const jobs = (remindersByUid[userSnap.id] || []).filter(j => j.churchId === user.churchId);
     if (jobs.length === 0) continue;
@@ -1218,7 +1229,8 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
       if (!userSnap.exists) continue;
       const user = userSnap.data();
       if (!user.phone || !user.smsRemindersEnabled || user.active === false) continue;
-      if (user.allowedHubs && !user.allowedHubs.includes('jobs')) continue;
+      // F-21 helper treats admin/missing-array as access.
+      if (!effectiveHasHub(user, 'jobs')) continue;
       const jobs = (remindersByUid[userSnap.id] || []).filter(j => j.churchId === user.churchId);
       if (jobs.length === 0) continue;
       const jobLines = jobs.map(j => `- ${j.title}${j.scheduledTime ? ' at ' + j.scheduledTime : ''}${j.location ? ' - ' + j.location : ''}`).join('\n');
@@ -1485,7 +1497,8 @@ exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
   // toggle — recipients need to know they took a confirmed spot.
   const user = userSnap.data();
   if (!user?.email || user.active === false || user.churchId !== churchId) return { promoted: true };
-  if (user.allowedHubs && !user.allowedHubs.includes('jobs')) return { promoted: true };
+  // F-21 helper treats admin/missing-array as access.
+  if (!effectiveHasHub(user, 'jobs')) return { promoted: true };
 
   const churchName = churchSnap.data()?.churchName || 'Your Church';
   const safeTitle = escapeHtml(jobData?.title || 'Job');
@@ -1544,7 +1557,8 @@ exports.sendTaskMentionEmail = onCall({ cors: true }, async (req) => {
       const userSnap = await db.doc(`users/${mentionedUid}`).get();
       const user = userSnap.data();
       if (!user?.email || user.active === false) continue;
-      if (user.allowedHubs && !user.allowedHubs.includes('tasks')) continue;
+      // F-21 helper treats admin/missing-array as access.
+      if (!effectiveHasHub(user, 'tasks')) continue;
 
       const safeName = escapeHtml(user.name || 'there');
       const subject = `${commentAuthorName || 'Someone'} mentioned you in ${taskNumber || 'a task'}`;
