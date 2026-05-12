@@ -14,9 +14,9 @@ import {
   EmailAuthProvider
 } from 'firebase/auth';
 import {
-  doc, setDoc, getDoc, getDocs, deleteDoc,
-  collection, query, where
+  doc, setDoc, getDoc, deleteDoc,
 } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, googleProvider, db } from './firebase.js';
 
 const DEFAULT_LOCATIONS = [
@@ -41,11 +41,22 @@ const DEFAULT_TAGS = [
 ];
 
 // Look up a church by its join code. Returns the churchId string or null.
+// Phase D / H-02: this used to query the `churches` collection directly,
+// which required `allow list: if request.auth != null` on the collection —
+// any authenticated user could dump every church code and join any church.
+// Now routed through the `lookupChurchByCode` callable so reads are
+// server-side and only the matched churchId is returned.
 async function findChurchByCode(churchCode) {
-  const code = churchCode.toUpperCase();
-  const snap = await getDocs(query(collection(db, 'churches'), where('churchCode', '==', code)));
-  if (!snap.empty) return snap.docs[0].id;
-  return null;
+  const code = churchCode.trim().toUpperCase();
+  if (!code) return null;
+  const fn = httpsCallable(getFunctions(), 'lookupChurchByCode');
+  try {
+    const res = await fn({ code });
+    return res.data?.found ? res.data.churchId : null;
+  } catch (err) {
+    console.error('[ChurchOpsHub] lookupChurchByCode failed', err);
+    return null;
+  }
 }
 
 export function useAuth() {
@@ -90,9 +101,13 @@ export function useAuth() {
       cred = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: userName });
 
-      // Check if this email already created a church (1-church-per-email limit)
-      const emailChurchCheck = await getDocs(query(collection(db, 'churches'), where('createdBy', '==', cred.user.uid)));
-      if (!emailChurchCheck.empty) {
+      // Check if this email already created a church (1-church-per-email limit).
+      // Phase D: dropped the collection query (would need `allow list` on churches).
+      // The convention is churchId = '{creatorUid}-church', so a direct getDoc on
+      // that path tells us the same thing and is permitted by `allow get` for the
+      // self-creator branch.
+      const ownChurchSnap = await getDoc(doc(db, 'churches', cred.user.uid + '-church'));
+      if (ownChurchSnap.exists()) {
         await cred.user.delete();
         throw new Error('An account with this email has already created a church. Please sign in instead.');
       }

@@ -5,8 +5,7 @@ import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app, db } from '../firebase.js';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { app } from '../firebase.js';
 
 function formatPhoneDisplay(e164) {
   if (!e164) return '';
@@ -152,9 +151,19 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     const code = newCode.trim().toUpperCase();
     if (code.length < 3) return;
     if (!window.confirm(`Change the church code to "${code}"? Anyone using the old code to join will no longer be able to.`)) return;
-    const snap = await getDocs(query(collection(db, 'churches'), where('churchCode', '==', code)));
-    const takenByOther = snap.docs.some(d => d.id !== userProfile?.churchId);
-    if (takenByOther) { alert(`The code "${code}" is already in use by another church. Please choose a different code.`); return; }
+    // Phase D / H-02: server-side lookup so we don't need `allow list` on churches.
+    try {
+      const fn = httpsCallable(getFunctions(), 'lookupChurchByCode');
+      const res = await fn({ code });
+      if (res.data?.found && res.data.churchId !== userProfile?.churchId) {
+        alert(`The code "${code}" is already in use by another church. Please choose a different code.`);
+        return;
+      }
+    } catch (err) {
+      console.error('[ChurchOpsHub] lookupChurchByCode failed', err);
+      alert('Could not verify the code uniqueness. Please try again.');
+      return;
+    }
     updateConfig({ churchCode: code });
     setEditCodeMode(false);
     setNewCode("");

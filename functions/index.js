@@ -158,6 +158,24 @@ exports.getChurchStats = onCall(
   }
 );
 
+// ── lookupChurchByCode ────────────────────────────────────────────────────
+// Phase D / H-02 from the 2026-05-12 audit. Replaces the client-side
+// `getDocs(collection('churches'), where('churchCode','==',code))` query that
+// required `allow list: if request.auth != null` on `churches/{churchId}`,
+// which let any authenticated user dump every church code and join any church.
+// Returns only { found, churchId } for an exact-match code. Requires auth so
+// random crawlers can't probe; rate-limiting is left to App Check / Cloud Run
+// quotas (not configured today — flagged for follow-up).
+exports.lookupChurchByCode = onCall({ cors: true }, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  const code = (req.data?.code || '').toString().trim().toUpperCase();
+  if (!code) throw new HttpsError('invalid-argument', 'Code required.');
+  const db = getFirestore();
+  const snap = await db.collection('churches').where('churchCode', '==', code).limit(1).get();
+  if (snap.empty) return { found: false };
+  return { found: true, churchId: snap.docs[0].id };
+});
+
 // ── getPublicJobs ─────────────────────────────────────────────────────────
 // Public, unauthenticated read for the shareable PublicJobsPage. Strips
 // signups[], waitlist[], attendance, and any other PII before returning so
