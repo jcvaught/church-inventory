@@ -162,9 +162,50 @@ service cloud.firestore {
       // raw-SDK PII pulls (Jobs Hub audit, 2026-05-06).
       allow list:           if isMember(churchId);
       allow create, delete: if isChurchAdminOrManager(churchId);
-      allow update:         if isChurchAdminOrManager(churchId) || (
+      // Update has multiple paths:
+      //   1a. Admin/manager general edit — broad write access, BUT cannot touch
+      //       signups[]/waitlist[] in the same write as other fields, and cannot
+      //       touch server-managed counters at all. F-16 from the 2026-05-12 audit.
+      //   1b. Admin attendance update — signups changes only (length unchanged,
+      //       entries mutated in place by updateJobSignupAttendance).
+      //   1c. Admin removal — signups OR waitlist length -1 (handleAdminRemoveSignup
+      //       reuses the member withdraw transaction; needs to work even when
+      //       status is not open, e.g., cleaning up a closed job's roster).
+      //   2.  Member — sign up / withdraw / join-or-leave-waitlist with strict
+      //       ±1 length-delta + capacity guards. Field-presence guards on
+      //       signups/waitlist/spotsTotal so legacy docs missing them don't
+      //       crash the rule (defense-in-depth; backfill recommended).
+      allow update:         if (
+        isChurchAdminOrManager(churchId) && (
+          // 1a. General edit — not touching arrays/server fields at all
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'signups', 'waitlist',
+            'createdBy', 'createdByName', 'createdAt', 'jobNumber',
+            'recurrenceGroupId', 'recurrenceFreq', 'seriesEndDate',
+            'cancellationEmailSentAt', 'lastReminderSentDate', 'lastPosterNotifiedByActors'
+          ])
+          ||
+          // 1b. Attendance update — signups only, length preserved
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signups', 'updatedAt']) &&
+           'signups' in resource.data &&
+           request.resource.data.signups.size() == resource.data.signups.size())
+          ||
+          // 1c. Admin remove signup — signups only, length -1
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signups', 'updatedAt']) &&
+           'signups' in resource.data &&
+           request.resource.data.signups.size() == resource.data.signups.size() - 1)
+          ||
+          // 1c. Admin remove waitlist entry — waitlist only, length -1
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['waitlist', 'updatedAt']) &&
+           'waitlist' in resource.data &&
+           request.resource.data.waitlist.size() == resource.data.waitlist.size() - 1)
+        )
+      ) || (
         isMember(churchId) &&
         resource.data.status == 'open' &&
+        'signups' in resource.data &&
+        'waitlist' in resource.data &&
+        'spotsTotal' in resource.data &&
         (
           // Sign up / withdraw
           (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signups', 'updatedAt']) &&
