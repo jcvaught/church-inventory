@@ -252,19 +252,21 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJ
       aria-label={`${job.title} — ${job.status}`}
       style={{ background: B.white, borderRadius: 14, border: '1px solid ' + (overdue ? '#FECACA' : B.sand), padding: 18, cursor: 'pointer', transition: 'box-shadow 0.15s' }}
       {...hoverHandlers}>
+      {/* M-1 from the 2026-05-12 audit: bump 11-12px secondary text → 13 on
+          mobile so iPhone SE / small phones meet iOS 11pt minimum. */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-          <span style={{ fontSize: 11, fontFamily: 'monospace', color: B.textLight, background: B.warmGray, padding: '2px 6px', borderRadius: 4 }}>{job.jobNumber}</span>
-          {job.recurrenceGroupId && <span title="Recurring series" style={{ fontSize:11, color:B.teal }}>🔁</span>}
+          <span style={{ fontSize: isMobile ? 12 : 11, fontFamily: 'monospace', color: B.textLight, background: B.warmGray, padding: '2px 6px', borderRadius: 4 }}>{job.jobNumber}</span>
+          {job.recurrenceGroupId && <span title="Recurring series" style={{ fontSize: isMobile ? 13 : 11, color:B.teal }}>🔁</span>}
         </div>
         <JobStatusBadge status={job.status} />
       </div>
       <div style={{ fontWeight: 700, fontSize: 15, fontFamily: f1, color: B.navy, marginBottom: 6 }}>{job.title}</div>
-      <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 2 }}>
+      <div style={{ fontSize: isMobile ? 13 : 12, color: B.textMid, fontFamily: f2, marginBottom: 2 }}>
         📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' at ' + job.scheduledTime : ''}
       </div>
       {job.location && (
-        <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 8 }}>📍 {job.location}</div>
+        <div style={{ fontSize: isMobile ? 13 : 12, color: B.textMid, fontFamily: f2, marginBottom: 8 }}>📍 {job.location}</div>
       )}
       {job.pay != null && (
         <div style={{ fontSize: 14, fontWeight: 700, color: '#16A34A', fontFamily: f1, marginBottom: 10 }}>

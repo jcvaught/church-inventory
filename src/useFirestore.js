@@ -1027,6 +1027,24 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
+  // Data #1 from the 2026-05-12 audit: previously these batch-deleted series
+  // jobs without clearing linkedTaskDocId on any task that pointed back at
+  // them. The corresponding Task kept a stale "Linked Job" chip pointing at
+  // a doc that no longer exists. Single-job deleteJobListing already cleans
+  // its back-ref (line ~960); mirror the same cleanup here for both series
+  // delete paths.
+  async function clearLinkedTaskBackRefs(docs) {
+    const linkedTaskDocIds = docs
+      .map(d => d.exists() ? d.data()?.linkedTaskDocId : null)
+      .filter(Boolean);
+    if (linkedTaskDocIds.length === 0) return;
+    // Best-effort fire-and-forget. If a task was also deleted concurrently
+    // we don't want the series delete to fail; just log + Sentry on errors.
+    await Promise.allSettled(linkedTaskDocIds.map(taskId =>
+      updateDoc(doc(db, 'churches', churchId, 'tasks', taskId), { linkedJobDocId: null })
+    ));
+  }
+
   // Deletes all jobs in a recurring series from a given date onward.
   const deleteJobListingSeriesFrom = useCallback(async (groupId, fromDate, userId, userName) => {
     try {
@@ -1036,6 +1054,7 @@ export function useFirestore(churchId) {
         where('scheduledDate', '>=', fromDate)
       ));
       if (snap.empty) return;
+      await clearLinkedTaskBackRefs(snap.docs);
       const batch = writeBatch(db);
       snap.docs.forEach(d => batch.delete(d.ref));
       await batch.commit();
@@ -1051,6 +1070,7 @@ export function useFirestore(churchId) {
         where('recurrenceGroupId', '==', groupId)
       ));
       if (snap.empty) return;
+      await clearLinkedTaskBackRefs(snap.docs);
       const batch = writeBatch(db);
       snap.docs.forEach(d => batch.delete(d.ref));
       await batch.commit();

@@ -864,7 +864,12 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
   if (recipients.length === 0) return { sent: 0 };
 
   const safeTitle = escapeHtml(title);
-  const safeBody = escapeHtml(body).replace(/\n/g, '<br>');
+  // F-28 from the 2026-05-12 audit: cap body length. Previously unbounded — an
+  // admin pasting 200KB of text fans out 200KB × N recipients. Gmail also
+  // clip-renders bodies > ~102KB. Truncate to 5000 chars (mirrors the cap
+  // already used in sendTaskMentionEmail at line ~1565).
+  const truncatedBody = (body || '').substring(0, 5000);
+  const safeBody = escapeHtml(truncatedBody).replace(/\n/g, '<br>');
   const safePostedBy = escapeHtml(postedBy);
   const safeChurch = escapeHtml(churchName);
   const subject = `📢 ${title} — ${churchName}`;
@@ -1674,7 +1679,10 @@ exports.sendTaskMentionEmail = onCall({ cors: true }, async (req) => {
 <blockquote style="border-left:3px solid #2A7D6E;margin:12px 0;padding:8px 12px;background:#f8f8f8;font-size:14px">${safeComment}</blockquote>
 <p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to view and reply.</p>
 <p style="font-size:13px;color:#666">— ${churchName} via ChurchOpsHub</p>`;
-      await sgMail.send({ to: user.email, from: FROM, subject, html });
+      // F-30 from the 2026-05-12 audit: include a plain-text MIME part.
+      // HTML-only emails get a spam-score penalty from Gmail/Outlook.
+      const text = `Hi ${user.name || 'there'},\n\n${commentAuthorName || 'Someone'} mentioned you in a comment on task ${taskNumber || ''} — ${taskName || ''}:\n\n${(commentText || '').substring(0, 500)}\n\nOpen churchopshub.com to view and reply.\n\n— ${churchName}`;
+      await sgMail.send({ to: user.email, from: FROM, subject, html, text });
       sent++;
     } catch (err) {
       console.error('sendTaskMentionEmail: failed for', mentionedUid, err?.message);
@@ -1821,7 +1829,12 @@ exports.twilioInbound = onRequest({ cors: false }, async (req, res) => {
   // Cloud Run hostname (*.run.app) differs from the cloudfunctions.net URL Twilio called,
   // so the request's host header doesn't match what Twilio signed against. Use the
   // configured public URL directly.
-  const url = 'https://us-central1-church-inventory-9615c.cloudfunctions.net/twilioInbound';
+  // F-37 from the 2026-05-12 audit: previously hardcoded; if the function
+  // ever moves region or project, signature validation breaks silently.
+  // Fall back to the hardcoded prod URL if the env var is missing so this
+  // change is non-breaking.
+  const url = process.env.TWILIO_INBOUND_URL
+    || 'https://us-central1-church-inventory-9615c.cloudfunctions.net/twilioInbound';
   const params = req.body || {};
 
   let valid = false;
