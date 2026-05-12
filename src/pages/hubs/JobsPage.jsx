@@ -1024,9 +1024,9 @@ export function JobsPage({ store, userProfile }) {
 
   return (
     <div>
-      {/* Flash messages */}
+      {/* Flash messages — fixed-position so they appear above modals (z-index 1100 > Modal's 1000) */}
       {msg && (
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError?'#FEE8E8':B.tealPale, border:`1px solid ${msg.isError?'#FECACA':B.tealLight}`, borderRadius:10, padding:'10px 16px', marginBottom:16, fontSize:14, fontWeight:600, color:msg.isError?B.red:B.teal }}>
+        <div style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', zIndex:1100, maxWidth:'min(560px, calc(100vw - 32px))', minWidth:'280px', display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError?'#FEE8E8':B.tealPale, border:`1px solid ${msg.isError?'#FECACA':B.tealLight}`, borderRadius:10, padding:'10px 16px', fontSize:14, fontWeight:600, color:msg.isError?B.red:B.teal, boxShadow:'0 4px 16px rgba(27,42,74,0.18)' }}>
           <span>{msg.text}</span>
           <button onClick={()=>setMsg(null)} aria-label="Dismiss message" style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button>
         </div>
