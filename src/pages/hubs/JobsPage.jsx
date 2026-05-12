@@ -630,7 +630,14 @@ export function JobsPage({ store, userProfile }) {
   async function handleSaveJob() {
     if (!isAdminOrManager) return;
     if (!jobForm.title.trim() || !jobForm.scheduledDate) return;
-    const spots = Math.max(1, Math.floor(Number(jobForm.spotsTotal) || 1));
+    // Validate raw spots input BEFORE clamping so the user gets explicit feedback
+    // when they enter 0 or blank, instead of a silent Math.max(1, ...) override.
+    const rawSpots = Number(jobForm.spotsTotal);
+    if (!Number.isFinite(rawSpots) || rawSpots < 1) {
+      flash('Spots must be at least 1.', true);
+      return;
+    }
+    const spots = Math.floor(rawSpots);
     const existingJob = editJobId ? (jobListings || []).find(j => j._docId === editJobId) : null;
     const currentSignups = (existingJob?.signups || []).length;
     if (spots < currentSignups) {
