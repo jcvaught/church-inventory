@@ -16,3 +16,10 @@ Thumbs.db
 .vercel
 .env*.local
 scripts/serviceAccountKey.json
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/e2e/.auth/
