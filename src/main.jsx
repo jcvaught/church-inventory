@@ -12,6 +12,22 @@ Sentry.init({
   ],
   tracesSampleRate: 0.2,
   environment: import.meta.env.MODE,
+  // Drop a known class of transient noise from the Sentry issue feed.
+  // Firebase Firestore SDK logs "Uncaught Error in snapshot listener" to
+  // console.error whenever an in-flight listener loses access — which
+  // commonly happens during auth-state transitions (sign-out, token
+  // refresh, rapid E2E context teardown). Our useFirestore hook's
+  // per-subscription error callbacks already handle these via handleErr
+  // (which Sentry-captures with context), so the SDK's console.error is
+  // duplicate noise.
+  beforeSend(event, hint) {
+    const exc = hint?.originalException;
+    const msg = (event.message || (exc && exc.message) || '').toString();
+    if (msg.includes('@firebase/firestore') && msg.includes('Uncaught Error in snapshot listener')) {
+      return null;
+    }
+    return event;
+  },
 });
 
 ReactDOM.createRoot(document.getElementById('root')).render(
