@@ -3,6 +3,7 @@ import {
   doc, setDoc, getDoc, deleteDoc, getDocs,
   collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction, writeBatch
 } from 'firebase/firestore';
+import * as Sentry from '@sentry/react';
 import { db, storage } from './firebase.js';
 import { ref as stRef, deleteObject } from 'firebase/storage';
 import { generateRecurrenceDates } from './utils/date.js';
@@ -33,7 +34,15 @@ export function useFirestore(churchId) {
   const clearError = useCallback(() => setError(null), []);
 
   function handleErr(err) {
+    // Audit overnight 2026-05-12 / Error-resilience #1: this is the single
+    // chokepoint for ~80 Firestore writes in this hook. Previously we only
+    // console.error'd, which Sentry's captureConsole would pick up as a
+    // string (no stack, no Firestore error code, no operation context).
+    // Calling captureException directly preserves the full error object so
+    // engineering can see code (permission-denied / unavailable / etc.) and
+    // stack trace in Sentry.
     console.error('[ChurchOpsHub]', err);
+    try { Sentry.captureException(err, { tags: { area: 'firestore-write' } }); } catch { /* never let Sentry break the app */ }
     setError(err.message);
   }
 
@@ -838,10 +847,17 @@ export function useFirestore(churchId) {
 
   const removePeopleAccessRequirement = useCallback(async (reqId) => {
     try {
-      const snap = await getDoc(doc(db, 'churches', churchId, 'config', 'settings'));
-      const reqs = (snap.data()?.peopleAccessRequirements || []).filter(r => r.id !== reqId);
-      await updateDoc(doc(db, 'churches', churchId, 'config', 'settings'), {
-        peopleAccessRequirements: reqs
+      // F-RC-1 from the 2026-05-12 audit: previously this read the settings
+      // doc, filtered the array client-side, and wrote the result back without
+      // a transaction. Two admins removing two DIFFERENT requirements
+      // concurrently would each read the original array, filter out their
+      // chosen entry, and write — last write wins, resurrecting the first
+      // removal. Now atomic via runTransaction.
+      const settingsRef = doc(db, 'churches', churchId, 'config', 'settings');
+      await runTransaction(db, async (t) => {
+        const snap = await t.get(settingsRef);
+        const reqs = (snap.data()?.peopleAccessRequirements || []).filter(r => r.id !== reqId);
+        t.update(settingsRef, { peopleAccessRequirements: reqs });
       });
     } catch (err) { handleErr(err); }
   }, [churchId]);

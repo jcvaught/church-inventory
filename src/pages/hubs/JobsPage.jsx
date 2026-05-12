@@ -866,7 +866,15 @@ export function JobsPage({ store, userProfile }) {
           const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
           fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'withdrawal', actorUid: userId, actorName: userName }).catch(err => { console.error('[ChurchOpsHub] CF sendJobPosterNotification (withdrawal) failed', err); });
         }
-        httpsCallable(getFunctions(), 'promoteFromWaitlist')({ churchId: userProfile?.churchId, jobDocId: job._docId }).catch(err => { console.error('[ChurchOpsHub] CF promoteFromWaitlist failed', err); });
+        // F-RC-3 from the 2026-05-12 audit: await the promotion so a tab close
+        // between the withdrawal commit and the CF call doesn't drop the
+        // promotion entirely. The freed spot would otherwise stay empty
+        // forever despite an eligible waitlist.
+        try {
+          await httpsCallable(getFunctions(), 'promoteFromWaitlist')({ churchId: userProfile?.churchId, jobDocId: job._docId });
+        } catch (err) {
+          console.error('[ChurchOpsHub] CF promoteFromWaitlist failed', err);
+        }
       } else if (result?.wasOnWaitlist) {
         flash('Removed from waitlist.');
       }
