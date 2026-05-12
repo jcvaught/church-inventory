@@ -45,6 +45,22 @@ export async function purgeE2EArtifacts() {
 }
 
 // Create an accessPeople doc; optionally linked to a user uid.
+// Create a jobAnnouncement doc; the [E2E] title prefix lets the purge helper find it.
+export async function createAnnouncement({ title, body, pinned = false, expiresAt = null, createdBy, createdByName }) {
+  const now = new Date().toISOString();
+  const ref = await db().collection(`churches/${CHURCH_ID}/jobAnnouncements`).add({
+    title, body: body || '', pinned, expiresAt,
+    createdBy, createdByName,
+    createdAt: now, updatedAt: now,
+  });
+  return { _docId: ref.id, title };
+}
+
+export async function getAnnouncement(docId) {
+  const snap = await db().doc(`churches/${CHURCH_ID}/jobAnnouncements/${docId}`).get();
+  return snap.exists ? { _docId: docId, ...snap.data() } : null;
+}
+
 export async function createAccessPerson({ name, userId = null }) {
   const ref = await db().collection(`churches/${CHURCH_ID}/accessPeople`).add({
     name, userId, ministry: null, notes: null,
