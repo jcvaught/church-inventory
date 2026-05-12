@@ -1,6 +1,6 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
-const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
@@ -620,9 +620,21 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
       .sort((a, b) => hubCounts[b] - hubCounts[a] || a.localeCompare(b));
     const freeHubsSelected = sorted.slice(0, 2);
 
-    // Update subscription doc
+    // F-RC-4 from the 2026-05-12 audit: do the read-validate-write inside a
+    // transaction so a concurrent Stripe webhook (e.g. customer.subscription
+    // .updated arriving at trial expiry from a same-day paid upgrade) can't
+    // race with this cron. If the webhook already flipped status/freeHubsSelected
+    // between the prefetch above and this point, the txn re-check aborts.
     try {
-      await subDoc.ref.update({ freeHubsSelected, status: 'active' });
+      await db.runTransaction(async (t) => {
+        const fresh = await t.get(subDoc.ref);
+        if (!fresh.exists) return;
+        const freshData = fresh.data();
+        if (freshData.status !== 'trialing') return; // webhook already moved it on
+        if (freshData.freeHubsSelected !== null && freshData.freeHubsSelected !== undefined) return;
+        if (!freshData.trialEndsAt || new Date(freshData.trialEndsAt) > now) return;
+        t.update(subDoc.ref, { freeHubsSelected, status: 'active' });
+      });
     } catch (err) {
       console.error('processTrialExpirations: update failed', { churchId, err: err.message });
       Sentry.captureException(err);
@@ -771,8 +783,15 @@ exports.sendTicketAssignedEmail = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
   if (!initSendGrid()) return { sent: false };
 
-  const { toEmail, toName, churchName, ticketNumber, ticketName, assignedBy } = req.data;
+  // F-39 from the 2026-05-12 audit: this CF is reused by Tasks Hub for task
+  // assignments but the subject/body always said "Maintenance Ticket". Accept
+  // an optional `kind` field (defaults to 'ticket' for back-compat) so the
+  // copy is accurate from each caller.
+  const { toEmail, toName, churchName, ticketNumber, ticketName, assignedBy, kind } = req.data;
   if (!toEmail) return { sent: false };
+  const isTask = kind === 'task';
+  const label = isTask ? 'Task' : 'Maintenance Ticket';
+  const labelLower = isTask ? 'task' : 'maintenance ticket';
 
   const safeName = escapeHtml(toName);
   const safeTicket = escapeHtml(ticketName);
@@ -780,17 +799,17 @@ exports.sendTicketAssignedEmail = onCall({ cors: true }, async (req) => {
   const safeChurch = escapeHtml(churchName);
   const safeAssignedBy = escapeHtml(assignedBy);
 
-  const subject = `Maintenance Ticket Assigned — ${ticketNumber}`;
+  const subject = `${label} Assigned — ${ticketNumber}`;
   const html = `<p>Hi ${safeName},</p>
-<p>You've been assigned a maintenance ticket by <strong>${safeAssignedBy}</strong>.</p>
+<p>You've been assigned a ${labelLower} by <strong>${safeAssignedBy}</strong>.</p>
 <table style="border-collapse:collapse;margin:12px 0">
-  <tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">Ticket</td><td style="font-size:14px"><strong>${safeNumber}</strong></td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">${label}</td><td style="font-size:14px"><strong>${safeNumber}</strong></td></tr>
   <tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">Description</td><td style="font-size:14px">${safeTicket}</td></tr>
 </table>
-<p><a href="https://churchopshub.com">Log in to ChurchOpsHub</a> to view and update the ticket.</p>
+<p><a href="https://churchopshub.com">Log in to ChurchOpsHub</a> to view and update the ${labelLower}.</p>
 <p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`;
 
-  const text = `Hi ${toName},\n\nYou've been assigned maintenance ticket ${ticketNumber}: "${ticketName}" by ${assignedBy}.\n\nLog in at churchopshub.com to view it.\n\n— ${churchName}`;
+  const text = `Hi ${toName},\n\nYou've been assigned ${labelLower} ${ticketNumber}: "${ticketName}" by ${assignedBy}.\n\nLog in at churchopshub.com to view it.\n\n— ${churchName}`;
 
   await sgMail.send({ to: toEmail, from: FROM, subject, html, text });
   return { sent: true };
@@ -903,7 +922,11 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
 
   const job = jobSnap.data();
   const signups = job.signups || [];
-  if (signups.length === 0) return { sent: 0 };
+  const waitlist = job.waitlist || [];
+  // F-32 from the 2026-05-12 audit: include waitlist users in cancellation
+  // notifications. Previously waitlisted teens sat on a dead waitlist forever
+  // because they were excluded from cancellation broadcasts.
+  if (signups.length === 0 && waitlist.length === 0) return { sent: 0 };
 
   // Re-trigger guard: prevent spamming cancellation emails within a 1-hour window
   const lastSent = job.cancellationEmailSentAt;
@@ -917,19 +940,39 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
   const safeChurch = escapeHtml(churchName);
   const dateStr = job.scheduledDate || '';
   const timeStr = job.scheduledTime ? ` at ${job.scheduledTime}` : '';
-  const subject = `Job Cancelled: ${job.title || 'Job'}`;
+  const signupSubject = `Job Cancelled: ${job.title || 'Job'}`;
+  const waitlistSubject = `Job You Were Waitlisted For Was Cancelled: ${job.title || 'Job'}`;
 
-  const userSnaps = await Promise.all(signups.map(s => db.doc(`users/${s.uid}`).get()));
+  // Build (entry, kind) pairs so we can render waitlist vs signup variants.
+  // Dedupe by uid in case someone is on both (shouldn't happen, but defensive).
+  const seenUids = new Set();
+  const recipients = [];
+  for (const s of signups) {
+    if (s.uid && !seenUids.has(s.uid)) { seenUids.add(s.uid); recipients.push({ uid: s.uid, kind: 'signup' }); }
+  }
+  for (const w of waitlist) {
+    if (w.uid && !seenUids.has(w.uid)) { seenUids.add(w.uid); recipients.push({ uid: w.uid, kind: 'waitlist' }); }
+  }
 
-  const results = await Promise.allSettled(userSnaps.map(snap => {
+  const userSnaps = await Promise.all(recipients.map(r => db.doc(`users/${r.uid}`).get()));
+
+  const results = await Promise.allSettled(userSnaps.map((snap, i) => {
     if (!snap.exists) return Promise.resolve();
     const user = snap.data();
     if (!user.email || user.active === false || user.churchId !== churchId) return Promise.resolve();
     // Respect per-user hub access; F-21 helper treats admin/missing-array as access.
     if (!effectiveHasHub(user, 'jobs')) return Promise.resolve();
     const safeName = escapeHtml(user.name || 'there');
+    const isWaitlist = recipients[i].kind === 'waitlist';
+    const subject = isWaitlist ? waitlistSubject : signupSubject;
+    const bodyLine = isWaitlist
+      ? 'A job you were on the waitlist for has been <strong>cancelled</strong>, so no spot was needed:'
+      : 'A job you signed up for has been <strong>cancelled</strong>:';
+    const bodyTextLine = isWaitlist
+      ? 'A job you were waitlisted for has been cancelled — no spot was needed.'
+      : 'The following job you signed up for has been cancelled:';
     const html = `<p>Hi ${safeName},</p>
-<p>We wanted to let you know that a job you signed up for has been <strong>cancelled</strong>:</p>
+<p>${bodyLine}</p>
 <table style="border-collapse:collapse;margin:12px 0">
   <tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">Job</td><td style="font-size:14px"><strong>${safeTitle}</strong></td></tr>
   ${dateStr ? `<tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">Date</td><td style="font-size:14px">${escapeHtml(dateStr)}${escapeHtml(timeStr)}</td></tr>` : ''}
@@ -937,7 +980,7 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
 <p>No action is needed on your part.</p>
 <p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to see other available jobs.</p>
 <p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`;
-    const text = `Hi ${user.name || 'there'},\n\nThe following job you signed up for has been cancelled:\n\n${job.title || 'Job'}${dateStr ? '\nDate: ' + dateStr + timeStr : ''}\n\nNo action is needed.\n\n— ${churchName}`;
+    const text = `Hi ${user.name || 'there'},\n\n${bodyTextLine}\n\n${job.title || 'Job'}${dateStr ? '\nDate: ' + dateStr + timeStr : ''}\n\nNo action is needed.\n\n— ${churchName}`;
     return sgMail.send({ to: user.email, from: FROM, subject, html, text });
   }));
 
@@ -950,6 +993,28 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
   }
 
   return { sent };
+});
+
+// ── clearCancellationStampOnReopen ────────────────────────────────────────
+// F-23/agent from the 2026-05-12 audit. The sendJobCancelledEmails CF stamps
+// cancellationEmailSentAt and skips re-sends for 1 hour. If an admin
+// cancels → reopens → re-cancels within that window, the stale stamp
+// suppresses notifications to NEW signups added in between.
+// This trigger clears the stamp whenever a job's status leaves cancelled
+// or closed, so the next cancellation pass fires emails for the current
+// (possibly different) roster. Bypasses firestore.rules because Admin SDK.
+exports.clearCancellationStampOnReopen = onDocumentUpdated('churches/{churchId}/jobListings/{jobId}', async (event) => {
+  const before = event.data?.before?.data();
+  const after = event.data?.after?.data();
+  if (!before || !after) return;
+  const wasTerminal = before.status === 'cancelled' || before.status === 'closed';
+  const isTerminalNow = after.status === 'cancelled' || after.status === 'closed';
+  if (wasTerminal && !isTerminalNow && after.cancellationEmailSentAt) {
+    await event.data.after.ref.update({ cancellationEmailSentAt: FieldValue.delete() }).catch((err) => {
+      console.error('clearCancellationStampOnReopen: clear failed', err);
+      Sentry.captureException(err);
+    });
+  }
 });
 
 // ── sendTaskDueReminders ──────────────────────────────────────────────────
@@ -1666,7 +1731,14 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
       const configRef = db.doc(`churches/${churchId}/config/main`);
       const newTaskRef = db.collection(`churches/${churchId}/tasks`).doc();
       let taskNumber;
+      const nextDate = template.autoGenerateFrequency ? advanceDate(todayStr, template.autoGenerateFrequency) : todayStr;
 
+      // F-RC-6 from the 2026-05-12 audit: the template's autoGenerateNextAt
+      // advance used to happen AFTER the task-creation transaction committed.
+      // A cron retry between the commit and the template update would re-fire
+      // the function, find the template still "due", and create a duplicate
+      // task. Move both writes into one transaction so the next-due cursor
+      // advances atomically with task creation.
       await db.runTransaction(async (t) => {
         const configSnap = await t.get(configRef);
         const maxNum = (configSnap.data()?.maxTaskNumber || 0) + 1;
@@ -1697,10 +1769,9 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
+        t.update(templateDoc.ref, { autoGenerateNextAt: nextDate, lastGeneratedAt: todayStr });
       });
 
-      const nextDate = template.autoGenerateFrequency ? advanceDate(todayStr, template.autoGenerateFrequency) : todayStr;
-      await templateDoc.ref.update({ autoGenerateNextAt: nextDate, lastGeneratedAt: todayStr });
       console.log(`generateRecurringTemplateTasks: created ${taskNumber} for church ${churchId}`);
     } catch (err) {
       console.error(`generateRecurringTemplateTasks: failed for church ${churchId} template ${templateDoc.id}`, err?.message);

@@ -1214,7 +1214,7 @@ export function TasksPage({ store, userProfile }) {
         for (const assignee of newlyAdded) {
           const assigneeUser = users.find(u => u.id === assignee.uid);
           if (!assigneeUser?.email) continue;
-          fn({ toEmail: assigneeUser.email, toName: assignee.name, churchName: config?.churchName || '', ticketNumber: showDetail.taskNumber, ticketName: detailEdits.name, assignedBy: userName }).catch(err => { console.error('[ChurchOpsHub] CF sendTicketAssignedEmail failed', err); });
+          fn({ kind: 'task', toEmail: assigneeUser.email, toName: assignee.name, churchName: config?.churchName || '', ticketNumber: showDetail.taskNumber, ticketName: detailEdits.name, assignedBy: userName }).catch(err => { console.error('[ChurchOpsHub] CF sendTicketAssignedEmail failed', err); });
         }
       }
 
