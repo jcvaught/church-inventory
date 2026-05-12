@@ -1374,6 +1374,13 @@ exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
     throw new HttpsError('permission-denied', 'Not a member of this church.');
   }
 
+  // F-17: gate on subscription BEFORE running the promotion transaction.
+  // Previously we promoted, then bailed silently if the sub had lapsed —
+  // moving the volunteer to signups[] without any email. If the hub is
+  // gone, the volunteer can't even see the job, so don't promote at all.
+  const subSnapEarly = await db.doc(`churches/${churchId}/config/subscription`).get();
+  if (!subHasHub(subSnapEarly.data() || {}, 'jobs')) return { promoted: false, reason: 'hub-inactive' };
+
   const jobRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}`);
   let promotedUser = null;
   let jobData = null;
@@ -1441,18 +1448,15 @@ exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
   if (!promotedUser) return { promoted: false };
   if (!initSendGrid()) return { promoted: true, promotedName: promotedUser.name };
 
-  const [churchSnap, subSnap, userSnap] = await Promise.all([
+  // Sub already verified pre-transaction (F-17). Skip the redundant re-check.
+  const [churchSnap, userSnap] = await Promise.all([
     db.doc(`churches/${churchId}/config/main`).get(),
-    db.doc(`churches/${churchId}/config/subscription`).get(),
     db.doc(`users/${promotedUser.uid}`).get(),
   ]);
 
   // The promotion email is transactional ("you're now signed up"), not a
   // marketing notification. Don't gate it on the church-wide notifications
-  // toggle — recipients need to know they took a confirmed spot. The
-  // hub-active and per-user checks below still apply (Jobs Hub audit #8).
-  if (!subHasHub(subSnap.data() || {}, 'jobs')) return { promoted: true, promotedName: promotedUser.name };
-
+  // toggle — recipients need to know they took a confirmed spot.
   const user = userSnap.data();
   if (!user?.email || user.active === false || user.churchId !== churchId) return { promoted: true };
   if (user.allowedHubs && !user.allowedHubs.includes('jobs')) return { promoted: true };
