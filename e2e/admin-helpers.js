@@ -25,16 +25,41 @@ export function churchId() { return CHURCH_ID; }
 export const E2E_PREFIX = '[E2E]';
 export function e2eTitle(label) { return `${E2E_PREFIX} ${label}`; }
 
-// Wipe any leftover E2E jobs + announcements from prior runs.
+// Wipe any leftover E2E jobs + announcements + access records from prior runs.
 export async function purgeE2EArtifacts() {
   const f = db();
   const jobsSnap = await f.collection(`churches/${CHURCH_ID}/jobListings`).where('title', '>=', E2E_PREFIX).where('title', '<', E2E_PREFIX + '~').get();
   const annSnap = await f.collection(`churches/${CHURCH_ID}/jobAnnouncements`).where('title', '>=', E2E_PREFIX).where('title', '<', E2E_PREFIX + '~').get();
+  const apSnap = await f.collection(`churches/${CHURCH_ID}/accessPeople`).where('name', '>=', E2E_PREFIX).where('name', '<', E2E_PREFIX + '~').get();
+  const e2eAPIds = apSnap.docs.map(d => d.id);
+  const arSnap = e2eAPIds.length
+    ? await f.collection(`churches/${CHURCH_ID}/accessRecords`).where('personId', 'in', e2eAPIds.slice(0, 30)).get()
+    : { docs: [], size: 0 };
   const batch = f.batch();
   jobsSnap.docs.forEach(d => batch.delete(d.ref));
   annSnap.docs.forEach(d => batch.delete(d.ref));
-  if (jobsSnap.size + annSnap.size > 0) await batch.commit();
-  return { jobs: jobsSnap.size, announcements: annSnap.size };
+  apSnap.docs.forEach(d => batch.delete(d.ref));
+  arSnap.docs.forEach(d => batch.delete(d.ref));
+  if (jobsSnap.size + annSnap.size + apSnap.size + arSnap.size > 0) await batch.commit();
+  return { jobs: jobsSnap.size, announcements: annSnap.size, accessPeople: apSnap.size, accessRecords: arSnap.size };
+}
+
+// Create an accessPeople doc; optionally linked to a user uid.
+export async function createAccessPerson({ name, userId = null }) {
+  const ref = await db().collection(`churches/${CHURCH_ID}/accessPeople`).add({
+    name, userId, ministry: null, notes: null,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  });
+  return { _docId: ref.id, name, userId };
+}
+
+// Create an accessRecords doc for a given accessPeople _docId.
+export async function createAccessRecord({ personId, type, expiryDate = null, notes = null }) {
+  const ref = await db().collection(`churches/${CHURCH_ID}/accessRecords`).add({
+    personId, type, expiryDate, notes,
+    createdAt: new Date().toISOString(),
+  });
+  return { _docId: ref.id, personId, type, expiryDate };
 }
 
 // Create a job atomically (mirrors the addJobListing transaction).
