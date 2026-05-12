@@ -261,6 +261,8 @@ service cloud.firestore {
       // Self-updates are allowed but cannot change role, churchId, active, or allowedHubs.
       // Admins in the same church can update role, active, allowedHubs, etc. — but cannot
       // change another user's phone or smsRemindersEnabled (TCPA: SMS opt-in must be the user's).
+      // C-01: admins also CANNOT change churchId. Without this pin an admin could transplant
+      // any user (or themselves) into another church, defeating multi-tenant isolation.
       allow update: if request.auth != null && (
         (
           request.auth.uid == userId
@@ -272,6 +274,7 @@ service cloud.firestore {
         || (
           userIsAdmin()
           && userChurchId() == resource.data.churchId
+          && request.resource.data.churchId == resource.data.churchId
           && request.resource.data.get('phone', '') == resource.data.get('phone', '')
           && request.resource.data.get('smsRemindersEnabled', false) == resource.data.get('smsRemindersEnabled', false)
         )
