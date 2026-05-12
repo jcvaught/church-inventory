@@ -726,3 +726,101 @@ Full security audit findings addressed across all layers.
 - Job Hub H3: series-wide edit and delete — updateJobListingSeries + deleteJobListingSeries in useFirestore (writeBatch; spotsTotal validated against each job's signups); edit modal gains scope selector (This job only / This + all future jobs); detail modal gains "Delete Series" button
 - Tasks Hub audit fixes (Opus review): all task functions now rethrow errors; updateTask strips immutable fields; Firestore rule blocks visibility escalation by non-creators; calculateNextDue Feb-29 annually fix + extracted to src/utils/date.js; createNextRecurringTask idempotency via runTransaction; handleDeleteTask cascade-deletes subtasks; deleteTask batch-deletes comments + Storage photos; bulk Complete triggers createNextRecurringTask; activityLabels.js shared utility; sendTaskDueReminders: idempotency, active+allowedHubs filter
 - Tasks + Job Hub follow-up audit fixes (Opus review #2): tasksByDocId useMemo moved before pruning useEffect (TDZ crash fix); addTaskTags gated behind canOperate; Firestore task update rule blocks visibility changes by non-creators; sendTaskDueReminders lower bound removed (overdue tasks now included); job signup rule blocks writes on cancelled/completed jobs; updateJobListingSeries → runTransaction (TOCTOU fix); all Job Hub CRUD catch blocks rethrow; deleteJobListingSeriesFrom helper (Delete This + Future); savingJobId per-card (sign-up/withdraw no longer freezes all cards)
+
+### 2026-05-11 — Jobs Hub pre-rollout UAT (manual)
+
+Session 1 of the rollout: user ran `docs/TEST-JOBS-HUB-2026-05-07.md` against prod. First click broke (Modal `open` prop missing), then every UAT section surfaced 2–3 bugs. 11 fixes shipped during testing (F-fix-1 through F-fix-11). Highlights:
+
+- **F-fix-1 (Modal open prop)**: 4 modals (New/Edit Job, Job Detail, New/Edit Announcement, Delegates) were calling `<Modal>` without the `open` prop — every click silently rendered nothing. Added `open` shorthand + Modal `maxWidth` prop support.
+- **F-fix-2 (Sentry CSP)**: `vercel.json` CSP `connect-src` was missing `*.ingest.sentry.io` — Sentry transmission blocked since launch, hiding F-fix-1 and (later) F-fix-9 from telemetry. Added Sentry hosts.
+- **F-fix-3 (hard-delete cancellation emails)**: handleDeleteJob/handleDeleteSeries/handleDeleteSeriesFrom were silently stranding signups. Now fan out sendJobCancelledEmails before delete.
+- F-fix-4 update_job activity-log showed raw docId not JOB-###.
+- F-fix-5 Job Lead dropdown now filters to admins + users-with-jobs-access.
+- F-fix-6 past-dated open jobs were signup-able until 2am cron — filter + handler guard + disabled card button.
+- F-fix-7 ICS export scoped per-user (members get their signups; admins get "Export All").
+- F-fix-8 Print Roster admin-only + selection modal.
+- **F-fix-9 (CSP for Cloud Functions)** — _the silent catastrophe_: CSP missing `*.cloudfunctions.net` + `*.run.app` had blocked every client-callable CF since launch. Cloud Run logs showed 24h of zero client-CF activity. Hidden by F-fix-2.
+- F-fix-10 Spots field now flashes "Spots must be at least 1" instead of silent Math.max clamp.
+- F-fix-11 flash banner was hidden behind Modal's z:1000 backdrop; now fixed-position z:1100.
+
+### 2026-05-12 — Overnight 7-agent audit + comprehensive fix wave
+
+Triggered by 2026-05-11 UAT volume. User asked for "full audit while I sleep." Seven parallel deep-review agents covered security, race conditions, email/SMS plumbing, error resilience, mobile/a11y, performance/scale, and data-model integrity. ~80 findings consolidated into `docs/AUDIT-TASKS-JOBS-2026-04-25.md`.
+
+**Audit fix waves (F-fix-12 through F-fix-19):**
+
+- F-fix-12 (F-20): cosmetic cleanup — shadowed isFull, dead todayStr prop, stale eslint-disable.
+- F-fix-13 (F-18): signUpForJob prechecks 50-entry waitlist cap.
+- F-fix-14 (F-17): promoteFromWaitlist gates on subscription pre-transaction.
+- F-fix-15 (F-15): sendJobPosterNotification 30s double-fire guard now atomic via runTransaction (was: race between read and post-send write).
+- F-fix-16 (F-14): missing `config/notifications` doc defaults to enabled=true. Five CF gate sites updated. Fresh churches now receive emails.
+- F-fix-17 (F-21): new `effectiveHasHub(user, hub)` helper applied to 7 CF sites — admins with `allowedHubs: []` (e.g., John, Nancy in FXCC) no longer excluded from job emails.
+- F-fix-18 (Security C-02, C-03): Stripe CFs now require admin role; sendTaskMentionEmail verifies caller's churchId match. Closes cross-tenant phishing primitive + the "any member can cancel subscription" path.
+- F-fix-19 (F-23): tasks.dueDate + taskTemplates.autoGenerate COLLECTION_GROUP indexes patched via Firestore Admin REST API (firebase deploy --only firestore:indexes silently no-op'd per the known `feedback_firebase_collection_index` pitfall). Fixes daily 8am cron FAILED_PRECONDITION errors.
+
+**Rules tightening Phases A–D (user-sign-off-required, all shipped):**
+
+- Phase A (C-01): pinned `churchId` equality on admin user-update branch. Closes cross-tenant transplant attack where admin could rewrite any user's (or own) churchId.
+- Phase B (F-16): jobListings admin update gets a forbidden-fields blocklist (signups/waitlist/attendance/server-managed). Three legitimate sub-paths preserved (attendance length-preserving, single removal, waitlist removal).
+- Phase C (Data #2): member-branch of jobListings has `'signups' in resource.data && …` guards. Backfill script `scripts/backfill-jobs.cjs` added (dry-run; not executed against FXCC which already has all fields).
+- Phase D (H-02): dropped `allow list` on churches collection — replaced with new `lookupChurchByCode` callable CF. Three-step coordinated deploy: CF first → client refactor (5 call sites) → rule drop.
+
+**Autonomous batch:**
+
+- F-RC-1: removePeopleAccessRequirement wrapped in runTransaction.
+- F-RC-3: handleWithdraw awaits promoteFromWaitlist (was fire-and-forget; tab-close could drop the promotion).
+- F-RC-4: processTrialExpirations read-validate-update now in runTransaction.
+- F-RC-6: generateRecurringTemplateTasks template advance now in same txn as task create.
+- F-23/agent: NEW `clearCancellationStampOnReopen` onDocumentUpdated trigger.
+- F-32: sendJobCancelledEmails now emails waitlist users with a distinct subject.
+- F-39: sendTicketAssignedEmail accepts `kind: 'task'|'ticket'` for accurate subject.
+- handleErr Sentry.captureException with `{ area: 'firestore-write' }` tag — instruments ~80 mutations at one stroke.
+- **Bundle splitting**: 7 hub pages → React.lazy + Suspense; qrcode dynamic-imported. Main bundle 462 KB → **230 KB gzipped (-50%)**. Recharts now its own lazy 132 KB chunk.
+- **activityLog pagination**: subscription capped at 100 most-recent; `loadOlderActivityLog` helper for deeper history; ActivityLogPage gains "Load older entries" button.
+
+**Mobile rollout-readiness:**
+
+- C-1: admin ✕ remove-signup buttons bumped from ~22×16pt to ≥44×44pt.
+- C-3: safe-area-inset on flash banner top + error toast bottom.
+- H-1: Modal a11y — role=dialog, aria-modal, aria-labelledby, Escape closes, focus trap (move-in + restore).
+- H-2: Modal maxHeight `92vh` → `92dvh` (iOS Safari toolbar safe).
+- H-3: bottom-nav `flex: 0 0 64px` (448px wide, overflowed) → `flex: 1 1 0`. All 7 tabs fit any iPhone width.
+- H-4: view tabs + filter chips horizontal-scroll on mobile.
+- M-3: JobCard hover handlers skipped on mobile (no stuck-hover after tap).
+- M-7: Public Jobs CTAs bumped to 14px / 44pt.
+- L-1: aria-hidden on decorative emojis (bottom nav, error toast).
+
+**Bucket 1 polish:**
+
+- H-6: FF.jsx form-a11y refactor — useId-generated label/input association, opt-in `required` + `error` props (aria-required, aria-invalid, aria-describedby). Every form gets proper screen-reader semantics.
+- M-1: Job card secondary-text font sizes bumped 11–12px → 13 on mobile.
+- Data #1: deleteJobListingSeries + deleteJobListingSeriesFrom now clear linkedTaskDocId back-refs.
+- F-28: sendJobAnnouncementEmails caps body at 5000 chars.
+- F-30: sendTaskMentionEmail now includes plain-text MIME part.
+- F-37: twilioInbound signature URL reads from `TWILIO_INBOUND_URL` env var (hardcoded fallback).
+
+**F-24 — sender domain swap (last 🔴 closed):**
+
+- Authenticated `churchopshub.com` in SendGrid — 5 CNAMEs + DMARC TXT added to Vercel DNS.
+- `from: noreply@churchopshub.com` replaces gmail-as-sender across all 11 SendGrid sends.
+- Verified end-to-end via raw email headers: `dkim=pass header.i=@churchopshub.com header.s=s1` + `spf=pass` + `dmarc=pass`. First-send landed in Gmail inbox, not spam.
+
+**Sentry cleanup:**
+
+- `beforeSend` filter drops transient `@firebase/firestore: Uncaught Error in snapshot listener` console.errors (transient auth-state-transition noise).
+
+**A2P 10DLC resubmission prep:**
+
+- 2026-04-27 campaign rejected with "issues verifying CTA" — TCR couldn't follow the authenticated in-app opt-in flow.
+- New `src/pages/PublicSMSProgramPage.jsx` — publicly accessible (no auth required) disclosure page: program name, sending number, sample messages, frequency, exact in-app consent text, opt-in/out flow, HELP/STOP keywords, privacy + terms links.
+- Routing: both `/sms-program` (clean path via SPA catch-all + pathname check) and `?sms-program` (query) work. Same pattern enabled for `/privacy` and `/terms`.
+- Cross-links from Privacy + Terms SMS sections; LandingPage footer surfaces Privacy + Terms + SMS Program. sitemap.xml entry added.
+- User updates the Twilio campaign with: new opt-in description pointing at /sms-program, Privacy URL = https://churchopshub.com/privacy, Terms URL = https://churchopshub.com/terms. Three daily Gmail-draft reminders scheduled via Claude Routines for May 13–15.
+
+**Playwright E2E suite — 31/31 passing in ~80s:**
+
+- Mirrors Court Climber's pattern: Firebase v12 IndexedDB auth state, per-spec teardown via Admin SDK, three roles (admin / member-a / member-b).
+- Coverage maps every section of `docs/TEST-JOBS-HUB-2026-05-07.md`: §4 waitlist + auto-promotion, §5 compliance/waiver, §6 attendance/Reports, §7 roster visibility, §8 announcements, §9 public board (PII strip regression check), §10 notifications gate (verified via F-15 transaction stamp on lastPosterNotifiedByActors), §11 edge cases.
+- SMS smoke test gated behind `E2E_RUN_SMS=1`. Triggers via `gcloud scheduler jobs run`, polls Twilio Messages API for delivery. Will auto-flip green after A2P approval + Messaging Service migration.
+- Files: `playwright.config.js`, `e2e/firebase-fixtures.js`, 3 auth.setup.\*.js, `admin-helpers.js`, 7 spec files. Test accounts in FXCC: `jcvaught@gmail.com` (Member A), `e2e-admin@churchopshub.com`, `e2e-member-b@churchopshub.com`.
+- Run: `E2E_MEMBER_B_EMAIL=e2e-member-b@churchopshub.com npm run test:e2e`.
