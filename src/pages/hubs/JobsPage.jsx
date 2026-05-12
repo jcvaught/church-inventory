@@ -1586,7 +1586,7 @@ export function JobsPage({ store, userProfile }) {
                   style={{ ...btnS, color:'#92400E', borderColor:'#FDE68A', background:'#FFF9C4', fontSize:13 }}>
                   {savingJobId === liveDetail._docId ? '…' : 'Leave Waitlist'}
                 </button>
-              ) : isPastJob ? (
+              ) : (liveDetail.scheduledDate && liveDetail.scheduledDate < todayStr) ? (
                 <button disabled
                   style={{ ...btnS, fontSize: 13, color: B.textLight, cursor: 'default', opacity: 0.6 }}>
                   Past — signups closed
