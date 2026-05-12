@@ -228,7 +228,14 @@ exports.createCheckoutSession = onCall(
     const db = getFirestore();
     const userSnap = await db.doc(`users/${req.auth.uid}`).get();
     if (!userSnap.exists) throw new HttpsError('not-found', 'User profile not found.');
-    const { churchId } = userSnap.data();
+    const userData = userSnap.data();
+    // C-02 from overnight audit: gate Stripe checkout to admin only.
+    // Previously any user could initiate a checkout against the church's
+    // stripeCustomerId.
+    if (userData.role !== 'admin') {
+      throw new HttpsError('permission-denied', 'Only admins can manage billing.');
+    }
+    const { churchId } = userData;
 
     const subSnap = await db.doc(`churches/${churchId}/config/subscription`).get();
     const existingCustomerId = subSnap.data()?.stripeCustomerId || null;
@@ -263,7 +270,13 @@ exports.createPortalSession = onCall(
     const db = getFirestore();
     const userSnap = await db.doc(`users/${req.auth.uid}`).get();
     if (!userSnap.exists) throw new HttpsError('not-found', 'User profile not found.');
-    const { churchId } = userSnap.data();
+    const userData = userSnap.data();
+    // C-02: gate Stripe billing portal to admin only.
+    // Previously any user could open the portal and cancel the subscription.
+    if (userData.role !== 'admin') {
+      throw new HttpsError('permission-denied', 'Only admins can manage billing.');
+    }
+    const { churchId } = userData;
 
     const subSnap = await db.doc(`churches/${churchId}/config/subscription`).get();
     const stripeCustomerId = subSnap.data()?.stripeCustomerId;
@@ -1535,6 +1548,15 @@ exports.sendTaskMentionEmail = onCall({ cors: true }, async (req) => {
   if (!initSendGrid()) return { sent: 0 };
 
   const db = getFirestore();
+  // C-03 from overnight audit: verify caller is actually a member of the
+  // churchId they're acting on. Previously any authenticated user could
+  // call this CF with any churchId, enabling cross-tenant spam under the
+  // ChurchOpsHub sender brand. Pattern matches sendJobCancelledEmails:844.
+  const callerSnap = await db.doc(`users/${uid}`).get();
+  if (!callerSnap.exists || callerSnap.data().churchId !== churchId) {
+    throw new HttpsError('permission-denied', 'Not a member of this church.');
+  }
+
   const [notifSnap, subSnap, churchSnap] = await Promise.all([
     db.doc(`churches/${churchId}/config/notifications`).get(),
     db.doc(`churches/${churchId}/config/subscription`).get(),
@@ -1557,6 +1579,8 @@ exports.sendTaskMentionEmail = onCall({ cors: true }, async (req) => {
       const userSnap = await db.doc(`users/${mentionedUid}`).get();
       const user = userSnap.data();
       if (!user?.email || user.active === false) continue;
+      // C-03: only mention users who are members of THIS church.
+      if (user.churchId !== churchId) continue;
       // F-21 helper treats admin/missing-array as access.
       if (!effectiveHasHub(user, 'tasks')) continue;
 
