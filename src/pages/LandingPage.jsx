@@ -435,6 +435,15 @@ export function LandingPage({ onGetStarted }) {
             <a href="/blog" style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14, textDecoration: 'none', fontFamily: f1 }}>
               Blog
             </a>
+            <a href="/privacy" style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14, textDecoration: 'none', fontFamily: f1 }}>
+              Privacy
+            </a>
+            <a href="/terms" style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14, textDecoration: 'none', fontFamily: f1 }}>
+              Terms
+            </a>
+            <a href="/sms-program" style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14, textDecoration: 'none', fontFamily: f1 }}>
+              SMS Program
+            </a>
             <a
               href="mailto:churchopshub@gmail.com"
               style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14, textDecoration: 'none', fontFamily: f1 }}
