@@ -787,7 +787,10 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
   ]);
   const sub = subSnap.data() || {};
   if (!subHasHub(sub, 'jobs')) return { sent: 0 };
-  if (!notifSnap2.data()?.enabled) return { sent: 0 };
+  // F-14: treat missing/unset doc as enabled (default-on); only explicit
+  // false disables. Fresh churches that haven't opened the Notifications
+  // settings page still receive emails.
+  if (notifSnap2.exists && notifSnap2.data()?.enabled === false) return { sent: 0 };
 
   // Use server-derived poster name (not client-supplied) to prevent impersonation in email body
   const postedBy = callerSnap.data().name || 'Your church';
@@ -967,8 +970,9 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
     if (notifCache[churchId] !== undefined) return notifCache[churchId];
     try {
       const s = await db.doc(`churches/${churchId}/config/notifications`).get();
-      notifCache[churchId] = !!(s.exists && s.data().enabled);
-    } catch { notifCache[churchId] = false; }
+      // F-14: default-on. Treat missing doc as enabled; only explicit false disables.
+      notifCache[churchId] = !s.exists || s.data()?.enabled !== false;
+    } catch { notifCache[churchId] = true; }
     return notifCache[churchId];
   }
   async function churchHasTasksHub(churchId) {
@@ -1112,8 +1116,9 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     if (notifCache2[churchId] !== undefined) return notifCache2[churchId];
     try {
       const s = await db.doc(`churches/${churchId}/config/notifications`).get();
-      notifCache2[churchId] = !!(s.exists && s.data().enabled);
-    } catch { notifCache2[churchId] = false; }
+      // F-14: default-on. Treat missing doc as enabled; only explicit false disables.
+      notifCache2[churchId] = !s.exists || s.data()?.enabled !== false;
+    } catch { notifCache2[churchId] = true; }
     return notifCache2[churchId];
   }
 
@@ -1253,7 +1258,8 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
     db.doc(`churches/${churchId}/config/notifications`).get(),
     db.doc(`churches/${churchId}/config/subscription`).get(),
   ]);
-  if (!notifSnap.data()?.enabled) return { sent: 0 };
+  // F-14: default-on. Treat missing doc as enabled; only explicit false disables.
+  if (notifSnap.exists && notifSnap.data()?.enabled === false) return { sent: 0 };
   if (!subHasHub(subSnap.data() || {}, 'jobs')) return { sent: 0 };
 
   // F-15: read the 30-second double-fire guard AND stamp the timestamp inside
@@ -1521,7 +1527,8 @@ exports.sendTaskMentionEmail = onCall({ cors: true }, async (req) => {
     db.doc(`churches/${churchId}/config/subscription`).get(),
     db.doc(`churches/${churchId}/config/main`).get(),
   ]);
-  if (!notifSnap.data()?.enabled) return { sent: 0 };
+  // F-14: default-on. Treat missing doc as enabled; only explicit false disables.
+  if (notifSnap.exists && notifSnap.data()?.enabled === false) return { sent: 0 };
   if (!subHasHub(subSnap.data(), 'tasks')) return { sent: 0 };
 
   const churchName = escapeHtml(churchSnap.data()?.churchName || 'Your Church');
