@@ -22,6 +22,10 @@ export default defineConfig({
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
     ignoreHTTPSErrors: true,
+    // Realistic Chrome UA so Vercel's bot protection doesn't challenge us.
+    // Without this, repeated E2E runs trip Vercel's "Failed to verify your
+    // browser / Code 21" challenge and the auth setup loops forever.
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
     video: 'retain-on-failure',
