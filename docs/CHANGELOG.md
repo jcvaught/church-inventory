@@ -35,6 +35,8 @@ Affects **every** modal in the app (New Task, edit task, bulk assign, defaults, 
 
 **Follow-up shipped same day** (separate concern from Jill's typing bug, but lives in the same effect block): the focus-on-open also targeted the close-button "X" for the same DOM-order reason. Split the `querySelector` into two passes — prefer `input/select/textarea/[tabindex]` first, fall back to `button` second, then the panel itself. Now opening any modal lands the cursor in the first typeable field, which is what users (and screen readers) expect.
 
+**Third follow-up** (Enter-in-Description "doesn't work"): same modal, third invisible-feedback report. `RichTextarea` (TasksPage.jsx + MaintenancePage.jsx — duplicated, not a shared primitive yet) had `minHeight:72` / `52` and no auto-grow. Pressing Enter at end-of-content inserted `\n` correctly (state updated) but the cursor moved to an empty line just below the visible area — textarea scrolls ~2px to keep cursor in view, but with cursor on empty content there's nothing to see. User concludes Enter is broken. Confirmed empirically against prod: scrollHeight 70→82, clientHeight stays 70 → 12px overflow swallows the new line. **Fix:** `useEffect` on `value` setting `el.style.height = scrollHeight + 'px'`. After fix, clientHeight grows 70 → 80 → 100 as Enter is pressed. Applied to both copies.
+
 ---
 
 ## 2026-05-06 — Jobs Hub Pre-Rollout Audit + Blog #20 + Task Sharing Backfill
