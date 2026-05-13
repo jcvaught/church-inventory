@@ -7,6 +7,7 @@ import { MobileCtx } from '../../hooks/useMobile.js';
 import { localDateStr, generateRecurrenceDates } from '../../utils/date.js';
 import { printJobRoster } from '../../utils/print.js';
 import { exportJobsICS } from '../../utils/ical.js';
+import { formatTimeForDisplay } from '../../utils/time.js';
 
 function formatJobDate(dateStr) {
   if (!dateStr) return '—';
@@ -138,7 +139,7 @@ function JobCalendar({ jobs, onJobClick, isMobile, todayStr: todayStrProp }) {
                   <span style={{ width:8, height:8, borderRadius:'50%', background:sc.dot, flexShrink:0 }}/>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:14, fontWeight:600, color:B.navy, fontFamily:f1 }}>{j.title}</div>
-                    <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>{j.scheduledDate}{j.scheduledTime ? ' · '+j.scheduledTime : ''}</div>
+                    <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>{j.scheduledDate}{j.scheduledTime ? ' · '+formatTimeForDisplay(j.scheduledTime) : ''}</div>
                   </div>
                   <span style={{ fontSize:12, color:sc.tx, fontFamily:f1 }}>{(j.signups||[]).length}/{j.spotsTotal||1}</span>
                 </div>
@@ -263,7 +264,7 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJ
       </div>
       <div style={{ fontWeight: 700, fontSize: 15, fontFamily: f1, color: B.navy, marginBottom: 6 }}>{job.title}</div>
       <div style={{ fontSize: isMobile ? 13 : 12, color: B.textMid, fontFamily: f2, marginBottom: 2 }}>
-        📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' at ' + job.scheduledTime : ''}
+        📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' at ' + formatTimeForDisplay(job.scheduledTime) : ''}
       </div>
       {job.location && (
         <div style={{ fontSize: isMobile ? 13 : 12, color: B.textMid, fontFamily: f2, marginBottom: 8 }}>📍 {job.location}</div>
@@ -343,7 +344,7 @@ const MobileScheduleRow = memo(function MobileScheduleRow({ job, showRoster, onD
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
         <div>
           <div style={{ fontSize:14, fontWeight:700, color:B.navy, fontFamily:f1 }}>{job.title}</div>
-          <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}>📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' · '+job.scheduledTime : ''}</div>
+          <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}>📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' · '+formatTimeForDisplay(job.scheduledTime) : ''}</div>
         </div>
         <span style={{ fontSize:11, fontWeight:700, color:sc.tx, background:sc.bg, padding:'2px 8px', borderRadius:12 }}>{job.status}</span>
       </div>
@@ -369,7 +370,7 @@ const DesktopScheduleRow = memo(function DesktopScheduleRow({ job, todayStr, isA
       onMouseEnter={e => e.currentTarget.style.background=B.warmGray}
       onMouseLeave={e => e.currentTarget.style.background=''}>
       <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textDark, whiteSpace:'nowrap' }}>
-        {formatJobDate(job.scheduledDate)}{job.scheduledTime ? <div style={{ fontSize:11, color:B.textLight }}>{job.scheduledTime}</div> : null}
+        {formatJobDate(job.scheduledDate)}{job.scheduledTime ? <div style={{ fontSize:11, color:B.textLight }}>{formatTimeForDisplay(job.scheduledTime)}</div> : null}
       </td>
       <td style={{ padding:'10px 14px', fontFamily:f2, color:B.navy, fontWeight:600 }}>
         <div>{job.title}</div>
@@ -1286,7 +1287,7 @@ export function JobsPage({ store, userProfile }) {
             </div>
             <div style={{ flex: '1 1 120px' }}>
               <FF label="Time">
-                <input style={inp} value={jobForm.scheduledTime} onChange={e => setJobForm(f => ({ ...f, scheduledTime: e.target.value }))} placeholder="e.g. 2:00 PM" />
+                <input type="time" style={inp} value={jobForm.scheduledTime} onChange={e => setJobForm(f => ({ ...f, scheduledTime: e.target.value }))} />
               </FF>
             </div>
           </div>

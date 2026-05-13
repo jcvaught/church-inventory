@@ -16,6 +16,63 @@ Sentry.init({
 let sgMail;
 try { sgMail = require('@sendgrid/mail'); } catch { sgMail = null; }
 
+// Format job scheduledTime for human-readable email/SMS output.
+// Mirrors src/utils/time.js — accepts canonical HH:MM (new format) and
+// renders "2:00 PM"; passes legacy free-text values through unchanged.
+function formatTimeForDisplay(value) {
+  if (!value) return '';
+  const m = String(value).match(/^(\d{2}):(\d{2})$/);
+  if (!m) return value;
+  const h24 = parseInt(m[1], 10);
+  if (Number.isNaN(h24) || h24 < 0 || h24 > 23) return value;
+  const ampm = h24 >= 12 ? 'PM' : 'AM';
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${m[2]} ${ampm}`;
+}
+
+// ─── Email suppression (F-38) ──────────────────────────────────────────────
+// Inbound bounce/spam/unsubscribe events from SendGrid land in
+// emailSuppressions/{normalizedEmail}. sendEmailSafe wraps sgMail.send and
+// skips any suppressed recipient — caller sees `{ skipped: 'suppressed' }`
+// instead of a delivery.
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+async function isEmailSuppressed(email) {
+  const norm = normalizeEmail(email);
+  if (!norm) return false;
+  try {
+    const snap = await getFirestore().doc(`emailSuppressions/${encodeURIComponent(norm)}`).get();
+    if (!snap.exists) return false;
+    const data = snap.data();
+    // Manual unsuppress: set { active: false } on the doc.
+    return data.active !== false;
+  } catch (err) {
+    console.warn('[isEmailSuppressed] read failed for', norm, err.message);
+    return false; // fail-open — better to send than to silently drop
+  }
+}
+
+async function sendEmailSafe(msg) {
+  if (!sgMail) return { skipped: 'no-sgmail' };
+  const recipients = Array.isArray(msg.to) ? msg.to : [msg.to];
+  const filtered = [];
+  const suppressed = [];
+  for (const r of recipients) {
+    const addr = typeof r === 'string' ? r : (r?.email || '');
+    if (await isEmailSuppressed(addr)) suppressed.push(addr);
+    else filtered.push(r);
+  }
+  if (suppressed.length) {
+    console.log('[sendEmailSafe] skipped suppressed', suppressed.join(', '));
+  }
+  if (!filtered.length) return { skipped: 'suppressed', suppressed };
+  const finalMsg = filtered.length === recipients.length ? msg : { ...msg, to: filtered };
+  await sgMail.send(finalMsg);
+  return { sent: filtered.length, suppressed };
+}
+
 let twilioClient;
 try { twilioClient = require('twilio'); } catch { twilioClient = null; }
 
@@ -451,6 +508,90 @@ const TWILIO_FROM = process.env.TWILIO_FROM_NUMBER || '';
 // left active in SendGrid as an emergency fallback for ~24h after this deploy.
 const FROM = { email: 'noreply@churchopshub.com', name: 'ChurchOpsHub' };
 
+// ─── SendGrid Event Webhook (F-38) ─────────────────────────────────────────
+// Receives bounce / dropped / spamreport / unsubscribe events from SendGrid
+// and updates emailSuppressions/{normalizedEmail} so subsequent sends skip
+// the address via sendEmailSafe. Configure SendGrid → Settings → Mail Settings →
+// Event Webhook with the URL below and SENDGRID_WEBHOOK_SECRET as a path token:
+//   https://us-central1-church-inventory-9615c.cloudfunctions.net/sendgridEventWebhook?token=<SECRET>
+// Enable at minimum: Bounced, Dropped, Spam Reports, Unsubscribed. The other
+// engagement events (delivered/open/click) are also accepted but only logged.
+const SUPPRESSING_EVENTS = new Set(['bounce', 'dropped', 'spamreport', 'unsubscribe', 'group_unsubscribe']);
+exports.sendgridEventWebhook = onRequest({ cors: false, invoker: 'public' }, async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).send('Method not allowed');
+    return;
+  }
+  // Shared-secret guard. SendGrid's signed-event-webhook ECDSA verification is
+  // also supported by the platform, but a token in the URL is sufficient for
+  // our scale and simpler to operate. Set SENDGRID_WEBHOOK_SECRET in
+  // functions/.env.
+  const expected = process.env.SENDGRID_WEBHOOK_SECRET;
+  if (!expected) {
+    console.error('[sendgridEventWebhook] SENDGRID_WEBHOOK_SECRET not configured — rejecting.');
+    res.status(503).send('Webhook secret not configured');
+    return;
+  }
+  const provided = (req.query?.token || req.headers['x-webhook-token'] || '').toString();
+  if (provided !== expected) {
+    console.warn('[sendgridEventWebhook] token mismatch from', req.ip);
+    res.status(401).send('Unauthorized');
+    return;
+  }
+
+  const events = Array.isArray(req.body) ? req.body : [req.body];
+  if (!events.length) {
+    res.status(200).send('OK (no events)');
+    return;
+  }
+
+  const db = getFirestore();
+  let suppressed = 0;
+  let other = 0;
+  let errors = 0;
+
+  for (const evt of events) {
+    if (!evt || typeof evt !== 'object') continue;
+    const email = normalizeEmail(evt.email);
+    const eventType = String(evt.event || '').toLowerCase();
+    const eventId = String(evt.sg_event_id || `${email}-${evt.timestamp || Date.now()}-${eventType}`);
+    if (!email || !eventType) continue;
+
+    try {
+      // Audit log every event (capped TTL not enforced — table is small)
+      await db.doc(`emailEvents/${encodeURIComponent(eventId)}`).set({
+        email,
+        event: eventType,
+        reason: evt.reason || evt.type || null,
+        bounceClassification: evt.bounce_classification || null,
+        timestamp: typeof evt.timestamp === 'number' ? evt.timestamp : Math.floor(Date.now() / 1000),
+        sg_message_id: evt.sg_message_id || null,
+        receivedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      if (SUPPRESSING_EVENTS.has(eventType)) {
+        await db.doc(`emailSuppressions/${encodeURIComponent(email)}`).set({
+          email,
+          active: true,
+          lastEvent: eventType,
+          lastReason: evt.reason || evt.type || null,
+          lastEventAt: FieldValue.serverTimestamp(),
+          eventCount: FieldValue.increment(1),
+        }, { merge: true });
+        suppressed += 1;
+      } else {
+        other += 1;
+      }
+    } catch (err) {
+      errors += 1;
+      console.error('[sendgridEventWebhook] failed to process event', eventId, err.message);
+    }
+  }
+
+  console.log(`[sendgridEventWebhook] processed ${events.length} events: ${suppressed} suppress, ${other} other, ${errors} errors`);
+  res.status(200).send(`OK (${events.length})`);
+});
+
 // Shared hub-access check used by all hub-gating Cloud Functions.
 // Mirrors the client-side hasHub() logic in useSubscription.js.
 function subHasHub(sub, hubName) {
@@ -551,7 +692,7 @@ exports.sendWelcomeEmail = onDocumentCreated('churches/{churchId}', async (event
   }
 
   try {
-    await sgMail.send({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject, html, text });
+    await sendEmailSafe({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject, html, text });
     await churchRef.update({ welcomeEmailSentAt: new Date().toISOString() });
   } catch (err) {
     console.error('sendWelcomeEmail: send failed', err?.response?.body || err);
@@ -681,7 +822,7 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
     const text = `Hi ${firstName},\n\nYour 90-day free trial has ended. Based on your team's usage, we've kept your two most-used hubs active for free:\n\n${freeNames}\n\nThe Inventory Hub remains free as always. To unlock additional hubs, go to Settings → Subscription.\n\nAll your data is still there — nothing was deleted.\n\nThank you for trying ChurchOpsHub.\n\n— John Vaught\nChurchOpsHub`;
 
     try {
-      await sgMail.send({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject, html, text });
+      await sendEmailSafe({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject, html, text });
     } catch (err) {
       console.error('processTrialExpirations: trial-end email failed', { churchId, err: err?.response?.body || err });
       Sentry.captureException(err);
@@ -736,7 +877,7 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
     const warnText = `Hi ${firstName},\n\nYour 90-day free trial ends on ${trialEndDisplay} — just 7 days away.\n\nAfter the trial, we'll automatically keep your two most-used hubs active for free. To keep all hubs, upgrade to the All-In plan ($29/mo) from Settings → Subscription.\n\nLog in at churchopshub.com to review your hubs.\n\n— John Vaught\nChurchOpsHub`;
 
     try {
-      await sgMail.send({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject: warnSubject, html: warnHtml, text: warnText });
+      await sendEmailSafe({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject: warnSubject, html: warnHtml, text: warnText });
       await subDoc.ref.update({ trialWarningEmailSentAt: nowStr });
     } catch (err) {
       console.error('processTrialExpirations: warning email failed', { churchId, err: err?.response?.body || err });
@@ -778,7 +919,7 @@ exports.sendReservationEmail = onCall({ cors: true }, async (req) => {
 
   const text = `Hi ${toName},\n\nYour reservation for "${eventName}" (${resourceDesc}) on ${eventDate} has been ${status} by ${actionBy}.\n\n— ${churchName}`;
 
-  await sgMail.send({ to: toEmail, from: FROM, subject, html, text });
+  await sendEmailSafe({ to: toEmail, from: FROM, subject, html, text });
   return { sent: true };
 });
 
@@ -817,7 +958,7 @@ exports.sendTicketAssignedEmail = onCall({ cors: true }, async (req) => {
 
   const text = `Hi ${toName},\n\nYou've been assigned ${labelLower} ${ticketNumber}: "${ticketName}" by ${assignedBy}.\n\nLog in at churchopshub.com to view it.\n\n— ${churchName}`;
 
-  await sgMail.send({ to: toEmail, from: FROM, subject, html, text });
+  await sendEmailSafe({ to: toEmail, from: FROM, subject, html, text });
   return { sent: true };
 });
 
@@ -881,7 +1022,7 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
   const subject = `📢 ${title} — ${churchName}`;
 
   const results = await Promise.allSettled(recipients.map(u =>
-    sgMail.send({
+    sendEmailSafe({
       to: u.email,
       from: FROM,
       subject,
@@ -950,7 +1091,7 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
   const safeTitle = escapeHtml(job.title || 'Job');
   const safeChurch = escapeHtml(churchName);
   const dateStr = job.scheduledDate || '';
-  const timeStr = job.scheduledTime ? ` at ${job.scheduledTime}` : '';
+  const timeStr = job.scheduledTime ? ` at ${formatTimeForDisplay(job.scheduledTime)}` : '';
   const signupSubject = `Job Cancelled: ${job.title || 'Job'}`;
   const waitlistSubject = `Job You Were Waitlisted For Was Cancelled: ${job.title || 'Job'}`;
 
@@ -992,7 +1133,7 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
 <p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to see other available jobs.</p>
 <p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`;
     const text = `Hi ${user.name || 'there'},\n\n${bodyTextLine}\n\n${job.title || 'Job'}${dateStr ? '\nDate: ' + dateStr + timeStr : ''}\n\nNo action is needed.\n\n— ${churchName}`;
-    return sgMail.send({ to: user.email, from: FROM, subject, html, text });
+    return sendEmailSafe({ to: user.email, from: FROM, subject, html, text });
   }));
 
   results.forEach((r, i) => { if (r.status === 'rejected') { console.error('sendJobCancelledEmails: email failed', { index: i, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
@@ -1141,7 +1282,7 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
     ).join('\n');
     const text = `Hi ${user.name || 'there'},\n\nYou have tasks coming due:\n\n${textRows}\n\nLog in at churchopshub.com to view your tasks.\n`;
 
-    emailTasks.push(sgMail.send({ to: user.email, from: FROM, subject, html, text }));
+    emailTasks.push(sendEmailSafe({ to: user.email, from: FROM, subject, html, text }));
     emailTaskRefs.push(tasks.map(t => t._ref));
   }
 
@@ -1295,7 +1436,7 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     const safeName = escapeHtml(user.name || 'there');
 
     const jobRows = jobs.map(j => {
-      const timeStr = j.scheduledTime ? ` at ${escapeHtml(j.scheduledTime)}` : '';
+      const timeStr = j.scheduledTime ? ` at ${escapeHtml(formatTimeForDisplay(j.scheduledTime))}` : '';
       const locStr = j.location ? `<br><span style="font-size:13px;color:#666">📍 ${escapeHtml(j.location)}</span>` : '';
       const payStr = j.pay ? `<br><span style="font-size:13px;color:#16A34A">💵 ${escapeHtml(j.pay)}</span>` : '';
       return `<li style="margin-bottom:8px"><strong>${escapeHtml(j.title)}</strong>${timeStr}${locStr}${payStr}</li>`;
@@ -1310,9 +1451,9 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
 <ul style="padding-left:20px;margin:12px 0">${jobRows}</ul>
 <p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to view details or withdraw.</p>`;
 
-    const text = `Hi ${user.name || 'there'},\n\nReminder — you're signed up for the following job${jobs.length !== 1 ? 's' : ''} today:\n\n${jobs.map(j => `• ${j.title}${j.scheduledTime ? ' at ' + j.scheduledTime : ''}${j.location ? ' — ' + j.location : ''}`).join('\n')}\n\nLog in at churchopshub.com to view details.\n`;
+    const text = `Hi ${user.name || 'there'},\n\nReminder — you're signed up for the following job${jobs.length !== 1 ? 's' : ''} today:\n\n${jobs.map(j => `• ${j.title}${j.scheduledTime ? ' at ' + formatTimeForDisplay(j.scheduledTime) : ''}${j.location ? ' — ' + j.location : ''}`).join('\n')}\n\nLog in at churchopshub.com to view details.\n`;
 
-    emailTasks.push(sgMail.send({ to: user.email, from: FROM, subject, html, text }));
+    emailTasks.push(sendEmailSafe({ to: user.email, from: FROM, subject, html, text }));
     // Each user's jobs come from multiple job refs — record all their refs for this send
     emailJobRefs.push(jobs.map(j => j._ref));
   }
@@ -1340,9 +1481,9 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
       if (!effectiveHasHub(user, 'jobs')) continue;
       const jobs = (remindersByUid[userSnap.id] || []).filter(j => j.churchId === user.churchId);
       if (jobs.length === 0) continue;
-      const jobLines = jobs.map(j => `- ${j.title}${j.scheduledTime ? ' at ' + j.scheduledTime : ''}${j.location ? ' - ' + j.location : ''}`).join('\n');
+      const jobLines = jobs.map(j => `- ${j.title}${j.scheduledTime ? ' at ' + formatTimeForDisplay(j.scheduledTime) : ''}${j.location ? ' - ' + j.location : ''}`).join('\n');
       const body = jobs.length === 1
-        ? `ChurchOpsHub: Reminder - you're signed up for "${jobs[0].title}" today${jobs[0].scheduledTime ? ' at ' + jobs[0].scheduledTime : ''}${jobs[0].location ? ' @ ' + jobs[0].location : ''}. Reply STOP to opt out.`
+        ? `ChurchOpsHub: Reminder - you're signed up for "${jobs[0].title}" today${jobs[0].scheduledTime ? ' at ' + formatTimeForDisplay(jobs[0].scheduledTime) : ''}${jobs[0].location ? ' @ ' + jobs[0].location : ''}. Reply STOP to opt out.`
         : `ChurchOpsHub: Reminder - you have ${jobs.length} jobs today:\n${jobLines}\n\nReply STOP to opt out.`;
       smsTasks.push(
         tw.messages.create({ to: user.phone, from: TWILIO_FROM, body })
@@ -1450,7 +1591,7 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
   const safeActor = escapeHtml(actorName || 'Someone');
   const safeRemoved = escapeHtml(removedName || 'Someone');
   const dateStr = job.scheduledDate ? escapeHtml(job.scheduledDate) : '';
-  const timeStr = job.scheduledTime ? ` at ${escapeHtml(job.scheduledTime)}` : '';
+  const timeStr = job.scheduledTime ? ` at ${escapeHtml(formatTimeForDisplay(job.scheduledTime))}` : '';
   const filled = (job.signups || []).length;
   const total = job.spotsTotal || 1;
 
@@ -1496,7 +1637,7 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
   const allNotifyRecipients = [poster, ...delegateUsers, ...(jobLeadUser ? [jobLeadUser] : [])];
   const recipients = allNotifyRecipients.filter(u => { if (seenEmails.has(u.email)) return false; seenEmails.add(u.email); return true; });
   const results = await Promise.allSettled(
-    recipients.map(u => sgMail.send({ to: u.email, from: FROM, subject, html: bodyHtml, text: bodyText }))
+    recipients.map(u => sendEmailSafe({ to: u.email, from: FROM, subject, html: bodyHtml, text: bodyText }))
   );
   results.forEach((r, i) => { if (r.status === 'rejected') { console.error('sendJobPosterNotification: failed', { index: i, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
   // Timestamp already stamped pre-send inside the F-15 transaction.
@@ -1625,7 +1766,7 @@ exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
   const text = `Hi ${user.name || 'there'},\n\nGreat news! A spot opened up for:\n\n${jobData?.title || 'Job'}${dateStr ? '\nDate: ' + dateStr + timeStr : ''}\n\nYou're now signed up.\n\n— ${churchName}`;
 
   try {
-    await sgMail.send({ to: user.email, from: FROM, subject, html, text });
+    await sendEmailSafe({ to: user.email, from: FROM, subject, html, text });
   } catch (err) {
     console.error('promoteFromWaitlist: email failed', err?.message);
     Sentry.captureException(err);
@@ -1688,7 +1829,7 @@ exports.sendTaskMentionEmail = onCall({ cors: true }, async (req) => {
       // F-30 from the 2026-05-12 audit: include a plain-text MIME part.
       // HTML-only emails get a spam-score penalty from Gmail/Outlook.
       const text = `Hi ${user.name || 'there'},\n\n${commentAuthorName || 'Someone'} mentioned you in a comment on task ${taskNumber || ''} — ${taskName || ''}:\n\n${(commentText || '').substring(0, 500)}\n\nOpen churchopshub.com to view and reply.\n\n— ${churchName}`;
-      await sgMail.send({ to: user.email, from: FROM, subject, html, text });
+      await sendEmailSafe({ to: user.email, from: FROM, subject, html, text });
       sent++;
     } catch (err) {
       console.error('sendTaskMentionEmail: failed for', mentionedUid, err?.message);

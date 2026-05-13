@@ -347,5 +347,20 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // ── Email suppression list (F-38) — Admin SDK writes only; owner-only read
+    // Populated by sendgridEventWebhook when SendGrid reports bounce, dropped,
+    // spamreport, or unsubscribe events. Read by sendEmailSafe before every
+    // outbound message. Manually set `active: false` to un-suppress an address.
+    match /emailSuppressions/{docId} {
+      allow read: if request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
+      allow create, update, delete: if false;
+    }
+
+    // ── Email event audit log (F-38) — every SendGrid event lands here.
+    match /emailEvents/{docId} {
+      allow read: if request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
+      allow create, update, delete: if false;
+    }
+
   }
 }

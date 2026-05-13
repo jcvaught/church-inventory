@@ -2,6 +2,8 @@
 // fires on printLabel (one of many print operations). Dynamic import keeps
 // it out of the main bundle.
 
+import { formatTimeForDisplay } from './time.js';
+
 export function escapeHtml(str) {
   if (str == null) return '';
   return String(str)
@@ -54,7 +56,7 @@ export function printJobRoster(jobs, churchName) {
   const rows = jobs.map(job => {
     const parts = (job.scheduledDate || '').slice(0, 10).split('-').map(Number);
     const dateStr = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' }) : '—';
-    const timeStr = job.scheduledTime ? ` at ${escapeHtml(job.scheduledTime)}` : '';
+    const timeStr = job.scheduledTime ? ` at ${escapeHtml(formatTimeForDisplay(job.scheduledTime))}` : '';
     const signupList = (job.signups || []).map(s => escapeHtml(s.name)).join(', ') || '<em style="color:#aaa">No signups</em>';
     return `<tr>
       <td class="mono">${escapeHtml(job.jobNumber || '')}</td>
