@@ -4,6 +4,39 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-13 — Modal "one letter at a time" focus bug
+
+User reported (Jill in FXCC, Chrome desktop): typing into the New Task modal in Tasks Hub yanked focus to the close-button "X" after every keystroke. Reproduced same-day on the reporter's own account by typing in the Description field.
+
+**Root cause:** `Modal.jsx` (added 2026-05-12 in commit `a28e92a` "Mobile rollout-readiness batch") wired an a11y focus-management `useEffect` with `[open, onClose]` in its dependency array. Callers (every Modal call site, including `TasksPage.jsx:2090`) pass `onClose` as an inline arrow:
+
+```jsx
+<Modal open={showAdd} onClose={() => { setShowAdd(false); setTaskForm(getEmptyTask()); ... }}>
+```
+
+On every keystroke inside the modal, `setTaskForm` triggers a parent re-render → new `onClose` identity → the effect's deps see a change → cleanup + re-run. The re-run schedules `setTimeout(() => target.focus(), 0)` where `target = panelRef.current.querySelector('input, select, textarea, button, [tabindex]:not([tabindex="-1"])')`. `querySelector` returns elements in DOM order, and the close-button "X" sits **before** any form input in the panel's DOM. So every keystroke → focus to the X → user has to click back into the field → repeat.
+
+Typing only in the first input would have masked the bug (the `.focus()` lands on the same element if focus is already there). The reporter's "I don't have the issue" check had only typed into the Name field.
+
+**Fix:** Pin `onClose` through a ref, drop it from the effect's dep array. Standard React idiom for "call the latest version of this callback without rebinding the effect."
+
+```js
+const onCloseRef = useRef(onClose);
+useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+useEffect(() => {
+  // …
+  const onKey = (e) => { if (e.key === 'Escape') onCloseRef.current?.(); };
+  // …
+}, [open]); // ← was [open, onClose]
+```
+
+Affects **every** modal in the app (New Task, edit task, bulk assign, defaults, settings, ticket detail, item detail, etc.) — anywhere users type inside a Modal. Single-component fix in the shared primitive, so all call sites are fixed at once. Build clean, lint 0 errors.
+
+**Not fixed in this commit** (separate concern, not blocking Jill): the focus-on-open targets the close button "X" because it's first in DOM order. Better a11y would be to skip buttons in the auto-focus query and prefer the first input/select/textarea, falling back to the panel itself. Filed mentally as a follow-up; only matters on modal open, not on subsequent typing.
+
+---
+
 ## 2026-05-06 — Jobs Hub Pre-Rollout Audit + Blog #20 + Task Sharing Backfill
 
 Pre-rollout audit of the Jobs Hub before opening it to real teens/parents at FXCC. 14 findings across four severity tiers; 13 actionable items shipped in three commits today, one was a non-issue.

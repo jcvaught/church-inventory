@@ -7,6 +7,13 @@ export function Modal({ open, onClose, title, wide, maxWidth, children }) {
   const titleId = useId();
   const panelRef = useRef(null);
   const previouslyFocusedRef = useRef(null);
+  // Pin onClose through a ref so the focus-management effect below doesn't re-run
+  // on every parent render. Callers pass `onClose` as an inline arrow, so without
+  // this ref the effect would tear down + rebuild on every keystroke inside the
+  // modal — and the rebuild calls `.focus()` on the panel's first input, which
+  // can interrupt typing.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   // Audit overnight 2026-05-12 / Mobile H-1: a11y — Escape closes the modal,
   // focus moves into the panel on open, and focus is restored to the trigger
@@ -15,7 +22,7 @@ export function Modal({ open, onClose, title, wide, maxWidth, children }) {
   useEffect(() => {
     if (!open) return;
     previouslyFocusedRef.current = document.activeElement;
-    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    const onKey = (e) => { if (e.key === 'Escape') onCloseRef.current?.(); };
     document.addEventListener('keydown', onKey);
     // Move focus into the panel on the next paint so screen readers pick it up.
     const t = setTimeout(() => {
@@ -33,7 +40,7 @@ export function Modal({ open, onClose, title, wide, maxWidth, children }) {
         setTimeout(() => prev.focus(), 0);
       }
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   const resolvedMaxWidth = maxWidth || (wide ? 720 : 520);
