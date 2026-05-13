@@ -985,62 +985,16 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
     throw new HttpsError('permission-denied', 'Only admin or manager can send announcements.');
   }
 
-  // Verify church has an active Jobs hub subscription and notifications enabled
-  const [churchSnap, subSnap, notifSnap2, usersSnap] = await Promise.all([
-    db.doc(`churches/${churchId}/config/main`).get(),
-    db.doc(`churches/${churchId}/config/subscription`).get(),
-    db.doc(`churches/${churchId}/config/notifications`).get(),
-    // Use plain churchId filter — 'active != false' silently excludes docs where field is missing
-    db.collection('users').where('churchId', '==', churchId).get(),
-  ]);
-  const sub = subSnap.data() || {};
-  if (!subHasHub(sub, 'jobs')) return { sent: 0 };
-  // F-14: treat missing/unset doc as enabled (default-on); only explicit
-  // false disables. Fresh churches that haven't opened the Notifications
-  // settings page still receive emails.
-  if (notifSnap2.exists && notifSnap2.data()?.enabled === false) return { sent: 0 };
-
-  // Use server-derived poster name (not client-supplied) to prevent impersonation in email body
-  const postedBy = callerSnap.data().name || 'Your church';
-
-  const churchName = churchSnap.data()?.churchName || 'Your Church';
-  const recipients = usersSnap.docs
-    .map(d => ({ ...d.data(), uid: d.id }))
-    .filter(u => u.email && u.active !== false && effectiveHasHub(u, 'jobs'));
-
-  if (recipients.length === 0) return { sent: 0 };
-
-  const safeTitle = escapeHtml(title);
-  // F-28 from the 2026-05-12 audit: cap body length. Previously unbounded — an
-  // admin pasting 200KB of text fans out 200KB × N recipients. Gmail also
-  // clip-renders bodies > ~102KB. Truncate to 5000 chars (mirrors the cap
-  // already used in sendTaskMentionEmail at line ~1565).
-  const truncatedBody = (body || '').substring(0, 5000);
-  const safeBody = escapeHtml(truncatedBody).replace(/\n/g, '<br>');
-  const safePostedBy = escapeHtml(postedBy);
-  const safeChurch = escapeHtml(churchName);
-  const subject = `📢 ${title} — ${churchName}`;
-
-  const results = await Promise.allSettled(recipients.map(u =>
-    sendEmailSafe({
-      to: u.email,
-      from: FROM,
-      subject,
-      html: `<p>Hi ${escapeHtml(u.name || 'there')},</p>
-<p><strong>${safePostedBy}</strong> posted a new Job Hub announcement:</p>
-<div style="background:#f5f5f5;border-left:4px solid #0D9488;padding:12px 16px;margin:12px 0;border-radius:4px">
-  <p style="font-weight:700;margin:0 0 8px;font-size:15px">${safeTitle}</p>
-  <p style="margin:0;font-size:14px;line-height:1.6">${safeBody}</p>
-</div>
-<p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to view all announcements.</p>
-<p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`,
-      text: `Hi ${u.name || 'there'},\n\n${postedBy} posted a new announcement:\n\n${title}\n\n${body}\n\n— ${churchName}`,
-    })
-  ));
-
-  results.forEach((r, i) => { if (r.status === 'rejected') { console.error('sendJobAnnouncementEmails: email failed', { index: i, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
-  const sent = results.filter(r => r.status === 'fulfilled').length;
-  return { sent };
+  // 2026-05-13: church-wide announcement emails disabled. They were the
+  // single biggest volume burst (N×members per click) and the in-app
+  // activityLog entry already surfaces announcements in every member's feed.
+  // Auth/role checks above are preserved so the callable can't be misused
+  // as a leak vector; the function just stops emailing. Re-enable by
+  // restoring the email fan-out from git history (commit prior to this).
+  // The `title` + `body` params are read above for the auth path's input
+  // validation contract; reference them here so linters don't complain.
+  void title; void body;
+  return { sent: 0, skipped: 'announcement-emails-disabled' };
 });
 
 // ── sendJobCancelledEmails ────────────────────────────────────────────────
@@ -1173,20 +1127,27 @@ exports.clearCancellationStampOnReopen = onDocumentUpdated('churches/{churchId}/
 // Runs every morning at 8:00 AM Central time.
 // Finds all tasks due today or tomorrow (not Complete/Cancelled) that have assignees,
 // and emails each assignee. Respects per-church notification settings.
-exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'America/Chicago' }, async () => {
+// 2026-05-13: Switched from daily 8am to weekly Monday 8am Central. Per-task
+// daily reminders were the heaviest sustained email volume; a weekly digest
+// covering the full upcoming week reduces send count by ~5–7× while
+// preserving the "don't let tasks slip" UX. Overdue + this-week's tasks
+// roll into one email per assignee.
+exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * 1', timeZone: 'America/Chicago' }, async () => {
   if (!initSendGrid()) { console.warn('sendTaskDueReminders: SendGrid not configured, skipping.'); return; }
 
   const db = getFirestore();
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
   const pad = n => String(n).padStart(2, '0');
-  const todayStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-  const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
-  const tomorrowStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth()+1)}-${pad(tomorrow.getDate())}`;
+  const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const todayStr = ymd(now);
+  const endOfWeek = new Date(now); endOfWeek.setDate(now.getDate() + 6);
+  const endOfWeekStr = ymd(endOfWeek);
 
-  // Query all tasks with a dueDate on or before tomorrow (captures overdue + due today + due tomorrow).
-  // No lower bound so overdue tasks are included; status check below excludes Complete/Cancelled.
+  // Query all tasks with a dueDate on or before the end of this week
+  // (captures overdue + due any day Mon–Sun). No lower bound so overdue
+  // tasks are included; status check below excludes Complete/Cancelled.
   const snap = await db.collectionGroup('tasks')
-    .where('dueDate', '<=', tomorrowStr)
+    .where('dueDate', '<=', endOfWeekStr)
     .get();
 
   if (snap.empty) return;
@@ -1259,28 +1220,41 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Am
     if (!(await notifEnabled(user.churchId))) continue;
 
     const safeName = escapeHtml(user.name || 'there');
-    const dueToday = tasks.filter(t => t.dueDate === todayStr);
-    const dueTomorrow = tasks.filter(t => t.dueDate === tomorrowStr);
+    // Bucket each task: overdue, today, this week. Within each bucket, sort
+    // by dueDate ascending so the rendered list reads chronologically.
+    const dayLabel = (dateStr) => {
+      if (dateStr < todayStr) return 'Overdue';
+      if (dateStr === todayStr) return 'Today';
+      const d = new Date(dateStr + 'T00:00:00');
+      return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    };
+    const dayColor = (dateStr) => {
+      if (dateStr < todayStr) return '#DC2626';
+      if (dateStr === todayStr) return '#EA580C';
+      return '#0F766E';
+    };
+    const overdueCount = tasks.filter(t => t.dueDate < todayStr).length;
+    tasks.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
     const subject = tasks.length === 1
-      ? `Task Reminder: "${tasks[0].name}" due ${tasks[0].dueDate === todayStr ? 'today' : 'tomorrow'}`
-      : `Task Reminder: ${tasks.length} tasks due soon`;
+      ? `Task reminder: "${tasks[0].name}"`
+      : `${tasks.length} task${tasks.length !== 1 ? 's' : ''} for this week${overdueCount > 0 ? ` (${overdueCount} overdue)` : ''}`;
 
     const taskRow = t => {
-      const when = t.dueDate === todayStr ? '<strong style="color:#DC2626">Today</strong>' : 'Tomorrow';
-      return `<li style="margin-bottom:8px">${when} — <strong>${escapeHtml(t.name)}</strong> <span style="font-size:12px;color:#888">(${escapeHtml(t.taskNumber)} · ${escapeHtml(t.priority)} · ${escapeHtml(t.status)})</span></li>`;
+      const label = dayLabel(t.dueDate);
+      const color = dayColor(t.dueDate);
+      return `<li style="margin-bottom:8px"><strong style="color:${color}">${label}</strong> — <strong>${escapeHtml(t.name)}</strong> <span style="font-size:12px;color:#888">(${escapeHtml(t.taskNumber)} · ${escapeHtml(t.priority)} · ${escapeHtml(t.status)})</span></li>`;
     };
 
-    const allRows = [...dueToday, ...dueTomorrow].map(taskRow).join('');
+    const allRows = tasks.map(taskRow).join('');
     const html = `<p>Hi ${safeName},</p>
-<p>You have task${tasks.length !== 1 ? 's' : ''} coming due:</p>
+<p>Your task${tasks.length !== 1 ? 's' : ''} for the week:</p>
 <ul style="padding-left:20px;margin:12px 0">${allRows}</ul>
-<p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to view and update your tasks.</p>`;
+<p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to view and update your tasks.</p>
+<p style="font-size:12px;color:#888">You're getting this because you have one or more tasks due this week. Reminders go out every Monday morning.</p>`;
 
-    const textRows = [...dueToday, ...dueTomorrow].map(t =>
-      `• ${t.dueDate === todayStr ? 'TODAY' : 'Tomorrow'} — ${t.name} (${t.taskNumber}, ${t.priority})`
-    ).join('\n');
-    const text = `Hi ${user.name || 'there'},\n\nYou have tasks coming due:\n\n${textRows}\n\nLog in at churchopshub.com to view your tasks.\n`;
+    const textRows = tasks.map(t => `• ${dayLabel(t.dueDate)} — ${t.name} (${t.taskNumber}, ${t.priority})`).join('\n');
+    const text = `Hi ${user.name || 'there'},\n\nYour tasks for the week:\n\n${textRows}\n\nLog in at churchopshub.com to view your tasks.\n\nReminders go out every Monday morning.\n`;
 
     emailTasks.push(sendEmailSafe({ to: user.email, from: FROM, subject, html, text }));
     emailTaskRefs.push(tasks.map(t => t._ref));
@@ -1506,6 +1480,13 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
 
   const { churchId, jobDocId, event, actorUid, actorName, removedName } = req.data;
   if (!churchId || !jobDocId || !event) return { sent: 0 };
+
+  // 2026-05-13: withdrawal events no longer trigger an email — the poster
+  // sees the updated signup count in the app and can react on their next
+  // visit. Cancellation and admin_removal still email since those are rare
+  // and require the poster's attention. Reduces email volume; the in-app
+  // activityLog entry is unaffected.
+  if (event === 'withdrawal') return { sent: 0, skipped: 'withdrawal-emails-disabled' };
 
   const db = getFirestore();
 
