@@ -814,7 +814,7 @@ function TaskCalendar({ tasks, onTaskClick, isMobile }) {
   );
 }
 
-const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], parentTaskId:null, blockedBy:[], linkedItemDocId:null, linkedTicketDocId:null, estimatedHours:null, actualHours:null, ministry:'' });
+const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', status:'Backlog', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], parentTaskId:null, blockedBy:[], linkedItemDocId:null, linkedTicketDocId:null, estimatedHours:null, actualHours:null, ministry:'' });
 
 export function TasksPage({ store, userProfile }) {
   const { tasks, items, maintenanceTickets, users, settings, config, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser, taskTemplates, addTaskTemplate, deleteTaskTemplate, addJobListing, addTicket, deleteJobListing, deleteTicket } = store;
@@ -1145,7 +1145,7 @@ export function TasksPage({ store, userProfile }) {
         name: taskForm.name.trim(),
         description: taskForm.description.trim(),
         priority: taskForm.priority,
-        status: 'Backlog',
+        status: taskForm.status || 'Backlog',
         tags: taskForm.tags,
         dueDate: taskForm.dueDate || null,
         recurrence: taskForm.recurrence || null,
@@ -2099,7 +2099,12 @@ export function TasksPage({ store, userProfile }) {
           <input style={inp} value={taskForm.name} onChange={e => setTaskForm(f => ({ ...f, name:e.target.value }))} placeholder="Short descriptive name..."/>
         </FF>
         <RichTextarea label="Description" style={{ ...inp, minHeight:72, resize:'vertical' }} value={taskForm.description} onChange={v => setTaskForm(f => ({ ...f, description:v }))} placeholder="What needs to be done — scope, context, and acceptance criteria"/>
-        <div style={{ display:'grid', gridTemplateColumns:isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap:12 }}>
+        <div style={{ display:'grid', gridTemplateColumns:isMobile ? '1fr 1fr' : '1fr 1fr 1fr 1fr', gap:12 }}>
+          <FF label="Status">
+            <select style={{ ...inp, cursor:'pointer' }} value={taskForm.status} onChange={e => setTaskForm(f => ({ ...f, status:e.target.value }))}>
+              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </FF>
           <FF label="Priority">
             <select style={{ ...inp, cursor:'pointer' }} value={taskForm.priority} onChange={e => setTaskForm(f => ({ ...f, priority:e.target.value }))}>
               {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
