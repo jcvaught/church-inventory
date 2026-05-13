@@ -103,6 +103,53 @@ test.describe('§4 Waitlist + auto-promotion', () => {
     expect(final.waitlist).toHaveLength(0);
   });
 
+  test('Member self-withdrawal also auto-promotes the head of the waitlist', async ({ memberAPage }) => {
+    // Companion to the admin-remove test above. handleWithdraw and
+    // handleAdminRemoveSignup both call promoteFromWaitlist; this exercises
+    // the member-driven path so the symmetry doesn't regress.
+    const u = await uids();
+    const job = await createJob({
+      title: e2eTitle('Member-Withdraw Promotion'),
+      scheduledDate: daysFromNowStr(3),
+      spotsTotal: 1,
+      createdBy: u.admin, createdByName: 'E2E Admin',
+    });
+
+    await db().doc(`churches/${churchId()}/jobListings/${job.docId}`).update({
+      signups: [{ uid: u.memberA, name: 'Member A Test', signedUpAt: new Date().toISOString() }],
+      waitlist: [{ uid: u.memberB, name: 'E2E Member B', addedAt: new Date().toISOString() }],
+      updatedAt: new Date().toISOString(),
+    });
+
+    const seeded = await getJob(job.docId);
+    expect(seeded.signups[0].uid).toBe(u.memberA);
+    expect(seeded.waitlist[0].uid).toBe(u.memberB);
+
+    // Member A withdraws via their own browser session
+    await memberAPage.goto('/');
+    await memberAPage.getByRole('button', { name: /^hubs$/i }).first().click();
+    await memberAPage.locator('text=Job Hub').first().click();
+    await memberAPage.getByRole('button').filter({ hasText: job.title }).first().click();
+    memberAPage.once('dialog', dialog => dialog.accept().catch(() => {}));
+    await memberAPage.getByRole('dialog').getByRole('button', { name: /^withdraw$/i }).click();
+
+    // Poll Firestore for the expected end-state: Member B promoted, waitlist empty.
+    await expect.poll(async () => {
+      const j = await getJob(job.docId);
+      return {
+        signupUids: j.signups.map(s => s.uid),
+        waitlistLength: j.waitlist.length,
+      };
+    }, { timeout: 30_000, intervals: [500, 1000, 2000] }).toEqual({
+      signupUids: [u.memberB],
+      waitlistLength: 0,
+    });
+
+    const final = await getJob(job.docId);
+    expect(final.signups[0].name).toBe('E2E Member B');
+    expect(final.signups[0].signedUpAt).toBeTruthy();
+  });
+
   test('signUpForJob transaction respects the 50-entry waitlist cap (F-18)', async () => {
     const u = await uids();
     const job = await createJob({
