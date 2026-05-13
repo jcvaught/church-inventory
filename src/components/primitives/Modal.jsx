@@ -25,10 +25,15 @@ export function Modal({ open, onClose, title, wide, maxWidth, children }) {
     const onKey = (e) => { if (e.key === 'Escape') onCloseRef.current?.(); };
     document.addEventListener('keydown', onKey);
     // Move focus into the panel on the next paint so screen readers pick it up.
+    // Prefer form inputs over buttons — a single querySelector with both in the
+    // selector list returns elements in DOM order, and the close-button "X" sits
+    // before any form input in the panel's DOM. We want the cursor in the first
+    // typeable field, not on the close button.
     const t = setTimeout(() => {
-      const target = panelRef.current?.querySelector(
-        'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      ) || panelRef.current;
+      const target =
+        panelRef.current?.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ||
+        panelRef.current?.querySelector('button:not([disabled])') ||
+        panelRef.current;
       target?.focus?.();
     }, 0);
     return () => {

@@ -33,7 +33,7 @@ useEffect(() => {
 
 Affects **every** modal in the app (New Task, edit task, bulk assign, defaults, settings, ticket detail, item detail, etc.) — anywhere users type inside a Modal. Single-component fix in the shared primitive, so all call sites are fixed at once. Build clean, lint 0 errors.
 
-**Not fixed in this commit** (separate concern, not blocking Jill): the focus-on-open targets the close button "X" because it's first in DOM order. Better a11y would be to skip buttons in the auto-focus query and prefer the first input/select/textarea, falling back to the panel itself. Filed mentally as a follow-up; only matters on modal open, not on subsequent typing.
+**Follow-up shipped same day** (separate concern from Jill's typing bug, but lives in the same effect block): the focus-on-open also targeted the close-button "X" for the same DOM-order reason. Split the `querySelector` into two passes — prefer `input/select/textarea/[tabindex]` first, fall back to `button` second, then the panel itself. Now opening any modal lands the cursor in the first typeable field, which is what users (and screen readers) expect.
 
 ---
 
