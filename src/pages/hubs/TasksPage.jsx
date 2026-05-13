@@ -407,6 +407,16 @@ function PhotoGrid({ photos = [], onAdd, onRemove, uploading }) {
 function RichTextarea({ value, onChange, style, placeholder, onKeyDown, label }) {
   const taRef = useRef();
 
+  // Auto-grow with content. Without this, the textarea is locked at minHeight
+  // and the empty line created by Enter at end-of-content is invisible — users
+  // press Enter, see no change, and assume Enter is broken.
+  useEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }, [value]);
+
   function getLineRange(selStart, selEnd) {
     const lines = value.split('\n');
     let pos = 0, startLine = 0, endLine = lines.length - 1, foundStart = false;

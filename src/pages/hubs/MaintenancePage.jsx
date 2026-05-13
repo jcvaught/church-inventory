@@ -235,6 +235,16 @@ function PhotoGrid({ photos = [], onAdd, onRemove, uploading }) {
 function RichTextarea({ value, onChange, style, placeholder, onKeyDown }) {
   const taRef = useRef();
 
+  // Auto-grow with content so the empty line created by Enter at end-of-content
+  // is visible. Without this, users press Enter, see no change, and assume Enter
+  // is broken (the cursor moves to a line below the visible area).
+  useEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }, [value]);
+
   function getLineRange(selStart, selEnd) {
     const lines = value.split('\n');
     let pos = 0, startLine = 0, endLine = lines.length - 1, foundStart = false;
