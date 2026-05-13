@@ -1,5 +1,172 @@
 export const BLOG_POSTS = [
   {
+    slug: 'volunteer-coordinator-role-guide',
+    title: 'Volunteer Coordinator Role Guide: What the Job Actually Looks Like',
+    description: "Most churches treat the volunteer coordinator role as a vague 'helps with stuff' position — which is why coordinators burn out and quit. Here's a concrete responsibility breakdown, realistic time commitment, and a clear list of what the role is and isn't.",
+    date: '2026-05-14',
+    keywords: 'volunteer coordinator role, church volunteer coordinator job description, volunteer coordinator responsibilities, church volunteer manager, volunteer coordination church, what does a volunteer coordinator do',
+    content: `
+## The Volunteer Coordinator Role Is Almost Always Underdefined
+
+Most churches who recruit a volunteer coordinator do it the same way: they identify someone competent and organized, give them a vague "help us with volunteers" mandate, and turn them loose. Eighteen months later, that person is exhausted, the volunteer base has shrunk, and the church is looking for a replacement.
+
+The problem isn't usually the person. It's that nobody told them — or themselves — what the job actually was. They were asked to solve every volunteer-related problem with no scope, no priority, and no permission to say no.
+
+This post is a concrete role description: what a church volunteer coordinator actually does, what they don't, what the realistic time commitment looks like, and what tools and skills make it survivable. Use it to onboard a new coordinator, or to bring clarity to a role you're already in.
+
+## Why Role Clarity Matters More Than Effort
+
+Volunteer coordinator burnout is one of the most common church-staffing failures. The pattern is consistent:
+
+A coordinator is appointed. They want to help. They're competent. In their first three months they say yes to everything — every ministry leader asking for "just a quick favor," every event needing extra hands, every reminder text that "could you just send it." By month six they're working 15 hours a week on what was supposed to be a 4-hour role. By month nine they're resentful. By month twelve they're done.
+
+The thing that prevents this isn't more discipline or better organization. It's clarity, in advance, about what's inside the role and what isn't. A coordinator with a written list of their actual responsibilities can decline scope creep with confidence. A coordinator without one absorbs everything and resents nothing in particular but everything in general.
+
+So the most important investment when establishing this role isn't training or tools. It's writing down what the job is.
+
+## The Seven Core Responsibilities
+
+A church volunteer coordinator's job breaks into seven distinct responsibilities. Some churches need all seven; smaller churches need three or four. The size of each will vary by congregation. What doesn't vary is that these are the categories — adding ad-hoc work outside them is how burnout starts.
+
+**1. Recruiting**
+
+Finding new volunteers and inviting existing members into volunteer roles. This is more strategic than tactical: it's identifying gaps in coverage, knowing which ministries are short, and creating the social context where people feel asked rather than guilted. Recruiting can mean weekly bulletin announcements, intentional one-on-one conversations, new-member follow-ups, or a quarterly "ministry fair." The coordinator doesn't necessarily do all the asking — but they ensure the asking happens.
+
+What this is NOT: convincing reluctant people. The coordinator's job is to make opportunities visible and accessible. It is not to twist arms or chase people who've said no.
+
+**2. Onboarding**
+
+Getting new volunteers from "yes, I'll help" to actually serving. This involves orientation (what does the role involve? what's the time commitment? who do they report to?), training (specific to the role — nursery volunteers need different prep than ushers), background checks if required, and connecting them with their ministry team.
+
+The biggest onboarding failure: a new volunteer says yes, gets a vague "we'll be in touch," and then nothing happens for three weeks. They lose momentum. They feel forgotten. They don't come back. A volunteer coordinator's most important onboarding metric is *time from yes to first shift* — and it should be measured in days, not weeks.
+
+**3. Scheduling**
+
+Assigning volunteers to specific dates, services, or events. This is the most concrete and time-consuming responsibility. It includes the master schedule (who's serving when), notifications (each volunteer knows their assignments), and substitutions (when someone can't make it, finding coverage).
+
+The scheduling work is where most coordinators burn out, because it's high-frequency, time-sensitive, and easily becomes a personal text-thread responsibility ("hey, can you cover for John on Sunday?"). The right system removes the coordinator from the middle of swap requests — volunteers should be able to request swaps and find their own substitutes from a designated backup pool, with the coordinator visible but not gating every interaction.
+
+**4. Communication**
+
+Keeping volunteers informed about what's happening — service changes, special events, training opportunities, appreciation messages, and timely reminders. This is broader than scheduling reminders; it's the ongoing relationship-tending that keeps volunteers feeling like part of a team rather than just a roster.
+
+The cadence depends on church size. Smaller churches can do this person-by-person; larger ones need group messages, email lists, or a volunteer app. Either way, the coordinator should not be the sole channel for all information to all volunteers — they should be the *primary* channel for volunteer-specific info, while ministry leaders handle ministry-specific info.
+
+**5. Recognition**
+
+Making sure volunteers feel valued. This sounds like a soft skill but it's actually a discrete set of practices: thank-you notes after particularly demanding events, public acknowledgment in services, annual appreciation events, milestone recognition (5 years of serving, 10 years, etc.), and small consistent gestures (a coffee gift card, a card on a birthday).
+
+The math on recognition is brutal: a volunteer who feels appreciated will serve for years; one who feels invisible will quietly fade out within a season. Recognition is one of the highest-leverage things a coordinator does, and it's often the first thing that gets dropped when other responsibilities pile up. Resist that — even when busy, send the thank-you notes.
+
+**6. Boundary Management**
+
+Saying no on behalf of the system. This is the responsibility most churches forget to assign, and the absence of it is where coordinators get destroyed.
+
+Examples of where boundary management matters: a ministry leader wants to double their volunteer count for an event in three weeks (too late to recruit responsibly); a long-time volunteer is consistently a no-show and needs to be moved off a key role (a hard conversation); a new ministry wants to start without confirming they have leadership capacity (a slow no). The coordinator's job is to advocate for the volunteers, not just for the ministries demanding their time.
+
+Coordinators who can't say no end up making the volunteers themselves say no — by getting overworked and quitting. The coordinator declining a request is almost always doing the volunteers a favor, even when it doesn't feel that way to the requester.
+
+**7. Reporting to Leadership**
+
+Giving the pastoral staff or elder team a regular pulse on the volunteer base. How many active volunteers are there? Are there gaps in coverage? Which ministries are short-handed? Are people burning out in specific roles? This is the only way church leadership can make informed decisions about ministry strategy, hiring, or scope reduction.
+
+This is also where the coordinator earns the political capital to do the boundary-management work. A coordinator who reports quarterly with hard numbers — "we have 87 active volunteers, 14% turnover this year, three roles are unfilled, two volunteers are at risk of burnout" — gets listened to when they push back on a request. A coordinator without that data is just a person saying no.
+
+## What Volunteer Coordination Is NOT
+
+Equally important — maybe more important — is what isn't in the role. Common things that DON'T belong to the volunteer coordinator:
+
+**It's not the coordinator's job to do the ministry work itself.** If the nursery is short volunteers, the coordinator doesn't fill in. They recruit and schedule, but the ministry happens through the volunteers, not the coordinator.
+
+**It's not the coordinator's job to train ministry-specific skills.** General orientation, yes. Teaching a sound tech volunteer how to use the soundboard, no — that's the worship leader's job.
+
+**It's not the coordinator's job to enforce attendance.** They can flag patterns ("Susan has missed her last 4 shifts") but the actual conversation about commitment is the ministry leader's or pastor's.
+
+**It's not the coordinator's job to resolve interpersonal conflict.** If two volunteers don't get along, that's pastoral care, not scheduling.
+
+**It's not the coordinator's job to be the back-up for every empty slot.** If a ministry can't find coverage, that's a ministry capacity problem to escalate, not a coordinator workload problem to absorb.
+
+The most common pattern that destroys this role is the coordinator quietly absorbing tasks from each of these "not" categories until the role is unrecognizable. Writing the "not" list and revisiting it quarterly keeps the role survivable.
+
+## Realistic Time Commitment
+
+A common question is "how much time does the coordinator actually need?" The honest range, by church size:
+
+**Small church (under 75 attendees, ~20 active volunteers):** 2–4 hours/week. The coordinator can usually be a volunteer themselves. Communication is mostly personal. The schedule has limited complexity.
+
+**Mid-size church (75–250 attendees, ~50 active volunteers):** 5–10 hours/week. Often a stipended or part-time paid position. Communication starts requiring tooling beyond personal texts. The schedule has real complexity — multiple ministries, recurring needs.
+
+**Large church (250+ attendees, 100+ active volunteers):** 15–30 hours/week. Almost always a paid role, often with a small team or assistant. Real volunteer database, real communication tools, real reporting requirements.
+
+The time-commitment trap: someone is recruited from the small-church math (a volunteer doing 3 hours/week) but the church grows and the role expectations grow with it, without acknowledgment that the role has fundamentally changed shape. By the time the church needs a 15-hour-a-week coordinator, the existing one is on their way out.
+
+Reviewing the role's hours annually against church size is one of the small disciplines that prevents that.
+
+## Skills and Temperament Fit
+
+The role attracts both the wrong people and the wrong-fit-but-trying people. The skills that actually matter:
+
+**Organization** is table-stakes. Schedules, contact info, recurring deadlines — the coordinator is the system. Someone who has trouble keeping their own life organized will not thrive here.
+
+**Calm under pressure**, especially on Sunday mornings or before big events. Volunteers will cancel last-minute. Things will break. The coordinator who panics makes everyone else panic.
+
+**Ability to say no warmly.** Not bluntly, not apologetically — warmly. "I can't do that this week, but here's what I can do" is a learned skill. Coordinators who can't develop it will absorb scope until they break.
+
+**Comfort with the church's relational dynamics.** Volunteer coordination is people work. Someone who'd rather work with spreadsheets than people will not enjoy this role, regardless of how organized they are.
+
+**A real respect for volunteers as a finite resource.** The coordinator who sees volunteers as people to be cared for will retain them. The coordinator who sees them as resources to deploy will burn through them.
+
+Recruiting for this role should screen for these explicitly — not just "are they nice and competent" but specifically "can they say no, can they stay calm, can they organize, do they like people."
+
+## What Tools Make the Role Survivable
+
+Software won't fix a broken role definition, but the right tools turn a 15-hour-a-week job into a 6-hour-a-week job. The key categories:
+
+**A scheduling system that handles its own swaps.** Volunteers should request substitutes themselves from a pool of opted-in subs, with the coordinator visible but not gating each exchange. This is the single biggest time saver.
+
+**Automated reminders.** Service-day morning, week-before, day-of texts and emails. The coordinator should never be the one personally remembering to text 30 people on Saturday night.
+
+**A volunteer directory with notes.** Who has what skills, who's been trained on what, who needs gentle handling, who's a reliable backup. Personal notes the coordinator can reference, especially when onboarding their successor.
+
+**Reporting.** Pulling the "how many active volunteers, who's at risk of burnout, where are the gaps" view should be a button click, not a Saturday-afternoon spreadsheet project.
+
+**Communication channels for the volunteer base.** Group messaging, email lists, or an app where volunteers can see their schedule and ask questions. Centralized, not the coordinator's personal phone.
+
+## Onboarding the Next Coordinator
+
+The single biggest leverage a current coordinator has is making the next coordinator's transition smooth. The handoff usually includes:
+
+- The written role description (this document, customized for your church)
+- The list of active volunteers, their roles, and any notes
+- The current schedule for the next 8 weeks
+- The recurring tasks (when do reminder emails go out, when does the next quarterly report go to leadership, etc.)
+- Contact info for ministry leaders the coordinator regularly works with
+- Login credentials for whatever tools the role uses
+- The "what's NOT in the role" list, with examples of times you held the line
+
+If a coordinator can't do a clean handoff, the role definition was probably already fuzzy. If they can, they leave behind a foundation that lets their successor start strong instead of starting from scratch.
+
+## Where ChurchOpsHub Fits
+
+We build ChurchOpsHub, so consider this paragraph accordingly.
+
+ChurchOpsHub is an operations platform for small-to-mid-sized churches. Its Jobs Hub handles much of the scheduling and communication weight that otherwise eats coordinator time: volunteers self-sign-up for open slots, accept assignments on their phones, request swaps from a substitute pool without going through the coordinator, and get automated email + SMS reminders. The coordinator's view shows who's signed up, who's on the waitlist, who hasn't responded — without the personal-text-thread overhead.
+
+The People Access Hub tracks background checks, certifications, and expirations, so the coordinator doesn't have to manually remember who's compliant for which roles. The Tasks Hub handles the recurring non-volunteer ops work (orientation packets, training schedules, recognition gifts). Inventory is free; the paid hubs cost $7/month each, or $29/month for the All-In bundle.
+
+The platform doesn't replace the role. It replaces the parts of the role that don't need a human (reminders, swap-coordination, status tracking), so the coordinator can focus on the parts that do (recruiting conversations, recognition, boundary management, leadership reporting).
+
+## The Bottom Line
+
+The volunteer coordinator role is one of the most important and most under-defined positions in most churches. Most coordinators don't fail because they're bad at the job; they fail because the job was never described clearly enough to be successfully done.
+
+Writing down the seven responsibilities, the explicit list of what's NOT in scope, the realistic time commitment, and the tools that make it survivable is the single biggest investment a church can make in volunteer leadership longevity. Do that, and your coordinators will stay. Skip it, and you'll be recruiting a new one every 18 months — and your volunteer base will erode quietly alongside.
+
+The role is real. The role is meaningful. The role is survivable if you define it.
+    `.trim(),
+  },
+
+  {
     slug: 'church-volunteer-scheduling-system-that-lasts',
     title: 'Church Volunteer Scheduling: How to Build a System That Lasts',
     description: 'Most church volunteer schedules die within six months — not because volunteers stop showing up, but because the system falls apart. Here are the principles that make a volunteer scheduling system survive past the honeymoon.',
