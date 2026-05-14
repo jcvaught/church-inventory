@@ -15,11 +15,22 @@ Audited every signup entry point (`createChurch`, `register`, `loginWithGoogle`,
 - **S-4 — `sendEmailVerification` failures surfaced to Sentry.** Two `.catch(() => {})` swallowing sites replaced with `Sentry.captureException`. The signup still succeeds (verification is best-effort) but we hear about SendGrid/quota issues instead of users silently never receiving the email.
 - **S-5 — `loginWithGoogle` distinguishes first-time vs stuck state.** Compares `creationTime` vs `lastSignInTime` on `firebaseUser.metadata`. First-time sign-in still flows to `needsRegistration`; returning users with missing profiles fall through to the new recovery screen with a Sentry warning. `login` (email/password) inherits the same recovery path via `onAuthStateChanged`.
 
-### Deferred for later
+### Second pass (commits `0944a47`, `6180e4f`, `f561139`) — remaining audit items shipped
 
-- **S-7 — `writeBatch` atomicity** for the `createChurch` chain. Initially planned for this commit but rules evaluate batched writes against pre-batch state, so `config/main`'s `isChurchAdminOrManager` rule would still deny inside a batch (the `users/{uid}` doc isn't visible until the batch commits). The user-profile-first ordering shipped earlier today (`73e73ec`) is the correct fix for the ordering issue; adding `writeBatch` on top needs companion rules changes — a separate task.
-- S-3 was Haleigh's bug, already fixed in commit `73e73ec`.
-- S-6, S-8 through S-15 are documented in this session's audit notes but unshipped (email verification enforcement, transactions, `updateProfile` error path, CF lookup retries, `register` overwrite guard, Google cleanup, register-form honeypot, timestamp consolidation, email normalization, rate limiting). None of these are Haleigh-class — they're hardening on top of the now-fixed primary failure family.
+- **S-6 — SMS opt-in gated on `user.emailVerified`** (`6180e4f`). The Settings page's SMS Job Reminders section now shows a "verify your email first" message in place of the phone/checkbox form for unverified users. After verifying (Resend button in the AppShell banner already), the form reappears unchanged. Ties TCPA/A2P consent to an identity we know the user controls.
+- **S-7 — atomic `writeBatch` in `createChurch` + companion rules update** (`f561139`). The 5-doc signup chain is now one all-or-nothing batch. Companion rules change: `config/main` and `config/settings` split `allow write` into `allow create: if self-creator OR isChurchAdminOrManager` and `allow update, delete: if isChurchAdminOrManager`, matching the existing `config/subscription` pattern. Rules deployed to `church-inventory-9615c`. Closes the partial-failure window that previously could leave orphan Firestore docs even after S-2's Auth-account cleanup.
+- **S-9 — `findChurchByCode` distinguishes "not found" from "lookup failed"** (`0944a47`). Throws a specific error on CF failure (+ Sentry); callers surface a transient-failure message instead of "Invalid church code" during CF outages.
+- **S-11 — `registerWithGoogle` signs out on cleanup** (`0944a47`). Failed church-code lookup no longer leaves the user in a stuck-Google-session state.
+- **S-12 — Honeypot bot trap on `register` form** (`0944a47`). Matches the existing trap on `createChurch`.
+- **S-13 — Timestamps consolidated** (`0944a47`). Single `now` reused across every doc write in a single signup chain.
+- **S-14 — Email normalization** (`0944a47`). `createChurch` / `register` / `login` / `resetPassword` / `registerWithGoogle` apply `.trim().toLowerCase()` before any Firestore or Firebase Auth call.
+
+### Skipped / non-issues
+
+- **S-3** was Haleigh's bug, already fixed in commit `73e73ec`.
+- **S-8** is already covered by S-2's inner try/catch (`updateProfile` is inside it).
+- **S-10** isn't reachable under current flows — `register` creates a new Auth account, and Firebase blocks duplicate emails before `setDoc` ever runs.
+- **S-15 — server-side signup rate limiting** is the one real gap left. Effective limiting requires reCAPTCHA or a Cloud Function gate; client throttle is useless against bots. Firebase Auth's own per-IP throttling is the only protection in place today. Deferred as a known gap.
 
 ## 2026-05-14 — Signup chain broke for new church creators (Haleigh / TrueNorth)
 
