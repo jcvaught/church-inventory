@@ -209,6 +209,8 @@ function TagInput({ tags = [], onChange, suggestions = [] }) {
 function BlockedByInput({ blockedBy = [], onChange, tasks = [], currentTaskNumber }) {
   const [inputVal, setInputVal] = useState('');
   const [blockerError, setBlockerError] = useState('');
+  const errorTimerRef = useRef(null);
+  useEffect(() => () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current); }, []);
   const suggestions = tasks.filter(t =>
     t.taskNumber?.startsWith('TSK-') &&
     t.taskNumber !== currentTaskNumber &&
@@ -222,7 +224,8 @@ function BlockedByInput({ blockedBy = [], onChange, tasks = [], currentTaskNumbe
     if (!v || blockedBy.includes(v)) { setInputVal(''); return; }
     if (!tasks.find(t => t.taskNumber === v)) {
       setBlockerError('Task not found.');
-      setTimeout(() => setBlockerError(''), 3000);
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+      errorTimerRef.current = setTimeout(() => setBlockerError(''), 3000);
       return;
     }
     onChange([...blockedBy, v]);
@@ -548,10 +551,29 @@ function renderWithMentions(text) {
 
 function CommentThread({ comments, loading, newComment, onChange, onPost, posting, userId, canOperate, onEdit, onDelete, users = [] }) {
   const endRef = useRef();
+  const commentInputWrapRef = useRef(null);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
   const [mentionOpen, setMentionOpen] = useState(false);
   useEffect(() => { if (comments.length) endRef.current?.scrollIntoView({ behavior:'smooth' }); }, [comments.length]);
+
+  function insertMentionAtCursor(name) {
+    const ta = commentInputWrapRef.current?.querySelector('textarea');
+    const cursor = ta?.selectionStart ?? newComment.length;
+    const before = newComment.slice(0, cursor);
+    const after = newComment.slice(cursor);
+    const lead = before.length > 0 && !before.endsWith(' ') ? ' ' : '';
+    const trail = after.startsWith(' ') ? '' : ' ';
+    const insertion = lead + '@' + name + trail;
+    onChange(before + insertion + after);
+    setMentionOpen(false);
+    const newCursor = before.length + insertion.length;
+    setTimeout(() => {
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(newCursor, newCursor);
+    }, 0);
+  }
 
   function startEdit(c) { setEditingId(c.id); setEditText(c.text); }
   function cancelEdit() { setEditingId(null); setEditText(''); }
@@ -603,7 +625,7 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
         <div ref={endRef}/>
       </div>
       <div style={{ display:'flex', gap:8, alignItems:'flex-start' }}>
-        <div style={{ flex:1, position:'relative' }}>
+        <div ref={commentInputWrapRef} style={{ flex:1, position:'relative' }}>
           <RichTextarea
             value={newComment}
             onChange={onChange}
@@ -614,7 +636,7 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
           {mentionOpen && users.filter(u => u.id !== userId).length > 0 && (
             <div style={{ position:'absolute', bottom:'100%', left:0, right:0, zIndex:200, background:'#fff', border:'1px solid #E8E0D5', borderRadius:10, boxShadow:'0 4px 16px rgba(27,42,74,0.1)', maxHeight:150, overflowY:'auto', marginBottom:2 }}>
               {users.filter(u => u.id !== userId).map(u => (
-                <div key={u.id} onMouseDown={e => { e.preventDefault(); onChange(newComment + (newComment.length && !newComment.endsWith(' ') ? ' ' : '') + '@' + u.name + ' '); setMentionOpen(false); }} style={{ padding:'8px 14px', cursor:'pointer', fontSize:13, fontFamily:'Source Sans 3, sans-serif', color:'#1B2A4A' }}
+                <div key={u.id} onMouseDown={e => { e.preventDefault(); insertMentionAtCursor(u.name); }} style={{ padding:'8px 14px', cursor:'pointer', fontSize:13, fontFamily:'Source Sans 3, sans-serif', color:'#1B2A4A' }}
                   onMouseEnter={e => e.currentTarget.style.background='#F7F4EF'}
                   onMouseLeave={e => e.currentTarget.style.background=''}
                 >@{u.name}</div>
