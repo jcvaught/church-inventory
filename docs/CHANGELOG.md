@@ -35,6 +35,28 @@ Closed the four accessibility findings from the audit:
 
 Build clean, lint 0 errors (43 baseline warnings, all pre-existing `exhaustive-deps`).
 
+### Polish bundle shipped (P-7 … P-13, third pass on 2026-05-14)
+
+Closed the seven remaining audit items:
+
+7. **P-7 — toolbar cursor preservation.** `RichTextarea.toggleBullet`/`toggleNumbered` toggled the `• ` / `1. ` prefix on the active line(s) and called `el.focus()` without restoring the selection — the cursor snapped back to offset 0. Replaced the duplicated toggle bodies with a single `applyLineTransform(kind)` helper that computes old/new line-start arrays and re-maps `selectionStart`/`selectionEnd` to the same offset-within-line in the new text. Applied to both `TasksPage.jsx` and the duplicated `MaintenancePage.jsx` copy.
+
+8. **P-8 — `TagInput` / `BlockedByInput` Enter double-fire.** Both components handle Enter in `onKeyDown` (desktop) and `onKeyUp` (mobile virtual-keyboard fallback). The keydown clears `inputVal` via `setInputVal('')`, but React state isn't synchronously updated, so the closure-captured `inputVal` in `onKeyUp` is still non-empty and `addTag(inputVal)` ran a second time. Added an `enterHandledRef` flag set in keydown and cleared in keyup; the mobile fallback only fires when keydown didn't already handle it.
+
+9. **P-9 — dropdown keyboard navigation.** `TagInput` and `BlockedByInput` suggestion dropdowns were mouse-only. Added `highlightIdx` state with `ArrowDown`/`ArrowUp` to navigate, `Enter` to select the highlighted suggestion, and `Escape` to dismiss. Mouse hover updates the highlight so keyboard + mouse stay in sync. Dropdowns got `role="listbox"` + `role="option"` + `aria-selected` so screen readers announce the active item. The displayed index is clamped via `safeIdx = idx >= 0 && idx < filtered.length ? idx : -1` rather than reset in a `useEffect` (avoids the "setState in effect" lint rule).
+
+10. **P-10 — scope `CommentThread` auto-scroll.** `endRef.scrollIntoView({ behavior:'smooth' })` scrolls the nearest scrollable ancestor — for comments in a modal, that's the modal panel itself, so posting a comment yanked the entire dialog. Replaced with `listRef.current.scrollTop = listRef.current.scrollHeight` on the comment-list container.
+
+11. **P-11 — edit-comment auto-grow.** Edit-comment mode rendered a plain `<textarea>` with no auto-grow, so editing a long comment hit the same Enter-doesn't-work invisible-feedback bug we fixed for the description field (2026-05-13). Extracted a small `AutoGrowTextarea` component (same `el.style.height = scrollHeight` pattern as `RichTextarea`) and used it for the edit path.
+
+12. **P-12 — mention rendering.** `renderWithMentions` used `/(@[\w][\w\s]*?\b)/g` which dropped apostrophes/hyphens (`@O'Brien` → `@O`, `@Mary-Jane` → `@Mary`) and clipped multi-word names like `@John Vaught` to `@John` because `\b` matches at the first space. Replaced with a names-list-driven scan: pull the actual user names from the `users` prop, sort longest-first, and walk the text matching at each `@`. Now any reasonable name shape highlights correctly. Call site updated to pass `users`.
+
+13. **P-13 — required-field asterisk consistency.** Across 10 files, 26 `FF` call sites used `label="Foo *"` and 2 used `label="Bar (required)"` while `FF`'s actual `required` prop only emitted `aria-required` (no visible marker), so two non-standard conventions had grown ad-hoc. Updated `FF` to render a red asterisk after the label when `required` is set, then converted all 28 call sites to `<FF label="Foo" required>`. Screen readers now hear "required" via `aria-required`; sighted users see a consistent asterisk.
+
+Build clean, lint 0 errors (43 baseline `exhaustive-deps` warnings).
+
+`RichTextarea` is **still duplicated** between `TasksPage.jsx` and `MaintenancePage.jsx` — extracting to `src/components/primitives/RichTextarea.jsx` remains the obvious next refactor.
+
 ---
 
 ## 2026-05-13 — Modal "one letter at a time" focus bug
