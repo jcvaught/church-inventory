@@ -316,7 +316,7 @@ export function LandingPage({ onGetStarted }) {
                 <span style={{ fontSize: 16, color: 'rgba(255,255,255,0.45)', fontFamily: f1 }}>/mo</span>
               </div>
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 28, fontFamily: f1 }}>Unlimited users · Cancel anytime</div>
-              {['All 7 paid hubs included', 'Unlimited team members', 'Maintenance & ticketing', 'Insights & analytics', 'Coordination & scheduling', 'Accountability & audits', 'Job board & announcements'].map(item => (
+              {['All 7 feature hubs included', 'Unlimited team members', 'Maintenance & ticketing', 'Insights & analytics', 'Coordination & scheduling', 'Accountability & audits', 'People Access & compliance', 'Kanban task board', 'Job board & announcements'].map(item => (
                 <div key={item} style={{ display: 'flex', alignItems: 'center', marginBottom: 10, fontSize: 14, color: 'rgba(255,255,255,0.75)' }}>
                   {check(true)}{item}
                 </div>

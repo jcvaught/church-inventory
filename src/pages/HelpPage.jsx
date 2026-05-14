@@ -14,6 +14,7 @@ const SECTIONS = [
   { id: 'insights',        label: 'Insights Hub' },
   { id: 'coordination',    label: 'Coordination Hub' },
   { id: 'accountability',  label: 'Accountability Hub' },
+  { id: 'people-access',   label: 'People Access Hub' },
   { id: 'tasks',           label: 'Tasks Hub' },
   { id: 'jobs',            label: 'Job Hub' },
   { id: 'team',            label: 'Team Hub' },
@@ -181,7 +182,7 @@ export function HelpPage({ onBack }) {
       { '@type': 'Question', name: 'Can I export my data?',
         acceptedAnswer: { '@type': 'Answer', text: 'Yes. Inventory, supplies, reservations, and the activity log all have CSV export options. The Accountability Hub also offers an insurance-ready CSV with financial fields.' } },
       { '@type': 'Question', name: 'What is the All-In Bundle?',
-        acceptedAnswer: { '@type': 'Answer', text: 'The All-In Bundle ($29/mo) includes all six paid hubs — Maintenance, Insights, Coordination, Accountability, Tasks, and Team (unlimited users) — at a significant discount versus subscribing individually.' } },
+        acceptedAnswer: { '@type': 'Answer', text: 'The All-In Bundle ($29/mo) includes all 7 paid feature hubs — Maintenance, Insights, Coordination, Accountability, People Access, Tasks, and Job Hub — plus unlimited team members (the Team Hub $19/mo tier). Saves you $16/mo versus subscribing individually.' } },
       { '@type': 'Question', name: 'How do I report a bug or request a feature?',
         acceptedAnswer: { '@type': 'Answer', text: 'Use the Suggest a Feature / Report a Bug button in Settings. Your feedback goes directly to us and is reviewed regularly.' } },
     ],
@@ -610,6 +611,90 @@ export function HelpPage({ onBack }) {
           </Section>
 
           {/* ──────────────────────────────────── */}
+          {/* PEOPLE ACCESS HUB                    */}
+          {/* ──────────────────────────────────── */}
+          <Section id="people-access" icon="🔑" title="People Access Hub" badge="$7/mo">
+            <P>Track compliance milestones for the people who serve at your church — background checks, key and fob assignments, certifications (CPR, SafeGuarding, etc.), and any custom requirement you need to record.</P>
+            <Note>People Access Hub is admin and manager only. Users with the <strong>User</strong> role cannot see this hub even if their <code>allowedHubs</code> includes it.</Note>
+
+            <Accordion title="Adding people" defaultOpen>
+              <P>Click <strong>+ Add Person</strong> on the People view. Fields:</P>
+              <UL items={[
+                'Name (required) — must match exactly if you later use Bulk Entry',
+                'Email and phone — optional contact info',
+                'Ministries — check all that apply (uses your church\'s ministry list)',
+                'Notes — free-form text',
+              ]} />
+              <P>People can be <strong>archived</strong> (not deleted) — their records are preserved for audit history. Toggle the Archived filter to view or restore them.</P>
+            </Accordion>
+
+            <Accordion title="Record types">
+              <P>Open a person and click <strong>+ Add Record</strong>. There are four record types:</P>
+              <UL items={[
+                '🔍 Background Check — completion date + optional expiry. Track who has been screened and when their screening lapses.',
+                '🔑 Key / Fob Assignment — what key or access card was issued, when, and (when returned) the return date. Active keys show a "🔑 N keys out" counter on the person card.',
+                '🎓 Certification — admin only. Cert type (CPR/First Aid, SafeGuarding, etc.), issuing organization, completion date, and optional expiry.',
+                '✅ Custom Requirement — pick from custom requirements your church has defined (e.g. "Driver Training", "Insurance Form Signed").',
+              ]} />
+              <P>Every record stores who recorded it and when, plus optional ministry and notes.</P>
+            </Accordion>
+
+            <Accordion title="Expiry tracking and alerts">
+              <P>For any record with an expiry date, the hub shows a status badge based on how soon it expires:</P>
+              <UL items={[
+                '🔴 Expired or expiring within 7 days — critical',
+                '🟡 Expiring within 30 days — warning',
+                '✅ More than 30 days out — ok',
+              ]} />
+              <P>An alert banner at the top of the People Access page lists all expiring records, grouped by severity. Click any name to jump straight to that person\'s record list. Person cards are bordered red or gold when any of their records are critical or warning.</P>
+              <Tip>The Settings page also shows a compliance badge (🔴/🟡) next to team members whose linked records are expiring.</Tip>
+            </Accordion>
+
+            <Accordion title="Custom requirements">
+              <P>Switch to the <strong>📋 Requirements</strong> view to manage custom requirement types. Built-in types (Background Check, Key Assignment, Certification) are always available; custom requirements let you add anything specific to your church.</P>
+              <UL items={[
+                'Type a name (e.g. "Driver Training", "Insurance Form Signed")',
+                'Check "Has expiry" if the requirement should be tracked with an expiration date',
+                'Click Add — it\'s immediately available as a "Custom" record type when adding records',
+              ]} />
+              <P>Custom requirements can be added by admins and managers. Remove one by clicking the × — existing records using it remain in the database but display without the requirement name.</P>
+            </Accordion>
+
+            <Accordion title="Bulk entry">
+              <P>Click <strong>≡ Bulk Entry</strong> to add the same type of record for multiple people at once — useful for entering a stack of newly completed background checks or a CPR class roster.</P>
+              <UL items={[
+                'Pick the record type and (for certifications) the cert type or custom requirement',
+                'Set the expiry mode — None, Interval (1–5 years from completion date), or Per row (different expiry per person)',
+                'Type each name in the Name column (autocompletes from existing people)',
+                'Add the completed date for each row; rows with empty name or date are skipped',
+              ]} />
+              <Note>Names must match an existing active person exactly. Rows with names that don\'t match are flagged in the result banner — you can then add the missing people and re-run.</Note>
+            </Accordion>
+
+            <Accordion title="Linking a person to a user account">
+              <P><RoleTag role="admin" /> Open a person\'s detail modal and click <strong>🔗 Link to user account</strong>, then pick the user from the dropdown. Once linked:</P>
+              <UL items={[
+                'That user sees their own compliance records on Settings → My Compliance',
+                'Settings → Team Members shows their compliance badge next to their name',
+                'Job Hub uses the link to gate signups: jobs with Required Access Types only allow signups from users whose linked person has those records',
+              ]} />
+              <P>Click <strong>Unlink</strong> to break the connection at any time — the person record and all their compliance records are preserved.</P>
+            </Accordion>
+
+            <Accordion title="Permissions at a glance">
+              <UL items={[
+                'Admin — everything (add/edit/archive people, all record types including certifications, custom requirements, link to user accounts)',
+                'Manager — same as admin except cannot add or edit certifications, and cannot link people to user accounts',
+                'User — cannot see People Access Hub at all',
+              ]} />
+            </Accordion>
+
+            <Accordion title="CSV export">
+              <P>Click <strong>⬇ Export CSV</strong> in the page header to download all access records (across all people) as a spreadsheet. Useful for compliance audits, insurance reviews, or board reports.</P>
+            </Accordion>
+          </Section>
+
+          {/* ──────────────────────────────────── */}
           {/* TASKS HUB                            */}
           {/* ──────────────────────────────────── */}
           <Section id="tasks" icon="✅" title="Tasks Hub" badge="$7/mo">
@@ -739,6 +824,7 @@ export function HelpPage({ onBack }) {
               <P>Members can sign up for any open job with spots available. Click <strong>Sign Up</strong> on a job card or in the job detail. Sign-ups are transaction-safe — if the last spot is taken by someone else simultaneously, you'll see a "job is full" message.</P>
               <P>To remove yourself, click <strong>Withdraw</strong>. Admins and managers can also remove individual signups from the job detail view.</P>
               <Tip>Use the <strong>My Jobs</strong> filter tab to see all jobs you've signed up for at a glance.</Tip>
+              <Note>If a job has <strong>Required Access Types</strong> set (e.g. background check, SafeGuarding certification), only members linked to a People Access Hub record with those credentials can sign up. Admins set required access types when posting a job; the link between user accounts and People Access records is managed in People Access Hub → person detail → 🔗 Link to user account.</Note>
             </Accordion>
 
             <Accordion title="Views: Job Board, Schedule, and Calendar">
@@ -874,7 +960,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="What is the All-In Bundle?">
-              <P>The All-In Bundle ($29/mo) includes all six paid hubs — Maintenance, Insights, Coordination, Accountability, Tasks, and Team (unlimited users) — at a significant discount versus subscribing individually.</P>
+              <P>The All-In Bundle ($29/mo) includes all 7 paid feature hubs — Maintenance, Insights, Coordination, Accountability, People Access, Tasks, and Job Hub — plus unlimited team members (the Team Hub $19/mo tier). Saves you $16/mo versus subscribing individually.</P>
             </Accordion>
 
             <Accordion title="What if someone added something to the wrong list — items vs. supplies?">
