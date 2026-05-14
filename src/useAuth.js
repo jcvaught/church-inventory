@@ -127,6 +127,28 @@ export function useAuth() {
         createdBy: cred.user.uid,
         createdAt: new Date().toISOString()
       });
+
+      // Create user profile BEFORE the config subdocs. The rules on
+      // churches/{id}/config/main and config/settings require
+      // isChurchAdminOrManager(), which reads role from users/{uid}.
+      // If we write config docs first, that doc doesn't exist yet, every
+      // config write is denied, and the new church creator is stranded
+      // with auth + parent church doc but no config + no user profile
+      // (the state Haleigh Watson's TrueNorth Church signup landed in
+      // on 2026-05-14).
+      const profile = {
+        name: userName,
+        firstName,
+        lastName,
+        email,
+        role: 'admin',
+        churchId,
+        active: true,
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString()
+      };
+      await setDoc(doc(db, 'users', cred.user.uid), profile);
+
       await setDoc(doc(db, 'churches', churchId, 'config', 'main'), {
         churchName,
         churchCode: churchCode.toUpperCase(),
@@ -162,19 +184,6 @@ export function useAuth() {
         createdAt: new Date().toISOString()
       });
 
-      // Create user profile
-      const profile = {
-        name: userName,
-        firstName,
-        lastName,
-        email,
-        role: 'admin',
-        churchId,
-        active: true,
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString()
-      };
-      await setDoc(doc(db, 'users', cred.user.uid), profile);
       setUserProfile({ id: cred.user.uid, uid: cred.user.uid, ...profile });
       await sendEmailVerification(cred.user).catch(() => {});
 
