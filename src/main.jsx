@@ -30,6 +30,24 @@ Sentry.init({
   },
 });
 
+// Lazy-load PostHog after first paint so it stays out of the critical JS
+// path. Activates only when VITE_POSTHOG_KEY is set in Vercel env vars —
+// otherwise the entire block is dead-code-eliminated by Vite. Autocaptures
+// pageviews + pageleave; sufficient for blog traffic visibility.
+if (import.meta.env.VITE_POSTHOG_KEY) {
+  const initPostHog = () =>
+    import('posthog-js').then(({ default: posthog }) => {
+      posthog.init(import.meta.env.VITE_POSTHOG_KEY, {
+        api_host: import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com',
+        person_profiles: 'identified_only',
+        capture_pageview: true,
+        capture_pageleave: true,
+      });
+      window.posthog = posthog;
+    });
+  'requestIdleCallback' in window ? requestIdleCallback(initPostHog) : setTimeout(initPostHog, 1500);
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <HelmetProvider>
