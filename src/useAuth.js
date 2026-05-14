@@ -17,6 +17,7 @@ import {
   doc, setDoc, getDoc, deleteDoc,
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import * as Sentry from '@sentry/react';
 import { auth, googleProvider, db } from './firebase.js';
 
 const DEFAULT_LOCATIONS = [
@@ -62,6 +63,10 @@ async function findChurchByCode(churchCode) {
 export function useAuth() {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
+  // True when the Auth account exists but `users/{uid}` doesn't — the
+  // "Haleigh stuck" state. App.jsx renders a recovery screen for this
+  // instead of silently showing the login form again.
+  const [profileMissing, setProfileMissing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -75,16 +80,35 @@ export function useAuth() {
           const profileDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (profileDoc.exists()) {
             setUserProfile({ id: firebaseUser.uid, uid: firebaseUser.uid, ...profileDoc.data() });
+            setProfileMissing(false);
           } else {
-            setUserProfile(null); // Authenticated but no profile yet
+            // Authenticated but no Firestore profile — the half-signed-up
+            // state. Surface to user + log to Sentry so we hear about
+            // future cases proactively instead of waiting for an email.
+            setUserProfile(null);
+            setProfileMissing(true);
+            Sentry.captureMessage('Auth account has no Firestore profile (stuck-signup state)', {
+              level: 'warning',
+              extra: {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                creationTime: firebaseUser.metadata?.creationTime,
+                lastSignInTime: firebaseUser.metadata?.lastSignInTime,
+              },
+            });
           }
         } catch (err) {
+          // Transient Firestore read failure — keep profileMissing false so
+          // the user can retry login; surface the actual error to Sentry.
           console.error('Error loading profile:', err);
           setUserProfile(null);
+          setProfileMissing(false);
+          Sentry.captureException(err);
         }
       } else {
         setUser(null);
         setUserProfile(null);
+        setProfileMissing(false);
       }
       setLoading(false);
     });
@@ -99,93 +123,113 @@ export function useAuth() {
     try {
       // Create auth account first so Firestore reads are authenticated
       cred = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(cred.user, { displayName: userName });
 
-      // Check if this email already created a church (1-church-per-email limit).
-      // Phase D: dropped the collection query (would need `allow list` on churches).
-      // The convention is churchId = '{creatorUid}-church', so a direct getDoc on
-      // that path tells us the same thing and is permitted by `allow get` for the
-      // self-creator branch.
-      const ownChurchSnap = await getDoc(doc(db, 'churches', cred.user.uid + '-church'));
-      if (ownChurchSnap.exists()) {
-        await cred.user.delete();
-        throw new Error('An account with this email has already created a church. Please sign in instead.');
+      // Inner try/catch wraps every step after Auth creation so we can clean
+      // up the orphan Auth account on ANY failure (rules denial, network
+      // blip, Firestore quota, business-rule rejection). Without this, a
+      // mid-chain failure leaves the user with auth/email-already-in-use
+      // on retry and no path to recovery short of contacting support.
+      try {
+        await updateProfile(cred.user, { displayName: userName });
+
+        // Check if this email already created a church (1-church-per-email limit).
+        // Phase D: dropped the collection query (would need `allow list` on churches).
+        // The convention is churchId = '{creatorUid}-church', so a direct getDoc on
+        // that path tells us the same thing and is permitted by `allow get` for the
+        // self-creator branch.
+        const ownChurchSnap = await getDoc(doc(db, 'churches', cred.user.uid + '-church'));
+        if (ownChurchSnap.exists()) {
+          throw new Error('An account with this email has already created a church. Please sign in instead.');
+        }
+
+        // Check if church code is already taken
+        const existing = await findChurchByCode(churchCode);
+        if (existing) {
+          throw new Error('This church code is already in use. Please choose another.');
+        }
+
+        // Create church document (parent + config)
+        const churchId = cred.user.uid + '-church';
+        await setDoc(doc(db, 'churches', churchId), {
+          churchName,
+          churchCode: churchCode.toUpperCase(),
+          createdBy: cred.user.uid,
+          createdAt: new Date().toISOString()
+        });
+
+        // Create user profile BEFORE the config subdocs. The rules on
+        // churches/{id}/config/main and config/settings require
+        // isChurchAdminOrManager(), which reads role from users/{uid}.
+        // If we write config docs first, that doc doesn't exist yet, every
+        // config write is denied, and the new church creator is stranded
+        // with auth + parent church doc but no config + no user profile
+        // (the state Haleigh Watson's TrueNorth Church signup landed in
+        // on 2026-05-14).
+        const profile = {
+          name: userName,
+          firstName,
+          lastName,
+          email,
+          role: 'admin',
+          churchId,
+          active: true,
+          createdAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'users', cred.user.uid), profile);
+
+        await setDoc(doc(db, 'churches', churchId, 'config', 'main'), {
+          churchName,
+          churchCode: churchCode.toUpperCase(),
+          createdBy: cred.user.uid,
+          createdAt: new Date().toISOString()
+        });
+
+        // Create settings with defaults
+        await setDoc(doc(db, 'churches', churchId, 'config', 'settings'), {
+          locations: DEFAULT_LOCATIONS,
+          ministries: DEFAULT_MINISTRIES,
+          tags: DEFAULT_TAGS
+        });
+
+        // Create subscription doc — starts with 90-day all-hubs trial
+        const trialStartedAt = new Date().toISOString();
+        const trialEndsAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+        const TRIAL_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'people_access', 'tasks', 'jobs'];
+        await setDoc(doc(db, 'churches', churchId, 'config', 'subscription'), {
+          plan: 'free',
+          hubs: [],
+          maxUsers: 10,
+          status: 'trialing',
+          trialStartedAt,
+          trialEndsAt,
+          trialHubs: TRIAL_HUBS,
+          freeHubsSelected: null,
+          stripeCustomerId: null,
+          stripeSubscriptionId: null,
+          currentPeriodEnd: null,
+          grandfathered: false,
+          grandfatheredUntil: null,
+          createdAt: new Date().toISOString()
+        });
+
+        setUserProfile({ id: cred.user.uid, uid: cred.user.uid, ...profile });
+      } catch (innerErr) {
+        // Anything between Auth creation and the last setDoc threw — best
+        // effort: delete the orphan Auth account so the user can retry with
+        // the same email. If the delete itself fails, log to Sentry; the
+        // user will still see a friendly error from the outer catch.
+        try { await cred.user.delete(); } catch (delErr) {
+          Sentry.captureException(delErr, { extra: { uid: cred.user.uid, phase: 'createChurch cleanup' } });
+        }
+        throw innerErr;
       }
 
-      // Check if church code is already taken
-      const existing = await findChurchByCode(churchCode);
-      if (existing) {
-        await cred.user.delete();
-        throw new Error('This church code is already in use. Please choose another.');
-      }
-
-      // Create church document (parent + config)
-      const churchId = cred.user.uid + '-church';
-      await setDoc(doc(db, 'churches', churchId), {
-        churchName,
-        churchCode: churchCode.toUpperCase(),
-        createdBy: cred.user.uid,
-        createdAt: new Date().toISOString()
+      // Verification email is non-blocking; surface failures to Sentry so we
+      // hear about SendGrid/quota issues instead of silently swallowing them.
+      await sendEmailVerification(cred.user).catch(err => {
+        Sentry.captureException(err, { extra: { phase: 'createChurch sendEmailVerification' } });
       });
-
-      // Create user profile BEFORE the config subdocs. The rules on
-      // churches/{id}/config/main and config/settings require
-      // isChurchAdminOrManager(), which reads role from users/{uid}.
-      // If we write config docs first, that doc doesn't exist yet, every
-      // config write is denied, and the new church creator is stranded
-      // with auth + parent church doc but no config + no user profile
-      // (the state Haleigh Watson's TrueNorth Church signup landed in
-      // on 2026-05-14).
-      const profile = {
-        name: userName,
-        firstName,
-        lastName,
-        email,
-        role: 'admin',
-        churchId,
-        active: true,
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString()
-      };
-      await setDoc(doc(db, 'users', cred.user.uid), profile);
-
-      await setDoc(doc(db, 'churches', churchId, 'config', 'main'), {
-        churchName,
-        churchCode: churchCode.toUpperCase(),
-        createdBy: cred.user.uid,
-        createdAt: new Date().toISOString()
-      });
-
-      // Create settings with defaults
-      await setDoc(doc(db, 'churches', churchId, 'config', 'settings'), {
-        locations: DEFAULT_LOCATIONS,
-        ministries: DEFAULT_MINISTRIES,
-        tags: DEFAULT_TAGS
-      });
-
-      // Create subscription doc — starts with 90-day all-hubs trial
-      const trialStartedAt = new Date().toISOString();
-      const trialEndsAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
-      const TRIAL_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'people_access', 'tasks', 'jobs'];
-      await setDoc(doc(db, 'churches', churchId, 'config', 'subscription'), {
-        plan: 'free',
-        hubs: [],
-        maxUsers: 10,
-        status: 'trialing',
-        trialStartedAt,
-        trialEndsAt,
-        trialHubs: TRIAL_HUBS,
-        freeHubsSelected: null,
-        stripeCustomerId: null,
-        stripeSubscriptionId: null,
-        currentPeriodEnd: null,
-        grandfathered: false,
-        grandfatheredUntil: null,
-        createdAt: new Date().toISOString()
-      });
-
-      setUserProfile({ id: cred.user.uid, uid: cred.user.uid, ...profile });
-      await sendEmailVerification(cred.user).catch(() => {});
 
       return { success: true };
     } catch (err) {
@@ -207,33 +251,45 @@ export function useAuth() {
     try {
       // Create auth account first (needed for Firestore access)
       cred = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(cred.user, { displayName: userName });
 
-      // Find church by code
-      const foundChurchId = await findChurchByCode(churchCode);
+      // Inner try/catch: clean up the Auth account on ANY failure between
+      // Auth creation and the final profile setDoc. Otherwise the user gets
+      // stuck with auth/email-already-in-use on retry.
+      try {
+        await updateProfile(cred.user, { displayName: userName });
 
-      if (!foundChurchId) {
-        // Clean up: delete the auth account since church code was invalid
-        await cred.user.delete();
-        throw new Error('Invalid church code. Please check with your administrator.');
+        // Find church by code
+        const foundChurchId = await findChurchByCode(churchCode);
+
+        if (!foundChurchId) {
+          throw new Error('Invalid church code. Please check with your administrator.');
+        }
+
+        // Create user profile — allowedHubs null means "inherit all church hubs" (default for non-invite signups)
+        const profile = {
+          name: userName,
+          firstName,
+          lastName,
+          email,
+          role: 'user',
+          churchId: foundChurchId,
+          active: true,
+          ...(allowedHubs != null ? { allowedHubs } : {}),
+          createdAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'users', cred.user.uid), profile);
+        setUserProfile({ id: cred.user.uid, uid: cred.user.uid, ...profile });
+      } catch (innerErr) {
+        try { await cred.user.delete(); } catch (delErr) {
+          Sentry.captureException(delErr, { extra: { uid: cred.user.uid, phase: 'register cleanup' } });
+        }
+        throw innerErr;
       }
 
-      // Create user profile — allowedHubs null means "inherit all church hubs" (default for non-invite signups)
-      const profile = {
-        name: userName,
-        firstName,
-        lastName,
-        email,
-        role: 'user',
-        churchId: foundChurchId,
-        active: true,
-        ...(allowedHubs != null ? { allowedHubs } : {}),
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString()
-      };
-      await setDoc(doc(db, 'users', cred.user.uid), profile);
-      setUserProfile({ id: cred.user.uid, uid: cred.user.uid, ...profile });
-      await sendEmailVerification(cred.user).catch(() => {});
+      await sendEmailVerification(cred.user).catch(err => {
+        Sentry.captureException(err, { extra: { phase: 'register sendEmailVerification' } });
+      });
 
       return { success: true };
     } catch (err) {
@@ -258,6 +314,9 @@ export function useAuth() {
         await setDoc(doc(db, 'users', cred.user.uid), { lastLogin: new Date().toISOString() }, { merge: true });
         setUserProfile({ id: cred.user.uid, uid: cred.user.uid, ...profileDoc.data() });
       }
+      // If the profile is missing here, onAuthStateChanged will set
+      // profileMissing=true and App.jsx will show the recovery screen.
+      // We still return success because authentication itself succeeded.
       return { success: true };
     } catch (err) {
       const msg = err.code === 'auth/invalid-credential'
@@ -280,10 +339,30 @@ export function useAuth() {
         await setDoc(doc(db, 'users', cred.user.uid), { lastLogin: new Date().toISOString() }, { merge: true });
         setUserProfile({ id: cred.user.uid, uid: cred.user.uid, ...profileDoc.data() });
         return { success: true };
-      } else {
-        // Google user exists in Auth but not in our DB — needs to register
+      }
+      // No Firestore profile. Distinguish two cases:
+      //   1. First-time Google sign-in: Auth account was just created in this
+      //      popup, so creationTime === lastSignInTime. User legitimately
+      //      needs to enter a church code → needsRegistration flow.
+      //   2. Returning user whose profile is missing: same stuck-signup state
+      //      as Haleigh, but reached via Google. Fall through to the
+      //      onAuthStateChanged-driven recovery screen.
+      const meta = cred.user.metadata || {};
+      const isFirstSignIn = meta.creationTime === meta.lastSignInTime;
+      if (isFirstSignIn) {
         return { success: false, needsRegistration: true, email: cred.user.email, name: cred.user.displayName };
       }
+      Sentry.captureMessage('Returning Google user has no Firestore profile (stuck-signup state)', {
+        level: 'warning',
+        extra: {
+          uid: cred.user.uid,
+          email: cred.user.email,
+          creationTime: meta.creationTime,
+          lastSignInTime: meta.lastSignInTime,
+        },
+      });
+      // Return success so onAuthStateChanged's profileMissing path takes over.
+      return { success: true };
     } catch (err) {
       if (err.code === 'auth/popup-closed-by-user') return { success: false };
       setError('Google sign-in failed. Please try again.');
@@ -385,6 +464,7 @@ export function useAuth() {
   return {
     user,
     userProfile,
+    profileMissing,
     loading,
     error,
     setError,

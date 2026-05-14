@@ -428,7 +428,7 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
 
 export default function App() {
   const authHook = useAuth();
-  const { user, userProfile, loading: authLoading } = authHook;
+  const { user, userProfile, profileMissing, loading: authLoading } = authHook;
   const [publicRequest] = useState(() => {
     const p = new URLSearchParams(window.location.search);
     const churchId = p.get('request');
@@ -477,12 +477,52 @@ export default function App() {
 
   if (authLoading) return <Spinner />;
 
+  // Authenticated but the Firestore user profile is missing — the stuck-signup
+  // state Haleigh Watson reported on 2026-05-14. Show a recovery screen
+  // instead of silently bouncing the user back to the login form.
+  if (user && profileMissing) {
+    return <ProfileMissingScreen authHook={authHook} />;
+  }
+
   if (!user || !userProfile) {
     if (!showAuth) return <LandingPage onGetStarted={handleGetStarted} />;
     return <AuthScreen authHook={authHook} initialMode={authInitialMode} onBack={() => setShowAuth(false)} />;
   }
 
   return <AppShell authHook={authHook} />;
+}
+
+function ProfileMissingScreen({ authHook }) {
+  const { user, logout } = authHook;
+  const supportSubject = encodeURIComponent('ChurchOpsHub: account incomplete after signup');
+  const supportBody = encodeURIComponent(
+    `Hi — I'm having trouble signing into ChurchOpsHub. The app says my account is incomplete.\n\n` +
+    `My email: ${user?.email || '(unknown)'}\n` +
+    `Account created: ${user?.metadata?.creationTime || '(unknown)'}\n\n` +
+    `Please help recover my account.`
+  );
+  return (
+    <div style={{ fontFamily:f2, minHeight:'100vh', background:`linear-gradient(170deg, ${B.cream} 0%, ${B.warmGray} 100%)`, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+      <div style={{ background:B.white, borderRadius:20, padding:'40px 36px', maxWidth:480, width:'92%', boxShadow:'0 8px 40px rgba(27,42,74,0.1)' }}>
+        <div style={{ textAlign:'center', marginBottom:24 }}>
+          <div style={{ display:'flex', justifyContent:'center', marginBottom:16 }}><Logo size={48}/></div>
+          <h1 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:'0 0 8px' }}>Account incomplete</h1>
+          <p style={{ color:B.textMid, fontSize:14, margin:0, lineHeight:1.6 }}>
+            You're signed in, but we can't find your account data. This usually means signup didn't finish.
+          </p>
+        </div>
+        <div style={{ background:B.cream, borderRadius:12, padding:'14px 18px', marginBottom:20, fontSize:13, color:B.textMid, lineHeight:1.6 }}>
+          <div style={{ fontWeight:600, color:B.navy, fontFamily:f1, marginBottom:4 }}>Signed in as</div>
+          <div style={{ wordBreak:'break-all' }}>{user?.email || '(no email)'}</div>
+        </div>
+        <p style={{ fontSize:13, color:B.textMid, lineHeight:1.6, marginBottom:20 }}>
+          Email us at <a href={`mailto:churchopshub@gmail.com?subject=${supportSubject}&body=${supportBody}`} style={{ color:B.teal, fontWeight:600 }}>churchopshub@gmail.com</a> and we'll restore your account, usually within a few hours.
+        </p>
+        <button onClick={logout} style={{ ...btnS, width:'100%' }}>Sign out</button>
+      </div>
+    </div>
+  );
 }
 
 function AppShell({ authHook }) {
