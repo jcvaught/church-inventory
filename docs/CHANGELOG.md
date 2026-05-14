@@ -4,6 +4,25 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-14 — Tasks-modal interactive-primitives audit
+
+After the third invisible-feedback report on the same modal in two days (focus-yank, focus-on-open, no-autogrow — all 2026-05-13), ran a narrow audit of the modal's interactive primitives: `Modal`, `FF`, `RichTextarea`, `TagInput`, `BlockedByInput`, the pill-group selects (`AssigneeSelect` / `SharedWithSelect` / `VisibilitySelect`), and `CommentThread`. 13 findings filed (`P-1` … `P-13`) across 3 severity tiers.
+
+Shipped the two real bugs:
+
+1. **P-1 — `BlockedByInput` leaked a `setTimeout`.** `addBlocker`'s "Task not found." error reset used a bare `setTimeout(() => setBlockerError(''), 3000)` with no unmount cleanup. Closing the modal within 3 s of typing an invalid TSK number fired `setState` on an unmounted component (React warning). Wrapped in `errorTimerRef` + an unmount cleanup `useEffect`, matching `TagInput`'s existing `blurTimerRef` pattern.
+
+2. **P-2 — `CommentThread` mention insertion ignored cursor position.** Picking from the `@-mention` dropdown did `onChange(newComment + '@' + name + ' ')` — always appended at the end, even if the caret was elsewhere. Added a `commentInputWrapRef` on the input wrapper, `querySelector('textarea')` to read `selectionStart`, splice the mention at that offset, then restore the caret after the inserted text on the next tick. Verified live: caret at index 5 in `"Hello world"` → `"Hello @John Vaught world"` with caret at 18.
+
+Remaining audit items (deferred — labelled `P-3` to `P-13` in session notes):
+
+- **a11y bundle**: Modal has no focus trap (Tab can escape the dialog); `FF`'s `cloneElement` injection drops a11y props on custom-component children (`TagInput`, `BlockedByInput`, the `*Select` pills) → label `htmlFor` points nowhere; pill-group selects have no `role`/`aria-pressed`/`aria-checked` — screen readers can't tell what's selected.
+- **polish**: `RichTextarea` label has no `htmlFor`; toolbar bullet/numbered toggles don't preserve cursor offset; `TagInput`/`BlockedByInput` fire Enter on both keydown + keyup; `scrollIntoView({behavior:'smooth'})` in `CommentThread` scrolls the modal panel; the edit-comment textarea is a plain `<textarea>` (no auto-grow) instead of `RichTextarea`; mention regex misses apostrophes/hyphens; required-field asterisks are inconsistent.
+
+`RichTextarea` is also **still duplicated** between `TasksPage.jsx` and `MaintenancePage.jsx` — extracting to `src/components/primitives/RichTextarea.jsx` is the obvious next refactor if it gets touched again.
+
+---
+
 ## 2026-05-13 — Modal "one letter at a time" focus bug
 
 User reported (Jill in FXCC, Chrome desktop): typing into the New Task modal in Tasks Hub yanked focus to the close-button "X" after every keystroke. Reproduced same-day on the reporter's own account by typing in the Description field.
