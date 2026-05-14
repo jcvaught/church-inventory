@@ -29,8 +29,17 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
+      // Service worker registration is best-effort; the app works fine
+      // without it (just no PWA install + no offline shell). Surface the
+      // real error to console.error so Sentry's captureConsole picks it up
+      // with useful context (HTTPS error / 404 / MIME / etc.) instead of
+      // an unhandled rejection that Sentry can only describe as "Rejected".
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(err => {
+            console.error('[ChurchOpsHub] Service worker registration failed:', err && (err.message || err));
+          });
+        });
       }
     </script>
   </body>
