@@ -69,6 +69,10 @@ ChurchOpsHub: Reminders for jobs you signed up for. Msg frequency varies (1-5/we
 ```
 Deployed to prod immediately (`functions:twilioInbound` only). Once the A2P campaign approves and the bare number moves into the campaign's Messaging Service, the Advanced Opt-Out HELP keyword will fire first and this CF branch becomes a redundant fallback — safe to leave in place.
 
+**Gotcha caught during verification — deploy stripped `allUsers` invoker IAM.** When the user tested by texting HELP twice, Twilio Programmable Messaging Logs showed both inbounds as "Received" but no outgoing reply and no Cloud Function invocations. Direct `curl` against both function URLs (cloudfunctions.net and run.app) returned **HTTP 403 from Cloud Run itself** — Twilio's unauthenticated webhook calls were getting 403 before our function code ever ran, and Twilio silently dropped the webhook failures. Re-granted with `gcloud run services add-iam-policy-binding twilioinbound --region=us-central1 --project=church-inventory-9615c --member=allUsers --role=roles/run.invoker`. After re-grant, an unsigned curl now reaches the function and is correctly rejected by signature validation (visible in logs with `from: '+14122665015'`). Real Twilio webhooks (with valid X-Twilio-Signature) pass through.
+
+This was the first 2nd-gen Functions deploy on the project that touched `twilioInbound` since 2026-05-13 (`cd049b2`). Firebase CLI 15.10 + firebase-functions 4.9 reproducibly strips the `allUsers` invoker binding on Gen-2 functions in this repo. Workaround: add a post-deploy `gcloud` step, or pin the IAM in `firebase.json`. For now, **always probe `curl ... twilioInbound` after deploying it** and re-grant if 403.
+
 ### E2E suite cleanup (final pass on 2026-05-14)
 
 Ran the full Playwright suite after the audit work landed — 38 passed, 2 failed. Both failures turned out to be pre-existing spec bugs that had never actually run green: the test commits (`82c5d1a`, `4d42a39`) had been merged with "21/21 total" / "39 passed" notes from sessions where Vercel's bot-protection cooldown clipped setup, so these specs got committed without an end-to-end confirmation.

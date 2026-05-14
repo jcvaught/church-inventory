@@ -259,5 +259,25 @@ const today = localDateStr(new Date());
 ### 🟡 Bare `>` in JSX text content
 esbuild's strict JSX parser rejects bare `>` characters in JSX text (e.g. `<P>Settings > Team Members</P>`). Use `→` for navigation paths or `{'>'`} to escape. Running `npm run build` will surface these immediately.
 
+### 🟡 Gen-2 deploy can strip `allUsers` invoker IAM (silent 403 on webhooks)
+
+Reproduced 2026-05-14 on `twilioInbound`. After `firebase deploy --only functions:<webhook-name>`, the Cloud Run service's `allUsers/roles/run.invoker` binding can be silently removed. Symptoms: Twilio/SendGrid/Stripe webhook calls return 403 before reaching your function, no logs, the third-party's logs show "delivered to webhook" but no callback fired.
+
+**Always probe a redeployed webhook function before walking away:**
+```bash
+curl -X POST <function-url> -d "test=1"
+# 403 with empty body or "Error: Forbidden" → IAM stripped
+# 403 with your function's signature-rejection log → IAM fine, code rejected
+```
+
+**Re-grant:**
+```bash
+gcloud run services add-iam-policy-binding twilioinbound \
+  --region=us-central1 --project=church-inventory-9615c \
+  --member=allUsers --role=roles/run.invoker
+```
+
+Applies to `twilioInbound`, `sendgridEventWebhook`, `stripeWebhook`, and any other Gen-2 `onRequest` function called by an unauthenticated third party.
+
 ### 🟡 Pseudo-selector styles (`:focus`, `:hover`) require global CSS
 Inline styles cannot target pseudo-selectors. The workaround for focus states is a global CSS rule in `index.html` — not `onFocus`/`onBlur` handlers on every input. The existing rule in `index.html` covers all `input`, `select`, and `textarea` elements with a teal border + glow on focus. For hover states on interactive elements, use `onMouseEnter`/`onMouseLeave` handlers inline (see KanbanColumn, TicketCard).
