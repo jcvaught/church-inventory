@@ -81,6 +81,30 @@ Deployed to prod immediately (`functions:twilioInbound` only). Once the A2P camp
 - Address the campaign rejection by rewriting `message_flow` with reviewer-accessible CTA evidence (screenshots or supplied test creds) and resubmit.
 - Optionally customize the campaign's `help_message` so Twilio's compliance auto-response carries our copy instead of the bare default.
 
+### Further investigation of the rejection — Edit form is locked
+
+Attempted to resubmit the corrected `message_flow` through the Console's **Edit Campaign** dialog. The "How do end-users consent" textarea and the Privacy/Terms URL fields are all rendered greyed-out / non-editable while the campaign sits in this "rejected but displayed as IN_PROGRESS" limbo. No email rejection notification was sent (or it was missed). No "Resubmit" button appears on the campaign detail page.
+
+Re-checked the Messaging API right after — `errors[]` still carries the same `30909 / MESSAGE_FLOW` entry, and `date_updated` is unchanged at `2026-04-27T12:45:46Z`. So Twilio is not silently retrying; the submission is stuck and the only avenue forward is **delete + re-register** via API, or a **support ticket** asking Twilio to either unlock the edit form or waive the re-registration fee.
+
+### Compensating change shipped (independent of the campaign decision)
+
+Discovered that the in-app SMS consent disclosure text (rendered in `SettingsPage.jsx`'s "SMS Job Reminders" section) did **not** match what the public `/sms-program` page claims is the "exact text shown in the app." The in-app version omitted the message-frequency note and the HELP keyword reference — both A2P-required language. A careful reviewer comparing the two would have flagged it independent of the CTA issue.
+
+`SettingsPage.jsx` and `PublicSMSProgramPage.jsx` both now use the longer disclosure: *"By providing your phone number and enabling SMS reminders, you consent to receive automated text messages from ChurchOpsHub for job-shift reminders. US and Canada numbers only. Message and data rates may apply. Message frequency varies (typically 1-5 messages per week). Reply STOP to unsubscribe or HELP for help."*
+
+Shipped in commit `d114495`. Deployed to Vercel. So whether the campaign gets re-submitted today or in three weeks, the in-app form already shows the disclosure text the `message_flow` field will describe.
+
+### Drafted `message_flow` ready to paste once edit becomes possible
+
+Includes test reviewer credentials (`e2e-admin@churchopshub.com` / `E2eTestPass123!` — user confirmed OK to share with TCR), explicit click-by-click opt-in steps verified against `SettingsPage.jsx`, the exact in-app consent disclosure text, and links to the public disclosure / privacy / terms pages. Stored in this session's notes; not committed to the repo because it's submission-form copy rather than code.
+
+### Next-session resume
+
+- Decide between **Twilio support ticket** (free, 2-3 days wait) vs **delete + API re-register** (~$15 fee, restarts TCR queue but no human-in-loop delay). User opted to pause here.
+- Either way, no further code changes are required to address the rejection — the consent-text fix (commit `d114495`) and webhook routing fix (number moved into Messaging Service) are the only code-side dependencies, and both are done.
+- Until the campaign is approved, **all outbound SMS from `+1 571-540-7100` to real US carriers will be filtered** by carrier A2P enforcement. This is the underlying reason every HELP / STOP / START test reply has been invisible to the user across multiple sessions.
+
 **Original open-issue text below kept for context — superseded by the resolution above.**
 
 **Open issue (2026-05-14, awaiting Twilio support):** Even with the HELP fix deployed and the Cloud Run IAM re-granted, end-to-end testing failed — Twilio's Programmable Messaging Logs show every inbound SMS to `+1 571-540-7100` as "Received" but with "no HTTP Requests logged for this event", for both keywords (HELP) and non-keywords (`test`). REST API confirms `sms_url` is set correctly on the phone number, no `sms_application_sid` override, and the number isn't in any Messaging Service sender pool. A successful invocation on 2026-05-12 (START keyword, `opt_in matched: 2` in function logs) proves the configuration worked at that point — something changed in Twilio's pipeline behavior for this bare 10DLC number between then and 2026-05-14 with no config changes on either side. Possibly A2P-compliance-related throttling for unregistered numbers under a pending campaign, but unverified. Support ticket pending. Example MessageSids: `SM12a764dc856eec66859321d56685d750` (HELP), `SM5b945d84b2dcb0e4b7a185284c12ebcb` (test).
