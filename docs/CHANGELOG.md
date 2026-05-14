@@ -4,6 +4,40 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-14 — Signup chain broke for new church creators (Haleigh / TrueNorth)
+
+Haleigh Watson signed up to evaluate ChurchOpsHub for TrueNorth Church (code TNC2026) at 10:40 EDT today and emailed asking for help — the signup accepted her info and the welcome email arrived, but she could not get past the login screen and password reset didn't help.
+
+**Root cause:** `useAuth.createChurch` wrote Firestore docs in this order:
+
+```
+1. churches/{id}              ← parent doc        ✓ self-creator branch passes
+2. churches/{id}/config/main  ← admin-required    ✗ DENIED here
+3. churches/{id}/config/settings
+4. churches/{id}/config/subscription
+5. users/{uid}                ← creator's profile
+```
+
+The rule on `config/main` and `config/settings` is `isChurchAdminOrManager(churchId)`, which reads the requesting user's role from `users/{uid}`. At step 2 that document doesn't exist yet, so the rule denies, the awaited `setDoc` throws, the chain breaks, and steps 3–5 never run. The Auth account is created, the parent church doc is created (which fires the `sendWelcomeEmail` Cloud Function — explaining why she received the welcome email), but no config and no user profile exist. The app then loads, finds no user profile in Firestore, and keeps her stuck on the login screen.
+
+Anyone signing up between the rules being deployed in this configuration and today's fix would have hit the same wall silently.
+
+**Repair (Haleigh's account):** ran an Admin-SDK script that bypasses rules and wrote the four missing docs — `config/main`, `config/settings`, `config/subscription` (90-day trial restarted from today), and `users/{uid}` (role: admin, name: Haleigh Watson, etc.). All values match what the signup flow would have written; trial dates use today's timestamp per user request so the trial isn't shortened by the failed signup window.
+
+**Fix (commit `73e73ec`):** moved the `users/{uid}` `setDoc` to immediately after the parent church doc, before any config writes. The chain is now:
+
+```
+1. churches/{id}
+2. users/{uid}                ← was step 5
+3. churches/{id}/config/main
+4. churches/{id}/config/settings
+5. churches/{id}/config/subscription
+```
+
+`isChurchAdminOrManager` now passes at step 3 because the user doc exists by then. Removed the duplicate `setDoc(users/...)` that was at the end of the block; kept the `setUserProfile()` React state update there. Build clean, lint 0 errors. Deployed via Vercel.
+
+---
+
 ## 2026-05-14 — Tasks-modal interactive-primitives audit
 
 After the third invisible-feedback report on the same modal in two days (focus-yank, focus-on-open, no-autogrow — all 2026-05-13), ran a narrow audit of the modal's interactive primitives: `Modal`, `FF`, `RichTextarea`, `TagInput`, `BlockedByInput`, the pill-group selects (`AssigneeSelect` / `SharedWithSelect` / `VisibilitySelect`), and `CommentThread`. 13 findings filed (`P-1` … `P-13`) across 3 severity tiers.
