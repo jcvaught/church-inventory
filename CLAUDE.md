@@ -24,7 +24,9 @@ npm run test:e2e  # Playwright E2E suite against prod (~80s, requires E2E_MEMBER
 
 ### E2E test suite
 
-Playwright suite at `e2e/` mirrors the Court Climber pattern (Firebase v12 IndexedDB auth state per role, per-spec teardown via Admin SDK, three roles: admin / member-a / member-b). 31 tests covering every section of `docs/TEST-JOBS-HUB-2026-05-07.md` (§4–§11). Runs against PROD, cleans up after itself via `purgeE2EArtifacts()` (deletes any job/announcement/accessPeople doc whose title starts with `[E2E]`).
+Playwright suite at `e2e/` mirrors the Court Climber pattern (Firebase v12 IndexedDB auth state per role, per-spec teardown via Admin SDK, three roles: admin / member-a / member-b). 41 tests (40 active + 1 SMS-smoke gated by `E2E_RUN_SMS=1`) covering every section of `docs/TEST-JOBS-HUB-2026-05-07.md` (§2–§11). Runs against PROD, cleans up after itself via `purgeE2EArtifacts()` (deletes any job/announcement/accessPeople doc whose title starts with `[E2E]`). Last clean run 2026-05-14: 40 passed, 1 skipped, 0 failed (~110s).
+
+**activityLog schema for E2E assertions:** docs are `{ action, itemId, performedBy, performedByName, timestamp, details }` (see `useFirestore.js:394` `logActivity`). When asserting log entries, query `where('action', '==', '...')` and filter on `itemId` — *not* `kind`/`target` (a bug that landed in `crud.spec.js` because it was committed without an end-to-end run). `logActivity` fires async after the mutation it follows, so wrap log assertions in `expect.poll`.
 
 ```bash
 # Full suite (~80s)

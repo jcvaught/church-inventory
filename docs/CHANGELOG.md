@@ -55,6 +55,15 @@ Closed the seven remaining audit items:
 
 Build clean, lint 0 errors (43 baseline `exhaustive-deps` warnings).
 
+### E2E suite cleanup (final pass on 2026-05-14)
+
+Ran the full Playwright suite after the audit work landed — 38 passed, 2 failed. Both failures turned out to be pre-existing spec bugs that had never actually run green: the test commits (`82c5d1a`, `4d42a39`) had been merged with "21/21 total" / "39 passed" notes from sessions where Vercel's bot-protection cooldown clipped setup, so these specs got committed without an end-to-end confirmation.
+
+- **`public-board.spec.js` §9** — seeded 1 signup, then asserted `"0 / 3 spots filled"` on the public board. The `getPublicJobs` CF returns `signupCount = signups.length`, so the rendered text is `1/3`. Updated expectation to `1 / 3`.
+- **`crud.spec.js` §2 (Admin can edit a job's location)** — queried `where('kind', '==', 'update_job')` and filtered `d.target`. The actual `activityLog` schema is `{ action, itemId, performedBy, performedByName, timestamp, details }` (`useFirestore.js:394`); the test had been written against a schema that doesn't exist. Fixed field names and wrapped in `expect.poll` because `logActivity` fires async after `updateJobListing` returns — the success toast can paint before the log doc lands.
+
+Clean run: **40 passed, 1 SMS-smoke skipped, 0 failed** (~110s against prod).
+
 ### RichTextarea extracted to shared primitive
 
 Closed the final audit follow-up. `RichTextarea` was duplicated between `TasksPage.jsx` and `MaintenancePage.jsx` — both copies converged after the P-7 toolbar-cursor and 2026-05-13 auto-grow fixes, so any further change had to be made twice. Pulled the component to `src/components/primitives/RichTextarea.jsx` (~135 lines), removed both local copies (~145 lines each), and replaced them with `import { RichTextarea } from '../../components/primitives/RichTextarea.jsx'`. The shared version keeps the optional `label` prop (TasksPage uses it; MaintenancePage doesn't) so both call patterns work unchanged. `CLAUDE.md` file-layout block updated to list the new primitive. Build clean, lint 0 errors.
