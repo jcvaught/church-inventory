@@ -107,7 +107,9 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
     setBusy(false);
   }
   async function handleRegister(e) {
-    e?.preventDefault(); setBusy(true);
+    e?.preventDefault();
+    if (honeypot) return; // S-12: bot trap — silently reject
+    setBusy(true);
     await register({ firstName:form.firstName, lastName:form.lastName, email:form.email, password:form.password, churchCode:form.churchCode, allowedHubs: inviteData?.hubs ?? null });
     setBusy(false);
   }
@@ -224,6 +226,9 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
           <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
             <div style={{ flex:1, height:1, background:B.sand }}/><span style={{ fontSize:12, color:B.textLight, fontFamily:f1 }}>OR</span><div style={{ flex:1, height:1, background:B.sand }}/>
           </div>
+
+          {/* S-12: Honeypot — hidden from real users; bots fill it in */}
+          <input type="text" value={honeypot} onChange={e=>setHoneypot(e.target.value)} style={{ display:"none" }} tabIndex={-1} autoComplete="off" aria-hidden="true" />
 
           <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr", gap:12 }}>
             <FF label="First Name"><input style={inp} value={form.firstName} onChange={e=>u("firstName",e.target.value)} placeholder="John"/></FF>

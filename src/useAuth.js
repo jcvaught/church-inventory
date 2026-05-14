@@ -55,8 +55,14 @@ async function findChurchByCode(churchCode) {
     const res = await fn({ code });
     return res.data?.found ? res.data.churchId : null;
   } catch (err) {
-    console.error('[ChurchOpsHub] lookupChurchByCode failed', err);
-    return null;
+    // S-9: distinguish "code doesn't exist" (returns null) from
+    // "lookup failed" (throws). Previously both returned null, so users
+    // saw "Invalid church code" during transient CF outages even when
+    // their code was correct.
+    Sentry.captureException(err, { extra: { phase: 'findChurchByCode', code } });
+    const wrapped = new Error("We couldn't verify your church code right now. Please check your connection and try again.");
+    wrapped.code = 'lookup-failed';
+    throw wrapped;
   }
 }
 
@@ -118,11 +124,13 @@ export function useAuth() {
   // Create a new church (first-time setup)
   const createChurch = useCallback(async ({ churchName, churchCode, firstName, lastName, email, password }) => {
     const userName = (firstName + ' ' + lastName).trim();
+    // S-14: normalize email casing/whitespace before any storage write.
+    const normalizedEmail = email.trim().toLowerCase();
     setError(null);
     let cred = null;
     try {
       // Create auth account first so Firestore reads are authenticated
-      cred = await createUserWithEmailAndPassword(auth, email, password);
+      cred = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
 
       // Inner try/catch wraps every step after Auth creation so we can clean
       // up the orphan Auth account on ANY failure (rules denial, network
@@ -150,11 +158,13 @@ export function useAuth() {
 
         // Create church document (parent + config)
         const churchId = cred.user.uid + '-church';
+        // S-13: single shared timestamp for all writes in this signup.
+        const now = new Date().toISOString();
         await setDoc(doc(db, 'churches', churchId), {
           churchName,
           churchCode: churchCode.toUpperCase(),
           createdBy: cred.user.uid,
-          createdAt: new Date().toISOString()
+          createdAt: now,
         });
 
         // Create user profile BEFORE the config subdocs. The rules on
@@ -169,12 +179,12 @@ export function useAuth() {
           name: userName,
           firstName,
           lastName,
-          email,
+          email: normalizedEmail,
           role: 'admin',
           churchId,
           active: true,
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString()
+          createdAt: now,
+          lastLogin: now,
         };
         await setDoc(doc(db, 'users', cred.user.uid), profile);
 
@@ -182,26 +192,25 @@ export function useAuth() {
           churchName,
           churchCode: churchCode.toUpperCase(),
           createdBy: cred.user.uid,
-          createdAt: new Date().toISOString()
+          createdAt: now,
         });
 
         // Create settings with defaults
         await setDoc(doc(db, 'churches', churchId, 'config', 'settings'), {
           locations: DEFAULT_LOCATIONS,
           ministries: DEFAULT_MINISTRIES,
-          tags: DEFAULT_TAGS
+          tags: DEFAULT_TAGS,
         });
 
         // Create subscription doc — starts with 90-day all-hubs trial
-        const trialStartedAt = new Date().toISOString();
-        const trialEndsAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+        const trialEndsAt = new Date(Date.parse(now) + 90 * 24 * 60 * 60 * 1000).toISOString();
         const TRIAL_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'people_access', 'tasks', 'jobs'];
         await setDoc(doc(db, 'churches', churchId, 'config', 'subscription'), {
           plan: 'free',
           hubs: [],
           maxUsers: 10,
           status: 'trialing',
-          trialStartedAt,
+          trialStartedAt: now,
           trialEndsAt,
           trialHubs: TRIAL_HUBS,
           freeHubsSelected: null,
@@ -210,7 +219,7 @@ export function useAuth() {
           currentPeriodEnd: null,
           grandfathered: false,
           grandfatheredUntil: null,
-          createdAt: new Date().toISOString()
+          createdAt: now,
         });
 
         setUserProfile({ id: cred.user.uid, uid: cred.user.uid, ...profile });
@@ -246,11 +255,13 @@ export function useAuth() {
   // Register with church code
   const register = useCallback(async ({ firstName, lastName, email, password, churchCode, allowedHubs }) => {
     const userName = (firstName + ' ' + lastName).trim();
+    // S-14: normalize email casing/whitespace before any storage write.
+    const normalizedEmail = email.trim().toLowerCase();
     setError(null);
     let cred = null;
     try {
       // Create auth account first (needed for Firestore access)
-      cred = await createUserWithEmailAndPassword(auth, email, password);
+      cred = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
 
       // Inner try/catch: clean up the Auth account on ANY failure between
       // Auth creation and the final profile setDoc. Otherwise the user gets
@@ -265,18 +276,20 @@ export function useAuth() {
           throw new Error('Invalid church code. Please check with your administrator.');
         }
 
+        // S-13: single shared timestamp.
+        const now = new Date().toISOString();
         // Create user profile — allowedHubs null means "inherit all church hubs" (default for non-invite signups)
         const profile = {
           name: userName,
           firstName,
           lastName,
-          email,
+          email: normalizedEmail,
           role: 'user',
           churchId: foundChurchId,
           active: true,
           ...(allowedHubs != null ? { allowedHubs } : {}),
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString()
+          createdAt: now,
+          lastLogin: now,
         };
         await setDoc(doc(db, 'users', cred.user.uid), profile);
         setUserProfile({ id: cred.user.uid, uid: cred.user.uid, ...profile });
@@ -306,8 +319,11 @@ export function useAuth() {
   // Email/password sign in
   const login = useCallback(async (email, password) => {
     setError(null);
+    // S-14: normalize so users that signed up with mixed-case email don't
+    // hit auth/invalid-credential just because they typed it differently.
+    const normalizedEmail = email.trim().toLowerCase();
     try {
-      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const cred = await signInWithEmailAndPassword(auth, normalizedEmail, password);
       // Update last login
       const profileDoc = await getDoc(doc(db, 'users', cred.user.uid));
       if (profileDoc.exists()) {
@@ -386,24 +402,33 @@ export function useAuth() {
       const spaceIdx = displayName.indexOf(' ');
       const firstName = spaceIdx >= 0 ? displayName.slice(0, spaceIdx) : displayName;
       const lastName = spaceIdx >= 0 ? displayName.slice(spaceIdx + 1) : '';
+      const now = new Date().toISOString();
+      // S-14: normalize email casing/whitespace so search-by-email is reliable.
+      const normalizedEmail = (auth.currentUser.email || '').trim().toLowerCase();
       // allowedHubs null means "inherit all church hubs" (default for non-invite signups)
       const profile = {
-        name: displayName || auth.currentUser.email,
+        name: displayName || normalizedEmail,
         firstName,
         lastName,
-        email: auth.currentUser.email,
+        email: normalizedEmail,
         role: 'user',
         churchId: foundChurchId,
         active: true,
         ...(allowedHubs != null ? { allowedHubs } : {}),
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString()
+        createdAt: now,
+        lastLogin: now,
       };
       await setDoc(doc(db, 'users', auth.currentUser.uid), profile);
       setUserProfile({ id: auth.currentUser.uid, uid: auth.currentUser.uid, ...profile });
       return { success: true };
     } catch (err) {
       setError(err.message);
+      // S-11: sign out so the Google session doesn't linger in a half-signed-up
+      // state. Without this, a failed church-code lookup leaves the user
+      // authenticated with no profile (the stuck state).
+      try { await signOut(auth); } catch (signOutErr) {
+        Sentry.captureException(signOutErr, { extra: { phase: 'registerWithGoogle cleanup' } });
+      }
       return { success: false, error: err.message };
     }
   }, []);
@@ -416,8 +441,10 @@ export function useAuth() {
 
   const resetPassword = useCallback(async (email) => {
     setError(null);
+    // S-14: normalize so the email matches whatever Firebase Auth has stored.
+    const normalizedEmail = email.trim().toLowerCase();
     try {
-      await sendPasswordResetEmail(auth, email);
+      await sendPasswordResetEmail(auth, normalizedEmail);
       return { success: true };
     } catch (err) {
       const msg = err.code === 'auth/user-not-found'
