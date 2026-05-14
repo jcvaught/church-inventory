@@ -257,32 +257,45 @@ function RichTextarea({ value, onChange, style, placeholder, onKeyDown }) {
     return { lines, startLine, endLine };
   }
 
-  function toggleBullet() {
+  function applyLineTransform(kind /* 'bullet' | 'numbered' */) {
     const el = taRef.current;
-    const { lines, startLine, endLine } = getLineRange(el.selectionStart, el.selectionEnd);
+    if (!el) return;
+    const ss = el.selectionStart;
+    const se = el.selectionEnd;
+    const { lines, startLine, endLine } = getLineRange(ss, se);
     const slice = lines.slice(startLine, endLine + 1);
-    const allHave = slice.every(l => l.startsWith('• '));
-    onChange(lines.map((l, i) => {
-      if (i < startLine || i > endLine) return l;
-      const stripped = l.replace(/^\d+\.\s/, '').replace(/^• /, '');
-      return allHave ? stripped : '• ' + stripped;
-    }).join('\n'));
-    setTimeout(() => el.focus(), 0);
-  }
-
-  function toggleNumbered() {
-    const el = taRef.current;
-    const { lines, startLine, endLine } = getLineRange(el.selectionStart, el.selectionEnd);
-    const slice = lines.slice(startLine, endLine + 1);
-    const allHave = slice.every(l => /^\d+\.\s/.test(l));
+    const re = kind === 'bullet' ? /^• / : /^\d+\.\s/;
+    const allHave = slice.every(l => re.test(l));
     let n = 1;
-    onChange(lines.map((l, i) => {
+    const newLines = lines.map((l, i) => {
       if (i < startLine || i > endLine) return l;
       const stripped = l.replace(/^\d+\.\s/, '').replace(/^• /, '');
-      return allHave ? stripped : (n++) + '. ' + stripped;
-    }).join('\n'));
-    setTimeout(() => el.focus(), 0);
+      if (allHave) return stripped;
+      return kind === 'bullet' ? '• ' + stripped : (n++) + '. ' + stripped;
+    });
+    function starts(arr) {
+      const out = new Array(arr.length);
+      let pos = 0;
+      for (let i = 0; i < arr.length; i++) { out[i] = pos; pos += arr[i].length + 1; }
+      return out;
+    }
+    const oldStarts = starts(lines);
+    const newStarts = starts(newLines);
+    function adjust(p) {
+      let li = lines.length - 1;
+      for (let i = 0; i < lines.length; i++) {
+        if (p <= oldStarts[i] + lines[i].length) { li = i; break; }
+      }
+      const offset = p - oldStarts[li];
+      return newStarts[li] + Math.min(offset, newLines[li].length);
+    }
+    const newSs = adjust(ss);
+    const newSe = adjust(se);
+    onChange(newLines.join('\n'));
+    setTimeout(() => { if (!el) return; el.focus(); el.setSelectionRange(newSs, newSe); }, 0);
   }
+  function toggleBullet() { applyLineTransform('bullet'); }
+  function toggleNumbered() { applyLineTransform('numbered'); }
 
   function handleKeyDown(e) {
     if (e.key === 'Enter') {
@@ -1247,7 +1260,7 @@ export function MaintenancePage({ store, userProfile }) {
 
       {/* ═══ ADD TICKET MODAL ═══ */}
       <Modal open={showAdd} onClose={() => { setShowAdd(false); setPhotoFiles([]); setPhotoPreviews([]); }} title="New Maintenance Ticket" wide>
-        <FF label="Ticket Name *">
+        <FF label="Ticket Name" required>
           <input style={inp} value={ticketForm.name} onChange={e => setTicketForm(f => ({ ...f, name:e.target.value }))} placeholder="Short descriptive name..."/>
         </FF>
         <FF label="Description">
@@ -1470,7 +1483,7 @@ export function MaintenancePage({ store, userProfile }) {
 
       {/* ═══ EDIT VENDOR MODAL ═══ */}
       <Modal open={!!showEditVendor} onClose={() => { setShowEditVendor(null); setVendorForm(getEmptyVendor()); }} title="Edit Vendor">
-        <FF label="Vendor / Company Name *">
+        <FF label="Vendor / Company Name" required>
           <input style={inp} value={vendorForm.name} onChange={e => setVendorForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. Smith's HVAC"/>
         </FF>
         <FF label="Specialty">
@@ -1494,7 +1507,7 @@ export function MaintenancePage({ store, userProfile }) {
 
       {/* ═══ ADD VENDOR MODAL ═══ */}
       <Modal open={showAddVendor} onClose={() => { setShowAddVendor(false); setVendorForm(getEmptyVendor()); }} title="Add Vendor">
-        <FF label="Vendor / Company Name *">
+        <FF label="Vendor / Company Name" required>
           <input style={inp} value={vendorForm.name} onChange={e => setVendorForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. Smith's HVAC"/>
         </FF>
         <FF label="Specialty">

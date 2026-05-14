@@ -1273,7 +1273,7 @@ export function JobsPage({ store, userProfile }) {
       {/* ── New / Edit Job Modal ── */}
       {showNewJob && (
         <Modal open title={editJobId ? 'Edit Job' : 'Post a Job'} onClose={() => { setShowNewJob(false); setEditJobId(null); }} maxWidth={560}>
-          <FF label="Job Title *">
+          <FF label="Job Title" required>
             <input style={inp} value={jobForm.title} onChange={e => setJobForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Reset chairs in sanctuary" autoFocus />
           </FF>
           <FF label="Description">
@@ -1281,7 +1281,7 @@ export function JobsPage({ store, userProfile }) {
           </FF>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ flex: '1 1 160px' }}>
-              <FF label="Date *">
+              <FF label="Date" required>
                 <input type="date" style={inp} value={jobForm.scheduledDate} onChange={e => setJobForm(f => ({ ...f, scheduledDate: e.target.value }))} />
               </FF>
             </div>
@@ -1312,7 +1312,7 @@ export function JobsPage({ store, userProfile }) {
           </FF>
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <FF label="Spots Available *">
+              <FF label="Spots Available" required>
                 <input type="number" min={1} max={99} style={inp} value={jobForm.spotsTotal} onChange={e => setJobForm(f => ({ ...f, spotsTotal: e.target.value }))} />
               </FF>
             </div>
@@ -1359,7 +1359,7 @@ export function JobsPage({ store, userProfile }) {
               <span style={{ fontSize:13, fontFamily:f1, fontWeight:600, color:B.textDark }}>Require waiver/consent before signing up</span>
             </label>
             {jobForm.requiresWaiver && (
-              <FF label="Waiver Text *">
+              <FF label="Waiver Text" required>
                 <textarea style={{ ...inp, minHeight:80, resize:'vertical' }} value={jobForm.waiverText} onChange={e => setJobForm(f => ({ ...f, waiverText: e.target.value }))} placeholder="Enter the consent statement volunteers must agree to before signing up..." />
               </FF>
             )}
@@ -1396,7 +1396,7 @@ export function JobsPage({ store, userProfile }) {
                       </FF>
                     </div>
                     <div style={{ flex: '1 1 140px' }}>
-                      <FF label="Series Ends On *">
+                      <FF label="Series Ends On" required>
                         <input type="date" style={inp} value={recurrenceSeriesEndDate} min={jobForm.scheduledDate || undefined} onChange={e => setRecurrenceSeriesEndDate(e.target.value)} />
                       </FF>
                     </div>
@@ -1639,10 +1639,10 @@ export function JobsPage({ store, userProfile }) {
       {/* ── New / Edit Announcement Modal ── */}
       {showNewAnn && (
         <Modal open title={editAnnId ? 'Edit Announcement' : 'Post Announcement'} onClose={() => { setShowNewAnn(false); setEditAnnId(null); }} maxWidth={520}>
-          <FF label="Title *">
+          <FF label="Title" required>
             <input style={inp} value={annForm.title} onChange={e => setAnnForm(f => ({ ...f, title: e.target.value }))} placeholder="Announcement title" autoFocus />
           </FF>
-          <FF label="Body *">
+          <FF label="Body" required>
             <textarea style={{ ...inp, minHeight: 100, resize: 'vertical' }} value={annForm.body} onChange={e => setAnnForm(f => ({ ...f, body: e.target.value }))} placeholder="What do you want to share?" />
           </FF>
           <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -1781,7 +1781,7 @@ export function JobsPage({ store, userProfile }) {
 
       {/* ── Convert to Task Modal ── */}
       <Modal open={showConvertToTaskModal} onClose={() => setShowConvertToTaskModal(false)} title="Convert to Task">
-        <FF label="Task Name *">
+        <FF label="Task Name" required>
           <input style={inp} value={convertTaskForm.name} onChange={e => setConvertTaskForm(f => ({ ...f, name: e.target.value }))} placeholder="Task name…" />
         </FF>
         <FF label="Due Date">

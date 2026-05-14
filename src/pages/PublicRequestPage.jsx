@@ -77,7 +77,7 @@ export function PublicRequestPage({ churchId, churchName }) {
           {error && (
             <div style={{ background:B.redPale, border:'1px solid #FECACA', borderRadius:10, padding:'10px 14px', marginBottom:16, color:B.red, fontSize:13, fontWeight:600 }}>{error}</div>
           )}
-          <FF label="Your Name *">
+          <FF label="Your Name" required>
             <input style={inp} value={form.name} onChange={e=>setForm({...form, name:e.target.value})} placeholder="John Smith"/>
           </FF>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
@@ -88,7 +88,7 @@ export function PublicRequestPage({ churchId, churchName }) {
               <input style={inp} type="tel" value={form.phone} onChange={e=>setForm({...form, phone:e.target.value})} placeholder="555-555-5555"/>
             </FF>
           </div>
-          <FF label="What item do you need? *">
+          <FF label="What item do you need?" required>
             <input style={inp} value={form.itemDescription} onChange={e=>setForm({...form, itemDescription:e.target.value})} placeholder="e.g. Folding chairs, projector, sound system..."/>
           </FF>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>

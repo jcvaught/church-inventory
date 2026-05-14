@@ -840,7 +840,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
           <p style={{ fontSize:13, color:B.textMid, marginBottom:16 }}>
             Description, location, ministry, and tags will carry over. The inventory record will be permanently deleted.
           </p>
-          <FF label="Supply ID (required)">
+          <FF label="Supply ID" required>
             <input style={inp} value={moveSupplyForm.supplyId} onChange={e=>setMoveSupplyForm({...moveSupplyForm, supplyId:e.target.value})} placeholder="e.g. BATT-AA (min 3 chars)" autoFocus/>
           </FF>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>

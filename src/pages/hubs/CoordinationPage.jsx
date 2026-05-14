@@ -303,7 +303,7 @@ export function CoordinationPage({ store, userProfile }) {
 
       {/* ═══ BUNDLE EDIT MODAL ═══ */}
       <Modal open={showBundleModal} onClose={() => setShowBundleModal(false)} title={editBundle ? 'Edit Bundle' : 'New Bundle'} wide>
-        <FF label="Bundle Name *">
+        <FF label="Bundle Name" required>
           <input style={inp} value={bundleForm.name} onChange={e => setBundleForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Sunday Morning AV Setup" />
         </FF>
         <FF label="Description">
@@ -372,7 +372,7 @@ export function CoordinationPage({ store, userProfile }) {
               ))}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
-              <FF label="Person *">
+              <FF label="Person" required>
                 <input style={{ ...inp, borderColor: !coForm.person.trim() ? B.red : undefined }} value={coForm.person} onChange={e => setCoForm(f => ({ ...f, person: e.target.value }))} placeholder="Who is checking out?" />
                 {!coForm.person.trim() && <div style={{ fontSize: 12, color: B.red, marginTop: 4 }}>Person is required</div>}
               </FF>
@@ -386,7 +386,7 @@ export function CoordinationPage({ store, userProfile }) {
                 <input style={inp} value={coForm.purpose} onChange={e => setCoForm(f => ({ ...f, purpose: e.target.value }))} placeholder={checkoutBundle.name} />
               </FF>
               <div />
-              <FF label="Date *">
+              <FF label="Date" required>
                 <input type="date" style={{ ...inp, borderColor: !coForm.date ? B.red : undefined }} value={coForm.date} onChange={e => setCoForm(f => ({ ...f, date: e.target.value }))} />
                 {!coForm.date && <div style={{ fontSize: 12, color: B.red, marginTop: 4 }}>Date is required</div>}
               </FF>

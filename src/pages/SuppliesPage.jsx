@@ -461,7 +461,7 @@ export function SuppliesPage({ store, userProfile }) {
         <p style={{ fontSize:13, color:B.textMid, marginBottom:16 }}>
           Description, location, ministry, and tags will carry over. The supply record will be permanently deleted.
         </p>
-        <FF label="Item ID (required)">
+        <FF label="Item ID" required>
           <input style={{...inp, fontFamily:"monospace", letterSpacing:1}} value={moveItemForm.itemId} onChange={e=>setMoveItemForm({...moveItemForm, itemId:e.target.value.toUpperCase()})} placeholder="Auto-filled from description" autoFocus/>
         </FF>
         <FF label="Notes (optional)">

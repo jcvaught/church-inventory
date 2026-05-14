@@ -1144,7 +1144,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
         <div style={{ background:B.warmGray, borderRadius:12, padding:"16px 18px", marginBottom:20 }}>
           <div style={{ fontFamily:f1, fontWeight:700, fontSize:14, color:B.navy, marginBottom:12 }}>{editRoomId ? 'Edit Space' : 'Add New Space'}</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-            <FF label="Name *">
+            <FF label="Name" required>
               <input style={inp} value={roomForm.name} onChange={e => setRoomForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. Sanctuary"/>
             </FF>
             <FF label="Capacity">

@@ -153,23 +153,47 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
 function TagInput({ tags = [], onChange, suggestions = [] }) {
   const [inputVal, setInputVal] = useState('');
   const [showDrop, setShowDrop] = useState(false);
+  const [highlightIdx, setHighlightIdx] = useState(-1);
   const blurTimerRef = useRef(null);
+  // Enter handled in keydown sets this so the keyup mobile-fallback skips it on
+  // desktop, where both events fire from the same keypress and would double-add.
+  const enterHandledRef = useRef(false);
   useEffect(() => () => { if (blurTimerRef.current) clearTimeout(blurTimerRef.current); }, []);
   const filtered = suggestions.filter(s => !tags.includes(s) && s.toLowerCase().includes(inputVal.toLowerCase()));
+  // Clamp at render time rather than effect-resetting on every filter change.
+  const safeIdx = highlightIdx >= 0 && highlightIdx < filtered.length ? highlightIdx : -1;
 
   function addTag(t) {
     const tag = t.trim().toLowerCase();
     if (tag && !tags.includes(tag)) onChange([...tags, tag]);
     setInputVal('');
     setShowDrop(false);
+    setHighlightIdx(-1);
   }
   function onKey(e) {
-    if ((e.key === 'Enter' || e.key === ',') && inputVal.trim()) { e.preventDefault(); e.stopPropagation(); addTag(inputVal); }
+    if (showDrop && filtered.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightIdx(i => (i + 1) % filtered.length); return; }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setHighlightIdx(i => i <= 0 ? filtered.length - 1 : i - 1); return; }
+      if (e.key === 'Escape')    { e.preventDefault(); setShowDrop(false); return; }
+      if (e.key === 'Enter' && safeIdx >= 0) {
+        e.preventDefault(); e.stopPropagation();
+        enterHandledRef.current = true;
+        addTag(filtered[safeIdx]);
+        return;
+      }
+    }
+    if ((e.key === 'Enter' || e.key === ',') && inputVal.trim()) {
+      e.preventDefault(); e.stopPropagation();
+      if (e.key === 'Enter') enterHandledRef.current = true;
+      addTag(inputVal);
+    }
     else if (e.key === 'Backspace' && !inputVal && tags.length) onChange(tags.slice(0, -1));
   }
   // onKeyUp is a fallback for mobile virtual keyboards where onKeyDown may not fire for Enter
   function onKeyUp(e) {
-    if (e.key === 'Enter' && inputVal.trim()) { e.preventDefault(); e.stopPropagation(); addTag(inputVal); }
+    if (e.key !== 'Enter') return;
+    if (enterHandledRef.current) { enterHandledRef.current = false; return; }
+    if (inputVal.trim()) { e.preventDefault(); e.stopPropagation(); addTag(inputVal); }
   }
   return (
     <div style={{ position:'relative' }}>
@@ -193,11 +217,10 @@ function TagInput({ tags = [], onChange, suggestions = [] }) {
         />
       </div>
       {showDrop && filtered.length > 0 && (
-        <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:200, background:B.white, border:'1px solid '+B.sand, borderRadius:10, boxShadow:'0 4px 16px rgba(27,42,74,0.1)', maxHeight:130, overflowY:'auto', marginTop:2 }}>
-          {filtered.map(s => (
-            <div key={s} onMouseDown={() => addTag(s)} style={{ padding:'8px 14px', cursor:'pointer', fontSize:13, fontFamily:f2, color:B.textDark }}
-              onMouseEnter={e => e.currentTarget.style.background=B.warmGray}
-              onMouseLeave={e => e.currentTarget.style.background=''}
+        <div role="listbox" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:200, background:B.white, border:'1px solid '+B.sand, borderRadius:10, boxShadow:'0 4px 16px rgba(27,42,74,0.1)', maxHeight:130, overflowY:'auto', marginTop:2 }}>
+          {filtered.map((s, idx) => (
+            <div key={s} role="option" aria-selected={idx === safeIdx} onMouseDown={() => addTag(s)} style={{ padding:'8px 14px', cursor:'pointer', fontSize:13, fontFamily:f2, color:B.textDark, background: idx === safeIdx ? B.warmGray : '' }}
+              onMouseEnter={() => setHighlightIdx(idx)}
             >{s}</div>
           ))}
         </div>
@@ -209,7 +232,9 @@ function TagInput({ tags = [], onChange, suggestions = [] }) {
 function BlockedByInput({ blockedBy = [], onChange, tasks = [], currentTaskNumber }) {
   const [inputVal, setInputVal] = useState('');
   const [blockerError, setBlockerError] = useState('');
+  const [highlightIdx, setHighlightIdx] = useState(-1);
   const errorTimerRef = useRef(null);
+  const enterHandledRef = useRef(false);
   useEffect(() => () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current); }, []);
   const suggestions = tasks.filter(t =>
     t.taskNumber?.startsWith('TSK-') &&
@@ -218,6 +243,8 @@ function BlockedByInput({ blockedBy = [], onChange, tasks = [], currentTaskNumbe
     !['Complete', 'Cancelled'].includes(t.status) &&
     t.taskNumber.toLowerCase().includes(inputVal.toLowerCase())
   ).slice(0, 8);
+  const safeIdx = highlightIdx >= 0 && highlightIdx < suggestions.length ? highlightIdx : -1;
+  const dropOpen = !!inputVal && suggestions.length > 0;
 
   function addBlocker(num) {
     const v = num.trim().toUpperCase();
@@ -230,12 +257,32 @@ function BlockedByInput({ blockedBy = [], onChange, tasks = [], currentTaskNumbe
     }
     onChange([...blockedBy, v]);
     setInputVal('');
+    setHighlightIdx(-1);
   }
   function onKey(e) {
-    if ((e.key === 'Enter' || e.key === ',') && inputVal.trim()) { e.preventDefault(); addBlocker(inputVal); }
+    if (dropOpen) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightIdx(i => (i + 1) % suggestions.length); return; }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setHighlightIdx(i => i <= 0 ? suggestions.length - 1 : i - 1); return; }
+      if (e.key === 'Escape')    { e.preventDefault(); setInputVal(''); return; }
+      if (e.key === 'Enter' && safeIdx >= 0) {
+        e.preventDefault();
+        enterHandledRef.current = true;
+        addBlocker(suggestions[safeIdx].taskNumber);
+        return;
+      }
+    }
+    if ((e.key === 'Enter' || e.key === ',') && inputVal.trim()) {
+      e.preventDefault();
+      if (e.key === 'Enter') enterHandledRef.current = true;
+      addBlocker(inputVal);
+    }
     else if (e.key === 'Backspace' && !inputVal && blockedBy.length) onChange(blockedBy.slice(0, -1));
   }
-  function onKeyUp(e) { if (e.key === 'Enter' && inputVal.trim()) { e.preventDefault(); addBlocker(inputVal); } }
+  function onKeyUp(e) {
+    if (e.key !== 'Enter') return;
+    if (enterHandledRef.current) { enterHandledRef.current = false; return; }
+    if (inputVal.trim()) { e.preventDefault(); addBlocker(inputVal); }
+  }
 
   return (
     <div style={{ position:'relative' }}>
@@ -248,12 +295,11 @@ function BlockedByInput({ blockedBy = [], onChange, tasks = [], currentTaskNumbe
         ))}
         <input value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={onKey} onKeyUp={onKeyUp} enterKeyHint="done" placeholder={blockedBy.length ? '' : 'Type TSK-###, press Enter...'} style={{ border:'none', outline:'none', fontSize:13, flex:1, minWidth:100, fontFamily:f2, color:B.textDark, background:'transparent' }}/>
       </div>
-      {inputVal && suggestions.length > 0 && (
-        <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:200, background:B.white, border:'1px solid '+B.sand, borderRadius:10, boxShadow:'0 4px 16px rgba(27,42,74,0.1)', maxHeight:130, overflowY:'auto', marginTop:2 }}>
-          {suggestions.map(t => (
-            <div key={t._docId} onMouseDown={() => addBlocker(t.taskNumber)} style={{ padding:'8px 14px', cursor:'pointer', fontSize:13, fontFamily:f2, color:B.textDark }}
-              onMouseEnter={e => e.currentTarget.style.background=B.warmGray}
-              onMouseLeave={e => e.currentTarget.style.background=''}
+      {dropOpen && (
+        <div role="listbox" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:200, background:B.white, border:'1px solid '+B.sand, borderRadius:10, boxShadow:'0 4px 16px rgba(27,42,74,0.1)', maxHeight:130, overflowY:'auto', marginTop:2 }}>
+          {suggestions.map((t, idx) => (
+            <div key={t._docId} role="option" aria-selected={idx === safeIdx} onMouseDown={() => addBlocker(t.taskNumber)} style={{ padding:'8px 14px', cursor:'pointer', fontSize:13, fontFamily:f2, color:B.textDark, background: idx === safeIdx ? B.warmGray : '' }}
+              onMouseEnter={() => setHighlightIdx(idx)}
             ><strong>{t.taskNumber}</strong> — {t.name}</div>
           ))}
         </div>
@@ -436,32 +482,46 @@ function RichTextarea({ value, onChange, style, placeholder, onKeyDown, label })
     return { lines, startLine, endLine };
   }
 
-  function toggleBullet() {
+  function applyLineTransform(kind /* 'bullet' | 'numbered' */) {
     const el = taRef.current;
-    const { lines, startLine, endLine } = getLineRange(el.selectionStart, el.selectionEnd);
+    if (!el) return;
+    const ss = el.selectionStart;
+    const se = el.selectionEnd;
+    const { lines, startLine, endLine } = getLineRange(ss, se);
     const slice = lines.slice(startLine, endLine + 1);
-    const allHave = slice.every(l => l.startsWith('• '));
-    onChange(lines.map((l, i) => {
-      if (i < startLine || i > endLine) return l;
-      const stripped = l.replace(/^\d+\.\s/, '').replace(/^• /, '');
-      return allHave ? stripped : '• ' + stripped;
-    }).join('\n'));
-    setTimeout(() => el.focus(), 0);
-  }
-
-  function toggleNumbered() {
-    const el = taRef.current;
-    const { lines, startLine, endLine } = getLineRange(el.selectionStart, el.selectionEnd);
-    const slice = lines.slice(startLine, endLine + 1);
-    const allHave = slice.every(l => /^\d+\.\s/.test(l));
+    const re = kind === 'bullet' ? /^• / : /^\d+\.\s/;
+    const allHave = slice.every(l => re.test(l));
     let n = 1;
-    onChange(lines.map((l, i) => {
+    const newLines = lines.map((l, i) => {
       if (i < startLine || i > endLine) return l;
       const stripped = l.replace(/^\d+\.\s/, '').replace(/^• /, '');
-      return allHave ? stripped : (n++) + '. ' + stripped;
-    }).join('\n'));
-    setTimeout(() => el.focus(), 0);
+      if (allHave) return stripped;
+      return kind === 'bullet' ? '• ' + stripped : (n++) + '. ' + stripped;
+    });
+    // Re-map selection: keep cursor at the same offset within its line.
+    function starts(arr) {
+      const out = new Array(arr.length);
+      let pos = 0;
+      for (let i = 0; i < arr.length; i++) { out[i] = pos; pos += arr[i].length + 1; }
+      return out;
+    }
+    const oldStarts = starts(lines);
+    const newStarts = starts(newLines);
+    function adjust(p) {
+      let li = lines.length - 1;
+      for (let i = 0; i < lines.length; i++) {
+        if (p <= oldStarts[i] + lines[i].length) { li = i; break; }
+      }
+      const offset = p - oldStarts[li];
+      return newStarts[li] + Math.min(offset, newLines[li].length);
+    }
+    const newSs = adjust(ss);
+    const newSe = adjust(se);
+    onChange(newLines.join('\n'));
+    setTimeout(() => { if (!el) return; el.focus(); el.setSelectionRange(newSs, newSe); }, 0);
   }
+  function toggleBullet() { applyLineTransform('bullet'); }
+  function toggleNumbered() { applyLineTransform('numbered'); }
 
   function handleKeyDown(e) {
     if (e.key === 'Enter') {
@@ -547,19 +607,58 @@ function formatCommentDate(iso) {
   return d.toLocaleDateString([], { month:'short', day:'numeric' });
 }
 
-function renderWithMentions(text) {
+function renderWithMentions(text, users = []) {
   if (!text || !text.includes('@')) return text;
-  const parts = text.split(/(@[\w][\w\s]*?\b)/g);
-  return parts.map((p, i) => p.startsWith('@') ? <span key={i} style={{ color:'#2A7D6E', fontWeight:700 }}>{p}</span> : p);
+  // Match against actual user names rather than a regex. The previous
+  // `[\w][\w\s]*?\b` pattern dropped apostrophes/hyphens (O'Brien, Mary-Jane)
+  // and clipped multi-word names like "@John Vaught" after the first token.
+  // Longest-first so "Jean-Luc Picard" beats "Jean".
+  const names = users.map(u => u?.name).filter(Boolean).sort((a, b) => b.length - a.length);
+  if (!names.length) return text;
+  const out = [];
+  let buf = '';
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] === '@') {
+      const rest = text.slice(i + 1);
+      const match = names.find(n => rest.startsWith(n));
+      if (match) {
+        if (buf) { out.push(buf); buf = ''; }
+        out.push(<span key={out.length} style={{ color:'#2A7D6E', fontWeight:700 }}>@{match}</span>);
+        i += match.length + 1;
+        continue;
+      }
+    }
+    buf += text[i++];
+  }
+  if (buf) out.push(buf);
+  return out;
+}
+
+function AutoGrowTextarea({ value, onChange, style, autoFocus }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }, [value]);
+  return <textarea ref={ref} value={value} onChange={e => onChange(e.target.value)} style={style} autoFocus={autoFocus}/>;
 }
 
 function CommentThread({ comments, loading, newComment, onChange, onPost, posting, userId, canOperate, onEdit, onDelete, users = [] }) {
-  const endRef = useRef();
+  const listRef = useRef(null);
   const commentInputWrapRef = useRef(null);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
   const [mentionOpen, setMentionOpen] = useState(false);
-  useEffect(() => { if (comments.length) endRef.current?.scrollIntoView({ behavior:'smooth' }); }, [comments.length]);
+  // Scope auto-scroll to the comment list itself instead of scrollIntoView —
+  // the latter scrolls the nearest scrollable ancestor (the modal panel),
+  // jerking the whole modal whenever a comment is posted.
+  useEffect(() => {
+    const el = listRef.current;
+    if (el && comments.length) el.scrollTop = el.scrollHeight;
+  }, [comments.length]);
 
   function insertMentionAtCursor(name) {
     const ta = commentInputWrapRef.current?.querySelector('textarea');
@@ -585,7 +684,7 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
 
   return (
     <div>
-      <div style={{ maxHeight:200, overflowY:'auto', display:'flex', flexDirection:'column', gap:10, marginBottom:10, paddingRight:2 }}>
+      <div ref={listRef} style={{ maxHeight:200, overflowY:'auto', display:'flex', flexDirection:'column', gap:10, marginBottom:10, paddingRight:2 }}>
         {loading
           ? <div style={{ color:B.textLight, fontSize:13 }}>Loading...</div>
           : comments.length === 0
@@ -613,20 +712,19 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
                     {editingId === c.id
                       ? (
                         <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:4 }}>
-                          <textarea value={editText} onChange={e => setEditText(e.target.value)} style={{ ...inp, minHeight:60, resize:'vertical', width:'100%', boxSizing:'border-box' }} autoFocus/>
+                          <AutoGrowTextarea value={editText} onChange={setEditText} style={{ ...inp, minHeight:60, resize:'vertical', width:'100%', boxSizing:'border-box' }} autoFocus/>
                           <div style={{ display:'flex', gap:6, justifyContent:'flex-end' }}>
                             <button onClick={cancelEdit} style={{ ...btnS, padding:'5px 12px', fontSize:12 }}>Cancel</button>
                             <button onClick={() => submitEdit(c)} disabled={!editText.trim()} style={{ ...btnP, padding:'5px 12px', fontSize:12, opacity:editText.trim() ? 1 : 0.5 }}>Save</button>
                           </div>
                         </div>
                       )
-                      : <div style={{ fontSize:13, color:B.textDark, lineHeight:1.5, whiteSpace:'pre-wrap' }}>{renderWithMentions(c.text)}</div>
+                      : <div style={{ fontSize:13, color:B.textDark, lineHeight:1.5, whiteSpace:'pre-wrap' }}>{renderWithMentions(c.text, users)}</div>
                     }
                   </div>
                 );
               })
         }
-        <div ref={endRef}/>
       </div>
       <div style={{ display:'flex', gap:8, alignItems:'flex-start' }}>
         <div ref={commentInputWrapRef} style={{ flex:1, position:'relative' }}>
@@ -2131,7 +2229,7 @@ export function TasksPage({ store, userProfile }) {
             </button>
           </div>
         )}
-        <FF label="Task Name *">
+        <FF label="Task Name" required>
           <input style={inp} value={taskForm.name} onChange={e => setTaskForm(f => ({ ...f, name:e.target.value }))} placeholder="Short descriptive name..."/>
         </FF>
         <RichTextarea label="Description" style={{ ...inp, minHeight:72, resize:'vertical' }} value={taskForm.description} onChange={v => setTaskForm(f => ({ ...f, description:v }))} placeholder="What needs to be done — scope, context, and acceptance criteria"/>
@@ -2506,7 +2604,7 @@ export function TasksPage({ store, userProfile }) {
 
       {/* ═══ SAVE AS TEMPLATE MODAL ═══ */}
       <Modal open={showSaveTemplate} onClose={() => setShowSaveTemplate(false)} title="Save as Template">
-        <FF label="Template Name *">
+        <FF label="Template Name" required>
           <input style={inp} value={saveTemplateForm.name} onChange={e => setSaveTemplateForm(f => ({ ...f, name: e.target.value }))} placeholder="Template name..."/>
         </FF>
         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
@@ -2563,7 +2661,7 @@ export function TasksPage({ store, userProfile }) {
 
       {/* ═══ CONVERT TO JOB MODAL ═══ */}
       <Modal open={showConvertToJobModal} onClose={() => setShowConvertToJobModal(false)} title="Convert to Job">
-        <FF label="Job Title *">
+        <FF label="Job Title" required>
           <input style={inp} value={convertJobForm.title} onChange={e => setConvertJobForm(f => ({ ...f, title: e.target.value }))} placeholder="Job title…" />
         </FF>
         <FF label="Scheduled Date">

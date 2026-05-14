@@ -718,7 +718,7 @@ export function PeopleAccessPage({ store, userProfile }) {
             {editPerson ? 'Edit Person' : 'Add Person'}
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <FF label="Name *">
+            <FF label="Name" required>
               <input value={personForm.name} onChange={e => setPersonForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="Full name" style={inp} />
             </FF>
@@ -807,7 +807,7 @@ export function PeopleAccessPage({ store, userProfile }) {
             )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              <FF label="Date Completed *">
+              <FF label="Date Completed" required>
                 <input type="date" value={recordForm.completedDate} onChange={e => setRecordForm(f => ({ ...f, completedDate: e.target.value }))} style={inp} />
               </FF>
               <FF label="Expiry Date">

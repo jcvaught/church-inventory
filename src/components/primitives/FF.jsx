@@ -31,11 +31,16 @@ export function FF({ label, required, error, children }) {
     ));
   }
 
+  const labelContent = <>
+    {label}
+    {required ? <span aria-hidden="true" style={{ color:B.red, marginLeft:3 }}>*</span> : null}
+  </>;
+
   return <div style={{ marginBottom:16 }}>
     {isDOMElement ? (
-      <label htmlFor={first?.props?.id || inputId} style={labelStyle}>{label}</label>
+      <label htmlFor={first?.props?.id || inputId} style={labelStyle}>{labelContent}</label>
     ) : (
-      <div id={labelId} style={labelStyle}>{label}</div>
+      <div id={labelId} style={labelStyle}>{labelContent}</div>
     )}
     {isDOMElement ? enhanced : (
       <div

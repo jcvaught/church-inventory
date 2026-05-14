@@ -339,7 +339,7 @@ export function ReservationsPage({ store, userProfile }) {
           ))}
         </div>
         {resourceType === RESOURCE_TYPE.ROOM ? (
-          <FF label="Space *">
+          <FF label="Space" required>
             {activeRooms.length === 0 ? (
               <div style={{ fontSize:13, color:B.textLight, fontFamily:f2, padding:'10px 12px', background:B.warmGray, borderRadius:8 }}>No spaces defined yet. Add spaces in Settings → Spaces.</div>
             ) : (
@@ -354,7 +354,7 @@ export function ReservationsPage({ store, userProfile }) {
             {form.roomDocId && (() => { const rm = activeRooms.find(r => r._docId === form.roomDocId); return rm?.amenities?.length ? <div style={{ fontSize:12, color:B.textLight, marginTop:4, fontFamily:f2 }}>Amenities: {rm.amenities.join(', ')}</div> : null; })()}
           </FF>
         ) : (
-          <FF label="Equipment *">
+          <FF label="Equipment" required>
             <select style={{...inp, cursor:"pointer"}} value={form.itemDocId} onChange={e=>handleSelectItem(e.target.value)}>
               <option value="">Select an item...</option>
               {activeItems.map(i => <option key={i._docId} value={i._docId}>{i.description} ({i.itemId}) — {i.status}</option>)}
@@ -362,14 +362,14 @@ export function ReservationsPage({ store, userProfile }) {
           </FF>
         )}
         <div style={{ display:"flex", gap:14 }}>
-          <div style={{ flex:1 }}><FF label="Event / Purpose *"><input style={inp} value={form.eventName} onChange={e=>setForm(f=>({...f, eventName:e.target.value}))} placeholder="e.g. Youth Lock-In"/></FF></div>
+          <div style={{ flex:1 }}><FF label="Event / Purpose" required><input style={inp} value={form.eventName} onChange={e=>setForm(f=>({...f, eventName:e.target.value}))} placeholder="e.g. Youth Lock-In"/></FF></div>
           <div style={{ flex:1 }}><FF label="Ministry"><select style={{...inp, cursor:"pointer"}} value={form.ministry} onChange={e=>setForm(f=>({...f, ministry:e.target.value}))}>
             <option value="">—</option>
             {ministries.map(m => <option key={m} value={m}>{m}</option>)}
           </select></FF></div>
         </div>
         <div style={{ display:"flex", gap:14 }}>
-          <div style={{ flex:1 }}><FF label="Event Date *"><input type="date" style={inp} value={form.eventDate} onChange={e=>setForm(f=>({...f, eventDate:e.target.value}))}/></FF></div>
+          <div style={{ flex:1 }}><FF label="Event Date" required><input type="date" style={inp} value={form.eventDate} onChange={e=>setForm(f=>({...f, eventDate:e.target.value}))}/></FF></div>
           <div style={{ flex:1 }}><FF label="Expected Return"><input type="date" style={inp} value={form.returnDate} onChange={e=>setForm(f=>({...f, returnDate:e.target.value}))}/></FF></div>
         </div>
         {/* Recurring */}
