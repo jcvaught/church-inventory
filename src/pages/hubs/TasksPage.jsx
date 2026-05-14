@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, useRef, useMemo, memo } from 'react';
+import { useState, useEffect, useContext, useRef, useMemo, useId, memo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, doc, onSnapshot, query as fsQuery, orderBy, runTransaction, getDocs, where, updateDoc, deleteField, arrayRemove } from 'firebase/firestore';
@@ -276,7 +276,7 @@ function AssigneeSelect({ assignees = [], onChange, users = [], currentUserId, c
   }
   function pill(selected, label, onClick) {
     return (
-      <button key={label} type="button" onClick={onClick} style={{ padding:'5px 12px', borderRadius:20, border:'1px solid '+(selected ? B.teal : B.sand), background:selected ? B.tealPale : B.white, color:selected ? B.teal : B.textMid, fontSize:12, fontFamily:f1, cursor:'pointer', fontWeight:600 }}>
+      <button key={label} type="button" onClick={onClick} aria-pressed={selected} style={{ padding:'5px 12px', borderRadius:20, border:'1px solid '+(selected ? B.teal : B.sand), background:selected ? B.tealPale : B.white, color:selected ? B.teal : B.textMid, fontSize:12, fontFamily:f1, cursor:'pointer', fontWeight:600 }}>
         {selected ? '✓ ' : ''}{label}
       </button>
     );
@@ -310,6 +310,8 @@ function SharedWithSelect({ sharedWith = [], onChange, users = [], assignees = [
             key={u.id}
             type="button"
             onClick={() => !isAssignee && toggle(u)}
+            aria-pressed={isSelected}
+            aria-disabled={isAssignee || undefined}
             title={isAssignee ? 'Assignees always have access' : undefined}
             style={{ padding:'5px 12px', borderRadius:20, border:'1px solid '+(isSelected ? B.teal : B.sand), background:isSelected ? B.tealPale : B.white, color:isSelected ? B.teal : B.textMid, fontSize:12, fontFamily:f1, cursor:isAssignee ? 'default' : 'pointer', fontWeight:600, opacity:isAssignee ? 0.7 : 1 }}
           >
@@ -338,6 +340,7 @@ function VisibilitySelect({ visibility, onChange, canEdit }) {
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
+          aria-pressed={visibility === o.value}
           title={o.desc}
           style={{ padding:'5px 14px', borderRadius:20, border:'1px solid '+(visibility === o.value ? B.teal : B.sand), background:visibility === o.value ? B.tealPale : B.white, color:visibility === o.value ? B.teal : B.textMid, fontSize:12, fontFamily:f1, cursor:'pointer', fontWeight:600 }}
         >
@@ -409,6 +412,7 @@ function PhotoGrid({ photos = [], onAdd, onRemove, uploading }) {
 
 function RichTextarea({ value, onChange, style, placeholder, onKeyDown, label }) {
   const taRef = useRef();
+  const taId = useId();
 
   // Auto-grow with content. Without this, the textarea is locked at minHeight
   // and the empty line created by Enter at end-of-content is invisible — users
@@ -516,13 +520,13 @@ function RichTextarea({ value, onChange, style, placeholder, onKeyDown, label })
     <div style={label ? { marginBottom:16 } : {}}>
       {label ? (
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
-          <label style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1 }}>{label}</label>
+          <label htmlFor={taId} style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1 }}>{label}</label>
           <div style={{ display:'flex', gap:4 }}>{buttons}</div>
         </div>
       ) : (
         <div style={{ display:'flex', gap:4, marginBottom:4 }}>{buttons}</div>
       )}
-      <textarea ref={taRef} value={value} onChange={e => onChange(e.target.value)} style={style} placeholder={placeholder} onKeyDown={handleKeyDown}/>
+      <textarea id={taId} ref={taRef} value={value} onChange={e => onChange(e.target.value)} style={style} placeholder={placeholder} onKeyDown={handleKeyDown}/>
     </div>
   );
 }

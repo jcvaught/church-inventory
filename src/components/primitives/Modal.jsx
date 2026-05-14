@@ -22,7 +22,33 @@ export function Modal({ open, onClose, title, wide, maxWidth, children }) {
   useEffect(() => {
     if (!open) return;
     previouslyFocusedRef.current = document.activeElement;
-    const onKey = (e) => { if (e.key === 'Escape') onCloseRef.current?.(); };
+    const FOCUSABLE_SEL = 'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+    const onKey = (e) => {
+      if (e.key === 'Escape') { onCloseRef.current?.(); return; }
+      if (e.key !== 'Tab' || !panelRef.current) return;
+      // Focus trap: keep Tab cycling within the panel. Without this, Tab leaves
+      // the dialog and lands on background controls behind the backdrop.
+      const focusable = Array.from(panelRef.current.querySelectorAll(FOCUSABLE_SEL))
+        .filter(el => el.offsetParent !== null || el === panelRef.current);
+      if (focusable.length === 0) {
+        e.preventDefault();
+        panelRef.current.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (!panelRef.current.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     document.addEventListener('keydown', onKey);
     // Move focus into the panel on the next paint so screen readers pick it up.
     // Prefer form inputs over buttons — a single querySelector with both in the
