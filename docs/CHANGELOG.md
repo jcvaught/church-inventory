@@ -55,6 +55,20 @@ Closed the seven remaining audit items:
 
 Build clean, lint 0 errors (43 baseline `exhaustive-deps` warnings).
 
+### Twilio HELP keyword (compliance gap closed on 2026-05-14)
+
+A2P campaign `CM1c503f6147a2db830f…` is still "In progress" with Twilio (submitted 2026-04-27). While checking on it, found that Privacy §6 and Terms §7 commit to a "reply HELP for help" response, but **HELP replies silent-drop**:
+
+- `twilioInbound` only branched on STOP / START keywords; HELP fell through to empty `<Response/>`.
+- The CF's old comment said "HELP responses are handled by Twilio Messaging Service Advanced Opt-Out (configured in Twilio Console)" — but that's not actually in effect. Per `project_churchopshub_a2p.md`, `+1 571-540-7100` is a bare account-level number not attached to either Messaging Service, so the Messaging Service's Advanced Opt-Out keywords (where HELP would live) never fire for inbounds to this number. The phone number's webhook routes directly to `twilioInbound`.
+- If Twilio's A2P reviewer tested HELP during review and got silence, the campaign could have been rejected on that alone.
+
+**Fix:** Added a `HELP_KEYWORDS = ['HELP', 'INFO']` branch to `twilioInbound` that returns TwiML:
+```
+ChurchOpsHub: Reminders for jobs you signed up for. Msg frequency varies (1-5/week). Msg and data rates may apply. Reply STOP to opt out. For help, email churchopshub@gmail.com.
+```
+Deployed to prod immediately (`functions:twilioInbound` only). Once the A2P campaign approves and the bare number moves into the campaign's Messaging Service, the Advanced Opt-Out HELP keyword will fire first and this CF branch becomes a redundant fallback — safe to leave in place.
+
 ### E2E suite cleanup (final pass on 2026-05-14)
 
 Ran the full Playwright suite after the audit work landed — 38 passed, 2 failed. Both failures turned out to be pre-existing spec bugs that had never actually run green: the test commits (`82c5d1a`, `4d42a39`) had been merged with "21/21 total" / "39 passed" notes from sessions where Vercel's bot-protection cooldown clipped setup, so these specs got committed without an end-to-end confirmation.

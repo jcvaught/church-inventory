@@ -1944,8 +1944,13 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
 // ── twilioInbound ─────────────────────────────────────────────────────────
 // Twilio inbound SMS webhook. Syncs users.smsRemindersEnabled when users reply
 // STOP / START keywords so our UI matches the carrier-level opt-out state.
-// Carrier confirmation messages and HELP responses are handled by Twilio
-// Messaging Service Advanced Opt-Out (configured in Twilio Console).
+// Also returns TwiML for HELP / INFO since +1 571-540-7100 is a bare
+// account-level number not attached to either Messaging Service — so
+// Messaging Service Advanced Opt-Out keywords don't fire for it. Privacy §6
+// and Terms §7 commit to a HELP response; without this branch a HELP reply
+// silent-drops, which is a TCPA/A2P compliance gap. Post-A2P-approval, when
+// the number moves into the campaign's Messaging Service, this branch
+// becomes a redundant fallback (Advanced Opt-Out fires first).
 exports.twilioInbound = onRequest({ cors: false }, async (req, res) => {
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   if (!authToken || !twilioClient) {
@@ -1986,8 +1991,16 @@ exports.twilioInbound = onRequest({ cors: false }, async (req, res) => {
 
   const STOP_KEYWORDS = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'];
   const START_KEYWORDS = ['START', 'YES', 'UNSTOP'];
+  const HELP_KEYWORDS = ['HELP', 'INFO'];
   const isStop = STOP_KEYWORDS.includes(body);
   const isStart = START_KEYWORDS.includes(body);
+  const isHelp = HELP_KEYWORDS.includes(body);
+
+  if (isHelp) {
+    const helpMsg = 'ChurchOpsHub: Reminders for jobs you signed up for. Msg frequency varies (1-5/week). Msg and data rates may apply. Reply STOP to opt out. For help, email churchopshub@gmail.com.';
+    res.status(200).type('text/xml').send(`<Response><Message>${helpMsg}</Message></Response>`);
+    return;
+  }
 
   if (!isStop && !isStart) {
     res.status(200).type('text/xml').send('<Response/>');
