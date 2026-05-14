@@ -4,6 +4,23 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-14 — New-user signup-flow audit (15 findings, 4 shipped)
+
+Audited every signup entry point (`createChurch`, `register`, `loginWithGoogle`, `login`, `registerWithGoogle`, `onAuthStateChanged`, and the AuthScreen UI). 15 findings across 4 severity tiers. Three of the four critical/high items shipped this commit; the rest are queued.
+
+### Shipped (commit `7b21317`)
+
+- **S-1 — `profileMissing` recovery screen + Sentry breadcrumb.** When `onAuthStateChanged` finds an Auth account with no `users/{uid}` doc — exactly Haleigh's state earlier today — `useAuth` sets a new `profileMissing: true` flag and `Sentry.captureMessage(...)` logs the case for proactive visibility. `App.jsx` renders a new `ProfileMissingScreen` (email displayed, prefilled mailto support link, sign-out button) instead of silently bouncing the user back to the login form. We'll now hear about future occurrences instead of waiting for an email.
+- **S-2 — Cleanup orphan Auth on any post-Auth failure.** Both `createChurch` and `register` now wrap every step after `createUserWithEmailAndPassword` in an inner try/catch that best-effort `cred.user.delete()`s on ANY thrown error (rules denial, network, quota, business-rule rejection). The user can retry with the same email instead of being permanently blocked by `auth/email-already-in-use`. The previous inline `cred.user.delete()` calls in `createChurch`/`register` for specific business errors are removed because the outer catch handles them — avoids double-delete.
+- **S-4 — `sendEmailVerification` failures surfaced to Sentry.** Two `.catch(() => {})` swallowing sites replaced with `Sentry.captureException`. The signup still succeeds (verification is best-effort) but we hear about SendGrid/quota issues instead of users silently never receiving the email.
+- **S-5 — `loginWithGoogle` distinguishes first-time vs stuck state.** Compares `creationTime` vs `lastSignInTime` on `firebaseUser.metadata`. First-time sign-in still flows to `needsRegistration`; returning users with missing profiles fall through to the new recovery screen with a Sentry warning. `login` (email/password) inherits the same recovery path via `onAuthStateChanged`.
+
+### Deferred for later
+
+- **S-7 — `writeBatch` atomicity** for the `createChurch` chain. Initially planned for this commit but rules evaluate batched writes against pre-batch state, so `config/main`'s `isChurchAdminOrManager` rule would still deny inside a batch (the `users/{uid}` doc isn't visible until the batch commits). The user-profile-first ordering shipped earlier today (`73e73ec`) is the correct fix for the ordering issue; adding `writeBatch` on top needs companion rules changes — a separate task.
+- S-3 was Haleigh's bug, already fixed in commit `73e73ec`.
+- S-6, S-8 through S-15 are documented in this session's audit notes but unshipped (email verification enforcement, transactions, `updateProfile` error path, CF lookup retries, `register` overwrite guard, Google cleanup, register-form honeypot, timestamp consolidation, email normalization, rate limiting). None of these are Haleigh-class — they're hardening on top of the now-fixed primary failure family.
+
 ## 2026-05-14 — Signup chain broke for new church creators (Haleigh / TrueNorth)
 
 Haleigh Watson signed up to evaluate ChurchOpsHub for TrueNorth Church (code TNC2026) at 10:40 EDT today and emailed asking for help — the signup accepted her info and the welcome email arrived, but she could not get past the login screen and password reset didn't help.
