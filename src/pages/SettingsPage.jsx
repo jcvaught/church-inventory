@@ -458,47 +458,57 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             <div style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:10 }}>
               Receive a text message the morning of any job you're signed up for.
             </div>
-            <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
-              <input
-                type="tel"
-                placeholder="(555) 555-5555"
-                value={phoneInput}
-                onChange={e => { setPhoneInput(e.target.value); if (phoneError) setPhoneError(''); }}
-                style={{ ...inp, width:160, fontSize:14, borderColor: phoneError ? B.red : undefined }}
-              />
-              <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, fontFamily:f2, color:B.textMid, cursor:'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={smsEnabled}
-                  disabled={!phoneInput.trim()}
-                  onChange={e => setSmsEnabled(e.target.checked)}
-                  style={{ accentColor:B.teal, width:15, height:15 }}
-                />
-                Enable SMS reminders
-              </label>
-              <button
-                onClick={handleSavePhone}
-                disabled={savingPhone}
-                style={{ ...btnP, padding:'7px 18px', fontSize:13, opacity:savingPhone?0.6:1 }}
-              >
-                {phoneSaved ? 'Saved!' : savingPhone ? 'Saving…' : 'Save'}
-              </button>
-              {userProfile?.phone && (
-                <button
-                  onClick={handleRemovePhone}
-                  disabled={savingPhone}
-                  style={{ ...btnS, padding:'7px 14px', fontSize:13, opacity:savingPhone?0.6:1 }}
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-            {phoneError && (
-              <div style={{ fontSize:12, color:B.red, marginTop:6, fontFamily:f2 }}>{phoneError}</div>
+            {/* S-6: gate SMS opt-in on a verified email so TCPA consent is
+                tied to an identity we know the user controls. */}
+            {!user?.emailVerified ? (
+              <div style={{ fontSize:13, color:B.textMid, background:B.warmGray, borderRadius:10, padding:'12px 14px', fontFamily:f2, lineHeight:1.5 }}>
+                Verify your email first to enable SMS reminders. Check your inbox for a verification link, or use the resend button in the banner at the top of the page.
+              </div>
+            ) : (
+              <>
+                <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+                  <input
+                    type="tel"
+                    placeholder="(555) 555-5555"
+                    value={phoneInput}
+                    onChange={e => { setPhoneInput(e.target.value); if (phoneError) setPhoneError(''); }}
+                    style={{ ...inp, width:160, fontSize:14, borderColor: phoneError ? B.red : undefined }}
+                  />
+                  <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, fontFamily:f2, color:B.textMid, cursor:'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={smsEnabled}
+                      disabled={!phoneInput.trim()}
+                      onChange={e => setSmsEnabled(e.target.checked)}
+                      style={{ accentColor:B.teal, width:15, height:15 }}
+                    />
+                    Enable SMS reminders
+                  </label>
+                  <button
+                    onClick={handleSavePhone}
+                    disabled={savingPhone}
+                    style={{ ...btnP, padding:'7px 18px', fontSize:13, opacity:savingPhone?0.6:1 }}
+                  >
+                    {phoneSaved ? 'Saved!' : savingPhone ? 'Saving…' : 'Save'}
+                  </button>
+                  {userProfile?.phone && (
+                    <button
+                      onClick={handleRemovePhone}
+                      disabled={savingPhone}
+                      style={{ ...btnS, padding:'7px 14px', fontSize:13, opacity:savingPhone?0.6:1 }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                {phoneError && (
+                  <div style={{ fontSize:12, color:B.red, marginTop:6, fontFamily:f2 }}>{phoneError}</div>
+                )}
+                <div style={{ fontSize:11, color:B.textLight, marginTop:8, fontFamily:f2, maxWidth:480 }}>
+                  By providing your phone number and enabling SMS reminders, you consent to receive automated text messages from ChurchOpsHub for job-shift reminders. US and Canada numbers only. Message and data rates may apply. Message frequency varies (typically 1-5 messages per week). Reply STOP to unsubscribe or HELP for help.
+                </div>
+              </>
             )}
-            <div style={{ fontSize:11, color:B.textLight, marginTop:8, fontFamily:f2, maxWidth:480 }}>
-              By providing your phone number and enabling SMS reminders, you consent to receive automated text messages from ChurchOpsHub for job-shift reminders. US and Canada numbers only. Message and data rates may apply. Message frequency varies (typically 1-5 messages per week). Reply STOP to unsubscribe or HELP for help.
-            </div>
           </div>
         )}
       </div>
