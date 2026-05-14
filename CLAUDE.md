@@ -68,8 +68,8 @@ src/
 │   │   └── Logo.jsx           ← Logo, FullLogo
 │   ├── primitives/
 │   │   ├── Modal.jsx, FF.jsx, Badge.jsx, Stat.jsx, Spinner.jsx
-│   │   ├── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive
-│   │   └── (RichTextarea is a local component inside MaintenancePage.jsx, not a shared primitive)
+│   │   ├── RichTextarea.jsx   ← Auto-grow textarea with bullet/numbered list toolbar; optional `label` prop
+│   │   └── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive
 │   └── SEO.jsx                ← Reusable SEO component (react-helmet-async); sets title, description, canonical, OG tags, Twitter card, JSON-LD
 ├── pages/
 │   ├── LandingPage.jsx        ← Marketing landing page; includes SoftwareApplication JSON-LD schema and pain points copy
