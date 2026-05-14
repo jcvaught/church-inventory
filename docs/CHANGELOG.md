@@ -21,6 +21,20 @@ Remaining audit items (deferred — labelled `P-3` to `P-13` in session notes):
 
 `RichTextarea` is also **still duplicated** between `TasksPage.jsx` and `MaintenancePage.jsx` — extracting to `src/components/primitives/RichTextarea.jsx` is the obvious next refactor if it gets touched again.
 
+### a11y bundle shipped (P-3 / P-4 / P-5 / P-6, second pass on 2026-05-14)
+
+Closed the four accessibility findings from the audit:
+
+3. **P-3 — Modal focus trap.** `Modal.jsx`'s document `keydown` handler only watched `Escape`. Tab inside the panel would walk past the last focusable element onto background controls behind the backdrop (selects in the rest of the page, the close button on a parent modal, the browser's address bar). Extended the handler with a Tab branch: query `panelRef` for all enabled `input/select/textarea/button/a[href]/[tabindex]` elements, then preventDefault + wrap when (a) `Shift+Tab` from the first element → focus last, (b) `Tab` from the last element → focus first, (c) `Tab` fires while focus has somehow leaked outside the panel → snap back to the first element. `Escape` behavior unchanged.
+
+4. **P-4 — `FF` a11y for custom components.** `FF`'s `cloneElement` only forwards `id`/`aria-*` to its first child, which works for native `<input>`/`<select>`/`<textarea>` but silently drops the props on custom components (the cloned `id` lands on the custom-component instance, not on the inner `<input>` it eventually renders). The label's `htmlFor` then points at an element that doesn't exist, breaking the click-label-to-focus-input behavior and screen-reader name lookup. New branch in `FF`: detect `typeof first.type === 'string'`. Native elements get the existing `htmlFor`/`cloneElement` path unchanged. Custom-component children now render the label as a `<div id={labelId}>` plus a `role="group" aria-labelledby={labelId}` wrapper (and `aria-required`/`aria-invalid`/`aria-describedby` lift onto the group). Visible markup is identical; screen readers announce the field group correctly.
+
+5. **P-5 — pill-group ARIA semantics.** `AssigneeSelect`, `SharedWithSelect`, and `VisibilitySelect` render pill `<button>`s with a "✓ " prefix and a teal background as the only selection signal — screen readers had no way to know which pill was selected. Added `aria-pressed` (toggle-button pattern) to each pill. `SharedWithSelect` also emits `aria-disabled` on the locked "assignee" pill (it stays visible but can't be untoggled, which the cursor:`default` + 0.7 opacity already conveyed visually).
+
+6. **P-6 — `RichTextarea` label `htmlFor`.** The internal `<label>` rendered when `RichTextarea` receives a `label` prop had no `htmlFor` and the `<textarea>` had no `id`. Generated a `useId` in `RichTextarea` (TasksPage copy), set `htmlFor` on the label and `id` on the textarea. MaintenancePage's `RichTextarea` doesn't render an internal label (parent wraps it in `FF`), so its accessibility is covered by the P-4 fix above.
+
+Build clean, lint 0 errors (43 baseline warnings, all pre-existing `exhaustive-deps`).
+
 ---
 
 ## 2026-05-13 — Modal "one letter at a time" focus bug
