@@ -140,8 +140,18 @@ Deployed to prod immediately (`functions:twilioInbound` only). Once the A2P camp
 3. **Inbound webhook routing was fixed** by moving the number into the campaign's Messaging Service (`MGb4f2156d4ab3104ee564f15cb701d81d`). Bare number + rejected campaign = silent webhook drops. Service-attached number = webhook fires. Verified via Delivery Steps showing "TwiML Fetch Succeeded" 4.14s after a non-keyword test message.
 
 **Action items left open after this session:**
-- Address the campaign rejection by rewriting `message_flow` with reviewer-accessible CTA evidence (screenshots or supplied test creds) and resubmit.
-- Optionally customize the campaign's `help_message` so Twilio's compliance auto-response carries our copy instead of the bare default.
+- ~~Address the campaign rejection~~ ✓ Resubmitted 2026-05-14 at 22:32 UTC. See section below.
+- ~~Optionally customize the campaign's `help_message`~~ Attempted; Twilio's API kept its default text on LOW_VOLUME — not worth pursuing.
+
+### Resubmission (later same day, 22:32 UTC)
+
+Deleted both pre-existing campaigns via the Messaging API (`DELETE /v1/Services/{MS}/Compliance/Usa2p/{QEsid}`): the FAILED one on the unused service `MG45293bc76c21346ac47e5326ce1b7df6`, and the rejected one on the active service `MGb4f2156d4ab3104ee564f15cb701d81d`. Then POSTed a fresh campaign on the active service with the updated `MessageFlow` — reviewer test credentials (`e2e-admin@churchopshub.com` / `E2eTestPass123!`) and step-by-step opt-in walkthrough verified against the actual SettingsPage code. Brand SID `BN26d4c…` (approved) was reused.
+
+Result: HTTP 201, `errors: []`, `date_updated: 2026-05-14T22:32:04Z`, `campaign_status: IN_PROGRESS`. Compliance SID reused: `QE2c6890da8086d771620e9b13fadeba0b`. Now waiting on TCR review — typical re-submission turnaround on an already-approved brand is 1–3 days, vs 2–3 weeks for first-time submissions.
+
+Twilio's Console campaign page should now show just one campaign (the failed orphan on the second messaging service is gone). The fee for the new submission is charged to the Twilio account, partially or fully covered by the twilio.org nonprofit credit approved on 2026-04-27.
+
+Until TCR approves, outbound replies from `+1 571-540-7100` to real US carriers will still be carrier-filtered as unregistered A2P traffic. End-to-end SMS testing has to wait for approval.
 
 ### Further investigation of the rejection — Edit form is locked
 
