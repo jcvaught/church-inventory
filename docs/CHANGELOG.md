@@ -55,7 +55,9 @@ Closed the seven remaining audit items:
 
 Build clean, lint 0 errors (43 baseline `exhaustive-deps` warnings).
 
-`RichTextarea` is **still duplicated** between `TasksPage.jsx` and `MaintenancePage.jsx` — extracting to `src/components/primitives/RichTextarea.jsx` remains the obvious next refactor.
+### RichTextarea extracted to shared primitive
+
+Closed the final audit follow-up. `RichTextarea` was duplicated between `TasksPage.jsx` and `MaintenancePage.jsx` — both copies converged after the P-7 toolbar-cursor and 2026-05-13 auto-grow fixes, so any further change had to be made twice. Pulled the component to `src/components/primitives/RichTextarea.jsx` (~135 lines), removed both local copies (~145 lines each), and replaced them with `import { RichTextarea } from '../../components/primitives/RichTextarea.jsx'`. The shared version keeps the optional `label` prop (TasksPage uses it; MaintenancePage doesn't) so both call patterns work unchanged. `CLAUDE.md` file-layout block updated to list the new primitive. Build clean, lint 0 errors.
 
 ---
 
