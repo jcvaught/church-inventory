@@ -39,16 +39,29 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // ── Config/main — members read; admins+managers write ───────────────────
+    // ── Config/main — members read; admins+managers write; self-creator may
+    //    create during signup (S-7: allows the createChurch writeBatch to
+    //    commit atomically before users/{uid} exists to satisfy
+    //    isChurchAdminOrManager — rules in a batch are evaluated against
+    //    pre-batch state). Matches the existing self-creator pattern on
+    //    config/subscription above. ────────────────────────────────────────
     match /churches/{churchId}/config/main {
-      allow read:  if isMember(churchId);
-      allow write: if isChurchAdminOrManager(churchId);
+      allow read:           if isMember(churchId);
+      allow create:         if request.auth != null && (
+                                request.auth.uid + '-church' == churchId
+                                || isChurchAdminOrManager(churchId)
+                              );
+      allow update, delete: if isChurchAdminOrManager(churchId);
     }
 
-    // ── Config/settings — members read; admins+managers write ───────────────
+    // ── Config/settings — same pattern as config/main ───────────────────────
     match /churches/{churchId}/config/settings {
-      allow read:  if isMember(churchId);
-      allow write: if isChurchAdminOrManager(churchId);
+      allow read:           if isMember(churchId);
+      allow create:         if request.auth != null && (
+                                request.auth.uid + '-church' == churchId
+                                || isChurchAdminOrManager(churchId)
+                              );
+      allow update, delete: if isChurchAdminOrManager(churchId);
     }
 
     // ── Notifications — members read; admin-only write ───────────────────────

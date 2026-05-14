@@ -14,7 +14,7 @@ import {
   EmailAuthProvider
 } from 'firebase/auth';
 import {
-  doc, setDoc, getDoc, deleteDoc,
+  doc, setDoc, getDoc, deleteDoc, writeBatch,
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import * as Sentry from '@sentry/react';
@@ -156,25 +156,17 @@ export function useAuth() {
           throw new Error('This church code is already in use. Please choose another.');
         }
 
-        // Create church document (parent + config)
+        // S-7: write the whole signup chain in one Firestore batch so it's
+        // atomic — any single write failure rolls them all back. The
+        // companion rules update (firestore.rules) added a self-creator
+        // create branch to config/main and config/settings so they pass
+        // rule evaluation inside a batch (where users/{uid} isn't yet
+        // visible). Closes the partial-failure window that left earlier
+        // signups stranded with auth + some-but-not-all Firestore docs.
         const churchId = cred.user.uid + '-church';
-        // S-13: single shared timestamp for all writes in this signup.
         const now = new Date().toISOString();
-        await setDoc(doc(db, 'churches', churchId), {
-          churchName,
-          churchCode: churchCode.toUpperCase(),
-          createdBy: cred.user.uid,
-          createdAt: now,
-        });
-
-        // Create user profile BEFORE the config subdocs. The rules on
-        // churches/{id}/config/main and config/settings require
-        // isChurchAdminOrManager(), which reads role from users/{uid}.
-        // If we write config docs first, that doc doesn't exist yet, every
-        // config write is denied, and the new church creator is stranded
-        // with auth + parent church doc but no config + no user profile
-        // (the state Haleigh Watson's TrueNorth Church signup landed in
-        // on 2026-05-14).
+        const trialEndsAt = new Date(Date.parse(now) + 90 * 24 * 60 * 60 * 1000).toISOString();
+        const TRIAL_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'people_access', 'tasks', 'jobs'];
         const profile = {
           name: userName,
           firstName,
@@ -186,26 +178,27 @@ export function useAuth() {
           createdAt: now,
           lastLogin: now,
         };
-        await setDoc(doc(db, 'users', cred.user.uid), profile);
 
-        await setDoc(doc(db, 'churches', churchId, 'config', 'main'), {
+        const batch = writeBatch(db);
+        batch.set(doc(db, 'churches', churchId), {
           churchName,
           churchCode: churchCode.toUpperCase(),
           createdBy: cred.user.uid,
           createdAt: now,
         });
-
-        // Create settings with defaults
-        await setDoc(doc(db, 'churches', churchId, 'config', 'settings'), {
+        batch.set(doc(db, 'users', cred.user.uid), profile);
+        batch.set(doc(db, 'churches', churchId, 'config', 'main'), {
+          churchName,
+          churchCode: churchCode.toUpperCase(),
+          createdBy: cred.user.uid,
+          createdAt: now,
+        });
+        batch.set(doc(db, 'churches', churchId, 'config', 'settings'), {
           locations: DEFAULT_LOCATIONS,
           ministries: DEFAULT_MINISTRIES,
           tags: DEFAULT_TAGS,
         });
-
-        // Create subscription doc — starts with 90-day all-hubs trial
-        const trialEndsAt = new Date(Date.parse(now) + 90 * 24 * 60 * 60 * 1000).toISOString();
-        const TRIAL_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'people_access', 'tasks', 'jobs'];
-        await setDoc(doc(db, 'churches', churchId, 'config', 'subscription'), {
+        batch.set(doc(db, 'churches', churchId, 'config', 'subscription'), {
           plan: 'free',
           hubs: [],
           maxUsers: 10,
@@ -221,6 +214,7 @@ export function useAuth() {
           grandfatheredUntil: null,
           createdAt: now,
         });
+        await batch.commit();
 
         setUserProfile({ id: cred.user.uid, uid: cred.user.uid, ...profile });
       } catch (innerErr) {
