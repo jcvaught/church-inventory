@@ -39,8 +39,9 @@ test.describe('§9 Public job board', () => {
     // Wait for the job board (anonymous) to render
     await page.locator('text=' + job.title).first().waitFor({ timeout: 20_000 });
 
-    // Spot count visible (sanitized "X spots filled" count, no individual names)
-    await expect(page.locator('text=/0\\s*\\/\\s*3 spots filled/i').first()).toBeVisible();
+    // Spot count visible (sanitized "X spots filled" count, no individual names).
+    // The test seeds 1 signup above, so signupCount=1 and the rendered text is "1/3".
+    await expect(page.locator('text=/1\\s*\\/\\s*3 spots filled/i').first()).toBeVisible();
     await expect(page.locator(`text=${job.title}`).first()).toBeVisible();
     await expect(page.locator('text=$20').first()).toBeVisible();
 

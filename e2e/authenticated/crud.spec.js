@@ -51,15 +51,21 @@ test.describe('§2 Admin CRUD flows', () => {
     // Verify Firestore: location updated
     await expect.poll(async () => (await getJob(job.docId)).location, { timeout: 15_000 }).toBe('Fellowship Hall');
 
-    // Verify activityLog has an update_job entry for this job
-    const logsSnap = await db()
-      .collection(`churches/${churchId()}/activityLog`)
-      .where('kind', '==', 'update_job')
-      .get();
-    const matching = logsSnap.docs
-      .map(d => d.data())
-      .filter(d => String(d.target || '').includes(job.docId) || String(d.target || '').includes(job.jobNumber || ''));
-    expect(matching.length, 'activityLog should record update_job').toBeGreaterThan(0);
+    // Verify activityLog has an update_job entry for this job. The activityLog
+    // schema is { action, itemId, performedBy, performedByName, timestamp, details }
+    // (see useFirestore.logActivity) — not { kind, target }. Wrap in expect.poll
+    // because logActivity fires async after updateJobListing returns; the
+    // success toast can paint before the log doc lands.
+    await expect.poll(async () => {
+      const logsSnap = await db()
+        .collection(`churches/${churchId()}/activityLog`)
+        .where('action', '==', 'update_job')
+        .get();
+      return logsSnap.docs
+        .map(d => d.data())
+        .filter(d => String(d.itemId || '').includes(job.docId) || String(d.itemId || '').includes(job.jobNumber || ''))
+        .length;
+    }, { timeout: 15_000, message: 'activityLog should record update_job' }).toBeGreaterThan(0);
   });
 
   test('Cancelling the delete confirm dialog leaves the job intact', async ({ page }) => {
