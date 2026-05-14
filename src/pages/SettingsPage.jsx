@@ -497,7 +497,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
               <div style={{ fontSize:12, color:B.red, marginTop:6, fontFamily:f2 }}>{phoneError}</div>
             )}
             <div style={{ fontSize:11, color:B.textLight, marginTop:8, fontFamily:f2, maxWidth:480 }}>
-              By enabling SMS reminders you consent to receive automated text messages from ChurchOpsHub. US and Canada numbers only. Message and data rates may apply. Reply STOP to opt out at any time.
+              By providing your phone number and enabling SMS reminders, you consent to receive automated text messages from ChurchOpsHub for job-shift reminders. US and Canada numbers only. Message and data rates may apply. Message frequency varies (typically 1-5 messages per week). Reply STOP to unsubscribe or HELP for help.
             </div>
           </div>
         )}

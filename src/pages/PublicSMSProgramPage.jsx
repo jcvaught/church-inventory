@@ -75,7 +75,7 @@ Reply STOP to opt out.`}</SampleBox>
 
         <H2>Consent disclosure (exact text shown in the app)</H2>
         <P>Before the "Enable SMS reminders" checkbox can be enabled in Settings, the following disclosure is displayed:</P>
-        <SampleBox>{`By providing your phone number and enabling SMS reminders, you consent to receive automated text messages from ChurchOpsHub for job-shift reminders. Message and data rates may apply. Message frequency varies (typically 1-5 messages per week). Reply STOP to unsubscribe or HELP for help.`}</SampleBox>
+        <SampleBox>{`By providing your phone number and enabling SMS reminders, you consent to receive automated text messages from ChurchOpsHub for job-shift reminders. US and Canada numbers only. Message and data rates may apply. Message frequency varies (typically 1-5 messages per week). Reply STOP to unsubscribe or HELP for help.`}</SampleBox>
 
         <H2>How do I get help?</H2>
         <P>Reply <strong>HELP</strong> to any message and you will receive a reply with our support contact. You can also email <a href="mailto:churchopshub@gmail.com" style={{ color: B.teal }}>churchopshub@gmail.com</a> at any time.</P>
