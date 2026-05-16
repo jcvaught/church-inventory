@@ -4,6 +4,24 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-14/15 — SEO Cross-App Audit + Blog Pre-rendering
+
+Part of a 4-app SEO session covering RC, COH, MH, CC. Cross-app audit at `~/apps/seo-audit-2026-05-15.md`. Per-COH shipped this session:
+
+**Help docs (Phase 1 in cross-app plan, commit `bb1b524`)** — HelpPage gained a complete People Access Hub section with 8 accordions (adding people, the 4 record types — background_check 🔍 / key_assignment 🔑 / certification 🎓 admin-only / custom ✅, expiry tracking with 🔴 expired / 🟡 warning / ✅ ok signals, custom requirements, bulk entry, linking a person to a user account, permissions at a glance, CSV export). All-In Bundle copy reconciled across three surfaces (FAQ said "six paid hubs", pricing card said "7", grid showed 8 — standardized on "7 feature hubs + unlimited team members" with the full list). Added a Note in Job Hub's "Signing up and withdrawing" accordion explaining how Required Access Types compliance gating links back to People Access Hub records.
+
+**Blog post (commit `b091709`)** — "The Hidden Cost of Running Church Operations on Spreadsheets" (~1,900 words). Deliberately differentiated from the existing "Moving Beyond Spreadsheets: Church Inventory Best Practices" post by focusing on cross-functional operations sprawl (volunteer coordination + maintenance tickets + compliance + key management + audits + job posts) rather than inventory alone. Five hidden costs framed for the 200-member church target: volunteer coordinator tax (3–5 hrs/week), maintenance request Bermuda Triangle (no automatic surfacing), compliance risk with no owner ("probably yes but can't prove it"), key management liability (20–60 keys typically out), and cross-functional coordination tax (~150–300 hrs/year). Closes with the migration framing and the All-In Bundle math.
+
+**PostHog analytics wired (commit `29b7ade`)** — `posthog-js` installed as a dep, lazy-loaded in `src/main.jsx` via `requestIdleCallback` (or 1500ms `setTimeout` fallback for Safari, matching MH/RC pattern). Block dead-code-eliminates when `VITE_POSTHOG_KEY` is unset, so the integration ships inert until env vars land. Activation requires: create PostHog project at us.posthog.com, set `VITE_POSTHOG_KEY` + optional `VITE_POSTHOG_HOST` in Vercel Production env, redeploy. Goes alongside the existing Sentry integration (which stays as the errors-only channel).
+
+**Pre-rendering for SEO (commit `2750767`) — the major fix.** New `scripts/prerender-blog.mjs` runs as `postbuild` after `vite build`. Same pattern as RepCrew: reads `BLOG_POSTS` from `src/data/blogPosts.js`, renders each post's markdown to HTML via `marked`, wraps in a fully styled standalone HTML page (ChurchOpsHub navy + teal branding, embedded CSS, no external dependencies, includes site nav + footer + CTA + 3 related posts + post description prominently displayed), and writes to `dist/blog/<slug>/index.html`. Also generates `dist/blog/index.html` for the listing. Vercel serves static files before the SPA catch-all rewrite (preserving the existing Firebase auth rewrite in `vercel.json` — order matters: more specific rewrites first, then static files take precedence, then the SPA catch-all last).
+
+**Before:** every blog URL returned a 2,477-byte SPA shell with 30 chars of visible text. **After:** each post URL returns ~20KB of static HTML with ~7,600 chars of actual visible blog content — no JS execution needed for Google to index. 20 posts + 1 index page generated per build. Production-verified post-deploy. Memory: `project_prerender_blog.md`.
+
+**Sitemap status note:** unlike RC, COH's sitemap submission appeared to be working in GSC (HTTP 200, valid XML, 26 URLs at audit time). The deeper indexing problem was still the empty SPA shells — Google could read the sitemap but the URLs it discovered returned no content. Pre-rendering closes that gap.
+
+---
+
 ## 2026-05-14 — New-user signup-flow audit (15 findings, 4 shipped)
 
 Audited every signup entry point (`createChurch`, `register`, `loginWithGoogle`, `login`, `registerWithGoogle`, `onAuthStateChanged`, and the AuthScreen UI). 15 findings across 4 severity tiers. Three of the four critical/high items shipped this commit; the rest are queued.
