@@ -4,6 +4,7 @@ import { UpgradeGate } from '../components/primitives/UpgradeGate.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { lazyWithRetry } from '../utils/lazyWithRetry.js';
+import { ChunkErrorBoundary } from '../components/primitives/ChunkErrorBoundary.jsx';
 
 // Audit overnight 2026-05-12 / Perf #7: hub pages were all eagerly imported,
 // loading recharts + the full Tasks/Insights/People-Access surface even for
@@ -106,7 +107,13 @@ function HubContent({ hubKey, store, userProfile }) {
   else if (hubKey === 'tasks') page = <TasksPage store={store} userProfile={userProfile} />;
   else if (hubKey === 'jobs') page = <JobsPage store={store} userProfile={userProfile} />;
   if (!page) return null;
-  return <Suspense fallback={<HubLoadingFallback />}>{page}</Suspense>;
+  // key={hubKey} gives each hub a fresh boundary, so an error on one hub
+  // doesn't stick when the user navigates to another.
+  return (
+    <ChunkErrorBoundary key={hubKey}>
+      <Suspense fallback={<HubLoadingFallback />}>{page}</Suspense>
+    </ChunkErrorBoundary>
+  );
 }
 
 export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscriptionLoading, userCanSeeHub, onGoToSettings }) {
