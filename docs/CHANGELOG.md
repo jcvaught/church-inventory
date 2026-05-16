@@ -4,6 +4,25 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-15 (PM) — Pre-rendering extended from blog posts to all public pages
+
+Second pass of the SEO pre-rendering work — extended from blog content to landing + help + terms + privacy + sms-program. New `scripts/prerender-static.mjs` (commit `bf49b64`) runs in the `postbuild` chain after `prerender-blog.mjs`. Polyfills `globalThis.window` and `globalThis.document` BEFORE module imports — COH's `LandingPage` reads `window.innerWidth` in a `useState` lazy initializer for responsive layout state. Uses Vite's `ssrLoadModule` + React's `renderToString` wrapped in `HelmetProvider` (since `SEO.jsx` uses `react-helmet-async`).
+
+**Vercel routing change.** `vercel.json` catch-all rewrite updated from `/index.html` → `/app.html`. The prerender script preserves the original Vite-built SPA shell at `dist/app.html` before overwriting `dist/index.html` with the SSR-rendered landing page. Vercel serves static files in `dist/` before applying rewrites. The existing `/__/auth/(.*)` Firebase auth rewrite stays before the catch-all and is unaffected.
+
+**5 routes pre-rendered:**
+- `/` (LandingPage 29KB)
+- `/help` (Help Center 85KB — the 14-section accordion content this session expanded with the People Access Hub coverage)
+- `/terms` (17KB)
+- `/privacy` (18KB)
+- `/sms-program` (14KB — the Twilio A2P public disclosure page)
+
+**Legacy query-string URLs still work.** App.jsx checks both pathname AND query-string for the help/terms/privacy/sms-program routes. The path-based URLs are now SEO-canonical (and indexable), but old bookmarks/links to `/?help`, `/?privacy`, etc. continue to render the right page via the SPA after the catch-all routes them to `/app.html`.
+
+**Before:** every public URL returned a 2,477-byte SPA shell with 30 chars of visible text. **After:** `/` returns 28,951 bytes with 3,607 chars of visible content; help page returns 84,734 bytes with the full FAQ accordion expanded — no JS execution needed for Google to crawl any of it. Production-verified post-deploy. Cross-app audit + outcomes at `~/apps/seo-audit-2026-05-15.md`. Memory: `project_prerender_blog.md`.
+
+---
+
 ## 2026-05-14/15 — SEO Cross-App Audit + Blog Pre-rendering
 
 Part of a 4-app SEO session covering RC, COH, MH, CC. Cross-app audit at `~/apps/seo-audit-2026-05-15.md`. Per-COH shipped this session:
