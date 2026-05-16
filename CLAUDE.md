@@ -281,3 +281,6 @@ Applies to `twilioInbound`, `sendgridEventWebhook`, `stripeWebhook`, and any oth
 
 ### 🟡 Pseudo-selector styles (`:focus`, `:hover`) require global CSS
 Inline styles cannot target pseudo-selectors. The workaround for focus states is a global CSS rule in `index.html` — not `onFocus`/`onBlur` handlers on every input. The existing rule in `index.html` covers all `input`, `select`, and `textarea` elements with a teal border + glow on focus. For hover states on interactive elements, use `onMouseEnter`/`onMouseLeave` handlers inline (see KanbanColumn, TicketCard).
+
+### 🟡 `Failed to fetch dynamically imported module` after a deploy = stale chunk, not a bug
+Each build emits new hash-named chunks; the host removes the old ones. A browser still running the previous build requests an old hub chunk (`assets/TasksPage--<oldhash>.js`) that 404s, throwing `TypeError: Failed to fetch dynamically imported module`. **Never wrap a raw `lazy(() => import(...))` in `HubsPage.jsx` (or any new lazy route) — always use `lazyWithRetry(factory, name)` from `src/utils/lazyWithRetry.js`.** It retries once, then forces a one-time `window.location.reload()` (sessionStorage-guarded against reload loops) to pull the fresh manifest. If Sentry shows this error, it's a returning user on an old tab — not actionable beyond confirming the self-heal fired.

@@ -1,20 +1,21 @@
-import { useContext, lazy, Suspense } from 'react';
+import { useContext, Suspense } from 'react';
 import { B, f1, f2, btnP } from '../components/brand/tokens.js';
 import { UpgradeGate } from '../components/primitives/UpgradeGate.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
 import { MobileCtx } from '../hooks/useMobile.js';
+import { lazyWithRetry } from '../utils/lazyWithRetry.js';
 
 // Audit overnight 2026-05-12 / Perf #7: hub pages were all eagerly imported,
 // loading recharts + the full Tasks/Insights/People-Access surface even for
 // free-tier inventory-only churches. Lazy-load each hub so the main bundle
 // drops by ~200 KB gzipped and TTI on mobile improves accordingly.
-const InsightsPage      = lazy(() => import('./hubs/InsightsPage.jsx').then(m => ({ default: m.InsightsPage })));
-const MaintenancePage   = lazy(() => import('./hubs/MaintenancePage.jsx').then(m => ({ default: m.MaintenancePage })));
-const CoordinationPage  = lazy(() => import('./hubs/CoordinationPage.jsx').then(m => ({ default: m.CoordinationPage })));
-const AccountabilityPage = lazy(() => import('./hubs/AccountabilityPage.jsx').then(m => ({ default: m.AccountabilityPage })));
-const PeopleAccessPage  = lazy(() => import('./hubs/PeopleAccessPage.jsx').then(m => ({ default: m.PeopleAccessPage })));
-const TasksPage         = lazy(() => import('./hubs/TasksPage.jsx').then(m => ({ default: m.TasksPage })));
-const JobsPage          = lazy(() => import('./hubs/JobsPage.jsx').then(m => ({ default: m.JobsPage })));
+const InsightsPage      = lazyWithRetry(() => import('./hubs/InsightsPage.jsx').then(m => ({ default: m.InsightsPage })), 'InsightsPage');
+const MaintenancePage   = lazyWithRetry(() => import('./hubs/MaintenancePage.jsx').then(m => ({ default: m.MaintenancePage })), 'MaintenancePage');
+const CoordinationPage  = lazyWithRetry(() => import('./hubs/CoordinationPage.jsx').then(m => ({ default: m.CoordinationPage })), 'CoordinationPage');
+const AccountabilityPage = lazyWithRetry(() => import('./hubs/AccountabilityPage.jsx').then(m => ({ default: m.AccountabilityPage })), 'AccountabilityPage');
+const PeopleAccessPage  = lazyWithRetry(() => import('./hubs/PeopleAccessPage.jsx').then(m => ({ default: m.PeopleAccessPage })), 'PeopleAccessPage');
+const TasksPage         = lazyWithRetry(() => import('./hubs/TasksPage.jsx').then(m => ({ default: m.TasksPage })), 'TasksPage');
+const JobsPage          = lazyWithRetry(() => import('./hubs/JobsPage.jsx').then(m => ({ default: m.JobsPage })), 'JobsPage');
 
 const HubLoadingFallback = () => (
   <div style={{ display:'flex', justifyContent:'center', alignItems:'center', padding:'80px 20px' }}>

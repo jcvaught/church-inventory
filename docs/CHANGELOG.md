@@ -4,6 +4,14 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-16 — Stale-chunk self-heal for lazy-loaded hubs
+
+Sentry caught `TypeError: Failed to fetch dynamically imported module: .../assets/TasksPage--BA92yxPw.js` (issue `5e2ac57f…`, production, Chrome). Not a code bug — deploy skew: a browser still running an older build requested a hub chunk whose hashed filename no longer existed on the host after the 2026-05-15 pre-rendering deploy.
+
+New `src/utils/lazyWithRetry.js` wraps `React.lazy`: retries the dynamic `import()` once (transient network blip), then on a second failure forces a one-time hard `window.location.reload()` to fetch the fresh `index.html` + chunk manifest. A `sessionStorage` flag (`chunk-reload:<name>`, cleared on success) prevents an infinite reload loop if the failure isn't a stale chunk. All 7 lazy hub imports in `HubsPage.jsx` (Insights, Maintenance, Coordination, Accountability, PeopleAccess, Tasks, Jobs) now use `lazyWithRetry`. Build + lint clean (0 errors).
+
+---
+
 ## 2026-05-15 (PM) — Pre-rendering extended from blog posts to all public pages
 
 Second pass of the SEO pre-rendering work — extended from blog content to landing + help + terms + privacy + sms-program. New `scripts/prerender-static.mjs` (commit `bf49b64`) runs in the `postbuild` chain after `prerender-blog.mjs`. Polyfills `globalThis.window` and `globalThis.document` BEFORE module imports — COH's `LandingPage` reads `window.innerWidth` in a `useState` lazy initializer for responsive layout state. Uses Vite's `ssrLoadModule` + React's `renderToString` wrapped in `HelmetProvider` (since `SEO.jsx` uses `react-helmet-async`).
