@@ -4,6 +4,16 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-18 — Fix: Google sign-in blocked by CSP frame-src (broken ~7 weeks)
+
+User reported "Google sign-in failed. Please try again." on the Welcome Back screen. Not a Firebase config problem — `churchopshub.com` is in Auth authorized domains, the `/__/auth/(.*)` → `church-inventory-9615c.firebaseapp.com` Vercel rewrite is present, and email/password sign-in worked fine.
+
+Root cause: `signInWithPopup` loads a same-origin relay iframe at `https://{authDomain}/__/auth/iframe`. `authDomain` is the custom domain `churchopshub.com`, so the browser enforces CSP on that URL as `'self'`. The `frame-src` directive introduced in the 2026-03-27 security-hardening commit (`a45da1f`) listed only Stripe + `church-inventory-9615c.firebaseapp.com` and omitted `'self'`. Because an explicit `frame-src` overrides `default-src 'self'`, the auth iframe was blocked and the popup result never returned to the SDK → generic catch in `useAuth.js:378`. The auth proxy rewrite (2026-03-16) predated the CSP, so Google sign-in worked for ~11 days, then broke silently on 2026-03-27. Unnoticed because email/password (the `jcvaught@gmail.com` path) was unaffected.
+
+Fix (commit `ed108f6`): added `'self'` to `frame-src` in `vercel.json`. vercel.json-only change; takes effect on the Vercel auto-deploy.
+
+---
+
 ## 2026-05-16 — Stale-chunk self-heal for lazy-loaded hubs
 
 Sentry caught `TypeError: Failed to fetch dynamically imported module: .../assets/TasksPage--BA92yxPw.js` (issue `5e2ac57f…`, production, Chrome). Not a code bug — deploy skew: a browser still running an older build requested a hub chunk whose hashed filename no longer existed on the host after the 2026-05-15 pre-rendering deploy.
