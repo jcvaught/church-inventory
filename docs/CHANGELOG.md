@@ -4,6 +4,16 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-18 — Fix: Sentry "Service worker registration failed: Rejected" demoted to warn
+
+Stale Sentry error-level issue (`javascript-react` project, prod, `https://churchopshub.com/`). **Not a server defect** — direct prod probes confirmed every SW dependency serves correctly: `/sw.js` → `200 application/javascript`, `/manifest.json` → `200 application/json`, `/icon-192.png` & `/icon-512.png` → `200 image/png`. The vercel.json catch-all (`/(.*)` → `/app.html`) does **not** swallow these — Vercel's static-file precedence serves them before rewrites apply (an early investigation hypothesis that was disproven by the probes; no vercel.json change made).
+
+The literal `err.message` of `"Rejected"` with all assets healthy means `navigator.serviceWorker.register('/sw.js')` is rejecting in restrictive **client** environments only (private mode / storage-blocked / bots/crawlers). The SW is explicitly best-effort (network-first, no stale data) with **zero user-facing impact** — a failed registration just means no PWA install prompt + no offline shell; the app loads and runs fully. Logging that via `console.error` made Sentry's `captureConsole({levels:['error']})` file invisible noise as an error-level issue.
+
+Fix (commit `7446b6e`, `index.html`): the `.catch` now `console.warn`s `[ChurchOpsHub] Service worker registration skipped:` with `err.name` + message — diagnosable in-console, no longer error-level. Supersedes the 2026-05-14 `b3f6779` `console.error` choice (that commit's goal — surface the real error instead of an unhandled "Rejected" rejection — is now served by the enriched warn). Source-only change; takes effect on Vercel auto-deploy.
+
+---
+
 ## 2026-05-18 — Hide test/E2E accounts from member lists + Reuben dedupe
 
 Reported via the Tasks assignee filter showing "E2E Admin" and "Reuben Hinckley" twice.
