@@ -4,13 +4,18 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
-## 2026-05-18 — Fix: Google sign-in blocked by CSP frame-src (broken ~7 weeks)
+## 2026-05-18 — Fix: Google sign-in blocked by CSP (two gates; broken ~7 weeks)
 
-User reported "Google sign-in failed. Please try again." on the Welcome Back screen. Not a Firebase config problem — `churchopshub.com` is in Auth authorized domains, the `/__/auth/(.*)` → `church-inventory-9615c.firebaseapp.com` Vercel rewrite is present, and email/password sign-in worked fine.
+User reported "Google sign-in failed. Please try again." on the Welcome Back screen. Not a Firebase config problem — `churchopshub.com` is in Auth authorized domains, the `/__/auth/(.*)` → `church-inventory-9615c.firebaseapp.com` Vercel rewrite is present and returns real Firebase handler/iframe content, and email/password sign-in worked fine.
 
-Root cause: `signInWithPopup` loads a same-origin relay iframe at `https://{authDomain}/__/auth/iframe`. `authDomain` is the custom domain `churchopshub.com`, so the browser enforces CSP on that URL as `'self'`. The `frame-src` directive introduced in the 2026-03-27 security-hardening commit (`a45da1f`) listed only Stripe + `church-inventory-9615c.firebaseapp.com` and omitted `'self'`. Because an explicit `frame-src` overrides `default-src 'self'`, the auth iframe was blocked and the popup result never returned to the SDK → generic catch in `useAuth.js:378`. The auth proxy rewrite (2026-03-16) predated the CSP, so Google sign-in worked for ~11 days, then broke silently on 2026-03-27. Unnoticed because email/password (the `jcvaught@gmail.com` path) was unaffected.
+`signInWithPopup` (with the custom proxied `authDomain` `churchopshub.com`) needs two CSP allowances that the 2026-03-27 security-hardening commit (`a45da1f`) did not include. Both were broken from 2026-03-27 onward; unnoticed because email/password (the `jcvaught@gmail.com` path) was unaffected.
 
-Fix (commit `ed108f6`): added `'self'` to `frame-src` in `vercel.json`. vercel.json-only change; takes effect on the Vercel auto-deploy.
+1. **`frame-src` missing `'self'`** — the SDK loads a same-origin relay iframe at `https://churchopshub.com/__/auth/iframe`; the browser enforces CSP on it as `'self'`. An explicit `frame-src` overrides `default-src 'self'`, so omitting `'self'` blocked the iframe. Fixed commit `ed108f6` (added `'self'` to `frame-src`).
+2. **`script-src` missing `https://apis.google.com`** — that relay iframe loads `https://apis.google.com/js/api.js` (gapi) to drive the popup handshake. Browser console on `churchopshub.com` showed: *"Loading the script 'https://apis.google.com/js/api.js' violates … script-src 'self' 'unsafe-inline' https://js.stripe.com … The action has been blocked."* Fixed commit `d6b06ce` (added `https://apis.google.com` to `script-src`).
+
+Diagnostics improvement (commit `9e6958b`): `loginWithGoogle` catch in `src/useAuth.js` previously swallowed every non-`popup-closed` error into a generic message with no logging. Now it special-cases `auth/popup-blocked` and `auth/unauthorized-domain` with actionable copy, surfaces the `auth/*` code for anything else, and `Sentry.captureException`s with tag `flow:google-signin` so future failures are diagnosable without a console.
+
+All three are vercel.json/src changes; take effect on the Vercel auto-deploy. CSP header changes require a hard refresh (headers are attached per-deployment, cached pages keep the old header).
 
 ---
 
