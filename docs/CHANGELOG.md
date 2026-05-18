@@ -17,6 +17,8 @@ Diagnostics improvement (commit `9e6958b`): `loginWithGoogle` catch in `src/useA
 
 All three are vercel.json/src changes; take effect on the Vercel auto-deploy. CSP header changes require a hard refresh (headers are attached per-deployment, cached pages keep the old header).
 
+**Accepted behavior (not a bug):** after the CSP fix, the Google popup opens and completes but a password-registered user (e.g. `jcvaught@gmail.com`, UID `DTd95wkCIpeYRnqP39dtU0VyNvU2`, providers `["password"]` only) is bounced back to the sign-in screen. The project uses "one account per email" (`allowDuplicateEmails` off), so Google sign-in for an email that already has a password-only account collides (`auth/account-exists-with-different-credential`) — there is no linked Google identity to sign into. This affects any password-registered user who clicks "Sign in with Google". Owner decision 2026-05-18: leave as-is; email/password is canonical. Do **not** "fix" this bounce as a regression. If revisited, the path is an in-app link flow (password sign-in → `linkWithPopup(googleProvider)`).
+
 ---
 
 ## 2026-05-16 — Stale-chunk self-heal for lazy-loaded hubs
