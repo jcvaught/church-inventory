@@ -4,6 +4,18 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-18 — Hide test/E2E accounts from member lists + Reuben dedupe
+
+Reported via the Tasks assignee filter showing "E2E Admin" and "Reuben Hinckley" twice.
+
+**Test-account leak (commit `765cdbd`):** the E2E suite runs against PROD, so `e2e-admin@`/`e2e-member-b@churchopshub.com` live permanently in the real FXCC church (`6cksNI9…-church`) and surfaced in every user picker + the billable seat count. New `src/utils/testAccounts.js` (`isTestAccount` / `excludeTestAccounts`, matches the `@churchopshub.com` domain) applied at the single source in `useFirestore.js:117` so all consumers inherit it. Owner chose "hide everywhere" (unconditional) over the real-users-only variant.
+
+**E2E verification:** full Playwright suite re-run against prod after deploy → **40 passed / 1 skipped / 0 failed (2.1m)**. The predicted risk (roster-visibility/announcements specs depending on test-member name render) did not materialize: those specs assert seeded signup-entry display names, not `users`-collection lookups. No spec rework needed. (First run was a false alarm — Vercel bot-protection "Code 21" challenge blocked auth-setup; passed cleanly on the documented ~5-min retry.)
+
+**Reuben Hinckley duplicate (manual data fix):** he signed up twice within ~100s on 2026-05-18 — once with a typo email `reubenhh@gmail.xom` (`SLEYb4d3…`, allowedHubs `[maintenance,tasks]`), once correct `reubenhh@gmail.com` (`wEwGMVFCg9…`, no hubs). Neither had logged in again or had any task/job references. Owner-run script: copied `[maintenance,tasks]` onto the `.com` doc, deleted the `.xom` Firestore user doc + its Auth account. (The script was blocked from the agent by the destructive-action classifier — correct behavior — and run by the owner via `!`.)
+
+---
+
 ## 2026-05-18 — Fix: Google sign-in blocked by CSP (two gates; broken ~7 weeks)
 
 User reported "Google sign-in failed. Please try again." on the Welcome Back screen. Not a Firebase config problem — `churchopshub.com` is in Auth authorized domains, the `/__/auth/(.*)` → `church-inventory-9615c.firebaseapp.com` Vercel rewrite is present and returns real Firebase handler/iframe content, and email/password sign-in worked fine.

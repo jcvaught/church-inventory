@@ -7,11 +7,13 @@
 // e2e-member-b@); no real church member uses that domain (real members use
 // their own / church domains). Filtering on the domain is therefore exact.
 //
-// NOTE (accepted trade-off): this also hides test accounts from each other
-// during E2E runs, so specs that assert a seeded test member's *name renders*
-// in the UI (roster-visibility, announcements) may need rework. This was an
-// explicit owner decision (2026-05-18) — "hide everywhere" over the
-// real-users-only variant. Do not silently revert to surface E2E.
+// This also hides test accounts from each other during E2E runs. That was an
+// accepted risk (owner decision 2026-05-18, "hide everywhere") — but the full
+// Playwright suite was run against prod immediately after and came back
+// 40 passed / 1 skipped / 0 failed. Roster/announcement specs assert seeded
+// signup-entry display names, NOT users-collection lookups, so the filter has
+// no effect on them. No spec rework needed. Do not silently revert to surface
+// E2E in member-facing lists.
 
 const TEST_EMAIL_DOMAIN = '@churchopshub.com';
 

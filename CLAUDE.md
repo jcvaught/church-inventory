@@ -36,7 +36,7 @@ E2E_MEMBER_B_EMAIL=e2e-member-b@churchopshub.com npm run test:e2e
 E2E_RUN_SMS=1 E2E_MEMBER_B_EMAIL=e2e-member-b@churchopshub.com npm run test:e2e -- sms
 ```
 
-Test accounts (all in FXCC church): `jcvaught@gmail.com` / `testpass123` (Member A), `e2e-admin@churchopshub.com` / `E2eTestPass123!` (admin), `e2e-member-b@churchopshub.com` / `E2eTestPass123!` (Member B). All created via Admin SDK; `scripts/serviceAccountKey.json` holds the credentials.
+Test accounts (all in FXCC church): `jcvaught@gmail.com` / `testpass123` (Member A), `e2e-admin@churchopshub.com` / `E2eTestPass123!` (admin), `e2e-member-b@churchopshub.com` / `E2eTestPass123!` (Member B). All created via Admin SDK; `scripts/serviceAccountKey.json` holds the credentials. Because these live in the real FXCC prod church, `src/utils/testAccounts.js` (`excludeTestAccounts`, matches the `@churchopshub.com` domain) filters them out at the single source in `useFirestore.js` so they never appear in member-facing pickers or the billable seat count — verified not to affect the E2E suite (40/1/0, 2026-05-18). Real members never use that domain, so the match is exact; do not surface test accounts in UI lists.
 
 When the E2E suite mysteriously fails at the auth-setup step with "Failed to verify your browser / Code 21," Vercel's bot protection has flagged the headless browser. `playwright.config.js` sets a realistic Chrome User-Agent to minimize this; if it still trips, wait ~5 min and retry.
 
