@@ -7,6 +7,7 @@ import * as Sentry from '@sentry/react';
 import { db, storage } from './firebase.js';
 import { ref as stRef, deleteObject } from 'firebase/storage';
 import { generateRecurrenceDates } from './utils/date.js';
+import { excludeTestAccounts } from './utils/testAccounts.js';
 
 export function useFirestore(churchId) {
   const [settings, setSettings] = useState(null);
@@ -115,7 +116,10 @@ export function useFirestore(churchId) {
 
     // Users — scoped to this church via query (real-time)
     unsubs.push(onSnapshot(query(collection(db, 'users'), where('churchId', '==', churchId)), (snap) => {
-      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      // Test/E2E accounts (@churchopshub.com) live in the prod church for the
+      // E2E suite but must never surface in member lists, pickers, or seat
+      // counts. Filtered at the single source so every consumer inherits it.
+      setUsers(excludeTestAccounts(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
       checkDone();
     }, (err) => { handleErr(err); checkDone(); }));
 
