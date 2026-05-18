@@ -374,9 +374,20 @@ export function useAuth() {
       // Return success so onAuthStateChanged's profileMissing path takes over.
       return { success: true };
     } catch (err) {
-      if (err.code === 'auth/popup-closed-by-user') return { success: false };
-      setError('Google sign-in failed. Please try again.');
-      return { success: false, error: err.message };
+      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+        return { success: false };
+      }
+      Sentry.captureException(err, {
+        tags: { flow: 'google-signin' },
+        extra: { code: err.code, message: err.message },
+      });
+      const codeMsg = err.code === 'auth/popup-blocked'
+        ? 'Your browser blocked the sign-in popup. Allow popups for churchopshub.com and try again.'
+        : err.code === 'auth/unauthorized-domain'
+          ? 'This domain is not authorized for Google sign-in. Contact support.'
+          : `Google sign-in failed (${err.code || 'unknown'}). Please try again.`;
+      setError(codeMsg);
+      return { success: false, error: err.message, code: err.code };
     }
   }, []);
 
