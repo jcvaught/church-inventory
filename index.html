@@ -29,15 +29,21 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
-      // Service worker registration is best-effort; the app works fine
-      // without it (just no PWA install + no offline shell). Surface the
-      // real error to console.error so Sentry's captureConsole picks it up
-      // with useful context (HTTPS error / 404 / MIME / etc.) instead of
-      // an unhandled rejection that Sentry can only describe as "Rejected".
+      // Service worker registration is best-effort; the app works fully
+      // without it (just no PWA install + no offline shell). Failure here
+      // is invisible to the user and only happens in restrictive client
+      // environments (private mode / storage-blocked / bots) — server
+      // assets all serve correctly. Log at WARN (not error) so Sentry's
+      // captureConsole({levels:['error']}) doesn't file it as an error-
+      // level issue, but keep err.name so it stays diagnosable in-console.
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').catch(err => {
-            console.error('[ChurchOpsHub] Service worker registration failed:', err && (err.message || err));
+            console.warn(
+              '[ChurchOpsHub] Service worker registration skipped:',
+              (err && err.name) || 'Error',
+              err && (err.message || String(err))
+            );
           });
         });
       }
