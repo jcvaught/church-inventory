@@ -259,6 +259,22 @@ const today = localDateStr(new Date());
 ### 🟡 Bare `>` in JSX text content
 esbuild's strict JSX parser rejects bare `>` characters in JSX text (e.g. `<P>Settings > Team Members</P>`). Use `→` for navigation paths or `{'>'`} to escape. Running `npm run build` will surface these immediately.
 
+### 🟡 A2P/TCR Compliance API is create-only — FAILED campaigns can only be fixed via Console "Fix Campaign"
+
+`POST/GET https://messaging.twilio.com/v1/Services/{MS}/Compliance/Usa2p` is **create + read only**:
+- `DELETE` → **HTTP 405** *"resource does not support the attempted HTTP method DELETE"*
+- `POST` over an existing record → **HTTP 409 Conflict**
+- No `PUT`/update method
+
+Once a campaign reaches terminal `FAILED`, the Messaging Service is permanently bound to that compliance record via API. To fix and resubmit, use the **Twilio Console → Trust Hub → A2P Campaigns → [Campaign SID] → "Fix Campaign →"** button on the campaign detail page (only appears when status is terminally Rejected, not the rejected-but-IN_PROGRESS limbo). That wizard re-uses the same Campaign SID + Messaging Service + Brand at no fee.
+
+For TCR rejections **30921** (USE_CASE_DESCRIPTION / *"website requires authentication"*) and **30909** (MESSAGE_FLOW / CTA unverifiable), the structural fix is making the opt-in CTA reviewable **without login**:
+1. A public no-login page that shows a faithful visual reproduction of the in-app consent form + the verbatim disclosure (`PublicSMSProgramPage.jsx` has `OptInFormScreenshot` for this). Prose descriptions of the flow are not enough — reviewers need to *see* the CTA.
+2. Console fields to edit on resubmit: **Campaign description**, **"How do end-users consent to receive messages?"**, **Privacy Policy URL**, **Terms and Conditions URL**. The last two can silently sit empty after the initial registration — confirm they're populated.
+3. Strip "authenticated web application", "TEST CREDENTIALS FOR REVIEWERS", and "sign in" framing from message_flow — those phrases are 30921's trigger even when accompanied by a public disclosure page.
+
+Verify post-submit via API `GET` (description + message_flow update immediately; `errors[]` + `date_updated` lag until TCR re-reviews). **Don't verify the public page via curl** — `churchopshub.com` returns `x-vercel-mitigated: deny` (HTTP 403) to plain curl; use a real browser (Playwright) instead.
+
 ### 🟡 Gen-2 deploy can strip `allUsers` invoker IAM (silent 403 on webhooks)
 
 Reproduced 2026-05-14 on `twilioInbound`. After `firebase deploy --only functions:<webhook-name>`, the Cloud Run service's `allUsers/roles/run.invoker` binding can be silently removed. Symptoms: Twilio/SendGrid/Stripe webhook calls return 403 before reaching your function, no logs, the third-party's logs show "delivered to webhook" but no callback fired.

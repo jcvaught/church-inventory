@@ -4,6 +4,28 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-19 — A2P campaign resubmitted: public CTA screenshot + 4-field Console fix
+
+Campaign `CM57da3c4d828884b7d8a66f30ac1955b7` resolved from 5/14 IN_PROGRESS limbo to terminal **FAILED** with **two** errors: **30921** (USE_CASE_DESCRIPTION — *"website requires authentication and cannot be reviewed"*) + **30909** (MESSAGE_FLOW — CTA can't be verified). Root cause: the registered Campaign description + message_flow led with *"authenticated web application"* and a *"TEST CREDENTIALS … OPT-IN STEPS after signing in"* block, the public `/sms-program` page only described the opt-in in prose (no visual), and Privacy/Terms URL fields on the campaign were **empty** (gray placeholder). Triple-gated in-app form (login → email-verified → Jobs Hub access) means a reviewer logging in still couldn't see the CTA.
+
+Fix in two parts:
+
+**Code (commit `2166b8c`, `src/pages/PublicSMSProgramPage.jsx`):** added `OptInFormScreenshot` — a faithful no-login visual reproduction of the exact Settings → My Profile → "SMS Job Reminders" consent form (heading, sub-text, phone field, unchecked checkbox, Save, verbatim disclosure), mirroring `SettingsPage.jsx` ~454-512. Prerendered into `dist/sms-program/index.html` so reviewers/bots get the CTA on first byte. Verified rendering via Playwright at `https://churchopshub.com/sms-program` (curl is firewall-blocked → `x-vercel-mitigated: deny`; **use a real browser to verify this page, not curl**).
+
+**Console "Fix Campaign" (4 fields, no fees, same Campaign SID + MS + Brand):**
+1. **Campaign description** rewritten to reference the public no-login URL (clears 30921 / USE_CASE_DESCRIPTION).
+2. **"How do end-users consent to receive messages?"** rewritten — no test credentials, no "sign in" instructions, leads with the public URL + screenshot reference (clears 30909 / MESSAGE_FLOW).
+3. **Privacy Policy URL** filled with `https://churchopshub.com/privacy` (was empty — a structured rejection vector, not just cosmetic).
+4. **Terms and Conditions URL** filled with `https://churchopshub.com/terms` (was empty).
+
+Sample messages, opt-in/opt-out keywords & messages, embedded-link/phone/age-gated/direct-lending flags all left **untouched** at parity with the prior submission.
+
+Post-submit state: Console shows "In progress / under review"; API `GET .../Compliance/Usa2p` confirms `campaign_status: IN_PROGRESS` with the new description + message_flow stored. **Quirk:** unlike a 5/14-style API DELETE+POST resubmit, the Console "Fix Campaign" path does **not** immediately clear `errors[]` or advance `date_updated` on the Compliance API view — those refresh when TCR completes the new review. Console UI banner is the source of truth post-submit.
+
+**Confirmed dead end:** the simplified Messaging Compliance API (`/v1/Services/{MS}/Compliance/Usa2p`) is **create-only** — `DELETE` → HTTP 405, `POST` over existing → HTTP 409. Earlier memory claiming a DELETE+POST path is wrong (corrected in `memory/project_churchopshub_webhook_drop.md`). For a FAILED campaign, the only no-fee path is the Console **"Fix Campaign →"** button on the campaign detail page.
+
+---
+
 ## 2026-05-19 — Suppress Sentry "Connection to Indexed Database server lost" Firebase Auth noise
 
 New Sentry error-level issue (`javascript-react`, prod): `UnknownError: Connection to Indexed Database server lost. Refresh the page to try again` at `https://churchopshub.com/?invite=FXCC&hubs=maintenance%2Ctasks` (someone on the AuthScreen opening an invite link). **Not an app defect.** Thrown by **Firebase Auth's IndexedDB-backed persistence** (its token store) when the browser drops the IDB connection mid-session — Safari/iOS eviction, a backgrounded/killed tab, cleared site data, or private mode. Transient, environmental, self-heals on the refresh the SDK's own message prompts. Firestore offline persistence is **not** enabled anywhere in `src/` (`grep` for `initializeFirestore`/`persistentLocalCache`/`enableIndexedDbPersistence` → none), so this is Auth-only token-store noise, not data-cache corruption. Surfaced as error-level only because `captureConsoleIntegration({levels:['error']})` picks up the Firebase SDK's `console.error`.
