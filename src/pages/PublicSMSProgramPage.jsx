@@ -1,4 +1,4 @@
-import { B, f1, f2 } from '../components/brand/tokens.js';
+import { B, f1, f2, btnP } from '../components/brand/tokens.js';
 import { FullLogo } from '../components/brand/Logo.jsx';
 import { SEO } from '../components/SEO.jsx';
 
@@ -10,6 +10,38 @@ function P({ children }) {
 }
 function SampleBox({ children }) {
   return <div style={{ background: '#F5F7FA', border: `1px solid ${B.sand}`, borderRadius: 8, padding: '14px 18px', fontFamily: f2, fontSize: 14, color: B.textDark, margin: '8px 0 14px', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{children}</div>;
+}
+
+// Faithful, no-login visual reproduction of the exact in-app opt-in consent
+// form (Settings → My Profile → "SMS Job Reminders"). Rendered here so TCR /
+// carrier reviewers can verify the consent call-to-action and disclosure
+// language without an account. Mirrors src/pages/SettingsPage.jsx lines
+// ~454-512 (heading, sub-text, phone field, checkbox, Save, disclosure).
+function OptInFormScreenshot() {
+  return (
+    <figure style={{ margin: '8px 0 18px' }}>
+      <div style={{ background: B.white, border: `1px solid ${B.sand}`, borderRadius: 14, padding: '22px 24px', boxShadow: '0 1px 3px rgba(27,42,74,0.06)', maxWidth: 560 }}>
+        <div style={{ fontSize: 12, color: B.textLight, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: f1, marginBottom: 4 }}>SMS Job Reminders</div>
+        <div style={{ fontSize: 13, color: B.textMid, fontFamily: f2, marginBottom: 10 }}>
+          Receive a text message the morning of any job you&rsquo;re signed up for.
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ width: 160, padding: '11px 14px', borderRadius: 10, border: `1px solid ${B.sand}`, fontSize: 14, fontFamily: f2, background: B.white, color: B.textLight, boxSizing: 'border-box' }}>(555) 555-5555</div>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontFamily: f2, color: B.textMid }}>
+            <span style={{ width: 15, height: 15, borderRadius: 3, border: `1px solid ${B.sand}`, background: B.white, display: 'inline-block' }} />
+            Enable SMS reminders
+          </span>
+          <span style={{ ...btnP, padding: '7px 18px', fontSize: 13, cursor: 'default' }}>Save</span>
+        </div>
+        <div style={{ fontSize: 11, color: B.textLight, marginTop: 8, fontFamily: f2, maxWidth: 480, lineHeight: 1.5 }}>
+          By providing your phone number and enabling SMS reminders, you consent to receive automated text messages from ChurchOpsHub for job-shift reminders. US and Canada numbers only. Message and data rates may apply. Message frequency varies (typically 1-5 messages per week). Reply STOP to unsubscribe or HELP for help.
+        </div>
+      </div>
+      <figcaption style={{ fontFamily: f2, fontSize: 13, color: B.textLight, marginTop: 8, fontStyle: 'italic' }}>
+        Screenshot: the exact opt-in consent form shown to every user in ChurchOpsHub at Settings &rarr; My Profile &rarr; &ldquo;SMS Job Reminders.&rdquo; The &ldquo;Enable SMS reminders&rdquo; checkbox is unchecked by default and the disclosure above is displayed before consent is given.
+      </figcaption>
+    </figure>
+  );
 }
 
 // Public-facing SMS program disclosure page. Exists so TCR (The Campaign
@@ -71,6 +103,10 @@ Reply STOP to opt out.`}</SampleBox>
           <li>Check the box labeled <strong>"Enable SMS reminders."</strong></li>
           <li>Click <strong>Save</strong>.</li>
         </ol>
+
+        <P>This is exactly what the opt-in consent form looks like inside ChurchOpsHub. No message is ever sent to a phone number until the user has personally entered it here and checked &ldquo;Enable SMS reminders&rdquo;:</P>
+        <OptInFormScreenshot />
+
         <P>Messages are not sent to any phone number that has not completed this in-app consent flow. You can also revoke consent at any time by clearing your phone number in Settings, unchecking "Enable SMS reminders," or replying <strong>STOP</strong> to any message.</P>
 
         <H2>Consent disclosure (exact text shown in the app)</H2>
