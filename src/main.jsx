@@ -26,6 +26,16 @@ Sentry.init({
     if (msg.includes('@firebase/firestore') && msg.includes('Uncaught Error in snapshot listener')) {
       return null;
     }
+    // Firebase Auth's IndexedDB-backed persistence (its token store) throws
+    // "UnknownError: Connection to Indexed Database server lost. Refresh the
+    // page to try again" when the browser drops the IDB connection — Safari/iOS
+    // eviction, a backgrounded/killed tab, cleared site data, private mode.
+    // It is transient, environmental (not app code), and self-heals on the
+    // refresh the message itself prompts. Firestore offline persistence is not
+    // enabled, so this is Auth-only token-store noise, not a data-cache issue.
+    if (msg.includes('Connection to Indexed Database server lost')) {
+      return null;
+    }
     return event;
   },
 });

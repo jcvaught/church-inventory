@@ -4,6 +4,14 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-19 — Suppress Sentry "Connection to Indexed Database server lost" Firebase Auth noise
+
+New Sentry error-level issue (`javascript-react`, prod): `UnknownError: Connection to Indexed Database server lost. Refresh the page to try again` at `https://churchopshub.com/?invite=FXCC&hubs=maintenance%2Ctasks` (someone on the AuthScreen opening an invite link). **Not an app defect.** Thrown by **Firebase Auth's IndexedDB-backed persistence** (its token store) when the browser drops the IDB connection mid-session — Safari/iOS eviction, a backgrounded/killed tab, cleared site data, or private mode. Transient, environmental, self-heals on the refresh the SDK's own message prompts. Firestore offline persistence is **not** enabled anywhere in `src/` (`grep` for `initializeFirestore`/`persistentLocalCache`/`enableIndexedDbPersistence` → none), so this is Auth-only token-store noise, not data-cache corruption. Surfaced as error-level only because `captureConsoleIntegration({levels:['error']})` picks up the Firebase SDK's `console.error`.
+
+Fix (`src/main.jsx` `beforeSend`): added a second drop rule — `msg.includes('Connection to Indexed Database server lost') → return null` — alongside the existing `@firebase/firestore` "Uncaught Error in snapshot listener" filter. Same category as the 2026-05-18 SW-registration noise demotion. Source-only; takes effect on Vercel auto-deploy. Not actionable beyond this; nothing in app code can prevent a browser from evicting IndexedDB.
+
+---
+
 ## 2026-05-18 — Fix: Sentry "Service worker registration failed: Rejected" demoted to warn
 
 Stale Sentry error-level issue (`javascript-react` project, prod, `https://churchopshub.com/`). **Not a server defect** — direct prod probes confirmed every SW dependency serves correctly: `/sw.js` → `200 application/javascript`, `/manifest.json` → `200 application/json`, `/icon-192.png` & `/icon-512.png` → `200 image/png`. The vercel.json catch-all (`/(.*)` → `/app.html`) does **not** swallow these — Vercel's static-file precedence serves them before rewrites apply (an early investigation hypothesis that was disproven by the probes; no vercel.json change made).
