@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "postbuild": "node scripts/prerender-blog.mjs && node scripts/prerender-static.mjs",
+    "build": "NODE_ENV=production rm -rf node_modules/.vite && vite build",
+    "postbuild": "node scripts/prerender-blog.mjs && node scripts/prerender-static.mjs && node scripts/verify-prod-bundle.mjs",
     "preview": "vite preview",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
