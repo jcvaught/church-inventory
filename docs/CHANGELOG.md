@@ -4,6 +4,12 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-21 — Supplies Hub: location filter + alphabetical sort
+
+User feedback (Haleigh Watson) for the Supplies side: sort alphabetically and filter by location. `SuppliesPage.jsx` search card now has a location `<select>` (All locations + church locations from settings) and a sort `<select>` (Default / Name A–Z / Name Z–A). Both persist to `localStorage` (`sup_locationFilter`, `sup_sortBy`), mirroring the Items page filter-persistence pattern. Filter applied in the `filtered` `useMemo`; sort runs in-place on the filtered array via `localeCompare`.
+
+---
+
 ## 2026-05-19 — A2P campaign resubmitted: public CTA screenshot + 4-field Console fix
 
 Campaign `CM57da3c4d828884b7d8a66f30ac1955b7` resolved from 5/14 IN_PROGRESS limbo to terminal **FAILED** with **two** errors: **30921** (USE_CASE_DESCRIPTION — *"website requires authentication and cannot be reviewed"*) + **30909** (MESSAGE_FLOW — CTA can't be verified). Root cause: the registered Campaign description + message_flow led with *"authenticated web application"* and a *"TEST CREDENTIALS … OPT-IN STEPS after signing in"* block, the public `/sms-program` page only described the opt-in in prose (no visual), and Privacy/Terms URL fields on the campaign were **empty** (gray placeholder). Triple-gated in-app form (login → email-verified → Jobs Hub access) means a reviewer logging in still couldn't see the CTA.

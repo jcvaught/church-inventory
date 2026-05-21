@@ -1,4 +1,4 @@
-import { useState, useContext, useMemo } from 'react';
+import { useState, useContext, useMemo, useEffect } from 'react';
 import { app } from '../firebase.js';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { B, f1, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
@@ -29,6 +29,8 @@ export function SuppliesPage({ store, userProfile }) {
 
   const [search, setSearch] = useState("");
   const [showLowOnly, setShowLowOnly] = useState(false);
+  const [locationFilter, setLocationFilter] = useState(() => localStorage.getItem("sup_locationFilter") || "");
+  const [sortBy, setSortBy] = useState(() => localStorage.getItem("sup_sortBy") || "default");
 
   // Modals
   const [showAdd, setShowAdd] = useState(false);
@@ -76,6 +78,9 @@ export function SuppliesPage({ store, userProfile }) {
 
   function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
 
+  useEffect(() => { localStorage.setItem("sup_locationFilter", locationFilter); }, [locationFilter]);
+  useEffect(() => { localStorage.setItem("sup_sortBy", sortBy); }, [sortBy]);
+
   // ── AI Supply Identification ──
   async function handleIdentify(file) {
     if (!file) return;
@@ -106,13 +111,19 @@ export function SuppliesPage({ store, userProfile }) {
     }
   }
 
-  // Filter
-  const filtered = useMemo(() => supplies.filter(s => {
-    if (search && !s.description?.toLowerCase().includes(search.toLowerCase()) && !s.supplyId?.toLowerCase().includes(search.toLowerCase())) return false;
-    if (showLowOnly && s.quantity > s.minQuantity) return false;
-    if (tagFilter && !(s.tags || []).includes(tagFilter)) return false;
-    return true;
-  }), [supplies, search, showLowOnly, tagFilter]);
+  // Filter + sort
+  const filtered = useMemo(() => {
+    const out = supplies.filter(s => {
+      if (search && !s.description?.toLowerCase().includes(search.toLowerCase()) && !s.supplyId?.toLowerCase().includes(search.toLowerCase())) return false;
+      if (showLowOnly && s.quantity > s.minQuantity) return false;
+      if (tagFilter && !(s.tags || []).includes(tagFilter)) return false;
+      if (locationFilter && (s.location || "") !== locationFilter) return false;
+      return true;
+    });
+    if (sortBy === "az") out.sort((a, b) => (a.description || "").localeCompare(b.description || ""));
+    else if (sortBy === "za") out.sort((a, b) => (b.description || "").localeCompare(a.description || ""));
+    return out;
+  }, [supplies, search, showLowOnly, tagFilter, locationFilter, sortBy]);
 
   const lowCount = supplies.filter(s => s.quantity <= s.minQuantity).length;
 
@@ -269,13 +280,24 @@ export function SuppliesPage({ store, userProfile }) {
 
       {/* Search */}
       <div style={{ background:B.white, borderRadius:14, padding:"16px 20px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
-        <div style={{ position:"relative", marginBottom: tagOptions.length > 0 ? 10 : 0 }}>
+        <div style={{ position:"relative", marginBottom:10 }}>
           <input
             style={{...inp, paddingLeft:36}}
             placeholder="Search supplies..."
             value={search} onChange={e=>setSearch(e.target.value)}
           />
           <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:14, color:B.textLight }}>🔍</span>
+        </div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom: tagOptions.length > 0 ? 10 : 0 }}>
+          <select aria-label="Filter by location" style={{ ...inp, flex:1, minWidth:140 }} value={locationFilter} onChange={e=>setLocationFilter(e.target.value)}>
+            <option value="">All locations</option>
+            {locations.map(l => <option key={l} value={l}>{l}</option>)}
+          </select>
+          <select aria-label="Sort supplies" style={{ ...inp, flex:1, minWidth:140 }} value={sortBy} onChange={e=>setSortBy(e.target.value)}>
+            <option value="default">Sort: Default</option>
+            <option value="az">Sort: Name (A–Z)</option>
+            <option value="za">Sort: Name (Z–A)</option>
+          </select>
         </div>
         {tagOptions.length > 0 && (
           <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
@@ -294,10 +316,10 @@ export function SuppliesPage({ store, userProfile }) {
         <div style={{ background:B.white, borderRadius:18, padding:"48px 32px", border:"1px solid "+B.sand, textAlign:"center" }}>
           <div style={{ fontSize:48, marginBottom:16 }}>📦</div>
           <h3 style={{ fontFamily:f1, color:B.navy, margin:"0 0 8px", fontSize:18 }}>
-            {supplies.length === 0 ? "No supplies tracked yet" : "No supplies match your search"}
+            {supplies.length === 0 ? "No supplies tracked yet" : "No supplies match your filters"}
           </h3>
           <p style={{ color:B.textLight, fontSize:14 }}>
-            {supplies.length === 0 ? "Add your first consumable supply to start tracking." : "Try adjusting your search."}
+            {supplies.length === 0 ? "Add your first consumable supply to start tracking." : "Try adjusting your search or filters."}
           </p>
         </div>
       ) : (
