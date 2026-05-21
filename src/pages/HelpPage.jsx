@@ -422,6 +422,11 @@ export function HelpPage({ onBack }) {
               <Tip>Use the tag filter pills in the search bar to quickly view all supplies of a certain type (e.g. "Cleaning", "Office").</Tip>
             </Accordion>
 
+            <Accordion title="Finding, filtering, and sorting supplies">
+              <P>Use the search box to find a supply by description or Supply ID. Below it, the <strong>location</strong> dropdown narrows the list to a single location, and the <strong>sort</strong> dropdown reorders supplies alphabetically (A–Z or Z–A) or back to the default order.</P>
+              <Tip>Your location filter and sort choice are remembered on this device, so the Supplies page opens the way you left it.</Tip>
+            </Accordion>
+
             <Accordion title="Deleting a supply">
               <P><RoleTag role="admin" /> Admins can permanently delete a supply using the <strong>Delete</strong> button on its card. A confirmation dialog shows the supply name and ID before anything is removed.</P>
               <Note>Deleting a supply is permanent and cannot be undone. Activity history (usage and restock logs) is preserved in the Activity Log.</Note>
