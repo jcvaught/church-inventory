@@ -4,6 +4,26 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-22 — stripeWebhook quiets scanner-probe Sentry noise
+
+After the audit L2 fix made `stripeWebhook` `invoker:'public'` (correctly,
+for Stripe), scanners hitting the Cloud Run URL with no body started
+tripping `stripe.webhooks.constructEvent` → `No stripe-signature header
+value was provided.` → Sentry alert (REACT-S today, 20:19 UTC, `curl 8.7.1`
+on Ubuntu).
+
+`stripeWebhook` now short-circuits when the `stripe-signature` header is
+missing entirely: warn-level log (with UA + IP), 400 response, no Sentry
+capture. Mirrors the `twilioInbound` pattern. A *signed* request that
+fails verification still hits the existing catch + Sentry — that's the
+case that matters.
+
+Probed post-deploy: 400 "Missing stripe-signature header" on no-sig POST;
+400 "Invalid webhook signature" on junk-sig POST; both 400 (not 403) so
+`allUsers/roles/run.invoker` is intact.
+
+---
+
 ## 2026-05-22 — Jobs Hub audit verification (Part 2) — UAT automation, 11 more tests
 
 Most of `JOBS-HUB-AUDIT-VERIFICATION-PLAN.md` Part 2 turned out to be

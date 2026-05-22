@@ -420,6 +420,20 @@ exports.stripeWebhook = onRequest(
     const stripe = require('stripe')(STRIPE_SECRET_KEY.value());
     const sig = req.headers['stripe-signature'];
 
+    // Short-circuit obvious scanner probes — public Cloud Run URL gets hit by
+    // bots curl-POSTing with no body / no signature. Same pattern as
+    // twilioInbound: log at warn (not error), no Sentry capture, return 400.
+    // A *signed* request that fails verification still falls into the catch
+    // below and gets captured — that's the case worth paging on.
+    if (!sig) {
+      console.warn('stripeWebhook: no stripe-signature header (probable scanner probe)', {
+        ua: req.headers['user-agent'],
+        ip: req.headers['x-forwarded-for'] || req.ip,
+      });
+      res.status(400).send('Missing stripe-signature header');
+      return;
+    }
+
     let event;
     try {
       event = stripe.webhooks.constructEvent(
