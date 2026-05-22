@@ -822,7 +822,7 @@ export function HelpPage({ onBack }) {
                 'A 🔁 badge marks recurring jobs on cards and in the schedule',
                 'Edit or cancel individual jobs without affecting the rest of the series',
               ]} />
-              <Tip>Recurring series cannot be edited after creation — to change the schedule, delete the existing jobs and post a new series.</Tip>
+              <Tip>To change an existing series, open any job in it and click <strong>Edit</strong>. The edit form shows a <strong>This job only</strong> / <strong>This + all future jobs</strong> scope toggle, so you can fix one date or update the rest of the run in place — no need to delete and re-post.</Tip>
             </Accordion>
 
             <Accordion title="Signing up and withdrawing">
@@ -833,14 +833,42 @@ export function HelpPage({ onBack }) {
               <Note>If a job requires a <strong>waiver</strong>, signing up opens a consent window with the full waiver text — you must tick <strong>I have read and agree</strong> before <strong>Agree &amp; Sign Up</strong> becomes available. Your acknowledgement is recorded with the signup.</Note>
             </Accordion>
 
-            <Accordion title="Views: Job Board, Schedule, and Calendar">
-              <P>The Job Hub has four tabs:</P>
+            <Accordion title="Asking for a swap or replacement">
+              <P>Can't make a shift you signed up for? Open the job and click <strong>Request Swap</strong>. Add a short note (e.g. "can't make Sunday — looking for cover") and click <strong>Submit Request</strong>. The request shows up in the job detail under <strong>Swap Requests</strong> for admins and managers, who can dismiss it once you've found your own cover or someone else signs up.</P>
+              <Note>Requesting a swap does <em>not</em> withdraw you from the job — until someone actually replaces you, you're still on the roster. If you've decided to bail outright instead of looking for cover, use <strong>Withdraw</strong>.</Note>
+            </Accordion>
+
+            <Accordion title="Views: Job Board, Schedule, Calendar, Reports">
+              <P>The Job Hub has five tabs (Reports is admin/manager only):</P>
               <UL items={[
                 'Job Board — card grid; filter by status or "My Jobs"',
                 'Schedule — roster table sorted by date; shows spots filled, status, and (if allowed) who signed up; toggle to show past jobs',
                 'Calendar — month grid with job chips per day; color indicates status',
                 'Announcements — pinnable posts with optional expiry',
+                'Reports — volunteer leaderboard with attendance counts and pay totals (see Attendance + reports below)',
               ]} />
+            </Accordion>
+
+            <Accordion title="Exporting and printing">
+              <P>On the <strong>Schedule</strong> tab:</P>
+              <UL items={[
+                'Export My Signups — downloads an iCal (.ics) of just the jobs you’re signed up for; import into Google Calendar, Apple Calendar, or Outlook',
+                'Export All (admin/manager) — same idea, but the full church calendar',
+                'Print Rosters… (admin/manager) — opens a picker so you can choose which jobs to print sign-in sheets for in one batch',
+              ]} />
+              <P>From any job's detail modal, admins can also click <strong>🖨 Print Roster</strong> to print that one job's sign-in sheet on its own.</P>
+            </Accordion>
+
+            <Accordion title="Attendance + volunteer reports">
+              <P>After a job runs, admins and managers open the job detail and mark each signup <strong>Attended</strong> or <strong>No-show</strong> (click again to undo, or leave it blank for signups you didn't track). Attendance is what feeds the Reports leaderboard.</P>
+              <P>The <strong>Reports</strong> tab (admin/manager only) shows a per-volunteer leaderboard scoped to the last 30 days, last 90 days, or all time:</P>
+              <UL items={[
+                'Jobs — total signups in the window',
+                'Attended — count of jobs marked Attended (green)',
+                'No-show — count of jobs marked No-show (red)',
+                'Total pay — sum of pay across attended jobs only',
+              ]} />
+              <Tip>Marking attendance is optional. If you don't use it, the leaderboard still counts signups — it just won't compute attended/no-show or pay.</Tip>
             </Accordion>
 
             <Accordion title="Sharing a public job board">
@@ -868,6 +896,18 @@ export function HelpPage({ onBack }) {
                 'Co-admin cancellation — if a different admin cancels your job, you receive a notice',
               ]} />
               <P>When cancelling a job with signups, you'll be asked to confirm. If notifications are on, the cancellation email goes to signups automatically. Use the <strong>Notify Signups</strong> button to re-send on an already-cancelled job.</P>
+            </Accordion>
+
+            <Accordion title="SMS reminders (text messages)">
+              <P>Job Hub can also text you a reminder the morning of any job you're signed up for — useful when email isn't where you live. To opt in:</P>
+              <UL items={[
+                'Verify your email first (Settings shows a banner up top if you haven’t)',
+                'In Settings → SMS Job Reminders, enter your US/Canada mobile number',
+                'Tick Enable SMS reminders → Save',
+              ]} />
+              <P>Texts come from the same Twilio number that handles STOP/HELP. Frequency is typically 1–5 per week.</P>
+              <Note><strong>To unsubscribe:</strong> reply <strong>STOP</strong> to any reminder text. To turn it back on later, reply <strong>START</strong> from the same number.</Note>
+              <Tip><strong>START</strong> only re-enables reminders for numbers that previously opted in here. If you've never opted in on this phone — or you got a recycled number from your carrier — START won't silently turn anything on. You have to opt in via Settings first. That's deliberate: a teen receiving a new phone number shouldn't start getting reminders meant for whoever had it before.</Tip>
             </Accordion>
 
             <Accordion title="Report delegates">
