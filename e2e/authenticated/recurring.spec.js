@@ -1,6 +1,6 @@
 // @ts-check
 import { test, expect } from '../firebase-fixtures.js';
-import { purgeE2EArtifacts, createJob, getJob, uids, daysFromNowStr, e2eTitle, db, churchId } from '../admin-helpers.js';
+import { purgeE2EArtifacts, createJob, getJob, seedSignup, getJobSignups, uids, daysFromNowStr, e2eTitle, db, churchId } from '../admin-helpers.js';
 
 // §11 of docs/TEST-JOBS-HUB-2026-05-07.md — recurring series operations.
 // Series jobs share a `recurrenceGroupId`. The most error-prone operation
@@ -77,20 +77,19 @@ test.describe('§11 Recurring series', () => {
     const jobs = await seedSeries(3, seriesTitle, groupId, { uid: u.admin, name: 'E2E Admin' });
 
     // Pre-seed Member A as signed up to the second job in the series
-    const now = new Date().toISOString();
-    await db().doc(`churches/${churchId()}/jobListings/${jobs[1].docId}`).update({
-      signups: [{ uid: u.memberA, name: 'Member A Test', signedUpAt: now }],
-      updatedAt: now,
-    });
+    await seedSignup(jobs[1].docId, { uid: u.memberA, name: 'Member A Test' });
 
-    // Verify Firestore shape: 3 jobs in the series, 1 signup on the middle one
+    // Verify Firestore shape: 3 jobs in the series, 1 signup on the middle one.
+    // The roster lives in the signups subcollection (audit H1); the parent
+    // carries the server-maintained signupCount.
     const snap = await db()
       .collection(`churches/${churchId()}/jobListings`)
       .where('recurrenceGroupId', '==', groupId)
       .get();
     expect(snap.size).toBe(3);
-    const withSignup = snap.docs.filter(d => (d.data().signups || []).length > 0);
+    const withSignup = snap.docs.filter(d => (d.data().signupCount || 0) > 0);
     expect(withSignup).toHaveLength(1);
-    expect(withSignup[0].data().signups[0].uid).toBe(u.memberA);
+    const sigs = await getJobSignups(withSignup[0].id);
+    expect(sigs[0].uid).toBe(u.memberA);
   });
 });

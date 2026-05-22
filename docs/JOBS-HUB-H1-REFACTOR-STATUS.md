@@ -15,7 +15,7 @@ cd ~/apps/church-inventory
 git checkout jobs-hub-roster-refactor      # all work is on this branch
 ```
 
-- The branch is **6 commits ahead of `main`**; working tree clean.
+- The branch is **7 commits ahead of `main`**; working tree clean.
 - **Nothing is deployed. Production is 100% untouched.**
 - Verification approach already decided: **staged production cutover with the
   E2E suite as the green/red gate** (the repo has no Firebase emulator
@@ -56,33 +56,14 @@ git checkout jobs-hub-roster-refactor      # all work is on this branch
 - **`ical.js`** uses `signupCount`. `print.js` unchanged (gets a roster fetched
   at call time).
 - **`scripts/migrate-job-signups.cjs`** — two-phase production data migration.
-- **E2E** — `admin-helpers.js` has the new roster helpers; **2 of 11** specs
-  migrated (`signup-flow`, `waitlist`).
+- **E2E** — `admin-helpers.js` has the new roster helpers; **all 11** Jobs Hub
+  specs migrated to the roster subcollections (2026-05-22). `crud.spec.js`
+  needed no change — it never touched the roster arrays. All 40 tests collect
+  cleanly via `npx playwright test --list`.
 
 ## ⏳ REMAINING
 
-### 1. Migrate the 9 remaining E2E specs (mechanical, zero prod risk)
-
-Specs still on the old `signups[]` model:
-`attendance`, `compliance`, `roster-visibility`, `public-board`, `edge-cases`,
-`recurring`, `notifications-gate`, `crud`, `sms` (all under `e2e/authenticated/`).
-
-The migration pattern (see the done `signup-flow.spec.js` / `waitlist.spec.js`):
-- **Seeding** — replace `db().doc('.../jobListings/{id}').update({ signups:[…] })`
-  with `seedSignup(jobDocId, { uid, name, attended?, acknowledgedWaiverAt? })`;
-  same for `waitlist` → `seedWaitlistEntry(jobDocId, { uid, name })`.
-- **Assertions** — replace `(await getJob(id)).signups` / `.waitlist` with
-  `getJobSignups(id)` / `getJobWaitlist(id)` (both return arrays).
-- Drop now-unused imports (`getJob`, `db`, `churchId`) where the swap removes them.
-- `sms.spec.js` specifically: it adds the SMS-target user via
-  `jobRef.update({ signups: arrayUnion(…) })` and removes it in cleanup —
-  swap for `seedSignup` + a `signups/{uid}` doc delete.
-
-All four helpers are exported from `e2e/admin-helpers.js`:
-`seedSignup`, `seedWaitlistEntry`, `getJobSignups`, `getJobWaitlist`.
-`createJob` already seeds `signupCount:0`/`waitlistCount:0` (no arrays).
-
-### 2. Staged production cutover (CHECKPOINT WITH THE USER FIRST)
+### 1. Staged production cutover (CHECKPOINT WITH THE USER FIRST)
 
 1. Merge `jobs-hub-roster-refactor` → `main`.
 2. `./node_modules/.bin/firebase deploy --only functions,firestore:rules,firestore:indexes`

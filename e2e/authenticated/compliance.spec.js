@@ -1,6 +1,6 @@
 // @ts-check
 import { test, expect } from '../firebase-fixtures.js';
-import { purgeE2EArtifacts, createJob, getJob, createAccessPerson, createAccessRecord, uids, daysFromNowStr, e2eTitle } from '../admin-helpers.js';
+import { purgeE2EArtifacts, createJob, getJobSignups, createAccessPerson, createAccessRecord, uids, daysFromNowStr, e2eTitle } from '../admin-helpers.js';
 
 // §5 of docs/TEST-JOBS-HUB-2026-05-07.md — Compliance + waiver gates.
 // Verifies the three signup gates in JobsPage.handleSignUp:
@@ -39,8 +39,7 @@ test.describe('§5 Compliance + waiver gates', () => {
     await expect(memberAPage.locator('text=People Access record')).toBeVisible({ timeout: 10_000 });
 
     // Verify Firestore: no signup recorded
-    const final = await getJob(job.docId);
-    expect(final.signups).toHaveLength(0);
+    expect(await getJobSignups(job.docId)).toHaveLength(0);
   });
 
   test('Blocks signup when linked accessPeople has no valid Background Check', async ({ memberAPage }) => {
@@ -60,8 +59,7 @@ test.describe('§5 Compliance + waiver gates', () => {
     await memberAPage.getByRole('dialog').getByRole('button', { name: /^sign up$/i }).click();
 
     await expect(memberAPage.locator('text=valid Background Check')).toBeVisible({ timeout: 10_000 });
-    const final = await getJob(job.docId);
-    expect(final.signups).toHaveLength(0);
+    expect(await getJobSignups(job.docId)).toHaveLength(0);
   });
 
   test('Blocks signup when Background Check record is expired', async ({ memberAPage }) => {
@@ -81,8 +79,7 @@ test.describe('§5 Compliance + waiver gates', () => {
     await memberAPage.getByRole('dialog').getByRole('button', { name: /^sign up$/i }).click();
 
     await expect(memberAPage.locator('text=valid Background Check')).toBeVisible({ timeout: 10_000 });
-    const final = await getJob(job.docId);
-    expect(final.signups).toHaveLength(0);
+    expect(await getJobSignups(job.docId)).toHaveLength(0);
   });
 
   test('Declining the waiver does not sign up', async ({ memberAPage }) => {
@@ -106,8 +103,7 @@ test.describe('§5 Compliance + waiver gates', () => {
 
     // Give the page a moment in case it tries to fire signUpForJob anyway
     await memberAPage.waitForTimeout(1500);
-    const final = await getJob(job.docId);
-    expect(final.signups).toHaveLength(0);
+    expect(await getJobSignups(job.docId)).toHaveLength(0);
   });
 
   test('Accepting waiver with valid Background Check signs up + captures acknowledgedWaiverAt', async ({ memberAPage }) => {
@@ -128,9 +124,9 @@ test.describe('§5 Compliance + waiver gates', () => {
     memberAPage.once('dialog', dialog => dialog.accept().catch(() => {}));
     await memberAPage.getByRole('dialog').getByRole('button', { name: /^sign up$/i }).click();
 
-    await expect.poll(async () => (await getJob(job.docId)).signups.length, { timeout: 15_000 }).toBe(1);
-    const final = await getJob(job.docId);
-    expect(final.signups[0].uid).toBe(u.memberA);
-    expect(final.signups[0].acknowledgedWaiverAt).toBeTruthy();
+    await expect.poll(async () => (await getJobSignups(job.docId)).length, { timeout: 15_000 }).toBe(1);
+    const final = await getJobSignups(job.docId);
+    expect(final[0].uid).toBe(u.memberA);
+    expect(final[0].acknowledgedWaiverAt).toBeTruthy();
   });
 });

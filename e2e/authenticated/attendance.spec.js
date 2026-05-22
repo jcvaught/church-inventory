@@ -1,11 +1,12 @@
 // @ts-check
 import { test, expect } from '../firebase-fixtures.js';
-import { purgeE2EArtifacts, createJob, getJob, uids, daysFromNowStr, e2eTitle, db, churchId } from '../admin-helpers.js';
+import { purgeE2EArtifacts, createJob, getJobSignups, seedSignup, uids, daysFromNowStr, e2eTitle } from '../admin-helpers.js';
 
 // §6 of docs/TEST-JOBS-HUB-2026-05-07.md — Attendance + Reports.
 // The Attendance toggle is admin-only and only renders on past-dated jobs.
-// Writes through updateJobSignupAttendance (transactional length-preserving
-// signups update — see firestore.rules:165 admin attendance branch).
+// Writes go through the jobSetAttendance Cloud Function (audit H1/H2), which
+// updates the member's signups/{uid} subcollection doc server-side. Roster is
+// seeded via seedSignup() and asserted via getJobSignups().
 
 test.describe('§6 Attendance + Reports', () => {
   test.afterEach(async () => { await purgeE2EArtifacts(); });
@@ -36,14 +37,8 @@ test.describe('§6 Attendance + Reports', () => {
       createdBy: u.admin, createdByName: 'E2E Admin',
     });
     // Pre-populate signups
-    const now = new Date().toISOString();
-    await db().doc(`churches/${churchId()}/jobListings/${job.docId}`).update({
-      signups: [
-        { uid: u.memberA, name: 'Member A Test', signedUpAt: now },
-        { uid: u.memberB, name: 'E2E Member B', signedUpAt: now },
-      ],
-      updatedAt: now,
-    });
+    await seedSignup(job.docId, { uid: u.memberA, name: 'Member A Test' });
+    await seedSignup(job.docId, { uid: u.memberB, name: 'E2E Member B' });
 
     await navigateToJob(page, uniqueTitle);
 
@@ -54,19 +49,19 @@ test.describe('§6 Attendance + Reports', () => {
     await modal.getByRole('button', { name: /mark as attended/i }).first().click();
 
     await expect.poll(async () => {
-      const j = await getJob(job.docId);
-      return j.signups.find(s => s.uid === u.memberA)?.attended;
+      const signups = await getJobSignups(job.docId);
+      return signups.find(s => s.uid === u.memberA)?.attended;
     }, { timeout: 15_000 }).toBe(true);
 
     // Member B should still be untouched
-    let j = await getJob(job.docId);
-    expect(j.signups.find(s => s.uid === u.memberB)?.attended).toBeUndefined();
+    let signups = await getJobSignups(job.docId);
+    expect(signups.find(s => s.uid === u.memberB)?.attended).toBeUndefined();
 
     // Click Undo on Member A
     await modal.getByRole('button', { name: /mark as no-show/i }).first().click();
     await expect.poll(async () => {
-      const fresh = await getJob(job.docId);
-      return fresh.signups.find(s => s.uid === u.memberA)?.attended;
+      const fresh = await getJobSignups(job.docId);
+      return fresh.find(s => s.uid === u.memberA)?.attended;
     }, { timeout: 15_000 }).toBe(false);
   });
 
@@ -85,18 +80,9 @@ test.describe('§6 Attendance + Reports', () => {
       spotsTotal: 2, pay: 15, status: 'completed',
       createdBy: u.admin, createdByName: 'E2E Admin',
     });
-    const now = new Date().toISOString();
-    await db().doc(`churches/${churchId()}/jobListings/${j1.docId}`).update({
-      signups: [
-        { uid: u.memberA, name: 'Member A Test', signedUpAt: now, attended: true },
-        { uid: u.memberB, name: 'E2E Member B', signedUpAt: now, attended: false },
-      ],
-    });
-    await db().doc(`churches/${churchId()}/jobListings/${j2.docId}`).update({
-      signups: [
-        { uid: u.memberA, name: 'Member A Test', signedUpAt: now, attended: true },
-      ],
-    });
+    await seedSignup(j1.docId, { uid: u.memberA, name: 'Member A Test', attended: true });
+    await seedSignup(j1.docId, { uid: u.memberB, name: 'E2E Member B', attended: false });
+    await seedSignup(j2.docId, { uid: u.memberA, name: 'Member A Test', attended: true });
 
     // Navigate to Reports tab
     await page.goto('/');

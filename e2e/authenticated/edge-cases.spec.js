@@ -1,6 +1,6 @@
 // @ts-check
 import { test, expect } from '../firebase-fixtures.js';
-import { purgeE2EArtifacts, createJob, getJob, setNotifications, uids, daysFromNowStr, e2eTitle, db, churchId } from '../admin-helpers.js';
+import { purgeE2EArtifacts, createJob, getJob, seedSignup, setNotifications, uids, daysFromNowStr, e2eTitle, db, churchId } from '../admin-helpers.js';
 
 // §11 of docs/TEST-JOBS-HUB-2026-05-07.md — Bonus / edge cases.
 // Selected the highest-value sub-tests from the manual plan and skipped
@@ -69,11 +69,7 @@ test.describe('§11 Edge cases', () => {
       spotsTotal: 2,
       createdBy: u.admin, createdByName: 'E2E Admin',
     });
-    const now = new Date().toISOString();
-    await db().doc(`churches/${churchId()}/jobListings/${job.docId}`).update({
-      signups: [{ uid: u.memberA, name: 'Member A Test', signedUpAt: now }],
-      updatedAt: now,
-    });
+    await seedSignup(job.docId, { uid: u.memberA, name: 'Member A Test' });
 
     // Admin opens job → Delete → confirm. F-fix-3 fires the cancellation-emails
     // CF before delete; sendJobCancelledEmails stamps cancellationEmailSentAt
@@ -100,11 +96,7 @@ test.describe('§11 Edge cases', () => {
       spotsTotal: 2,
       createdBy: u.admin, createdByName: 'E2E Admin',
     });
-    const now = new Date().toISOString();
-    await db().doc(`churches/${churchId()}/jobListings/${job.docId}`).update({
-      signups: [{ uid: u.memberA, name: 'Member A Test', signedUpAt: now }],
-      updatedAt: now,
-    });
+    await seedSignup(job.docId, { uid: u.memberA, name: 'Member A Test' });
 
     // Member A: open job → Request Swap
     await memberAPage.goto('/');
