@@ -499,6 +499,9 @@ function getTwilioClient() {
   return twilioClient(sid, token);
 }
 const TWILIO_FROM = process.env.TWILIO_FROM_NUMBER || '';
+// A2P 10DLC: outbound SMS must route through the registered Messaging Service
+// (MGb4f2156d…, campaign CYO5934 VERIFIED 2026-05-22) — not the bare from-number.
+const TWILIO_MSID = process.env.TWILIO_MESSAGING_SERVICE_SID || '';
 
 // F-24 from the 2026-05-12 overnight audit: moved sender from the Gmail-as-
 // sender pattern (churchopshub@gmail.com, which Gmail's DMARC p=reject blocks
@@ -1445,8 +1448,11 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
 
   // SMS reminders — sent to opted-in users alongside email (independent channel)
   const tw = getTwilioClient();
-  if (tw && TWILIO_FROM) {
+  if (tw && (TWILIO_MSID || TWILIO_FROM)) {
     const smsTasks = [];
+    // A2P 10DLC: send via the registered Messaging Service when configured
+    // (campaign-compliant); fall back to the bare from-number only if unset.
+    const sender = TWILIO_MSID ? { messagingServiceSid: TWILIO_MSID } : { from: TWILIO_FROM };
     for (const userSnap of userSnaps) {
       if (!userSnap.exists) continue;
       const user = userSnap.data();
@@ -1460,7 +1466,7 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
         ? `ChurchOpsHub: Reminder - you're signed up for "${jobs[0].title}" today${jobs[0].scheduledTime ? ' at ' + formatTimeForDisplay(jobs[0].scheduledTime) : ''}${jobs[0].location ? ' @ ' + jobs[0].location : ''}. Reply STOP to opt out.`
         : `ChurchOpsHub: Reminder - you have ${jobs.length} jobs today:\n${jobLines}\n\nReply STOP to opt out.`;
       smsTasks.push(
-        tw.messages.create({ to: user.phone, from: TWILIO_FROM, body })
+        tw.messages.create({ to: user.phone, ...sender, body })
           .catch(err => { console.error('sendJobReminders: SMS failed', { uid: userSnap.id, err: err?.message }); Sentry.captureException(err); })
       );
     }
@@ -1944,13 +1950,12 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
 // ── twilioInbound ─────────────────────────────────────────────────────────
 // Twilio inbound SMS webhook. Syncs users.smsRemindersEnabled when users reply
 // STOP / START keywords so our UI matches the carrier-level opt-out state.
-// Also returns TwiML for HELP / INFO since +1 571-540-7100 is a bare
-// account-level number not attached to either Messaging Service — so
-// Messaging Service Advanced Opt-Out keywords don't fire for it. Privacy §6
-// and Terms §7 commit to a HELP response; without this branch a HELP reply
-// silent-drops, which is a TCPA/A2P compliance gap. Post-A2P-approval, when
-// the number moves into the campaign's Messaging Service, this branch
-// becomes a redundant fallback (Advanced Opt-Out fires first).
+// Also returns TwiML for HELP / INFO as a fallback. As of 2026-05-22 the
+// sending number +1 571-540-7100 is in the campaign's Messaging Service
+// (MGb4f2156d…, campaign CYO5934 VERIFIED) and outbound routes through it, so
+// Twilio's campaign-level keyword handling fires first; this branch stays as
+// a harmless backstop so a HELP reply is never silent-dropped (Privacy §6 /
+// Terms §7 commit to a HELP response).
 exports.twilioInbound = onRequest({ cors: false }, async (req, res) => {
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   if (!authToken || !twilioClient) {

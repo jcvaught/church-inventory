@@ -4,6 +4,19 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-22 — SMS outbound switched to the A2P Messaging Service
+
+The A2P 10DLC campaign `CYO5934` (on Messaging Service `MGb4f2156d4ab3104ee564f15cb701d81d`) is **VERIFIED** — brand approved, sending number `+15715407100` attached to the service, `errors: []`. With the campaign live, an audit of the Jobs Hub texting path found the one remaining gap: `sendJobReminders` still sent outbound SMS via the bare `from` number (`messages.create({ from: TWILIO_FROM, … })`), which is not the A2P-compliant route — A2P traffic must go through the registered Messaging Service or it risks carrier filtering / error 30034.
+
+Fix:
+- Added `TWILIO_MESSAGING_SERVICE_SID=MGb4f2156d4ab3104ee564f15cb701d81d` to `functions/.env`.
+- New module constant `TWILIO_MSID`; `sendJobReminders` now builds a `sender` of `{ messagingServiceSid }` when `TWILIO_MSID` is set, falling back to `{ from: TWILIO_FROM }` only if unset. The send guard widened to `tw && (TWILIO_MSID || TWILIO_FROM)`.
+- Refreshed the stale `twilioInbound` header comment (the number is no longer "not attached to a Messaging Service" — it is, and outbound routes through it; the HELP/INFO branch stays as a harmless backstop).
+
+`node -c` clean. Deployed `functions:sendJobReminders` to `church-inventory-9615c` (scheduled function — no `allUsers` invoker concern). The rest of the texting path was audited and confirmed sound: opt-in UI gated on email verification with E.164 normalization, consent stored as `users/{uid}.phone` + `smsRemindersEnabled`, the cron's per-user consent/active/hub-access guards, and `twilioInbound`'s STOP/START/HELP handling (probed live — reachable, IAM intact, signature validation working). **Next: a live end-to-end SMS delivery test.**
+
+---
+
 ## 2026-05-21 — Supplies Hub: location filter + alphabetical sort
 
 User feedback (Haleigh Watson) for the Supplies side: sort alphabetically and filter by location. `SuppliesPage.jsx` search card now has a location `<select>` (All locations + church locations from settings) and a sort `<select>` (Default / Name A–Z / Name Z–A). Both persist to `localStorage` (`sup_locationFilter`, `sup_sortBy`), mirroring the Items page filter-persistence pattern. Filter applied in the `filtered` `useMemo`; sort runs in-place on the filtered array via `localeCompare`.
