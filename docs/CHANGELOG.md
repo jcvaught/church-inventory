@@ -4,6 +4,48 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-22 — Jobs Hub audit verification (Part 2) — UAT automation, 11 more tests
+
+Most of `JOBS-HUB-AUDIT-VERIFICATION-PLAN.md` Part 2 turned out to be
+automatable; pulled them off the human-checklist into Playwright.
+
+**`e2e/authenticated/uat-ui.spec.js` (8 new tests)** —
+- M13 — job detail formats `scheduledTime: '14:30'` as `2:30 PM`.
+- M13 — Schedule status badge carries `title="Open — accepting signups"` and
+  `aria-label="Status: Open — accepting signups"`.
+- M10 — Post Job modal shows the public-PII warning text.
+- M10 — `Share Board` click fires `window.confirm` with the multi-line
+  public-warning text; dismissing it does NOT copy.
+- L9 — Waiver Modal: `Agree & Sign Up` is disabled until "I have read and
+  agree" is checked; Cancel = no signup.
+- M8 — `B.textLight` resolves to `rgb(107, 114, 128)` (`#6B7280`) — WCAG AA.
+- L8 — Recurring 🔁 chip exposes `aria-label="Recurring series"`.
+- L9 — Owner Email tab (gated to `jcvaught@gmail.com` / `jvaught@fxcc.org`)
+  loads the suppressions panel for the Member A fixture.
+
+**`e2e/authenticated/uat-sms.spec.js` (3 new tests, gated `E2E_RUN_UAT_SMS=1`)** —
+Signs Twilio webhook calls with `TWILIO_AUTH_TOKEN` from `functions/.env`
+(HMAC-SHA1(URL + sorted-key concat), base64) and POSTs to the live
+`twilioInbound` Cloud Function. Each test seeds + cleans up a synthetic
+user doc in the unallocated `+1 555 555 01xx` NANP test range.
+- M6 — STOP on a phone with prior consent flips `smsRemindersEnabled` to
+  false.
+- M6 — START on the same phone re-opts back to true.
+- M6 — **critical safety**: START on a phone with NO `smsConsentAt` does
+  NOT enable reminders and does NOT backfill consent (the
+  recycled/family-shared-number protection).
+
+`e2e/sms-helpers.js` (new) parses `functions/.env` for the auth token and
+implements the Twilio signing algorithm + a thin `fetch` wrapper.
+
+**Result:** standard suite **56 passed / 4 skipped / 0 failed** (~2.2 min).
+UAT SMS gated run **3 passed** (~11s). Audit verification effectively closed
+beyond the items that intrinsically need a real device or a wait for a
+scheduled CF run (L7 PWA install, L8 actual screen-reader speech, M12 / L1 /
+L3 next-run log spot-checks, eyeballs-on aesthetic judgment).
+
+---
+
 ## 2026-05-22 — Jobs Hub audit verification (Part 1) — 8 E2E tests added
 
 Closed the test-coverage gap on the 19 audit fixes shipped earlier today. Plan:

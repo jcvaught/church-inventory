@@ -3,14 +3,37 @@
 _Created 2026-05-22. Follow-up to the audit-backlog remediation — see
 `docs/CHANGELOG.md` (2026-05-22) and `docs/JOBS-HUB-AUDIT-2026-05-22.md`._
 
-## ✅ STATUS — Part 1 DONE (2026-05-22). Part 2 still PENDING (manual UAT).
+## ✅ STATUS — Part 1 DONE + Part 2 mostly AUTOMATED (2026-05-22).
 
-Part 1 was executed in a single pass on 2026-05-22 — T1–T8 added in two new
-specs (`e2e/authenticated/audit-rules.spec.js`, `e2e/authenticated/audit-ui.spec.js`)
-backed by a new Node client-SDK harness (`e2e/client-helpers.js`). Full suite
-runs **48 passed / 1 skipped / 0 failed** (~2.4 min). T9 was deferred as
-optional. See `docs/CHANGELOG.md` (2026-05-22 verification entry). Part 2
-below remains a manual checklist for the user to run on real devices.
+**Part 1 (E2E):** T1–T8 added in two specs (`audit-rules.spec.js`, `audit-ui.spec.js`)
+backed by `client-helpers.js`. T9 deferred as optional.
+
+**Part 2 (UAT):** Roughly 70% automated on a second pass:
+- `e2e/authenticated/uat-ui.spec.js` (8 active tests) — M13 time format,
+  M13 status-badge tooltip, M10 PII warning text, M10 Share Board confirm
+  dialog, L9 waiver-Modal checkbox-gates-Agree, M8 textLight contrast
+  computed style, L8 recurring-chip aria-label, L9 owner Email tab Load.
+- `e2e/authenticated/uat-sms.spec.js` (3 tests, gated `E2E_RUN_UAT_SMS=1`)
+  — signed-webhook simulation against live `twilioInbound`: STOP, START
+  (re-opt-in), and the **critical M6 recycled-phone safety test** (START
+  on a number with no `smsConsentAt` must NOT enable reminders). Verified
+  green 2026-05-22.
+
+Full standard suite: **56 passed / 4 skipped / 0 failed** (~2.2 min).
+UAT SMS gated run: **3 passed / 0 failed** (~11s).
+
+**Genuinely still manual** (requires a real device or a wait for a scheduled
+run):
+- L7 PWA icon — install on an actual Android phone, look at the icon.
+- L8 actual VoiceOver/TalkBack speech (we assert the aria attribute; we
+  can't assert how a screen reader pronounces it).
+- M12 / L1 / L3 — Cloud Function next-run log spot-checks (Mon 8am Central
+  for tasks; daily 2am Central for `closePastJobs`).
+- Aesthetic / "looks readable" / "easy to tap on a phone" judgments — the
+  computed style is asserted; the human feel is not.
+
+See `docs/CHANGELOG.md` (2026-05-22 verification entry + UAT automation
+entry).
 
 ## Why this exists
 
