@@ -15,19 +15,22 @@ import { db, churchId, uids } from '../admin-helpers.js';
 //   4. Assert delivery (status sent/delivered/queued) or surface the specific
 //      Twilio error code so future regressions don't slip past silently.
 //
-// Today this catches the A2P 10DLC pending-registration state (error 30034)
-// and the STOP-list state (error 21610) explicitly. After A2P approval +
-// MessagingService migration, the assertion flips to expecting status='sent'.
+// A2P 10DLC campaign CYO5934 is VERIFIED (2026-05-22) and sendJobReminders
+// sends via the registered Messaging Service, so the test expects a delivered
+// status. error_code is still surfaced loudly so a future regression (carrier
+// filtering, STOP-list 21610, etc.) fails informatively.
+//
+// SMS test user: e2e-member-b@churchopshub.com carries phone +1 412-266-5015
+// + smsRemindersEnabled (set 2026-05-22) — it is the default target below.
 //
 // Run with:
 //   E2E_RUN_SMS=1 \
-//   E2E_SMS_TARGET_EMAIL=jvaught@fxcc.org \
 //   E2E_SMS_JOB_NUMBER=JOB-001 \
 //   E2E_MEMBER_B_EMAIL=e2e-member-b@churchopshub.com \
 //   npm run test:e2e -- sms
 
 const SMS_ENABLED = process.env.E2E_RUN_SMS === '1';
-const TARGET_EMAIL = process.env.E2E_SMS_TARGET_EMAIL || 'jvaught@fxcc.org';
+const TARGET_EMAIL = process.env.E2E_SMS_TARGET_EMAIL || 'e2e-member-b@churchopshub.com';
 const TARGET_JOB_NUMBER = process.env.E2E_SMS_JOB_NUMBER || 'JOB-001';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
