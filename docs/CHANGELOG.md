@@ -4,6 +4,55 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-22 — Jobs Hub audit verification (Part 1) — 8 E2E tests added
+
+Closed the test-coverage gap on the 19 audit fixes shipped earlier today. Plan:
+`docs/JOBS-HUB-AUDIT-VERIFICATION-PLAN.md` Part 1 (Part 2 is a separate manual
+UAT checklist for the user on real devices). All 8 added tests passed first
+run; suite is **48 passed / 1 skipped / 0 failed (~2.4 min)**.
+
+**New harness — `e2e/client-helpers.js`.** A Node-side Firebase **client** SDK
+(named app `e2e-client`), separate from the Admin SDK in `admin-helpers.js`.
+Firestore rules are enforced for the client SDK regardless of whether it runs
+in a browser or Node, so the rule-rejection tests are pure Node — no
+Playwright browser, no app-side hook. Provides `signInAsClient(role)` /
+`signOutClient()`, the client `db`, the firestore primitives the specs use,
+`callGetPublicJobs(churchId)`, and `expectRejected(promise)`.
+
+**`e2e/authenticated/audit-rules.spec.js` (new) — T1–T4.**
+- T1 (M7) — admin updating `jobAnnouncements.createdBy`/`createdByName` is
+  rejected with `permission-denied`; control body-only edit succeeds.
+- T2 (L6) — unauthenticated `publicRequests.create` rejected for an
+  extra/disallowed key, `itemDescription > 2000` chars, or missing `name`;
+  control (10-key valid submission) succeeds and is admin-deleted in
+  `afterAll` (not covered by `purgeE2EArtifacts`).
+- T3 (L4) — member-A creating a `jobSwapRequests` doc with a spoofed name,
+  `note > 1000` chars, or an extra key is rejected.
+- T4 (M10) — `getPublicJobs` truncates `description` to 280 + `…` (length
+  ≤ 281) and `location` to 160 + `…` (length ≤ 161).
+
+**`e2e/authenticated/audit-ui.spec.js` (new) — T5–T8.**
+- T5 (M13) — a job card with `requiredAccessTypes: ['background_check']`
+  shows the `Background Check required` badge.
+- T6 (M13) — the Schedule row's status badge reads `Open` (capitalized) —
+  guards `JobStatusBadge` reuse in `DesktopScheduleRow`.
+- T7 (M9) — opening a recurring job's detail modal shows a `Danger zone`
+  label with the `Delete`, `Delete This + Future`, `Delete Series` buttons
+  grouped separately from `Edit`.
+- T8 (L9) — the Post Job modal's `Recurring series 🔁` section previews the
+  count (`This will create N jobs.`) **and** real dates (a month
+  abbreviation is present in the preview text).
+
+**Lint:** 0 errors, 45 warnings (the documented exhaustive-deps baseline).
+
+**Followup — not in this commit:** Part 2 manual UAT (M8 contrast, M9 touch
+targets on phone, M13 clarity walk-through, L7 PWA icon, L8 screen-reader
+labels, L9 waiver Modal, M10 PII warnings, **M6 SMS STOP/START** incl. the
+never-opted-in case, M2 dedup, the M12/L1/L3 background-job log spot-checks).
+Handed back to the user to tick off on real devices.
+
+---
+
 ## 2026-05-22 — Jobs Hub audit backlog cleared (10 Medium + 9 Low + decision D1)
 
 With the audit's High tier already shipped, this pass closed the remaining

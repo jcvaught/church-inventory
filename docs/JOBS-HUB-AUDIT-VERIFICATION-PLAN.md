@@ -3,6 +3,15 @@
 _Created 2026-05-22. Follow-up to the audit-backlog remediation — see
 `docs/CHANGELOG.md` (2026-05-22) and `docs/JOBS-HUB-AUDIT-2026-05-22.md`._
 
+## ✅ STATUS — Part 1 DONE (2026-05-22). Part 2 still PENDING (manual UAT).
+
+Part 1 was executed in a single pass on 2026-05-22 — T1–T8 added in two new
+specs (`e2e/authenticated/audit-rules.spec.js`, `e2e/authenticated/audit-ui.spec.js`)
+backed by a new Node client-SDK harness (`e2e/client-helpers.js`). Full suite
+runs **48 passed / 1 skipped / 0 failed** (~2.4 min). T9 was deferred as
+optional. See `docs/CHANGELOG.md` (2026-05-22 verification entry). Part 2
+below remains a manual checklist for the user to run on real devices.
+
 ## Why this exists
 
 The 10 Medium + 9 Low audit backlog shipped and the existing E2E suite stayed
