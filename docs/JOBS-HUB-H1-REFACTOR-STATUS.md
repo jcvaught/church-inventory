@@ -61,22 +61,37 @@ git checkout jobs-hub-roster-refactor      # all work is on this branch
   needed no change — it never touched the roster arrays. All 40 tests collect
   cleanly via `npx playwright test --list`.
 
-## ⏳ REMAINING
+## ✅ CUTOVER COMPLETE — 2026-05-22
 
-### 1. Staged production cutover (CHECKPOINT WITH THE USER FIRST)
+The staged production cutover ran end-to-end; the E2E suite went green.
 
-1. Merge `jobs-hub-roster-refactor` → `main`.
-2. `./node_modules/.bin/firebase deploy --only functions,firestore:rules,firestore:indexes`
-   (verify `firebase use` is `church-inventory-9615c` first).
-3. **Migration phase 1** — `node scripts/migrate-job-signups.cjs` (backfill;
-   purely additive, leaves the legacy arrays in place).
-4. Frontend auto-deploys via Vercel on the push to `main`.
-5. Run the E2E suite: `E2E_MEMBER_B_EMAIL=e2e-member-b@churchopshub.com npm run test:e2e`.
-6. **Green** → **migration phase 2** — `node scripts/migrate-job-signups.cjs --finalize`
-   (drops the legacy arrays) → verified ready.
-   **Red** → roll back (redeploy prior functions/rules + revert frontend; the
-   legacy arrays are still present so the old code works).
-7. Curl-probe `twilioInbound` + any webhook for the `allUsers` invoker (the
-   documented Gen-2 IAM-strip gotcha).
+1. ✅ Merged `jobs-hub-roster-refactor` → `main` (8 commits).
+2. ✅ Deployed functions / rules / indexes to `church-inventory-9615c`.
+   New callables `jobSignUp` / `jobWithdraw` / `jobSetAttendance` created
+   with `allUsers` invoker intact; webhooks probed (all healthy).
+3. ✅ Migration phase 1 — no-op: **0 `jobListings` docs exist** across all
+   3 churches (Jobs Hub is pre-launch with nothing posted).
+4. ✅ Frontend deployed via Vercel.
+5. ✅ E2E suite **GREEN — 40 passed, 0 failed, 1 skipped** (SMS gated).
+6. ✅ Migration phase 2 (`--finalize`) — no-op (0 docs).
+7. ✅ `twilioInbound` probed — `roles/run.invoker → allUsers` intact.
 
-Then it's launch-ready. The launch stays gated on a green E2E run.
+### Issues found by the cutover gate and fixed
+
+- **CG indexes silently skipped.** `firebase deploy --only
+  firestore:indexes` no-ops the `signups.uid` / `waitlist.uid`
+  collection-group field-override indexes (documented CLI gotcha).
+  Created directly via the Firestore Admin REST API
+  (`PATCH …/collectionGroups/{cg}/fields/uid`).
+- **`jobsRosterVisibility` broke for members.** The new subcollection
+  rules were admin/manager-only, silently disabling the 'signups'/'all'
+  member-visible modes the frontend still offered. Fixed: `firestore.rules`
+  `canSeeJobRoster()` enforces the setting per-member (rule-enforced now,
+  where the old gate was UI-only).
+- **Roster-fetch effect missed a dep**, then a **null-deref crash.** The
+  detail-roster effect gated on `canSeeRoster()` without it in deps;
+  adding `rosterAllowed` exposed that `canSeeRoster(null)` (no modal open)
+  throws. Both fixed in `JobsPage.jsx`.
+- **Compliance E2E text** updated for the unified server-side error.
+
+The launch stays gated on a green E2E run — which it now has.

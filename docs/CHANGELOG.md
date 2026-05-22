@@ -4,6 +4,20 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-22 — Jobs Hub roster refactor: production cutover (audit H1/H2/H3/H4/M1)
+
+Shipped the `jobs-hub-roster-refactor` branch to production. The Jobs Hub roster (signups/waitlist) moved off the member-readable parent-doc arrays into protected per-uid subcollections (`jobListings/{id}/signups/{uid}`, `…/waitlist/{uid}`), with server-maintained `signupCount` / `waitlistCount` integers on the parent. All roster writes now route through compliance-enforcing Cloud Functions — new callables `jobSignUp` / `jobWithdraw` / `jobSetAttendance` (Admin SDK; enforce compliance + waiver + capacity server-side, promote the waitlist inline). Closes audit findings H1 (roster readable by any member via raw SDK), H2 (UI-only compliance), H3/M1 (hub-access gating in rules), H4 (`getPublicJobs` hardening).
+
+Cutover ran the documented staged plan: merge → deploy functions/rules/indexes → migration phase 1 → frontend deploy → E2E gate → migration phase 2. Migration was a no-op both phases — **0 `jobListings` docs exist** (Jobs Hub is pre-launch). Final E2E: **40 passed, 1 skipped, 0 failed.**
+
+Four issues the E2E cutover gate caught and fixed:
+- **Collection-group indexes silently skipped.** `firebase deploy --only firestore:indexes` no-ops the `signups.uid` / `waitlist.uid` field-override CG indexes (known CLI gotcha — see `feedback_firebase_collection_index`). The frontend's "am I signed up" `collectionGroup` subscription failed without them. Created directly via the Firestore Admin REST API: `PATCH https://firestore.googleapis.com/v1/projects/church-inventory-9615c/databases/(default)/collectionGroups/{signups|waitlist}/fields/uid?updateMask=indexConfig` with a `COLLECTION_GROUP` index in the body. `gcloud firestore indexes fields update` cannot do this — its `--index` flag has no query-scope key.
+- **`jobsRosterVisibility` broke for regular members.** The new subcollection rules were admin/manager-only, silently disabling the `'signups'`/`'all'` member-visible modes the frontend still offered. Fixed in `firestore.rules`: new `canSeeJobRoster(churchId, jobId)` helper enforces the setting per-member — a member reads a job's roster when visibility is `'all'`, or `'signups'` and they have their own `signups/{uid}` doc. The setting is now a real rule-enforced boundary (the old gate was UI-only — that was H1 itself).
+- **Roster-fetch effect dependency + crash.** `JobsPage` detail-roster `useEffect` gated on `canSeeRoster()` without it in deps (a late `mySignups` subscription never re-triggered the fetch in `'signups'` mode). Adding `rosterAllowed` to deps exposed that `canSeeRoster(liveDetail)` runs every render and `canSeeRoster(null)` → `isSignedUp(null)` → `null._docId` threw, crashing the whole hub into `ChunkErrorBoundary`. Both fixed: `rosterAllowed` guards on `liveDetail`; `isSignedUp`/`isOnWaitlist` hardened against a null job.
+- **Compliance E2E assertions** updated — compliance is now enforced server-side in `jobSignUp` with one unified error (*"This job requires a valid `<type>` on file. Ask an admin to add yours under People Access."*); the 3 block-tests asserted stale client-side wording.
+
+All 11 Jobs Hub E2E specs migrated to roster-subcollection seeding/assertion helpers (`seedSignup` / `seedWaitlistEntry` / `getJobSignups` / `getJobWaitlist` in `admin-helpers.js`).
+
 ## 2026-05-22 — SMS outbound switched to the A2P Messaging Service
 
 The A2P 10DLC campaign `CYO5934` (on Messaging Service `MGb4f2156d4ab3104ee564f15cb701d81d`) is **VERIFIED** — brand approved, sending number `+15715407100` attached to the service, `errors: []`. With the campaign live, an audit of the Jobs Hub texting path found the one remaining gap: `sendJobReminders` still sent outbound SMS via the bare `from` number (`messages.create({ from: TWILIO_FROM, … })`), which is not the A2P-compliant route — A2P traffic must go through the registered Messaging Service or it risks carrier filtering / error 30034.
