@@ -898,8 +898,9 @@ export function useFirestore(churchId) {
             recurrenceGroupId: seriesGroupId,
             recurrenceFreq,
             seriesEndDate,
-            signups: [],
-            waitlist: [],
+            // Roster lives in subcollections (audit H1); parent holds counters.
+            signupCount: 0,
+            waitlistCount: 0,
             createdBy: userId,
             createdByName: userName,
             createdAt: new Date().toISOString(),
@@ -924,8 +925,9 @@ export function useFirestore(churchId) {
         t.set(newDocRef, {
           ...job,
           jobNumber,
-          signups: [],
-          waitlist: [],
+          // Roster lives in subcollections (audit H1); parent holds counters.
+          signupCount: 0,
+          waitlistCount: 0,
           createdBy: userId,
           createdByName: userName,
           createdAt: new Date().toISOString(),
