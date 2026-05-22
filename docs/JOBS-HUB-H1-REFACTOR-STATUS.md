@@ -1,13 +1,29 @@
-# Jobs Hub roster refactor — status & handoff (2026-05-22)
+# Jobs Hub roster refactor — status & pickup guide
 
-Companion to `docs/JOBS-HUB-AUDIT-2026-05-22.md`. Tracks the H1/H2/H3/M1
-remediation: moving the signups/waitlist roster off the `jobListings` parent
-doc (raw-SDK-readable by any church member — the audit's headline finding)
-into protected per-uid subcollections, with all roster writes routed through
-compliance-enforcing Cloud Functions.
+_Last updated 2026-05-22. Companion to `docs/JOBS-HUB-AUDIT-2026-05-22.md`._
 
-Branch: **`jobs-hub-roster-refactor`** (commit `5feea68`). **Nothing is
-deployed — production is untouched.**
+Remediation of the pre-launch audit's headline findings: the Jobs Hub roster
+(signups/waitlist) was readable by any church member via raw SDK queries and
+compliance was UI-only. This refactor moves the roster into protected per-uid
+subcollections and routes all roster writes through compliance-enforcing Cloud
+Functions.
+
+## ▶ HOW TO RESUME
+
+```bash
+cd ~/apps/church-inventory
+git checkout jobs-hub-roster-refactor      # all work is on this branch
+```
+
+- The branch is **6 commits ahead of `main`**; working tree clean.
+- **Nothing is deployed. Production is 100% untouched.**
+- Verification approach already decided: **staged production cutover with the
+  E2E suite as the green/red gate** (the repo has no Firebase emulator
+  configured; the E2E suite runs against prod). The two-phase migration makes
+  the cutover reversible.
+- Covers audit findings **H1, H2, H3, H4, M1** (+ M3/M4 fixed along the way).
+  The 13 Medium / 9 Low findings are NOT in scope here — they're the triage
+  backlog in the audit doc.
 
 ## New data model
 
@@ -15,96 +31,71 @@ deployed — production is untouched.**
   arrays; gains server-maintained integers `signupCount` / `waitlistCount`.
 - `jobListings/{id}/signups/{uid}` — `{ uid, name, signedUpAt, attended?, acknowledgedWaiverAt? }`
 - `jobListings/{id}/waitlist/{uid}` — `{ uid, name, addedAt, acknowledgedWaiverAt? }`
-- All roster writes go through Cloud Functions (Admin SDK). Members read only
-  their own signup/waitlist doc; admin/manager read the full roster.
+- All roster writes go through Cloud Functions (Admin SDK). A member reads only
+  their own signup/waitlist doc (incl. via a collectionGroup query); admin and
+  manager read the full roster.
 
-## ✅ DONE — server side (committed, syntax-clean)
+## ✅ DONE — code-complete, committed, builds clean (0 lint errors)
 
-- **H4** — `getPublicJobs` hardened (enumeration oracle, 200-row cap, `pay` coerce).
-- **`jobSignUp` / `jobWithdraw` / `jobSetAttendance`** Cloud Functions + rewritten
-  `promoteFromWaitlist` — operate on the subcollections, maintain the counters,
+- **H4** — `getPublicJobs` hardened (enumeration oracle closed, 200-row cap, `pay` coerce).
+- **Cloud Functions** — `jobSignUp` / `jobWithdraw` / `jobSetAttendance` + rewritten
+  `promoteFromWaitlist`: operate on the subcollections, maintain the counters,
   enforce compliance + waiver + capacity server-side (H2), promote inline (M3/M4).
-- **`sendJobCancelledEmails` / `sendJobReminders` / `sendJobPosterNotification`**
-  updated to read the subcollections / `signupCount`.
+- **Email functions** — `sendJobCancelledEmails` / `sendJobReminders` /
+  `sendJobPosterNotification` read the subcollections / `signupCount`.
 - **`firestore.rules`** — subcollection rules (own-doc + admin reads, CF-only
   writes), member parent-writes removed, `canUseJobsHub` gate (H3 subscription
   enforcement + M1 `allowedHubs` enforcement).
-- **`firestore.indexes.json`** — collection-group indexes for `signups.uid` /
-  `waitlist.uid`.
-- **`useFirestore.js`** — `signUpForJob` / `withdrawFromJob` /
-  `updateJobSignupAttendance` now call the Cloud Functions; `spotsTotal`-reduction
-  checks use `signupCount`.
+- **`firestore.indexes.json`** — collection-group indexes for `signups.uid` / `waitlist.uid`.
+- **`useFirestore.js`** — signup/withdraw/attendance call the Cloud Functions;
+  `addJobListing`/`addJobListingSeries` seed `signupCount`/`waitlistCount`.
+- **`JobsPage.jsx`** — full refactor: counts from `signupCount`/`waitlistCount`;
+  the member's own status from a `collectionGroup` subscription; the detail-modal
+  roster fetched on open; the Reports leaderboard aggregates per-job signup
+  fetches; signup passes `waiverAccepted`; attendance checks `{ updated }`.
+- **`ical.js`** uses `signupCount`. `print.js` unchanged (gets a roster fetched
+  at call time).
+- **`scripts/migrate-job-signups.cjs`** — two-phase production data migration.
+- **E2E** — `admin-helpers.js` has the new roster helpers; **2 of 11** specs
+  migrated (`signup-flow`, `waitlist`).
 
-## ⏳ REMAINING — frontend + cutover
+## ⏳ REMAINING
 
-**This part needs interactive testing (dev server running) before it cuts over
-to a teen-facing launch — a subtle bug here blocks signups for real teens.**
+### 1. Migrate the 9 remaining E2E specs (mechanical, zero prod risk)
 
-1. **`src/pages/hubs/JobsPage.jsx`** (~20 sites):
-   - Spot counts (`JobChip` ~45, `JobCalendar` mobile ~144, `SpotsBar` ~219,
-     `MobileScheduleRow` ~336, `DesktopScheduleRow` ~361) → `job.signupCount || 0`.
-   - Per-card / per-row roster *names* (`JobCard` ~278-281, `MobileScheduleRow`
-     ~352, `DesktopScheduleRow` ~392) → names no longer live on the job; show
-     count only on cards/rows, move the name roster into the detail modal,
-     loaded on open via a `getDocs` on the job's `signups` subcollection
-     (admin/manager only).
-   - Waitlist count (`JobCard` ~289) → `job.waitlistCount || 0`.
-   - `isSignedUp` / `isOnWaitlist` (~527-528) → a new `collectionGroup('signups')`
-     / `collectionGroup('waitlist')` subscription `where('uid','==',userId)`,
-     producing Sets of job ids. `isFull` (~529) → `signupCount >= spotsTotal`.
-   - Signup handler (~823-854) → pass `waiverAccepted` + `jobNumber` to
-     `signUpForJob`; the waiver should be an in-app Modal (audit L9), not
-     `window.confirm`. Server now enforces compliance, so the client gate
-     becomes UX-only.
-   - Attendance handler (~916) → check the returned `{ updated }` and flash if
-     `false` (audit M4).
-   - Delete-confirm signup counts (~731, 747, 757, 776, 795) → `signupCount`.
-   - Reports leaderboard (~551) → needs every job's signups; fetch per-job
-     `signups` subcollections when the Reports tab opens and aggregate.
-2. **`src/utils/ical.js`** (~91) and **`src/utils/print.js`** (~60, 66) — the
-   roster export reads `job.signups`; pass the fetched roster in instead.
-3. **Migration script** — `scripts/migrate-job-signups.cjs` (Admin SDK,
-   `serviceAccountKey.json`). Two-phase: (a) for every `jobListings` doc, create
-   `signups/{uid}` + `waitlist/{uid}` docs from the arrays and set
-   `signupCount`/`waitlistCount`; (b) after verification, delete the legacy
-   arrays. Two-phase so the cutover can roll back.
-4. **E2E** — `e2e/admin-helpers.js` (`createJob` sets `signups:[]` — harmless,
-   but seeding signups for tests must now write subcollection docs) and the
-   specs that read/seed `signups`: `signup-flow`, `waitlist`, `attendance`,
-   `compliance`, `roster-visibility`, `public-board`, `sms`.
-5. **Verify** against the Firebase emulator (`firebase emulators:start`), then
-   the **cutover**: deploy `functions` + `firestore:rules,indexes`, run the
-   migration, deploy the frontend (Vercel), run the E2E suite as the gate.
+Specs still on the old `signups[]` model:
+`attendance`, `compliance`, `roster-visibility`, `public-board`, `edge-cases`,
+`recurring`, `notifications-gate`, `crud`, `sms` (all under `e2e/authenticated/`).
 
-## Recommendation
+The migration pattern (see the done `signup-flow.spec.js` / `waitlist.spec.js`):
+- **Seeding** — replace `db().doc('.../jobListings/{id}').update({ signups:[…] })`
+  with `seedSignup(jobDocId, { uid, name, attended?, acknowledgedWaiverAt? })`;
+  same for `waitlist` → `seedWaitlistEntry(jobDocId, { uid, name })`.
+- **Assertions** — replace `(await getJob(id)).signups` / `.waitlist` with
+  `getJobSignups(id)` / `getJobWaitlist(id)` (both return arrays).
+- Drop now-unused imports (`getJob`, `db`, `churchId`) where the swap removes them.
+- `sms.spec.js` specifically: it adds the SMS-target user via
+  `jobRef.update({ signups: arrayUnion(…) })` and removes it in cleanup —
+  swap for `seedSignup` + a `signups/{uid}` doc delete.
 
-The remaining frontend is a focused mini-project (~1–2 days with the dev server
-in the loop). It should be finished and tested deliberately — not rushed into
-launch week untested. If the launch date is tight, the safest sequence is to
-treat this branch as the immediate post-audit work item and give the cutover a
-properly tested window.
+All four helpers are exported from `e2e/admin-helpers.js`:
+`seedSignup`, `seedWaitlistEntry`, `getJobSignups`, `getJobWaitlist`.
+`createJob` already seeds `signupCount:0`/`waitlistCount:0` (no arrays).
 
----
+### 2. Staged production cutover (CHECKPOINT WITH THE USER FIRST)
 
-## Update — feature refactor code-complete (2026-05-22, later)
+1. Merge `jobs-hub-roster-refactor` → `main`.
+2. `./node_modules/.bin/firebase deploy --only functions,firestore:rules,firestore:indexes`
+   (verify `firebase use` is `church-inventory-9615c` first).
+3. **Migration phase 1** — `node scripts/migrate-job-signups.cjs` (backfill;
+   purely additive, leaves the legacy arrays in place).
+4. Frontend auto-deploys via Vercel on the push to `main`.
+5. Run the E2E suite: `E2E_MEMBER_B_EMAIL=e2e-member-b@churchopshub.com npm run test:e2e`.
+6. **Green** → **migration phase 2** — `node scripts/migrate-job-signups.cjs --finalize`
+   (drops the legacy arrays) → verified ready.
+   **Red** → roll back (redeploy prior functions/rules + revert frontend; the
+   legacy arrays are still present so the old code works).
+7. Curl-probe `twilioInbound` + any webhook for the `allUsers` invoker (the
+   documented Gen-2 IAM-strip gotcha).
 
-The frontend is done and committed (branch tip `f83523c`): `JobsPage.jsx`,
-`useFirestore.js`, `ical.js`, and the two-phase migration script
-`scripts/migrate-job-signups.cjs`. Production build clean, **0 lint errors**.
-`print.js` needed no change (it receives a roster fetched at call time).
-
-**The entire feature refactor — H1 / H2 / H3 / H4 / M1 — is code-complete.**
-
-Only verification remains. Two facts shape the path:
-- The Playwright E2E suite runs against **production** — `firebase.json` has no
-  emulator block, so a pure emulator-suite run is a separate infra build-out.
-- ~11 E2E specs + `admin-helpers.js` still reference the old `signups[]` model
-  and need updating to the subcollection model.
-
-**Recommended path to "verified ready":** update the 11 E2E specs, then a
-**staged production cutover** — deploy `functions` + `firestore:rules,indexes`,
-run migration **phase 1** (backfill — additive, safe), deploy the frontend, run
-the existing prod E2E suite. Green ⇒ run migration **phase 2** (drop legacy
-arrays) ⇒ verified ready. Red ⇒ roll back (legacy arrays still present;
-redeploy the prior functions/rules/frontend). The launch stays gated on that
-green result — which is exactly the "won't launch until it's ready" posture.
+Then it's launch-ready. The launch stays gated on a green E2E run.
