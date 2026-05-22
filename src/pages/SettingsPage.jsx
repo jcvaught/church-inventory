@@ -5,7 +5,8 @@ import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app } from '../firebase.js';
+import { collection, getDocs } from 'firebase/firestore';
+import { app, db } from '../firebase.js';
 
 function formatPhoneDisplay(e164) {
   if (!e164) return '';
@@ -39,6 +40,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [allChurches, setAllChurches] = useState(null);
   const [loadingChurches, setLoadingChurches] = useState(false);
+  const [suppressions, setSuppressions] = useState(null);
+  const [loadingSuppressions, setLoadingSuppressions] = useState(false);
+  const [togglingSuppressionId, setTogglingSuppressionId] = useState(null);
   const [ownerTab, setOwnerTab] = useState('suggestions');
   const [editAccessUser, setEditAccessUser] = useState(null);
   const [editRole, setEditRole] = useState('user');
@@ -196,6 +200,33 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
       setAllChurches([]);
     }
     setLoadingChurches(false);
+  }
+
+  // Audit L9: in-app email-suppression management. The emailSuppressions
+  // collection is owner-readable per firestore.rules; re-subscribing (set
+  // active:false) routes through the setEmailSuppressionActive CF since the
+  // collection is Admin-SDK-write-only.
+  async function handleLoadSuppressions() {
+    setLoadingSuppressions(true);
+    try {
+      const snap = await getDocs(collection(db, 'emailSuppressions'));
+      setSuppressions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch {
+      setSuppressions([]);
+    }
+    setLoadingSuppressions(false);
+  }
+
+  async function handleToggleSuppression(docId, nextActive) {
+    setTogglingSuppressionId(docId);
+    try {
+      const fn = httpsCallable(getFunctions(app), 'setEmailSuppressionActive');
+      await fn({ docId, active: nextActive });
+      setSuppressions(prev => (prev || []).map(s => s.id === docId ? { ...s, active: nextActive } : s));
+    } catch {
+      // leave state unchanged; the row's button stays available to retry
+    }
+    setTogglingSuppressionId(null);
   }
 
   function handleCopyInviteLink() {
@@ -880,7 +911,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
         <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginTop:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
           {/* Tab bar */}
           <div style={{ display:"flex", gap:8, marginBottom:18 }}>
-            {[['suggestions','Suggestions'],['churches','Churches']].map(([key, label]) => (
+            {[['suggestions','Suggestions'],['churches','Churches'],['suppressions','Email']].map(([key, label]) => (
               <button key={key} onClick={() => setOwnerTab(key)}
                 style={{ padding:"6px 18px", borderRadius:20, border:"1px solid "+(ownerTab===key?B.teal:B.sand), background:ownerTab===key?B.tealPale:B.white, color:ownerTab===key?B.teal:B.textMid, fontFamily:f1, fontWeight:600, fontSize:13, cursor:"pointer" }}>
                 {label}
@@ -972,6 +1003,51 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                     </div>
               )}
               {!allChurches && <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Click "Load" to see all registered churches.</p>}
+            </>
+          )}
+
+          {/* Email suppressions tab (audit L9) */}
+          {ownerTab === 'suppressions' && (
+            <>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Email Suppressions</h3>
+                <button onClick={handleLoadSuppressions} disabled={loadingSuppressions} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>
+                  {loadingSuppressions ? "Loading…" : suppressions ? "Refresh" : "Load"}
+                </button>
+              </div>
+              <p style={{ margin:"0 0 14px", fontSize:12, color:B.textLight }}>
+                Addresses SendGrid flagged (bounce, spam report, unsubscribe). Suppressed addresses are skipped by all outbound email. Re-subscribe only with the recipient's consent.
+              </p>
+              {suppressions && (
+                suppressions.length === 0
+                  ? <p style={{ color:B.textLight, fontSize:14 }}>No suppressed addresses.</p>
+                  : <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:480, overflowY:"auto" }}>
+                      {suppressions.map(s => {
+                        const active = s.active !== false;
+                        return (
+                          <div key={s.id} style={{ padding:"12px 14px", borderRadius:10, background:B.warmGray, display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+                            <div>
+                              <div style={{ fontWeight:600, fontSize:14, color:B.navy, fontFamily:f1 }}>{s.email || s.id}</div>
+                              <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>
+                                {s.lastEvent || 'suppressed'}{s.lastReason ? ' · ' + s.lastReason : ''}{typeof s.eventCount === 'number' ? ' · ' + s.eventCount + '×' : ''}
+                              </div>
+                            </div>
+                            <div style={{ display:"flex", gap:10, alignItems:"center", flexShrink:0 }}>
+                              <span style={{ fontSize:11, fontWeight:700, fontFamily:f1, padding:"2px 10px", borderRadius:20,
+                                background: active ? B.redPale : B.tealPale, color: active ? B.red : B.teal }}>
+                                {active ? 'Suppressed' : 'Active'}
+                              </span>
+                              <button onClick={() => handleToggleSuppression(s.id, !active)} disabled={togglingSuppressionId === s.id}
+                                style={{ ...btnS, padding:"5px 12px", fontSize:12, opacity: togglingSuppressionId === s.id ? 0.6 : 1 }}>
+                                {togglingSuppressionId === s.id ? '…' : active ? 'Re-subscribe' : 'Re-suppress'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+              )}
+              {!suppressions && <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Click "Load" to see suppressed email addresses.</p>}
             </>
           )}
         </div>

@@ -985,6 +985,7 @@ export function useFirestore(churchId) {
       if (linkedTaskDocId) {
         updateDoc(doc(db, 'churches', churchId, 'tasks', linkedTaskDocId), { linkedJobDocId: null }).catch(() => {});
       }
+      await clearJobSwapRequests([docId]);
       if (userId) await logActivity('delete_job', jobNumber || docId, userId, userName, {});
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
@@ -1052,6 +1053,26 @@ export function useFirestore(churchId) {
     ));
   }
 
+  // Audit L4: jobSwapRequests would be orphaned (litter) when their job is
+  // deleted. Best-effort cleanup keyed on jobDocId; a failure here must never
+  // fail the job delete itself.
+  async function clearJobSwapRequests(docIds) {
+    if (!docIds || docIds.length === 0) return;
+    try {
+      const snaps = await Promise.all(docIds.map(id => getDocs(query(
+        collection(db, 'churches', churchId, 'jobSwapRequests'),
+        where('jobDocId', '==', id)
+      ))));
+      const refs = snaps.flatMap(s => s.docs.map(d => d.ref));
+      if (refs.length === 0) return;
+      const batch = writeBatch(db);
+      refs.forEach(r => batch.delete(r));
+      await batch.commit();
+    } catch (err) {
+      console.error('[ChurchOpsHub] clearJobSwapRequests failed', err);
+    }
+  }
+
   // Deletes all jobs in a recurring series from a given date onward.
   const deleteJobListingSeriesFrom = useCallback(async (groupId, fromDate, userId, userName) => {
     try {
@@ -1065,6 +1086,7 @@ export function useFirestore(churchId) {
       const batch = writeBatch(db);
       snap.docs.forEach(d => batch.delete(d.ref));
       await batch.commit();
+      await clearJobSwapRequests(snap.docs.map(d => d.id));
       await logActivity('delete_job', `series from ${fromDate} ×${snap.size}`, userId, userName, {});
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
@@ -1081,6 +1103,7 @@ export function useFirestore(churchId) {
       const batch = writeBatch(db);
       snap.docs.forEach(d => batch.delete(d.ref));
       await batch.commit();
+      await clearJobSwapRequests(snap.docs.map(d => d.id));
       await logActivity('delete_job', `series ×${snap.size}`, userId, userName, {});
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
@@ -1138,8 +1161,10 @@ export function useFirestore(churchId) {
 
   const addJobSwapRequest = useCallback(async (jobDocId, uid, name, note) => {
     try {
+      // Audit L4: cap the free-text note (the firestore.rules create rule
+      // enforces the same 1000-char bound server-side).
       const ref = await addDoc(collection(db, 'churches', churchId, 'jobSwapRequests'), {
-        jobDocId, uid, name: name || '', note: note || '',
+        jobDocId, uid, name: name || '', note: (note || '').slice(0, 1000),
         createdAt: new Date().toISOString()
       });
       return ref.id;

@@ -3,7 +3,9 @@ export const B = {
   teal: "#2A7D6E", tealLight: "#34957F", tealPale: "#E6F5F1",
   gold: "#D4A843", goldLight: "#F5ECD4",
   cream: "#FAFAF7", warmGray: "#F2F0EB", sand: "#E8E4DC",
-  textDark: "#1B2A4A", textMid: "#5A6477", textLight: "#8B93A1",
+  // textLight darkened #8B93A1 → #6B7280 for WCAG-AA contrast (audit M8): the
+  // old value was ~2.9:1 on white; #6B7280 is ~4.8:1 (passes AA normal text).
+  textDark: "#1B2A4A", textMid: "#5A6477", textLight: "#6B7280",
   white: "#FFFFFF", red: "#D94F4F", redPale: "#FDF2F2",
 };
 export const f1 = "'Outfit',sans-serif";

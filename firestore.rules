@@ -229,7 +229,8 @@ service cloud.firestore {
              'signups', 'waitlist', 'signupCount', 'waitlistCount',
              'createdBy', 'createdByName', 'createdAt', 'jobNumber',
              'recurrenceGroupId', 'recurrenceFreq', 'seriesEndDate',
-             'cancellationEmailSentAt', 'lastReminderSentDate', 'lastPosterNotifiedByActors'
+             'cancellationEmailSentAt', 'lastReminderSentDate',
+             'lastSmsReminderSentDate', 'lastPosterNotifiedByActors'
            ]);
     }
 
@@ -256,16 +257,32 @@ service cloud.firestore {
     }
 
     // ── Job Hub — swap requests: members create own; admins+mgrs read+delete; member can delete own ──
+    //    Audit L4: the create is bounded — exact key allowlist, uid pinned to
+    //    the caller, name pinned to the caller's own user-doc name (no
+    //    impersonation in this admin-read field; userData() reuses the
+    //    request's single get), and the free-text note capped at 1000 chars.
     match /churches/{churchId}/jobSwapRequests/{docId} {
       allow read:   if isChurchAdminOrManager(churchId);
-      allow create: if canUseJobsHub(churchId) && request.resource.data.uid == request.auth.uid;
+      allow create: if canUseJobsHub(churchId)
+        && request.resource.data.keys().hasOnly(['jobDocId', 'uid', 'name', 'note', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.name == userData().get('name', '')
+        && request.resource.data.note is string
+        && request.resource.data.note.size() <= 1000;
       allow delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && resource.data.uid == request.auth.uid);
     }
 
     // ── Job Hub — announcements: members (with hub access) read; admins+mgrs write ──
+    //    Identity + audit fields are immutable on edit (audit M7, mirrors the
+    //    hardened jobListings update rule).
     match /churches/{churchId}/jobAnnouncements/{docId} {
-      allow read:  if canUseJobsHub(churchId);
-      allow write: if isChurchAdminOrManager(churchId) && jobsHubActive(churchId);
+      allow read:           if canUseJobsHub(churchId);
+      allow create, delete: if isChurchAdminOrManager(churchId) && jobsHubActive(churchId);
+      allow update:         if isChurchAdminOrManager(churchId)
+        && jobsHubActive(churchId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+             'createdBy', 'createdByName', 'createdAt'
+           ]);
     }
 
     // ── Rooms/Spaces — members read; admins+mgrs write ────────────────────────
@@ -305,8 +322,27 @@ service cloud.firestore {
     }
 
     // ── Public requests — anyone can submit; only church members can read/dismiss ──
+    //    create is unauthenticated by design (public item-request form); audit L6
+    //    bounds it with an exact key allowlist + length caps so it can't be used
+    //    as an arbitrary-blob spam / Firestore-cost vector.
     match /churches/{churchId}/publicRequests/{docId} {
-      allow create: if true;
+      allow create: if request.resource.data.keys().hasOnly([
+                         'name', 'email', 'phone', 'itemDescription', 'quantity',
+                         'dateNeeded', 'urgency', 'notes', 'status', 'submittedAt'
+                       ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.itemDescription is string
+        && request.resource.data.itemDescription.size() > 0
+        && request.resource.data.itemDescription.size() <= 2000
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 200
+        && request.resource.data.phone is string
+        && request.resource.data.phone.size() <= 40
+        && request.resource.data.notes is string
+        && request.resource.data.notes.size() <= 2000
+        && request.resource.data.status == 'pending';
       allow read, update, delete: if request.auth != null && userChurchId() == churchId;
     }
 
@@ -387,6 +423,15 @@ service cloud.firestore {
     match /emailEvents/{docId} {
       allow read: if request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
       allow create, update, delete: if false;
+    }
+
+    // ── Errors (audit M5) — no client error-telemetry collection exists;
+    //    Sentry (@sentry/react) handles all error reporting. This explicit
+    //    deny makes the absence intentional: any future feature that needs an
+    //    `errors` collection must add a considered rule rather than silently
+    //    inherit access from a default. Do not relax without a real consumer.
+    match /errors/{docId} {
+      allow read, write: if false;
     }
 
   }

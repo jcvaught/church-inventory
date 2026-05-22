@@ -20,6 +20,24 @@ fixes hinge on product decisions (below).
 
 ---
 
+## ✅ REMEDIATION STATUS — ALL CLOSED (2026-05-22)
+
+The full audit slate is remediated and deployed. See `docs/CHANGELOG.md`
+(2026-05-22) for the per-finding shipping detail.
+
+- **High (H1–H4) + M1** — shipped earlier 2026-05-22 in the roster refactor.
+- **Medium (M2–M13)** — M3/M4 fixed during the refactor; M2, M5–M13 fixed in
+  the backlog pass. M10 = `getPublicJobs` `.limit(200)` (refactor) + free-text
+  length caps + UI warnings (backlog pass).
+- **Low (L1–L9)** — all fixed in the backlog pass. L1 = documented as
+  intentional (not a code change).
+- **D1** — accepted: `manager` keeps full Jobs Hub access identical to `admin`.
+- **D2** — resolved by the H1 roster refactor (rule-enforced `canSeeJobRoster`).
+
+Gate: E2E suite 40 passed / 1 skipped / 0 failed after each deploy surface.
+
+---
+
 ## Product decisions needed (drive the High fixes)
 
 - **D1 — `manager` role has full Jobs Hub access, identical to `admin`** — sees the

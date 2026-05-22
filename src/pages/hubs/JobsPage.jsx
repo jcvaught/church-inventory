@@ -207,11 +207,21 @@ function JobCalendar({ jobs, onJobClick, isMobile, todayStr: todayStrProp }) {
   );
 }
 
+// Audit M13: spell out what each status means so Closed/Completed/Cancelled
+// aren't opaque. Surfaced as both a hover title and the accessible label.
+const JOB_STATUS_MEANING = {
+  open:      'Open — accepting signups',
+  closed:    'Closed — signups stopped, job not yet finished',
+  completed: 'Completed — the job has happened',
+  cancelled: 'Cancelled — the job will not happen',
+};
 function JobStatusBadge({ status }) {
   const s = JOB_STATUS_COLORS[status] || JOB_STATUS_COLORS.open;
   const label = status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Open';
+  const meaning = JOB_STATUS_MEANING[status] || JOB_STATUS_MEANING.open;
   return (
-    <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: s.bg, color: s.tx, display: 'inline-block' }}>
+    <span title={meaning} aria-label={'Status: ' + meaning}
+      style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: s.bg, color: s.tx, display: 'inline-block' }}>
       {label}
     </span>
   );
@@ -260,7 +270,7 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJ
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <div style={{ display:'flex', alignItems:'center', gap:6 }}>
           <span style={{ fontSize: isMobile ? 12 : 11, fontFamily: 'monospace', color: B.textLight, background: B.warmGray, padding: '2px 6px', borderRadius: 4 }}>{job.jobNumber}</span>
-          {job.recurrenceGroupId && <span title="Recurring series" style={{ fontSize: isMobile ? 13 : 11, color:B.teal }}>🔁</span>}
+          {job.recurrenceGroupId && <span title="Recurring series" role="img" aria-label="Recurring series" style={{ fontSize: isMobile ? 13 : 11, color:B.teal }}>🔁</span>}
         </div>
         <JobStatusBadge status={job.status} />
       </div>
@@ -274,6 +284,17 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJ
       {job.pay != null && (
         <div style={{ fontSize: 14, fontWeight: 700, color: '#16A34A', fontFamily: f1, marginBottom: 10 }}>
           ${Number(job.pay).toFixed(2)} per person
+        </div>
+      )}
+      {/* Audit M13: surface compliance requirements on the card itself, not
+          only after a signup attempt fails. */}
+      {(job.requiredAccessTypes || []).length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 10 }}>
+          {job.requiredAccessTypes.map(t => (
+            <span key={t} style={{ fontSize: 11, fontWeight: 700, fontFamily: f1, color: '#92400E', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 6, padding: '2px 8px' }}>
+              🔒 {ACCESS_TYPE_LABELS[t] || t} required
+            </span>
+          ))}
         </div>
       )}
       <div style={{ marginBottom: 10 }}><SpotsBar job={job} /></div>
@@ -351,15 +372,16 @@ const MobileScheduleRow = memo(function MobileScheduleRow({ job, onDetail }) {
 });
 
 const DesktopScheduleRow = memo(function DesktopScheduleRow({ job, todayStr, isAdminOrManager, rosterVisibility, showRoster, onDetail, onEdit }) {
-  const sc = JOB_STATUS_COLORS[job.status] || JOB_STATUS_COLORS.open;
   const filled = job.signupCount || 0;
   const pct = Math.min(100, (filled / (job.spotsTotal||1)) * 100);
   const isPast = job.scheduledDate && job.scheduledDate < todayStr;
+  // Audit L9: the row keeps its implicit table-row semantics — the
+  // keyboard/AT-accessible trigger is a real <button> in the Job cell, not a
+  // role="button" on the <tr> (which destroyed the row role). The row onClick
+  // stays as a mouse-only convenience.
   return (
     <tr
-      tabIndex={0} role="button" aria-label={job.title}
       onClick={() => onDetail(job)}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDetail(job); } }}
       style={{ borderBottom:'1px solid '+B.sand, cursor:'pointer', opacity:isPast ? .65 : 1 }}
       onMouseEnter={e => e.currentTarget.style.background=B.warmGray}
       onMouseLeave={e => e.currentTarget.style.background=''}>
@@ -367,7 +389,10 @@ const DesktopScheduleRow = memo(function DesktopScheduleRow({ job, todayStr, isA
         {formatJobDate(job.scheduledDate)}{job.scheduledTime ? <div style={{ fontSize:11, color:B.textLight }}>{formatTimeForDisplay(job.scheduledTime)}</div> : null}
       </td>
       <td style={{ padding:'10px 14px', fontFamily:f2, color:B.navy, fontWeight:600 }}>
-        <div>{job.title}</div>
+        <button onClick={e => { e.stopPropagation(); onDetail(job); }}
+          style={{ background:'none', border:'none', padding:0, margin:0, font:'inherit', color:B.navy, fontWeight:600, cursor:'pointer', textAlign:'left' }}>
+          {job.title}
+        </button>
         <div style={{ fontSize:11, color:B.textLight, fontFamily:'monospace' }}>{job.jobNumber}</div>
       </td>
       <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textMid }}>{job.location || '—'}</td>
@@ -378,7 +403,8 @@ const DesktopScheduleRow = memo(function DesktopScheduleRow({ job, todayStr, isA
         </div>
       </td>
       <td style={{ padding:'10px 14px' }}>
-        <span style={{ fontSize:11, fontWeight:700, color:sc.tx, background:sc.bg, padding:'2px 8px', borderRadius:12 }}>{job.status}</span>
+        {/* Audit M13: use the shared badge — capitalized label + status meaning */}
+        <JobStatusBadge status={job.status} />
       </td>
       {(isAdminOrManager || rosterVisibility !== 'admin') && (
         <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textMid, maxWidth:220 }}>
@@ -475,6 +501,8 @@ export function JobsPage({ store, userProfile }) {
   const [showConvertToTaskModal, setShowConvertToTaskModal] = useState(false);
   const [convertTaskForm, setConvertTaskForm] = useState({ name: '', dueDate: '', description: '' });
   const [convertTaskSaving, setConvertTaskSaving] = useState(false);
+  const [waiverModalJob, setWaiverModalJob] = useState(null); // audit L9: waiver consent modal
+  const [waiverChecked, setWaiverChecked] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapNote, setSwapNote] = useState('');
   const [swapSaving, setSwapSaving] = useState(false);
@@ -493,6 +521,7 @@ export function JobsPage({ store, userProfile }) {
   const [detailSignups, setDetailSignups] = useState([]);
   const [detailWaitlist, setDetailWaitlist] = useState([]);
   const [detailRosterLoading, setDetailRosterLoading] = useState(false);
+  const [detailRosterError, setDetailRosterError] = useState(false);
   const [reportsSignups, setReportsSignups] = useState([]); // [{ ...signup, jobId }]
 
   function flash(text, isError = false) {
@@ -533,7 +562,8 @@ export function JobsPage({ store, userProfile }) {
   const isFull = (job) => (job.signupCount || 0) >= (job.spotsTotal || 1);
   const rosterVisibility = settings?.jobsRosterVisibility ?? 'signups';
   const canSeeRoster = (job) => isAdminOrManager || rosterVisibility === 'all' || (rosterVisibility === 'signups' && isSignedUp(job));
-  const recurrencePreviewCount = useMemo(() => generateRecurrenceDates(jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate).length, [jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate]);
+  const recurrencePreviewDates = useMemo(() => generateRecurrenceDates(jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate), [jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate]);
+  const recurrencePreviewCount = recurrencePreviewDates.length;
   const adminManagerUsers = useMemo(() => (users || []).filter(u => (u.role === 'admin' || u.role === 'manager') && u.id !== userId), [users, userId]);
 
   async function handleSaveDelegates(next) {
@@ -638,6 +668,7 @@ export function JobsPage({ store, userProfile }) {
     }
     let cancelled = false;
     setDetailRosterLoading(true);
+    setDetailRosterError(false);
     Promise.all([
       getDocs(collection(db, 'churches', churchId, 'jobListings', jobId, 'signups')),
       getDocs(collection(db, 'churches', churchId, 'jobListings', jobId, 'waitlist')),
@@ -649,6 +680,10 @@ export function JobsPage({ store, userProfile }) {
     }).catch(err => {
       if (cancelled) return;
       console.error('[ChurchOpsHub] detail roster fetch failed', err);
+      // Audit M13: a failed fetch must not be indistinguishable from an
+      // empty roster — flag the error so the modal can say so.
+      setDetailRosterError(true);
+      setDetailSignups([]); setDetailWaitlist([]);
       setDetailRosterLoading(false);
     });
     return () => { cancelled = true; };
@@ -895,15 +930,20 @@ export function JobsPage({ store, userProfile }) {
       const ok = window.confirm(`This job is full. ${wl > 0 ? `${wl} other${wl !== 1 ? 's' : ''} on the waitlist. ` : ''}Join the waitlist?`);
       if (!ok) return;
     }
-    // Waiver consent is shown here; the jobSignUp Cloud Function records
-    // acknowledgedWaiverAt. Background-Check / compliance is enforced
-    // server-side by that function — it returns a friendly error if the
-    // member isn't eligible, so no client-side compliance gate is needed.
-    let waiverAccepted = false;
+    // Audit L9: waiver consent is a real Modal + checkbox (not window.confirm)
+    // — a legal-consent flow deserves a reviewable, deliberate acknowledgement.
+    // performSignUp records acknowledgedWaiverAt via the jobSignUp CF.
+    // Background-Check / compliance is enforced server-side by that function,
+    // so no client-side compliance gate is needed.
     if (job.requiresWaiver && job.waiverText) {
-      waiverAccepted = window.confirm(`By signing up, you agree to the following:\n\n${job.waiverText}\n\nDo you agree?`);
-      if (!waiverAccepted) return;
+      setWaiverChecked(false);
+      setWaiverModalJob(job);
+      return;
     }
+    await performSignUp(job, false);
+  }
+
+  async function performSignUp(job, waiverAccepted) {
     setSavingJobId(job._docId);
     try {
       const result = await signUpForJob(job._docId, userId, userName, waiverAccepted, job.jobNumber);
@@ -1139,8 +1179,18 @@ export function JobsPage({ store, userProfile }) {
             </div>
             {isAdminOrManager && (
               <div style={{ display:'flex', gap:8 }}>
-                <button onClick={() => setShowDelegatesModal(true)} style={{ ...btnS, padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }} title="Manage who receives your job notification emails">📧 Delegates</button>
+                <button onClick={() => setShowDelegatesModal(true)} style={{ ...btnS, padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }} title="Manage who receives your job notification emails" aria-label="Delegates — manage who receives your job notification emails">📧 Delegates</button>
                 <button onClick={() => {
+                  // Audit M10: the shared board is a public, no-login page —
+                  // anyone with the link sees every open job's title,
+                  // description, date, location and pay. Warn before copying
+                  // so an admin doesn't unknowingly publish minor PII.
+                  const ok = window.confirm(
+                    'The shared job board is a PUBLIC page — anyone with the link can see each open job\'s title, description, date, location and pay.\n\n'
+                    + 'Make sure no job description or location contains a minor\'s name or a private address before sharing.\n\n'
+                    + 'Copy the public link?'
+                  );
+                  if (!ok) return;
                   const url = `${window.location.origin}?jobs=${userProfile?.churchId}&cn=${encodeURIComponent(config?.churchName || '')}&cc=${encodeURIComponent(config?.churchCode || '')}`;
                   navigator.clipboard.writeText(url).then(() => flash('Job board link copied!')).catch(() => flash('Could not copy link.', true));
                 }} style={{ ...btnS, padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }}>Share Board</button>
@@ -1182,6 +1232,7 @@ export function JobsPage({ store, userProfile }) {
                     setShowPrintRosterModal(true);
                   }}
                   title="Choose which jobs to print rosters for"
+                  aria-label="Print rosters — choose which jobs to print rosters for"
                   style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>
                   Print Rosters…
                 </button>
@@ -1193,6 +1244,7 @@ export function JobsPage({ store, userProfile }) {
                   { calendarLabel: 'My Jobs', filenamePrefix: 'my-jobs' }
                 )}
                 title="Export jobs you've signed up for to iCal (.ics)"
+                aria-label="Export my signups — exports jobs you've signed up for to an iCal (.ics) file"
                 style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>
                 Export My Signups
               </button>
@@ -1200,6 +1252,7 @@ export function JobsPage({ store, userProfile }) {
                 <button
                   onClick={() => exportJobsICS(scheduleJobs.filter(j => j.scheduledDate), config?.churchName || '')}
                   title="Export the full church job calendar to iCal (.ics)"
+                  aria-label="Export all — exports the full church job calendar to an iCal (.ics) file"
                   style={{ ...btnS, fontSize:13, padding:'6px 14px' }}>
                   Export All
                 </button>
@@ -1330,6 +1383,11 @@ export function JobsPage({ store, userProfile }) {
           <FF label="Description">
             <textarea style={{ ...inp, minHeight: 80, resize: 'vertical' }} value={jobForm.description} onChange={e => setJobForm(f => ({ ...f, description: e.target.value }))} placeholder="Details about what needs to be done..." />
           </FF>
+          {/* Audit M10: title, description and location appear on the public
+              shared board — keep minor names and private addresses out. */}
+          <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginTop: -6, marginBottom: 8 }}>
+            ⚠️ Title, description and location are visible on the public job board if you share it — don't include a minor's name or a private address.
+          </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ flex: '1 1 160px' }}>
               <FF label="Date" required>
@@ -1453,8 +1511,15 @@ export function JobsPage({ store, userProfile }) {
                     </div>
                   </div>
                   {recurrencePreviewCount > 0 && recurrencePreviewCount < 100 && (
-                    <div style={{ fontSize: 13, color: B.teal, fontFamily: f1, fontWeight: 600, marginTop: 4 }}>
-                      This will create {recurrencePreviewCount} job{recurrencePreviewCount !== 1 ? 's' : ''}.
+                    <div style={{ marginTop: 4 }}>
+                      <div style={{ fontSize: 13, color: B.teal, fontFamily: f1, fontWeight: 600 }}>
+                        This will create {recurrencePreviewCount} job{recurrencePreviewCount !== 1 ? 's' : ''}.
+                      </div>
+                      {/* Audit L9: preview the actual dates, not just the count. */}
+                      <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginTop: 2, lineHeight: 1.5 }}>
+                        {recurrencePreviewDates.slice(0, 5).map(d => formatJobDate(d)).join(' · ')}
+                        {recurrencePreviewCount > 5 ? ` · +${recurrencePreviewCount - 5} more` : ''}
+                      </div>
                     </div>
                   )}
                   {recurrencePreviewCount >= 100 && (
@@ -1491,7 +1556,7 @@ export function JobsPage({ store, userProfile }) {
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, color: B.textLight, textTransform: 'uppercase', letterSpacing: .8, fontFamily: f1, marginBottom: 2 }}>Date</div>
               <div style={{ fontSize: 14, color: B.textDark, fontFamily: f2 }}>
-                {formatJobDate(liveDetail.scheduledDate)}{liveDetail.scheduledTime ? ' at ' + liveDetail.scheduledTime : ''}
+                {formatJobDate(liveDetail.scheduledDate)}{liveDetail.scheduledTime ? ' at ' + formatTimeForDisplay(liveDetail.scheduledTime) : ''}
               </div>
             </div>
             {liveDetail.location && (
@@ -1527,6 +1592,8 @@ export function JobsPage({ store, userProfile }) {
             {canSeeRoster(liveDetail) ? (
               detailRosterLoading ? (
                 <div style={{ fontSize: 13, color: B.textLight, fontFamily: f2 }}>Loading roster…</div>
+              ) : detailRosterError ? (
+                <div style={{ fontSize: 13, color: B.red, fontFamily: f2 }}>Couldn't load the roster — close and reopen this job to retry.</div>
               ) : detailSignups.length === 0 ? (
                 <div style={{ fontSize: 13, color: B.textLight, fontFamily: f2 }}>No signups yet.</div>
               ) : (
@@ -1627,17 +1694,11 @@ export function JobsPage({ store, userProfile }) {
           )}
           {/* Action row */}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {isAdminOrManager && (
-                <>
+            {isAdminOrManager ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {/* Primary (non-destructive) admin actions */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button onClick={() => { setShowJobDetail(null); openEditJob(liveDetail); }} style={{ ...btnS, fontSize: 13 }}>Edit</button>
-                  <button onClick={() => handleDeleteJob(liveDetail)} style={{ ...btnD, fontSize: 13 }}>Delete</button>
-                  {liveDetail.recurrenceGroupId && (
-                    <>
-                      <button onClick={() => handleDeleteSeriesFrom(liveDetail)} style={{ ...btnD, fontSize: 13 }}>Delete This + Future</button>
-                      <button onClick={() => handleDeleteSeries(liveDetail)} style={{ ...btnD, fontSize: 13 }}>Delete Series</button>
-                    </>
-                  )}
                   {['cancelled', 'closed'].includes(liveDetail.status) && (liveDetail.signupCount || 0) > 0 && notificationConfig?.enabled && (
                     <button onClick={() => handleNotifySignups(liveDetail)} style={{ ...btnS, fontSize: 13, color: B.teal, borderColor: B.tealLight }}>
                       Notify Signups
@@ -1649,9 +1710,21 @@ export function JobsPage({ store, userProfile }) {
                   <button onClick={() => printJobRoster([{ ...liveDetail, signups: detailSignups }], config?.churchName || '')} title="Print this job's roster" style={{ ...btnS, fontSize: 13 }}>
                     🖨 Print Roster
                   </button>
-                </>
-              )}
-            </div>
+                </div>
+                {/* Destructive actions — separated below a divider so a Delete
+                    can't be mis-tapped next to Edit on a phone (audit M9). */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', paddingTop: 8, borderTop: '1px solid ' + B.sand }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: B.textLight, textTransform: 'uppercase', letterSpacing: .8, fontFamily: f1 }}>Danger zone</span>
+                  <button onClick={() => handleDeleteJob(liveDetail)} style={{ ...btnD, fontSize: 13 }}>Delete</button>
+                  {liveDetail.recurrenceGroupId && (
+                    <>
+                      <button onClick={() => handleDeleteSeriesFrom(liveDetail)} style={{ ...btnD, fontSize: 13 }}>Delete This + Future</button>
+                      <button onClick={() => handleDeleteSeries(liveDetail)} style={{ ...btnD, fontSize: 13 }}>Delete Series</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : <div />}
             <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
             {liveDetail.status === 'open' && isSignedUp(liveDetail) && !isAdminOrManager && (
               <button onClick={() => { setSwapNote(''); setShowSwapModal(true); }}
@@ -1865,7 +1938,7 @@ export function JobsPage({ store, userProfile }) {
           Let an admin know you need a replacement for this job. They'll follow up with you.
         </p>
         <FF label="Note (optional)">
-          <textarea style={{ ...inp, minHeight:70, resize:'vertical' }} value={swapNote} onChange={e => setSwapNote(e.target.value)} placeholder="Reason you need a replacement…" />
+          <textarea style={{ ...inp, minHeight:70, resize:'vertical' }} maxLength={1000} value={swapNote} onChange={e => setSwapNote(e.target.value)} placeholder="Reason you need a replacement…" />
         </FF>
         <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:8 }}>
           <button onClick={() => setShowSwapModal(false)} style={btnS}>Cancel</button>
@@ -1874,6 +1947,33 @@ export function JobsPage({ store, userProfile }) {
           </button>
         </div>
       </Modal>
+
+      {/* ── Waiver Consent Modal (audit L9) — replaces the old window.confirm.
+           A legal-consent flow gets the full waiver text in a scrollable box
+           and an explicit "I have read and agree" checkbox before signup. ── */}
+      {waiverModalJob && (
+        <Modal open title="Waiver & Consent" onClose={() => setWaiverModalJob(null)} maxWidth={520}>
+          <p style={{ fontSize: 13, color: B.textMid, fontFamily: f2, marginBottom: 10 }}>
+            Signing up for <strong>{waiverModalJob.title}</strong> requires you to read and agree to the following:
+          </p>
+          <div style={{ background: B.warmGray, border: '1px solid ' + B.sand, borderRadius: 8, padding: '12px 14px', marginBottom: 14, maxHeight: 240, overflowY: 'auto', fontSize: 13, color: B.textDark, fontFamily: f2, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+            {waiverModalJob.waiverText}
+          </div>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', marginBottom: 14 }}>
+            <input type="checkbox" checked={waiverChecked} onChange={e => setWaiverChecked(e.target.checked)} style={{ width: 16, height: 16, marginTop: 2, flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontFamily: f2, color: B.textDark }}>I have read and agree to the waiver above.</span>
+          </label>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button onClick={() => setWaiverModalJob(null)} style={btnS}>Cancel</button>
+            <button
+              disabled={!waiverChecked}
+              onClick={() => { const j = waiverModalJob; setWaiverModalJob(null); performSignUp(j, true); }}
+              style={{ ...btnP, opacity: waiverChecked ? 1 : 0.5, cursor: waiverChecked ? 'pointer' : 'not-allowed' }}>
+              Agree &amp; Sign Up
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

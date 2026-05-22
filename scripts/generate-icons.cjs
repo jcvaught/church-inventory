@@ -38,25 +38,22 @@ function makePNG(size) {
   ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4);
   ihdr[8] = 8; ihdr[9] = 2; // 8-bit RGB
 
-  // Draw pixels: navy background + rounded corners + teal ring
-  const cx = size / 2, cy = size / 2, r = size * 0.42;
+  // Draw pixels: FULL-BLEED navy background + teal ring.
+  // Audit L7: the icon is declared "any maskable" — a maskable icon must have
+  // its background bleed to every edge (any mask shape shows solid colour, no
+  // off-white slivers / cropped corners) and keep all logo content inside the
+  // central 80% "safe zone". The navy fills every pixel; the teal ring's outer
+  // radius (~0.353·size from centre) sits well inside the 0.4·size safe zone.
+  const cx = size / 2, cy = size / 2;
   const ringR = size * 0.31, ringW = size * 0.086;
-  const cornerR = size * 0.22;
 
   const pixels = Buffer.alloc(size * size * 3);
   const [nR,nG,nB] = [0x1B,0x2A,0x4A]; // navy
   const [tR,tG,tB] = [0x2A,0x7D,0x6E]; // teal
-  const [bgR,bgG,bgB] = [0xFA,0xFA,0xF7]; // off-white (transparent bg fallback)
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const idx = (y * size + x) * 3;
-      // rounded-rect hit test (CSS border-radius style)
-      const dx = Math.abs(x - cx), dy = Math.abs(y - cy);
-      const inRect = dx <= size/2 - cornerR || dy <= size/2 - cornerR ||
-        Math.hypot(dx - (size/2 - cornerR), dy - (size/2 - cornerR)) <= cornerR;
-
-      if (!inRect) { pixels[idx]=bgR; pixels[idx+1]=bgG; pixels[idx+2]=bgB; continue; }
 
       // teal ring (arc on left side of icon)
       const dist = Math.hypot(x - cx * 1.05, y - cy);

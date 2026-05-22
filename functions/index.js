@@ -215,6 +215,30 @@ exports.getChurchStats = onCall(
   }
 );
 
+// ── setEmailSuppressionActive ─────────────────────────────────────────────
+// Owner-only. Backs the in-app email-suppression management UI (audit L9).
+// The emailSuppressions collection is Admin-SDK-write-only in firestore.rules,
+// so re-subscribing an address (set active:false) must route through here.
+exports.setEmailSuppressionActive = onCall(
+  { cors: true },
+  async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    const userRecord = await getAuth().getUser(req.auth.uid);
+    if (!OWNER_EMAILS.includes(userRecord.email)) {
+      throw new HttpsError('permission-denied', 'Not authorized.');
+    }
+    const { docId, active } = req.data || {};
+    if (!docId || typeof docId !== 'string' || typeof active !== 'boolean') {
+      throw new HttpsError('invalid-argument', 'docId (string) and active (boolean) are required.');
+    }
+    const ref = getFirestore().doc(`emailSuppressions/${docId}`);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Suppression record not found.');
+    await ref.update({ active, updatedAt: new Date().toISOString(), updatedBy: userRecord.email });
+    return { ok: true, docId, active };
+  }
+);
+
 // ── lookupChurchByCode ────────────────────────────────────────────────────
 // Phase D / H-02 from the 2026-05-12 audit. Replaces the client-side
 // `getDocs(collection('churches'), where('churchCode','==',code))` query that
@@ -269,17 +293,24 @@ exports.getPublicJobs = onCall(
       .limit(200) // bound the unauthenticated payload (audit H4)
       .get();
 
+    // Cap free-text fields on the public payload (audit M10): a verbose admin
+    // description/location must not overshare minor PII to the public URL.
+    const cap = (s, n) => {
+      const str = String(s || '');
+      return str.length > n ? str.slice(0, n).trimEnd() + '…' : str;
+    };
+
     const jobs = jobsSnap.docs.map((doc) => {
       const x = doc.data();
       const payNum = Number(x.pay);
       return {
         _docId: doc.id,
         jobNumber: x.jobNumber || null,
-        title: x.title || '',
-        description: x.description || '',
+        title: cap(x.title, 120),
+        description: cap(x.description, 280),
         scheduledDate: x.scheduledDate || null,
         scheduledTime: x.scheduledTime || null,
-        location: x.location || '',
+        location: cap(x.location, 160),
         pay: Number.isFinite(payNum) ? payNum : null,
         spotsTotal: x.spotsTotal || 1,
         // Prefer the server-maintained signupCount (post-H1 subcollection model);
@@ -382,7 +413,9 @@ exports.createPortalSession = onCall(
 // Handles: checkout.session.completed, customer.subscription.updated,
 //          customer.subscription.deleted
 exports.stripeWebhook = onRequest(
-  { secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET] },
+  // invoker:'public' pins the allUsers run.invoker IAM so a Gen-2 redeploy
+  // can't silently strip it (audit L2 / CLAUDE.md gotcha) — same as sendgridEventWebhook.
+  { secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET], invoker: 'public' },
   async (req, res) => {
     const stripe = require('stripe')(STRIPE_SECRET_KEY.value());
     const sig = req.headers['stripe-signature'];
@@ -1110,9 +1143,16 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
   results.forEach((r, i) => { if (r.status === 'rejected') { console.error('sendJobCancelledEmails: email failed', { index: i, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
   const sent = results.filter(r => r.status === 'fulfilled').length;
 
-  // Record send timestamp to prevent re-triggers within 1 hour
+  // Record send timestamp to prevent re-triggers within 1 hour. Audit L3:
+  // don't silently swallow a failed stamp-write — a lost stamp lets the next
+  // pass re-send cancellation emails within the hour, so surface it.
   if (sent > 0) {
-    await db.doc(`churches/${churchId}/jobListings/${jobDocId}`).update({ cancellationEmailSentAt: new Date().toISOString() }).catch(() => {});
+    await db.doc(`churches/${churchId}/jobListings/${jobDocId}`)
+      .update({ cancellationEmailSentAt: new Date().toISOString() })
+      .catch((e) => {
+        console.error('sendJobCancelledEmails: cancellationEmailSentAt stamp-write failed', { jobDocId, churchId, reason: e?.message });
+        Sentry.captureException(e);
+      });
   }
 
   return { sent };
@@ -1159,12 +1199,19 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * 1', timeZone: 'Am
   const todayStr = ymd(now);
   const endOfWeek = new Date(now); endOfWeek.setDate(now.getDate() + 6);
   const endOfWeekStr = ymd(endOfWeek);
+  // Lower bound: ignore tasks overdue by more than 90 days — they are stale,
+  // not actionable reminders, and an unbounded floor lets the cross-tenant
+  // scan grow forever (audit M12). A .limit() caps it as a second safety net.
+  const floor = new Date(now); floor.setDate(now.getDate() - 90);
+  const floorStr = ymd(floor);
 
-  // Query all tasks with a dueDate on or before the end of this week
-  // (captures overdue + due any day Mon–Sun). No lower bound so overdue
-  // tasks are included; status check below excludes Complete/Cancelled.
+  // Query tasks with a dueDate within [90 days ago … end of this week]
+  // (captures recent-overdue + due any day Mon–Sun). Status check below
+  // excludes Complete/Cancelled.
   const snap = await db.collectionGroup('tasks')
+    .where('dueDate', '>=', floorStr)
     .where('dueDate', '<=', endOfWeekStr)
+    .limit(5000)
     .get();
 
   if (snap.empty) return;
@@ -1299,6 +1346,10 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * 1', timeZone: 'Am
 // scheduledDate is strictly before today to `completed`. Without this,
 // past-but-unfinished jobs stay in the "Open" filter forever and members
 // can still attempt to sign up (Jobs Hub audit, 2026-05-06 #7).
+// Audit L1: this intentionally ignores subscription state — a lapsed church's
+// stale past jobs should still be tidied up (a data-hygiene op, not a hub
+// feature), and a per-church subscription lookup here would add a read per
+// job for no user benefit. Decision recorded in docs/JOBS-HUB-AUDIT.
 exports.closePastJobs = onSchedule({ schedule: '0 2 * * *', timeZone: 'America/Chicago' }, async () => {
   const db = getFirestore();
   const today = (() => {
@@ -1374,8 +1425,13 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
 
   // Gather all unique user UIDs that need reminders, skipping churches without the Jobs hub
   // and skipping jobs where a reminder was already sent today (idempotency)
-  const remindersByUid = {}; // uid → [{ jobTitle, scheduledTime, location, pay, churchId }]
-  const jobsToMark = []; // [{ ref }] — jobs to stamp lastReminderSentDate after successful sends
+  const remindersByUid = {}; // uid → [{ title, scheduledTime, location, pay, churchId, _ref }]
+  // Audit M2: email and SMS are made idempotent on SEPARATE stamps
+  // (lastReminderSentDate / lastSmsReminderSentDate) so a crash mid-channel
+  // can neither drop nor double-send the other. A job is still gathered if
+  // EITHER channel still owes a reminder today.
+  const emailDoneRefs = new Set(); // jobs already email-stamped today
+  const smsDoneRefs = new Set();   // jobs already SMS-stamped today
   for (const jobDoc of snap.docs) {
     const job = jobDoc.data();
     const churchId = jobDoc.ref.parent.parent.id;
@@ -1385,10 +1441,13 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     // F-04: skip if church has disabled notifications
     if (!(await jobNotifEnabled(churchId))) continue;
 
-    // Idempotency: skip if reminder already sent today (guards against cron retry / redeploy)
-    if (job.lastReminderSentDate === today) continue;
-
-    jobsToMark.push(jobDoc.ref);
+    // Idempotency: skip the job only if BOTH channels already fired today
+    // (guards against cron retry / redeploy).
+    const emailDone = job.lastReminderSentDate === today;
+    const smsDone = job.lastSmsReminderSentDate === today;
+    if (emailDone && smsDone) continue;
+    if (emailDone) emailDoneRefs.add(jobDoc.ref);
+    if (smsDone) smsDoneRefs.add(jobDoc.ref);
 
     // Roster lives in the signups subcollection (audit H1, 2026-05-22).
     const suSnap = await jobDoc.ref.collection('signups').get();
@@ -1424,8 +1483,10 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     if (!user.email || user.active === false) continue;
     // Respect per-user hub access; F-21 helper treats admin/missing-array as access.
     if (!effectiveHasHub(user, 'jobs')) continue;
-    // Only send jobs that belong to the user's own church
-    const jobs = (remindersByUid[userSnap.id] || []).filter(j => j.churchId === user.churchId);
+    // Only send jobs that belong to the user's own church and that haven't
+    // already been email-stamped today (audit M2 — per-channel idempotency).
+    const jobs = (remindersByUid[userSnap.id] || [])
+      .filter(j => j.churchId === user.churchId && !emailDoneRefs.has(j._ref));
     if (jobs.length === 0) continue;
     const safeName = escapeHtml(user.name || 'there');
 
@@ -1464,6 +1525,7 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
   });
 
   // SMS reminders — sent to opted-in users alongside email (independent channel)
+  const smsJobSuccesses = new Set(); // job refs with ≥1 successful SMS send (audit M2)
   const tw = getTwilioClient();
   if (tw && (TWILIO_MSID || TWILIO_FROM)) {
     const smsTasks = [];
@@ -1476,22 +1538,30 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
       if (!user.phone || !user.smsRemindersEnabled || user.active === false) continue;
       // F-21 helper treats admin/missing-array as access.
       if (!effectiveHasHub(user, 'jobs')) continue;
-      const jobs = (remindersByUid[userSnap.id] || []).filter(j => j.churchId === user.churchId);
+      // Filter to this church AND jobs not already SMS-stamped today (audit M2).
+      const jobs = (remindersByUid[userSnap.id] || [])
+        .filter(j => j.churchId === user.churchId && !smsDoneRefs.has(j._ref));
       if (jobs.length === 0) continue;
       const jobLines = jobs.map(j => `- ${j.title}${j.scheduledTime ? ' at ' + formatTimeForDisplay(j.scheduledTime) : ''}${j.location ? ' - ' + j.location : ''}`).join('\n');
       const body = jobs.length === 1
         ? `ChurchOpsHub: Reminder - you're signed up for "${jobs[0].title}" today${jobs[0].scheduledTime ? ' at ' + formatTimeForDisplay(jobs[0].scheduledTime) : ''}${jobs[0].location ? ' @ ' + jobs[0].location : ''}. Reply STOP to opt out.`
         : `ChurchOpsHub: Reminder - you have ${jobs.length} jobs today:\n${jobLines}\n\nReply STOP to opt out.`;
+      const jobRefs = jobs.map(j => j._ref);
       smsTasks.push(
         tw.messages.create({ to: user.phone, ...sender, body })
+          .then(() => { jobRefs.forEach(ref => smsJobSuccesses.add(ref)); })
           .catch(err => { console.error('sendJobReminders: SMS failed', { uid: userSnap.id, err: err?.message }); Sentry.captureException(err); })
       );
     }
     if (smsTasks.length > 0) await Promise.allSettled(smsTasks);
   }
 
-  // Only stamp jobs where at least one email was successfully sent (F-07)
-  await Promise.allSettled([...jobsWithSuccesses].map(ref => ref.update({ lastReminderSentDate: today })));
+  // Stamp each channel on its OWN field, only for jobs where that channel had
+  // ≥1 successful send (F-07 for email; audit M2 keeps SMS independent).
+  await Promise.allSettled([
+    ...[...jobsWithSuccesses].map(ref => ref.update({ lastReminderSentDate: today })),
+    ...[...smsJobSuccesses].map(ref => ref.update({ lastSmsReminderSentDate: today })),
+  ]);
 });
 
 // ── sendJobPosterNotification ─────────────────────────────────────────────
@@ -1943,6 +2013,13 @@ exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
   if (!callerSnap.exists || callerSnap.data().churchId !== churchId) {
     throw new HttpsError('permission-denied', 'Not a member of this church.');
   }
+  // Audit L5: promotion is an admin/manager action — gate on role, not just
+  // church membership. The member-withdraw path promotes inline inside
+  // jobWithdraw, so no regular-member caller needs this callable.
+  const callerRole = callerSnap.data().role;
+  if (callerRole !== 'admin' && callerRole !== 'manager') {
+    throw new HttpsError('permission-denied', 'Only an admin or manager can promote from the waitlist.');
+  }
   const subSnap = await db.doc(`churches/${churchId}/config/subscription`).get();
   if (!subHasHub(subSnap.data() || {}, 'jobs')) return { promoted: false, reason: 'hub-inactive' };
   const promoted = await promoteWaitlistForJob(db, churchId, jobDocId);
@@ -2147,7 +2224,9 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
 // Twilio's campaign-level keyword handling fires first; this branch stays as
 // a harmless backstop so a HELP reply is never silent-dropped (Privacy §6 /
 // Terms §7 commit to a HELP response).
-exports.twilioInbound = onRequest({ cors: false }, async (req, res) => {
+// invoker:'public' pins the allUsers run.invoker IAM so a Gen-2 redeploy
+// can't silently strip it (audit L2 / CLAUDE.md gotcha).
+exports.twilioInbound = onRequest({ cors: false, invoker: 'public' }, async (req, res) => {
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   if (!authToken || !twilioClient) {
     res.status(503).type('text/xml').send('<Response/>');
@@ -2206,7 +2285,15 @@ exports.twilioInbound = onRequest({ cors: false }, async (req, res) => {
   try {
     const db = getFirestore();
     const userSnaps = await db.collection('users').where('phone', '==', from).get();
-    const updates = userSnaps.docs.map(doc => doc.ref.update({
+    // Audit M6: STOP suppresses every account on the number — over-suppression
+    // is the compliance-safe direction. A START re-opt-in, however, must only
+    // revive accounts with a prior consent record (smsConsentAt); otherwise a
+    // recycled or family-shared number would re-opt-in someone who never
+    // consented. Accounts opt in via Settings, which stamps smsConsentAt.
+    const docsToUpdate = isStart
+      ? userSnaps.docs.filter(doc => !!doc.data().smsConsentAt)
+      : userSnaps.docs;
+    const updates = docsToUpdate.map(doc => doc.ref.update({
       smsRemindersEnabled: isStart ? true : false,
     }));
     const results = await Promise.allSettled(updates);
@@ -2217,12 +2304,13 @@ exports.twilioInbound = onRequest({ cors: false }, async (req, res) => {
       action: isStop ? 'opt_out' : 'opt_in',
       keyword: body,
       matchedUsers: userSnaps.size,
+      updatedUsers: docsToUpdate.length,
       failedUpdates: failed,
       timestamp: FieldValue.serverTimestamp(),
       source: 'twilio_inbound',
     });
 
-    console.log('twilioInbound', { action: isStop ? 'opt_out' : 'opt_in', matched: userSnaps.size, failed });
+    console.log('twilioInbound', { action: isStop ? 'opt_out' : 'opt_in', matched: userSnaps.size, updated: docsToUpdate.length, failed });
   } catch (err) {
     console.error('twilioInbound: failed to sync', err?.message);
     Sentry.captureException(err);

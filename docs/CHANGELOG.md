@@ -4,6 +4,61 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-22 — Jobs Hub audit backlog cleared (10 Medium + 9 Low + decision D1)
+
+With the audit's High tier already shipped, this pass closed the remaining
+triage backlog from `docs/JOBS-HUB-AUDIT-2026-05-22.md`. Shipped across three
+deploy surfaces; the E2E suite (40 passed / 1 skipped) gated each one.
+
+**Product decision D1 — accepted, no code.** The `manager` role keeps full Jobs
+Hub access identical to `admin` (volunteer leaderboard + signup rosters). This
+is intended — managers help run jobs. UI↔rules are already consistent.
+
+**`firestore.rules`** — M5: explicit deny rule for the (unused) `errors`
+collection so a future need is a deliberate change, not a default. M7:
+`jobAnnouncements` update now blocks edits to `createdBy`/`createdByName`/
+`createdAt` (mirrors the hardened `jobListings` rule). L6: `publicRequests`
+create bounded by an exact key allowlist + length caps (was `if true`). L4:
+`jobSwapRequests` create pins `uid` and `name` (to the caller's own user-doc
+name, via the already-budgeted `userData()` get), caps `note` at 1000 chars,
+and allowlists keys. `lastSmsReminderSentDate` added to the `jobListings`
+update denylist.
+
+**Cloud Functions** — M2: `sendJobReminders` email and SMS are now idempotent
+on separate stamps (`lastReminderSentDate` / `lastSmsReminderSentDate`) so a
+crash mid-channel can neither drop nor double-send the other. M6: `twilioInbound`
+START re-opt-in now only revives accounts carrying an `smsConsentAt` consent
+record (STOP still suppresses all phone matches — over-suppression is the safe
+direction); prevents a recycled/family number re-opting-in a non-consenter. A
+one-time backfill (`scripts/backfill-sms-consent.cjs`) stamped `smsConsentAt`
+on the 4 already-opted-in users. M10: `getPublicJobs` caps `title`/`description`/
+`location` length on the public payload; the Job modal and Share Board now warn
+that those fields are public. M12: `sendTaskDueReminders` collection-group scan
+gained a 90-day `dueDate` floor + `.limit(5000)`. L1: `closePastJobs`
+subscription-agnostic behaviour documented as intentional. L2: explicit
+`invoker:'public'` on `twilioInbound` and `stripeWebhook` (pins the `allUsers`
+IAM against Gen-2 redeploy stripping). L3: `sendJobCancelledEmails` no longer
+swallows its stamp-write error. L5: `promoteFromWaitlist` callable gated on
+admin/manager role. New owner-only callable `setEmailSuppressionActive` backs
+the L9 email-suppression UI. Webhooks curl-probed post-deploy — IAM intact.
+
+**Frontend + static** — M8: `textLight` token darkened `#8B93A1`→`#6B7280`
+(WCAG-AA). M9: the job-detail admin action row splits destructive buttons
+(Delete / Delete This+Future / Delete Series) into a divided "Danger zone" row
+so they can't be mis-tapped next to Edit. M11: `robots.txt` disallows `/?jobs=`.
+M13: detail-modal time formatted, roster-fetch failure shows a distinct error
+(was indistinguishable from an empty roster), `JobStatusBadge` carries a
+status-meaning title/aria-label and is reused in the schedule rows (no more raw
+lowercase pills), `requiredAccessTypes` shown as a 🔒 badge on the job card.
+L7: PWA icons regenerated full-bleed (valid maskable safe-zone). L8: icon-only
+🔁 chip + export/print buttons given `aria-label`s. L9: waiver consent is now a
+real Modal + checkbox (not `window.confirm`), recurring-series setup previews
+the actual dates, the `<tr role="button">` schedule row replaced with proper
+row semantics + an in-cell `<button>`, and an owner-only Email-suppression
+management tab (list + re-subscribe) added to Settings.
+
+Build clean (0 jsxDEV), lint 0 errors (45 baseline warnings).
+
 ## 2026-05-22 — Jobs Hub roster refactor: production cutover (audit H1/H2/H3/H4/M1)
 
 Shipped the `jobs-hub-roster-refactor` branch to production. The Jobs Hub roster (signups/waitlist) moved off the member-readable parent-doc arrays into protected per-uid subcollections (`jobListings/{id}/signups/{uid}`, `…/waitlist/{uid}`), with server-maintained `signupCount` / `waitlistCount` integers on the parent. All roster writes now route through compliance-enforcing Cloud Functions — new callables `jobSignUp` / `jobWithdraw` / `jobSetAttendance` (Admin SDK; enforce compliance + waiver + capacity server-side, promote the waitlist inline). Closes audit findings H1 (roster readable by any member via raw SDK), H2 (UI-only compliance), H3/M1 (hub-access gating in rules), H4 (`getPublicJobs` hardening).

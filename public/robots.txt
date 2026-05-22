@@ -3,5 +3,6 @@ Allow: /
 Disallow: /?request=
 Disallow: /?signup
 Disallow: /?invite
+Disallow: /?jobs=
 
 Sitemap: https://churchopshub.com/sitemap.xml
