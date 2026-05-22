@@ -83,3 +83,28 @@ in the loop). It should be finished and tested deliberately — not rushed into
 launch week untested. If the launch date is tight, the safest sequence is to
 treat this branch as the immediate post-audit work item and give the cutover a
 properly tested window.
+
+---
+
+## Update — feature refactor code-complete (2026-05-22, later)
+
+The frontend is done and committed (branch tip `f83523c`): `JobsPage.jsx`,
+`useFirestore.js`, `ical.js`, and the two-phase migration script
+`scripts/migrate-job-signups.cjs`. Production build clean, **0 lint errors**.
+`print.js` needed no change (it receives a roster fetched at call time).
+
+**The entire feature refactor — H1 / H2 / H3 / H4 / M1 — is code-complete.**
+
+Only verification remains. Two facts shape the path:
+- The Playwright E2E suite runs against **production** — `firebase.json` has no
+  emulator block, so a pure emulator-suite run is a separate infra build-out.
+- ~11 E2E specs + `admin-helpers.js` still reference the old `signups[]` model
+  and need updating to the subcollection model.
+
+**Recommended path to "verified ready":** update the 11 E2E specs, then a
+**staged production cutover** — deploy `functions` + `firestore:rules,indexes`,
+run migration **phase 1** (backfill — additive, safe), deploy the frontend, run
+the existing prod E2E suite. Green ⇒ run migration **phase 2** (drop legacy
+arrays) ⇒ verified ready. Red ⇒ roll back (legacy arrays still present;
+redeploy the prior functions/rules/frontend). The launch stays gated on that
+green result — which is exactly the "won't launch until it's ready" posture.
