@@ -814,7 +814,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Recurring series 🔁">
-              <P>When posting a new job, check <strong>Recurring series</strong> to create multiple jobs at once. Set the frequency and a series end date — a preview shows how many jobs will be created (up to 100).</P>
+              <P>When posting a new job, check <strong>Recurring series</strong> to create multiple jobs at once. Set the frequency and a series end date — a preview shows how many jobs will be created and lists the first several dates (up to 100 jobs).</P>
               <UL items={[
                 'Weekly, Every 2 Weeks, Monthly, Quarterly, or Annually',
                 'All jobs in the series share the same details but have independent signup lists',
@@ -829,7 +829,8 @@ export function HelpPage({ onBack }) {
               <P>Members can sign up for any open job with spots available. Click <strong>Sign Up</strong> on a job card or in the job detail. Sign-ups are transaction-safe — if the last spot is taken by someone else simultaneously, you'll see a "job is full" message.</P>
               <P>To remove yourself, click <strong>Withdraw</strong>. Admins and managers can also remove individual signups from the job detail view.</P>
               <Tip>Use the <strong>My Jobs</strong> filter tab to see all jobs you've signed up for at a glance.</Tip>
-              <Note>If a job has <strong>Required Access Types</strong> set (e.g. background check, SafeGuarding certification), only members linked to a People Access Hub record with those credentials can sign up. Admins set required access types when posting a job; the link between user accounts and People Access records is managed in People Access Hub → person detail → 🔗 Link to user account.</Note>
+              <Note>If a job has <strong>Required Access Types</strong> set (e.g. background check, SafeGuarding certification), only members linked to a People Access Hub record with those credentials can sign up. Required types show as a 🔒 badge on the job card. Admins set required access types when posting a job; the link between user accounts and People Access records is managed in People Access Hub → person detail → 🔗 Link to user account.</Note>
+              <Note>If a job requires a <strong>waiver</strong>, signing up opens a consent window with the full waiver text — you must tick <strong>I have read and agree</strong> before <strong>Agree &amp; Sign Up</strong> becomes available. Your acknowledgement is recorded with the signup.</Note>
             </Accordion>
 
             <Accordion title="Views: Job Board, Schedule, and Calendar">
@@ -840,6 +841,11 @@ export function HelpPage({ onBack }) {
                 'Calendar — month grid with job chips per day; color indicates status',
                 'Announcements — pinnable posts with optional expiry',
               ]} />
+            </Accordion>
+
+            <Accordion title="Sharing a public job board">
+              <P>Admins can share a read-only job board with people who don't have an account. Click <strong>Share Board</strong> in the Job Hub header to copy a public link — anyone with the link sees each open job's title, description, date, time, location, pay, and spot count, and can register to sign up.</P>
+              <Note>The shared board is fully public — it is not behind a login. Signup names are never shown, but a job's title, description, and location are. Don't put a minor's name or a private address in those fields. The app warns you before copying the link and when posting a job.</Note>
             </Accordion>
 
             <Accordion title="Signup roster visibility">

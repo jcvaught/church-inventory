@@ -87,9 +87,10 @@ Standard ~45 minute checklist for verifying the ChurchOpsHub Jobs Hub end-to-end
 - [ ] **Admin** → People Access → link Member A's user account to a Person without a valid Background Check
 - [ ] Member A retries Sign Up → blocked: *"need valid Background Check"*
 - [ ] **Admin** adds Background Check record (non-expired) to that Person
-- [ ] Member A retries → **waiver dialog appears with J3's waiver text**
-- [ ] Decline waiver → no signup
-- [ ] Accept waiver → signup succeeds · *expected: signup entry has `acknowledgedWaiverAt` timestamp (check via Firestore console if needed)*
+- [ ] Member A retries → **waiver Modal appears** with J3's waiver text + an "I have read and agree" checkbox · *(audit L9 — replaced the old window.confirm)*
+- [ ] "Agree & Sign Up" is disabled until the checkbox is ticked
+- [ ] Cancel the waiver Modal → no signup
+- [ ] Reopen → tick the checkbox → **Agree & Sign Up** → signup succeeds · *expected: signup entry has `acknowledgedWaiverAt` timestamp (check via Firestore console if needed)*
 
 ---
 
@@ -135,7 +136,7 @@ Standard ~45 minute checklist for verifying the ChurchOpsHub Jobs Hub end-to-end
 
 **Role:** Admin then Public (signed-out) · Verifies 2026-05-06 signup-leak fix
 
-- [ ] Admin → Job Board toolbar → **Share Board** → URL copied to clipboard
+- [ ] Admin → Job Board toolbar → **Share Board** → a PII-warning confirm appears first · *(audit M10)* → confirm → URL copied to clipboard
 - [ ] URL format: `?jobs=CHURCH_ID&cn=ChurchName&cc=ChurchCode`
 - [ ] Open URL in fully signed-out browser (not Incognito with logged-in cookies — use a fresh profile or another device)
 - [ ] **Open jobs visible**: title, date, location, pay, spots bar
