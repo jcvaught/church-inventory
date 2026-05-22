@@ -249,8 +249,11 @@ exports.getPublicJobs = onCall(
 
     const db = getFirestore();
     const churchSnap = await db.collection('churches').doc(churchId).get();
+    // Return an empty list for a non-existent church too — so a caller cannot
+    // distinguish "church does not exist" from "church exists, hub off / no jobs".
+    // Closes a churchId (= {creatorUid}-church) enumeration oracle (audit H4).
     if (!churchSnap.exists) {
-      throw new HttpsError('not-found', 'Church not found.');
+      return { jobs: [] };
     }
 
     const subSnap = await db.collection('churches').doc(churchId).collection('config').doc('subscription').get();
@@ -263,10 +266,12 @@ exports.getPublicJobs = onCall(
       .collection('churches').doc(churchId).collection('jobListings')
       .where('status', '==', 'open')
       .orderBy('scheduledDate')
+      .limit(200) // bound the unauthenticated payload (audit H4)
       .get();
 
     const jobs = jobsSnap.docs.map((doc) => {
       const x = doc.data();
+      const payNum = Number(x.pay);
       return {
         _docId: doc.id,
         jobNumber: x.jobNumber || null,
@@ -275,9 +280,13 @@ exports.getPublicJobs = onCall(
         scheduledDate: x.scheduledDate || null,
         scheduledTime: x.scheduledTime || null,
         location: x.location || '',
-        pay: x.pay ?? null,
+        pay: Number.isFinite(payNum) ? payNum : null,
         spotsTotal: x.spotsTotal || 1,
-        signupCount: Array.isArray(x.signups) ? x.signups.length : 0,
+        // Prefer the server-maintained signupCount (post-H1 subcollection model);
+        // fall back to the legacy signups[] array length for unmigrated docs.
+        signupCount: typeof x.signupCount === 'number'
+          ? x.signupCount
+          : (Array.isArray(x.signups) ? x.signups.length : 0),
         status: x.status || 'open',
       };
     });
@@ -1030,8 +1039,13 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
   if (!subHasHub(subSnap.data() || {}, 'jobs')) return { sent: 0 };
 
   const job = jobSnap.data();
-  const signups = job.signups || [];
-  const waitlist = job.waitlist || [];
+  // Roster lives in the signups/waitlist subcollections (audit H1, 2026-05-22).
+  const [suSnap, wlSnap] = await Promise.all([
+    db.collection(`churches/${churchId}/jobListings/${jobDocId}/signups`).get(),
+    db.collection(`churches/${churchId}/jobListings/${jobDocId}/waitlist`).get(),
+  ]);
+  const signups = suSnap.docs.map(d => d.data());
+  const waitlist = wlSnap.docs.map(d => d.data());
   // F-32 from the 2026-05-12 audit: include waitlist users in cancellation
   // notifications. Previously waitlisted teens sat on a dead waitlist forever
   // because they were excluded from cancellation broadcasts.
@@ -1376,7 +1390,10 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
 
     jobsToMark.push(jobDoc.ref);
 
-    for (const signup of (job.signups || [])) {
+    // Roster lives in the signups subcollection (audit H1, 2026-05-22).
+    const suSnap = await jobDoc.ref.collection('signups').get();
+    for (const signupDoc of suSnap.docs) {
+      const signup = signupDoc.data();
       if (!signup.uid) continue;
       if (!remindersByUid[signup.uid]) remindersByUid[signup.uid] = [];
       remindersByUid[signup.uid].push({
@@ -1579,7 +1596,7 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
   const safeRemoved = escapeHtml(removedName || 'Someone');
   const dateStr = job.scheduledDate ? escapeHtml(job.scheduledDate) : '';
   const timeStr = job.scheduledTime ? ` at ${escapeHtml(formatTimeForDisplay(job.scheduledTime))}` : '';
-  const filled = (job.signups || []).length;
+  const filled = job.signupCount || 0;
   const total = job.spotsTotal || 1;
 
   let subject, bodyHtml, bodyText;
@@ -1631,44 +1648,40 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
   return { sent: results.filter(r => r.status === 'fulfilled').length };
 });
 
-// ── promoteFromWaitlist ───────────────────────────────────────────────────
-// Called after a signup withdrawal. Atomically promotes the first waitlist
-// entry to signups, then sends that person a promotion email.
-// data: { churchId, jobDocId }
-exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
-  if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
-  const { churchId, jobDocId } = req.data;
-  if (!churchId || !jobDocId) return { promoted: false };
+// ══ Job Hub roster mutations (audit H1/H2, 2026-05-22) ════════════════════
+// signups[]/waitlist[] moved OFF the jobListings parent doc into protected
+// per-uid subcollections (jobListings/{id}/signups/{uid}, .../waitlist/{uid})
+// so volunteer names are not raw-SDK-readable by every church member (H1).
+// ALL roster writes go through these Cloud Functions, which enforce
+// compliance/waiver/capacity server-side (H2) and maintain the integer
+// signupCount/waitlistCount on the parent doc (the spots bar reads those).
+const WAITLIST_CAP = 50;
 
-  const db = getFirestore();
+// Re-validate that `uid` meets a job's requiredAccessTypes, given pre-fetched
+// accessPeople + accessRecords for the church. Empty requirement list ⇒ ok.
+function isAccessEligible(uid, requiredTypes, accessPeople, accessRecords, todayS) {
+  if (!requiredTypes || requiredTypes.length === 0) return true;
+  const linkedIds = new Set(accessPeople.filter(p => p.userId === uid).map(p => p._docId));
+  if (linkedIds.size === 0) return false;
+  const myRecords = accessRecords.filter(r => linkedIds.has(r.personId));
+  return requiredTypes.every(reqType =>
+    myRecords.some(r => r.type === reqType && (!r.expiryDate || r.expiryDate >= todayS))
+  );
+}
 
-  const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
-  if (!callerSnap.exists || callerSnap.data().churchId !== churchId) {
-    throw new HttpsError('permission-denied', 'Not a member of this church.');
-  }
-
-  // F-17: gate on subscription BEFORE running the promotion transaction.
-  // Previously we promoted, then bailed silently if the sub had lapsed —
-  // moving the volunteer to signups[] without any email. If the hub is
-  // gone, the volunteer can't even see the job, so don't promote at all.
-  const subSnapEarly = await db.doc(`churches/${churchId}/config/subscription`).get();
-  if (!subHasHub(subSnapEarly.data() || {}, 'jobs')) return { promoted: false, reason: 'hub-inactive' };
-
+// Promote the oldest eligible waitlist entry into an open signup spot.
+// Operates on the signups/waitlist subcollections + the parent counters.
+// Returns the promoted signup object (for the email) or null.
+async function promoteWaitlistForJob(db, churchId, jobDocId) {
   const jobRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}`);
-  let promotedUser = null;
-  let jobData = null;
-
-  // Pre-read job once to know if compliance pre-fetch is needed.
   const preSnap = await jobRef.get();
-  if (!preSnap.exists) return { promoted: false };
-  const preData = preSnap.data();
-  if (preData.status !== 'open') return { promoted: false };
-  const requiredTypes = preData.requiredAccessTypes || [];
+  if (!preSnap.exists) return null;
+  const job = preSnap.data();
+  if (job.status !== 'open') return null;
+  if ((job.signupCount || 0) >= (job.spotsTotal || 1)) return null;
 
-  // If compliance gating is on, fetch the church's accessPeople + accessRecords
-  // once so we can re-validate each waitlisted user before promotion.
-  let accessPeople = [];
-  let accessRecords = [];
+  const requiredTypes = job.requiredAccessTypes || [];
+  let accessPeople = [], accessRecords = [];
   if (requiredTypes.length > 0) {
     const [peopleSnap, recordsSnap] = await Promise.all([
       db.collection(`churches/${churchId}/accessPeople`).get(),
@@ -1678,63 +1691,51 @@ exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
     accessRecords = recordsSnap.docs.map(d => ({ _docId: d.id, ...d.data() }));
   }
   const todayS = new Date().toISOString().slice(0, 10);
-  const isEligible = (uid) => {
-    if (requiredTypes.length === 0) return true;
-    const linkedIds = new Set(accessPeople.filter(p => p.userId === uid).map(p => p._docId));
-    if (linkedIds.size === 0) return false;
-    const myRecords = accessRecords.filter(r => linkedIds.has(r.personId));
-    return requiredTypes.every(reqType =>
-      myRecords.some(r => r.type === reqType && (!r.expiryDate || r.expiryDate >= todayS))
-    );
-  };
 
+  // Oldest-first scan; first eligible waitlister wins the freed spot.
+  const wlSnap = await db.collection(`churches/${churchId}/jobListings/${jobDocId}/waitlist`)
+    .orderBy('addedAt').get();
+  const eligibleDoc = wlSnap.docs.find(d =>
+    isAccessEligible(d.id, requiredTypes, accessPeople, accessRecords, todayS));
+  if (!eligibleDoc) return null;
+
+  const promotedUid = eligibleDoc.id;
+  const wlRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}/waitlist/${promotedUid}`);
+  const signupRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}/signups/${promotedUid}`);
+  let promoted = null;
   await db.runTransaction(async (t) => {
-    const snap = await t.get(jobRef);
-    if (!snap.exists) return;
-    const data = snap.data();
-    if (data.status !== 'open') return;
-    const waitlist = data.waitlist || [];
-    const signups = data.signups || [];
-    if (waitlist.length === 0) return;
-    if (signups.length >= (data.spotsTotal || 1)) return;
-    const idx = waitlist.findIndex(w => isEligible(w.uid));
-    if (idx === -1) return;
-    const promoted = waitlist[idx];
-    const newWaitlist = waitlist.filter((_, i) => i !== idx);
-    promotedUser = promoted;
-    jobData = data;
-    const promotedSignup = {
-      uid: promoted.uid,
-      name: promoted.name,
-      signedUpAt: promoted.addedAt || new Date().toISOString(),
-    };
-    // Carry waiver acknowledgement forward from the waitlist entry so the
-    // audit trail survives promotion (Jobs Hub audit, 2026-05-06 #6).
-    if (promoted.acknowledgedWaiverAt) promotedSignup.acknowledgedWaiverAt = promoted.acknowledgedWaiverAt;
+    const [jobS, wlS, suS] = await Promise.all([t.get(jobRef), t.get(wlRef), t.get(signupRef)]);
+    if (!jobS.exists) return;
+    const j = jobS.data();
+    if (j.status !== 'open') return;
+    if ((j.signupCount || 0) >= (j.spotsTotal || 1)) return;
+    if (!wlS.exists || suS.exists) return; // raced — entry gone or already promoted
+    const wl = wlS.data();
+    const entry = { uid: promotedUid, name: wl.name || '', signedUpAt: new Date().toISOString() };
+    // Carry waiver acknowledgement forward so the audit trail survives promotion.
+    if (wl.acknowledgedWaiverAt) entry.acknowledgedWaiverAt = wl.acknowledgedWaiverAt;
+    t.set(signupRef, entry);
+    t.delete(wlRef);
     t.update(jobRef, {
-      signups: [...signups, promotedSignup],
-      waitlist: newWaitlist,
-      updatedAt: new Date().toISOString()
+      signupCount: (j.signupCount || 0) + 1,
+      waitlistCount: Math.max(0, (j.waitlistCount || 0) - 1),
+      updatedAt: new Date().toISOString(),
     });
+    promoted = entry;
   });
+  return promoted;
+}
 
-  if (!promotedUser) return { promoted: false };
-  if (!initSendGrid()) return { promoted: true, promotedName: promotedUser.name };
-
-  // Sub already verified pre-transaction (F-17). Skip the redundant re-check.
+// Send the transactional "you're off the waitlist" email to a promoted user.
+async function sendWaitlistPromotionEmail(db, churchId, jobData, promotedUid) {
+  if (!initSendGrid()) return;
   const [churchSnap, userSnap] = await Promise.all([
     db.doc(`churches/${churchId}/config/main`).get(),
-    db.doc(`users/${promotedUser.uid}`).get(),
+    db.doc(`users/${promotedUid}`).get(),
   ]);
-
-  // The promotion email is transactional ("you're now signed up"), not a
-  // marketing notification. Don't gate it on the church-wide notifications
-  // toggle — recipients need to know they took a confirmed spot.
   const user = userSnap.data();
-  if (!user?.email || user.active === false || user.churchId !== churchId) return { promoted: true };
-  // F-21 helper treats admin/missing-array as access.
-  if (!effectiveHasHub(user, 'jobs')) return { promoted: true };
-
+  if (!user?.email || user.active === false || user.churchId !== churchId) return;
+  if (!effectiveHasHub(user, 'jobs')) return;
   const churchName = churchSnap.data()?.churchName || 'Your Church';
   const safeTitle = escapeHtml(jobData?.title || 'Job');
   const safeName = escapeHtml(user.name || 'there');
@@ -1751,14 +1752,204 @@ exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
 <p>You're now officially signed up! <a href="https://churchopshub.com">Open ChurchOpsHub</a> to view the details.</p>
 <p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`;
   const text = `Hi ${user.name || 'there'},\n\nGreat news! A spot opened up for:\n\n${jobData?.title || 'Job'}${dateStr ? '\nDate: ' + dateStr + timeStr : ''}\n\nYou're now signed up.\n\n— ${churchName}`;
-
   try {
     await sendEmailSafe({ to: user.email, from: FROM, subject, html, text });
   } catch (err) {
-    console.error('promoteFromWaitlist: email failed', err?.message);
+    console.error('sendWaitlistPromotionEmail: failed', err?.message);
     Sentry.captureException(err);
   }
-  return { promoted: true, promotedName: promotedUser.name };
+}
+
+// ── jobSignUp ─────────────────────────────────────────────────────────────
+// Member signs up for a job. Re-validates compliance + waiver + capacity
+// server-side, then writes a signups/{uid} or waitlist/{uid} subcollection doc.
+// data: { churchId, jobDocId, waiverAccepted }
+exports.jobSignUp = onCall({ cors: true }, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  const { churchId, jobDocId, waiverAccepted } = req.data || {};
+  if (!churchId || !jobDocId) throw new HttpsError('invalid-argument', 'churchId and jobDocId required.');
+  const db = getFirestore();
+  const uid = req.auth.uid;
+
+  const callerSnap = await db.doc(`users/${uid}`).get();
+  if (!callerSnap.exists || callerSnap.data().churchId !== churchId) {
+    throw new HttpsError('permission-denied', 'Not a member of this church.');
+  }
+  const caller = callerSnap.data();
+  if (caller.active === false) throw new HttpsError('permission-denied', 'Account is inactive.');
+  if (!effectiveHasHub(caller, 'jobs')) throw new HttpsError('permission-denied', 'No Jobs Hub access.');
+
+  const subSnap = await db.doc(`churches/${churchId}/config/subscription`).get();
+  if (!subHasHub(subSnap.data() || {}, 'jobs')) {
+    throw new HttpsError('failed-precondition', 'The Jobs Hub is not active for this church.');
+  }
+
+  const jobRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}`);
+  const preSnap = await jobRef.get();
+  if (!preSnap.exists) return { error: 'Job not found.' };
+  const job = preSnap.data();
+  if (job.status !== 'open') return { error: 'This job is no longer open.' };
+
+  // H2: server-side compliance enforcement (was UI-only).
+  const requiredTypes = job.requiredAccessTypes || [];
+  if (requiredTypes.length > 0) {
+    const [peopleSnap, recordsSnap] = await Promise.all([
+      db.collection(`churches/${churchId}/accessPeople`).get(),
+      db.collection(`churches/${churchId}/accessRecords`).get(),
+    ]);
+    const accessPeople = peopleSnap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+    const accessRecords = recordsSnap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+    const todayS = new Date().toISOString().slice(0, 10);
+    if (!isAccessEligible(uid, requiredTypes, accessPeople, accessRecords, todayS)) {
+      return { error: `This job requires a valid ${requiredTypes.join(' + ')} on file. Ask an admin to add yours under People Access.` };
+    }
+  }
+  // H2: a waiver-required job needs explicit acceptance.
+  if (job.requiresWaiver && waiverAccepted !== true) {
+    return { error: 'You must accept the waiver to sign up for this job.' };
+  }
+
+  const signupRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}/signups/${uid}`);
+  const waitlistRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}/waitlist/${uid}`);
+  const now = new Date().toISOString();
+  let result = null;
+  await db.runTransaction(async (t) => {
+    const [jobS, suS, wlS] = await Promise.all([t.get(jobRef), t.get(signupRef), t.get(waitlistRef)]);
+    if (!jobS.exists) { result = { error: 'Job not found.' }; return; }
+    const j = jobS.data();
+    if (j.status !== 'open') { result = { error: 'This job is no longer open.' }; return; }
+    if (suS.exists) { result = { error: 'You are already signed up.' }; return; }
+    if (wlS.exists) { result = { error: 'You are already on the waitlist.' }; return; }
+    const signupCount = j.signupCount || 0;
+    const waitlistCount = j.waitlistCount || 0;
+    const name = caller.name || '';
+    if (signupCount < (j.spotsTotal || 1)) {
+      const entry = { uid, name, signedUpAt: now };
+      if (j.requiresWaiver) entry.acknowledgedWaiverAt = now;
+      t.set(signupRef, entry);
+      t.update(jobRef, { signupCount: signupCount + 1, updatedAt: now });
+      result = { success: true };
+    } else if (waitlistCount >= WAITLIST_CAP) {
+      result = { error: 'This job is full and the waitlist is at capacity (50 max).' };
+    } else {
+      const entry = { uid, name, addedAt: now };
+      if (j.requiresWaiver) entry.acknowledgedWaiverAt = now;
+      t.set(waitlistRef, entry);
+      t.update(jobRef, { waitlistCount: waitlistCount + 1, updatedAt: now });
+      result = { wasWaitlisted: true };
+    }
+  });
+  return result || { error: 'Sign-up failed. Please try again.' };
+});
+
+// ── jobWithdraw ───────────────────────────────────────────────────────────
+// Member withdraws self, OR an admin/manager removes a member (uid param).
+// Deletes the signup/waitlist subcollection doc, decrements the parent
+// counter, and (when a signup spot frees) promotes the waitlist inline.
+// data: { churchId, jobDocId, uid? }
+exports.jobWithdraw = onCall({ cors: true }, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  const { churchId, jobDocId, uid: targetUidRaw } = req.data || {};
+  if (!churchId || !jobDocId) throw new HttpsError('invalid-argument', 'churchId and jobDocId required.');
+  const db = getFirestore();
+  const callerUid = req.auth.uid;
+  const targetUid = targetUidRaw || callerUid;
+
+  const callerSnap = await db.doc(`users/${callerUid}`).get();
+  if (!callerSnap.exists || callerSnap.data().churchId !== churchId) {
+    throw new HttpsError('permission-denied', 'Not a member of this church.');
+  }
+  const role = callerSnap.data().role;
+  if (targetUid !== callerUid && role !== 'admin' && role !== 'manager') {
+    throw new HttpsError('permission-denied', 'Only an admin or manager can remove another member.');
+  }
+
+  const jobRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}`);
+  const signupRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}/signups/${targetUid}`);
+  const waitlistRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}/waitlist/${targetUid}`);
+  const now = new Date().toISOString();
+  let wasSignedUp = false, wasOnWaitlist = false;
+  await db.runTransaction(async (t) => {
+    const [jobS, suS, wlS] = await Promise.all([t.get(jobRef), t.get(signupRef), t.get(waitlistRef)]);
+    if (!jobS.exists) return;
+    const j = jobS.data();
+    if (suS.exists) {
+      t.delete(signupRef);
+      t.update(jobRef, { signupCount: Math.max(0, (j.signupCount || 0) - 1), updatedAt: now });
+      wasSignedUp = true;
+    } else if (wlS.exists) {
+      t.delete(waitlistRef);
+      t.update(jobRef, { waitlistCount: Math.max(0, (j.waitlistCount || 0) - 1), updatedAt: now });
+      wasOnWaitlist = true;
+    }
+  });
+
+  // A signup spot freed — promote the head of the waitlist inline + server-side
+  // so it can't be lost to a closed browser tab (audit M3).
+  if (wasSignedUp) {
+    try {
+      const promoted = await promoteWaitlistForJob(db, churchId, jobDocId);
+      if (promoted) {
+        const jobSnap = await jobRef.get();
+        await sendWaitlistPromotionEmail(db, churchId, jobSnap.exists ? jobSnap.data() : {}, promoted.uid);
+      }
+    } catch (err) {
+      console.error('jobWithdraw: waitlist promotion failed', err?.message);
+      Sentry.captureException(err);
+    }
+  }
+  return { wasSignedUp, wasOnWaitlist };
+});
+
+// ── jobSetAttendance ──────────────────────────────────────────────────────
+// Admin/manager marks a signup attended / not-attended. Reports { updated }
+// honestly so a stale roster (signup already removed) doesn't read as success.
+// data: { churchId, jobDocId, uid, attended }
+exports.jobSetAttendance = onCall({ cors: true }, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  const { churchId, jobDocId, uid: targetUid, attended } = req.data || {};
+  if (!churchId || !jobDocId || !targetUid) {
+    throw new HttpsError('invalid-argument', 'churchId, jobDocId and uid required.');
+  }
+  const db = getFirestore();
+  const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
+  if (!callerSnap.exists || callerSnap.data().churchId !== churchId) {
+    throw new HttpsError('permission-denied', 'Not a member of this church.');
+  }
+  const role = callerSnap.data().role;
+  if (role !== 'admin' && role !== 'manager') {
+    throw new HttpsError('permission-denied', 'Only an admin or manager can record attendance.');
+  }
+  const signupRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}/signups/${targetUid}`);
+  let updated = false;
+  await db.runTransaction(async (t) => {
+    const s = await t.get(signupRef);
+    if (!s.exists) return; // audit M4: report the no-op rather than fake success
+    t.update(signupRef, { attended: !!attended });
+    updated = true;
+  });
+  return { updated };
+});
+
+// ── promoteFromWaitlist ───────────────────────────────────────────────────
+// Standalone promotion trigger (jobWithdraw already promotes inline; this is
+// kept for reconciliation / admin-edit paths). data: { churchId, jobDocId }
+exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  const { churchId, jobDocId } = req.data || {};
+  if (!churchId || !jobDocId) return { promoted: false };
+  const db = getFirestore();
+  const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
+  if (!callerSnap.exists || callerSnap.data().churchId !== churchId) {
+    throw new HttpsError('permission-denied', 'Not a member of this church.');
+  }
+  const subSnap = await db.doc(`churches/${churchId}/config/subscription`).get();
+  if (!subHasHub(subSnap.data() || {}, 'jobs')) return { promoted: false, reason: 'hub-inactive' };
+  const promoted = await promoteWaitlistForJob(db, churchId, jobDocId);
+  if (!promoted) return { promoted: false };
+  const jobSnap = await db.doc(`churches/${churchId}/jobListings/${jobDocId}`).get();
+  await sendWaitlistPromotionEmail(db, churchId, jobSnap.exists ? jobSnap.data() : {}, promoted.uid);
+  return { promoted: true, promotedName: promoted.name };
 });
 
 // ── sendTaskMentionEmail ──────────────────────────────────────────────────

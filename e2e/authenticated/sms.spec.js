@@ -4,7 +4,7 @@ import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { resolve as pathResolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { db, churchId, uids } from '../admin-helpers.js';
+import { db, churchId, seedSignup } from '../admin-helpers.js';
 
 // SMS smoke test — gated behind E2E_RUN_SMS=1 so it doesn't fire by default.
 //
@@ -82,13 +82,10 @@ test.describe('SMS smoke test (gated behind E2E_RUN_SMS=1)', () => {
     const beforeMsg = await fetchLatestTwilioMessage(targetPhone);
     const beforeSid = beforeMsg?.sid;
 
-    // 4. Add the target user to signups + clear any prior reminder stamp
+    // 4. Add the target user to the signups subcollection (audit H1) + clear
+    //    any prior reminder stamp. sendJobReminders reads the subcollection.
+    await seedSignup(jobRef.id, { uid: targetUser.uid, name: userData.name || 'SMS Test' });
     await jobRef.update({
-      signups: admin.default.firestore.FieldValue.arrayUnion({
-        uid: targetUser.uid,
-        name: userData.name || 'SMS Test',
-        signedUpAt: new Date().toISOString(),
-      }),
       lastReminderSentDate: admin.default.firestore.FieldValue.delete(),
       updatedAt: new Date().toISOString(),
     });
@@ -123,11 +120,11 @@ test.describe('SMS smoke test (gated behind E2E_RUN_SMS=1)', () => {
       }
       expect(okStatuses, `Twilio status=${newMsg.status} error=${newMsg.error_code} — A2P 10DLC likely pending`).toContain(newMsg.status);
     } finally {
-      // 8. Cleanup — remove our test signup + reminder stamp
-      const fresh = await jobRef.get();
-      const signups = (fresh.data().signups || []).filter(s => s.uid !== targetUser.uid);
+      // 8. Cleanup — delete our test signup doc + decrement the counter +
+      //    clear the reminder stamp.
+      await db().doc(`churches/${churchId()}/jobListings/${jobRef.id}/signups/${targetUser.uid}`).delete();
       await jobRef.update({
-        signups,
+        signupCount: admin.default.firestore.FieldValue.increment(-1),
         lastReminderSentDate: admin.default.firestore.FieldValue.delete(),
         updatedAt: new Date().toISOString(),
       });

@@ -93,7 +93,9 @@ export async function createJob({ title, scheduledDate, scheduledTime = '', loca
       title, description: '', scheduledDate, scheduledTime, location,
       spotsTotal, pay, status, jobLead,
       requiresWaiver, waiverText, requiredAccessTypes,
-      signups: [], waitlist: [], attendance: [],
+      // Roster lives in signups/waitlist subcollections (audit H1) — the
+      // parent carries server-maintained counters only.
+      signupCount: 0, waitlistCount: 0,
       createdBy, createdByName, createdAt: now, updatedAt: now,
       jobNumber,
     });
@@ -109,6 +111,35 @@ export async function getJob(docId) {
 
 export async function deleteJob(docId) {
   await db().doc(`churches/${CHURCH_ID}/jobListings/${docId}`).delete();
+}
+
+// ── Job roster subcollection helpers (audit H1, 2026-05-22) ──
+// The signups/waitlist roster lives in per-uid subcollections; tests seed and
+// read it through these helpers instead of the legacy parent-doc arrays.
+export async function seedSignup(jobDocId, { uid, name = 'E2E User', attended, acknowledgedWaiverAt } = {}) {
+  const entry = { uid, name, signedUpAt: new Date().toISOString() };
+  if (attended !== undefined) entry.attended = attended;
+  if (acknowledgedWaiverAt) entry.acknowledgedWaiverAt = acknowledgedWaiverAt;
+  await db().doc(`churches/${CHURCH_ID}/jobListings/${jobDocId}/signups/${uid}`).set(entry);
+  await db().doc(`churches/${CHURCH_ID}/jobListings/${jobDocId}`).update({
+    signupCount: admin.firestore.FieldValue.increment(1),
+  });
+}
+export async function seedWaitlistEntry(jobDocId, { uid, name = 'E2E User', acknowledgedWaiverAt } = {}) {
+  const entry = { uid, name, addedAt: new Date().toISOString() };
+  if (acknowledgedWaiverAt) entry.acknowledgedWaiverAt = acknowledgedWaiverAt;
+  await db().doc(`churches/${CHURCH_ID}/jobListings/${jobDocId}/waitlist/${uid}`).set(entry);
+  await db().doc(`churches/${CHURCH_ID}/jobListings/${jobDocId}`).update({
+    waitlistCount: admin.firestore.FieldValue.increment(1),
+  });
+}
+export async function getJobSignups(jobDocId) {
+  const snap = await db().collection(`churches/${CHURCH_ID}/jobListings/${jobDocId}/signups`).get();
+  return snap.docs.map(d => d.data());
+}
+export async function getJobWaitlist(jobDocId) {
+  const snap = await db().collection(`churches/${CHURCH_ID}/jobListings/${jobDocId}/waitlist`).get();
+  return snap.docs.map(d => d.data());
 }
 
 export async function setNotifications(enabled) {

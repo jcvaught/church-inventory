@@ -88,7 +88,7 @@ export function exportJobsICS(jobs, churchName, { calendarLabel = 'Jobs', filena
     const parts = [];
     if (job.description) parts.push(job.description);
     if (job.pay != null) parts.push(`Pay: $${Number(job.pay).toFixed(2)}/person`);
-    parts.push(`${(job.signups || []).length}/${job.spotsTotal || 1} spots filled`);
+    parts.push(`${job.signupCount || 0}/${job.spotsTotal || 1} spots filled`);
     events.push(`DESCRIPTION:${escICS(parts.join(' | '))}`);
     if (job.location) events.push(`LOCATION:${escICS(job.location)}`);
     events.push(`UID:${escICS(job.jobNumber || job._docId)}@churchopshub-jobs`);

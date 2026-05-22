@@ -1,6 +1,6 @@
 // @ts-check
 import { test, expect } from '../firebase-fixtures.js';
-import { purgeE2EArtifacts, createJob, getJob, setNotifications, uids, daysFromNowStr, e2eTitle, db, churchId } from '../admin-helpers.js';
+import { purgeE2EArtifacts, createJob, getJob, getJobSignups, seedSignup, setNotifications, uids, daysFromNowStr, e2eTitle } from '../admin-helpers.js';
 
 // §10 of docs/TEST-JOBS-HUB-2026-05-07.md — Notifications spot-check.
 //
@@ -14,6 +14,10 @@ import { purgeE2EArtifacts, createJob, getJob, setNotifications, uids, daysFromN
 //      toggle. (Email send for `event === 'withdrawal'` was permanently
 //      disabled 2026-05-13 to trim SendGrid volume; the in-app activityLog
 //      entry is the only channel.)
+//
+// Roster lives in the signups subcollection (audit H1, 2026-05-22): seed via
+// seedSignup(), assert via getJobSignups(). The lastPosterNotifiedByActors
+// stamp remains a parent-doc field, read via getJob().
 
 test.describe('§10 Notifications gate', () => {
   test.beforeAll(async () => { await setNotifications(true); });
@@ -29,11 +33,7 @@ test.describe('§10 Notifications gate', () => {
       spotsTotal: 2,
       createdBy: u.admin, createdByName: 'E2E Admin',
     });
-    const now = new Date().toISOString();
-    await db().doc(`churches/${churchId()}/jobListings/${job.docId}`).update({
-      signups: [{ uid: u.memberA, name: 'Member A Test', signedUpAt: now }],
-      updatedAt: now,
-    });
+    await seedSignup(job.docId, { uid: u.memberA, name: 'Member A Test' });
 
     await page.goto('/');
     const onboardingClose = page.getByRole('button', { name: /^×$|^close$/i }).first();
@@ -45,7 +45,7 @@ test.describe('§10 Notifications gate', () => {
     await page.getByRole('button', { name: /Remove Member A Test/ }).click();
 
     // Wait for the admin-remove transaction to commit
-    await expect.poll(async () => (await getJob(job.docId)).signups.length, { timeout: 15_000 }).toBe(0);
+    await expect.poll(async () => (await getJobSignups(job.docId)).length, { timeout: 15_000 }).toBe(0);
 
     // Give the CF call ~6s to attempt — should bail before the F-15 stamp
     await page.waitForTimeout(6_000);
@@ -63,11 +63,7 @@ test.describe('§10 Notifications gate', () => {
       // Important: poster ≠ actor so the self-skip path doesn't fire.
       createdBy: u.memberB, createdByName: 'E2E Member B',
     });
-    const now = new Date().toISOString();
-    await db().doc(`churches/${churchId()}/jobListings/${job.docId}`).update({
-      signups: [{ uid: u.memberA, name: 'Member A Test', signedUpAt: now }],
-      updatedAt: now,
-    });
+    await seedSignup(job.docId, { uid: u.memberA, name: 'Member A Test' });
 
     await page.goto('/');
     const onboardingClose = page.getByRole('button', { name: /^×$|^close$/i }).first();
@@ -95,11 +91,7 @@ test.describe('§10 Notifications gate', () => {
       spotsTotal: 2,
       createdBy: u.admin, createdByName: 'E2E Admin',
     });
-    const now = new Date().toISOString();
-    await db().doc(`churches/${churchId()}/jobListings/${job.docId}`).update({
-      signups: [{ uid: u.memberA, name: 'Member A Test', signedUpAt: now }],
-      updatedAt: now,
-    });
+    await seedSignup(job.docId, { uid: u.memberA, name: 'Member A Test' });
 
     await memberAPage.goto('/');
     await memberAPage.getByRole('button', { name: /^hubs$/i }).first().click();
@@ -108,7 +100,7 @@ test.describe('§10 Notifications gate', () => {
     memberAPage.once('dialog', dialog => dialog.accept().catch(() => {}));
     await memberAPage.getByRole('dialog').getByRole('button', { name: /^withdraw$/i }).click();
 
-    await expect.poll(async () => (await getJob(job.docId)).signups.length, { timeout: 15_000 }).toBe(0);
+    await expect.poll(async () => (await getJobSignups(job.docId)).length, { timeout: 15_000 }).toBe(0);
 
     // Wait long enough for the CF to have processed if it were going to —
     // then assert the stamp is still absent (withdrawal path is permanently

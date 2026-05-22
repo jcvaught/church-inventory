@@ -6,6 +6,7 @@ import {
 import * as Sentry from '@sentry/react';
 import { db, storage } from './firebase.js';
 import { ref as stRef, deleteObject } from 'firebase/storage';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { generateRecurrenceDates } from './utils/date.js';
 import { excludeTestAccounts } from './utils/testAccounts.js';
 
@@ -897,8 +898,9 @@ export function useFirestore(churchId) {
             recurrenceGroupId: seriesGroupId,
             recurrenceFreq,
             seriesEndDate,
-            signups: [],
-            waitlist: [],
+            // Roster lives in subcollections (audit H1); parent holds counters.
+            signupCount: 0,
+            waitlistCount: 0,
             createdBy: userId,
             createdByName: userName,
             createdAt: new Date().toISOString(),
@@ -923,8 +925,9 @@ export function useFirestore(churchId) {
         t.set(newDocRef, {
           ...job,
           jobNumber,
-          signups: [],
-          waitlist: [],
+          // Roster lives in subcollections (audit H1); parent holds counters.
+          signupCount: 0,
+          waitlistCount: 0,
           createdBy: userId,
           createdByName: userName,
           createdAt: new Date().toISOString(),
@@ -945,7 +948,7 @@ export function useFirestore(churchId) {
       // recurrence metadata.
       const {
         createdBy: _cb, createdByName: _cbn, jobNumber: _jn,
-        signups: _s, waitlist: _w,
+        signups: _s, waitlist: _w, signupCount: _sc, waitlistCount: _wc,
         cancellationEmailSentAt: _ce, lastReminderSentDate: _lr, lastPosterNotifiedByActors: _lp,
         recurrenceGroupId: _rg, recurrenceFreq: _rf, seriesEndDate: _se,
         ...safeUpdates
@@ -957,7 +960,7 @@ export function useFirestore(churchId) {
         await runTransaction(db, async (t) => {
           const snap = await t.get(jobRef);
           if (!snap.exists()) return;
-          const currentSignups = (snap.data().signups || []).length;
+          const currentSignups = (snap.data().signupCount || 0);
           if (safeUpdates.spotsTotal < currentSignups) {
             throw new Error(`Cannot reduce spots below current signup count (${currentSignups}).`);
           }
@@ -993,7 +996,7 @@ export function useFirestore(churchId) {
     try {
       const {
         createdBy: _cb, createdByName: _cbn, jobNumber: _jn,
-        signups: _s, waitlist: _w, scheduledDate: _sd,
+        signups: _s, waitlist: _w, signupCount: _sc, waitlistCount: _wc, scheduledDate: _sd,
         cancellationEmailSentAt: _ce, lastReminderSentDate: _lr, lastPosterNotifiedByActors: _lp,
         recurrenceGroupId: _rg, recurrenceFreq: _rf, seriesEndDate: _se,
         ...safeUpdates
@@ -1012,7 +1015,7 @@ export function useFirestore(churchId) {
         if (safeUpdates.spotsTotal !== undefined) {
           for (const d of docs) {
             if (!d.exists()) continue;
-            const cnt = (d.data().signups || []).length;
+            const cnt = (d.data().signupCount || 0);
             if (safeUpdates.spotsTotal < cnt) {
               throw new Error(`Cannot reduce spots — ${d.data().jobNumber || d.id} has ${cnt} signup(s) which would exceed the new limit.`);
             }
@@ -1023,7 +1026,7 @@ export function useFirestore(churchId) {
         docs.forEach(d => {
           if (!d.exists()) return;
           t.update(d.ref, { ...safeUpdates, updatedAt: now });
-          affected.push({ docId: d.id, signupCount: (d.data().signups || []).length });
+          affected.push({ docId: d.id, signupCount: (d.data().signupCount || 0) });
         });
       });
       await logActivity('update_job', `${updates.title || groupId} (series ×${refs.length})`, userId, userName, { title: updates.title });
@@ -1082,84 +1085,33 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
-  const signUpForJob = useCallback(async (docId, userId, userName) => {
+  // Roster mutations (audit H1/H2, 2026-05-22): signups/waitlist live in
+  // protected per-uid subcollections written exclusively by Cloud Functions,
+  // which enforce compliance/waiver/capacity server-side. These wrappers call
+  // those functions; activity logging stays client-side as before.
+  const signUpForJob = useCallback(async (docId, userId, userName, waiverAccepted, jobNumber) => {
     try {
-      const jobRef = doc(db, 'churches', churchId, 'jobListings', docId);
-      let errorMsg = null;
-      let jobTitle = '';
-      let jobNumber = '';
-      let wasWaitlisted = false;
-      await runTransaction(db, async (t) => {
-        const snap = await t.get(jobRef);
-        if (!snap.exists()) { errorMsg = 'Job not found.'; return; }
-        const data = snap.data();
-        if (data.status !== 'open') { errorMsg = 'This job is no longer open.'; return; }
-        const signups = data.signups || [];
-        const waitlist = data.waitlist || [];
-        if (signups.some(s => s.uid === userId)) { errorMsg = 'You are already signed up.'; return; }
-        if (waitlist.some(w => w.uid === userId)) { errorMsg = 'You are already on the waitlist.'; return; }
-        jobTitle = data.title || '';
-        jobNumber = data.jobNumber || docId;
-        if (signups.length >= (data.spotsTotal || 1)) {
-          // Mirror the firestore.rules waitlist cap (size() > 50) so the user
-          // gets a specific error instead of a generic permission-denied that
-          // handleErr would swallow into 'Sign-up failed. Please try again.'
-          if (waitlist.length >= 50) {
-            errorMsg = 'This job is full and the waitlist is at capacity (50 max).';
-            return;
-          }
-          const waitlistEntry = { uid: userId, name: userName, addedAt: new Date().toISOString() };
-          // Capture waiver acknowledgement at waitlist join so the audit trail
-          // survives the eventual promotion to signups.
-          if (data.requiresWaiver) waitlistEntry.acknowledgedWaiverAt = new Date().toISOString();
-          t.update(jobRef, {
-            waitlist: [...waitlist, waitlistEntry],
-            updatedAt: new Date().toISOString()
-          });
-          wasWaitlisted = true;
-          return;
-        }
-        const signupEntry = { uid: userId, name: userName, signedUpAt: new Date().toISOString() };
-        if (data.requiresWaiver) signupEntry.acknowledgedWaiverAt = new Date().toISOString();
-        t.update(jobRef, { signups: [...signups, signupEntry], updatedAt: new Date().toISOString() });
-      });
-      if (errorMsg) return { error: errorMsg };
-      if (wasWaitlisted) {
-        await logActivity('signup_job', jobNumber, userId, userName, { title: jobTitle, waitlisted: true });
+      const fn = httpsCallable(getFunctions(), 'jobSignUp');
+      const { data } = await fn({ churchId, jobDocId: docId, waiverAccepted: !!waiverAccepted });
+      if (data?.error) return { error: data.error };
+      if (data?.wasWaitlisted) {
+        await logActivity('signup_job', jobNumber || docId, userId, userName, { waitlisted: true });
         return { wasWaitlisted: true };
       }
-      await logActivity('signup_job', jobNumber, userId, userName, { title: jobTitle });
+      await logActivity('signup_job', jobNumber || docId, userId, userName, {});
       return { success: true };
     } catch (err) { handleErr(err); return { error: 'Sign-up failed. Please try again.' }; }
   }, [churchId]);
 
-  const withdrawFromJob = useCallback(async (docId, uid, actorId, actorName) => {
+  const withdrawFromJob = useCallback(async (docId, uid, actorId, actorName, jobNumber) => {
     try {
-      const jobRef = doc(db, 'churches', churchId, 'jobListings', docId);
-      let jobNumber = '';
-      let wasSignedUp = false;
-      let wasOnWaitlist = false;
-      await runTransaction(db, async (t) => {
-        const snap = await t.get(jobRef);
-        if (!snap.exists()) return;
-        jobNumber = snap.data().jobNumber || docId;
-        const existing = snap.data().signups || [];
-        const signups = existing.filter(s => s.uid !== uid);
-        if (signups.length < existing.length) {
-          wasSignedUp = true;
-          t.update(jobRef, { signups, updatedAt: new Date().toISOString() });
-          return;
-        }
-        const existingWL = snap.data().waitlist || [];
-        const waitlist = existingWL.filter(w => w.uid !== uid);
-        if (waitlist.length < existingWL.length) {
-          wasOnWaitlist = true;
-          t.update(jobRef, { waitlist, updatedAt: new Date().toISOString() });
-        }
-      });
+      const fn = httpsCallable(getFunctions(), 'jobWithdraw');
+      const { data } = await fn({ churchId, jobDocId: docId, uid });
+      const wasSignedUp = !!data?.wasSignedUp;
+      const wasOnWaitlist = !!data?.wasOnWaitlist;
       if (wasSignedUp && actorId) {
         const action = actorId !== uid ? 'admin_remove_job' : 'withdraw_job';
-        await logActivity(action, jobNumber, actorId, actorName, { removedUid: uid });
+        await logActivity(action, jobNumber || docId, actorId, actorName, { removedUid: uid });
       }
       return { wasSignedUp, wasOnWaitlist };
     } catch (err) { handleErr(err); throw err; }
@@ -1167,15 +1119,9 @@ export function useFirestore(churchId) {
 
   const updateJobSignupAttendance = useCallback(async (docId, uid, attended) => {
     try {
-      const jobRef = doc(db, 'churches', churchId, 'jobListings', docId);
-      await runTransaction(db, async (t) => {
-        const snap = await t.get(jobRef);
-        if (!snap.exists()) return;
-        const signups = (snap.data().signups || []).map(s =>
-          s.uid === uid ? { ...s, attended } : s
-        );
-        t.update(jobRef, { signups, updatedAt: new Date().toISOString() });
-      });
+      const fn = httpsCallable(getFunctions(), 'jobSetAttendance');
+      const { data } = await fn({ churchId, jobDocId: docId, uid, attended });
+      return { updated: !!data?.updated };
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 

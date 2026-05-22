@@ -1,13 +1,14 @@
 // @ts-check
 import { test, expect } from '@playwright/test';
-import { purgeE2EArtifacts, createJob, uids, daysFromNowStr, e2eTitle, db, churchId } from '../admin-helpers.js';
+import { purgeE2EArtifacts, createJob, seedSignup, seedWaitlistEntry, uids, daysFromNowStr, e2eTitle, churchId } from '../admin-helpers.js';
 
 // §9 of docs/TEST-JOBS-HUB-2026-05-07.md — Public job board.
 // Critical regression check for the 2026-05-06 PII-leak fix: the public
-// board renders via the getPublicJobs CF (functions/index.js:167), which
-// strips signups[], waitlist[], attendance, createdBy, and any other PII
-// before returning. Direct unauthenticated Firestore reads are blocked
-// by firestore.rules (no `allow get/list` for anonymous on jobListings).
+// board renders via the getPublicJobs CF, which returns only display fields
+// + signupCount — the roster lives in signups/waitlist subcollections the CF
+// never reads. Direct unauthenticated Firestore reads are blocked by
+// firestore.rules (no `allow get/list` for anonymous on jobListings or its
+// roster subcollections).
 
 test.describe('§9 Public job board', () => {
   test.afterAll(async () => { await purgeE2EArtifacts(); });
@@ -23,12 +24,8 @@ test.describe('§9 Public job board', () => {
       createdBy: u.admin, createdByName: 'E2E Admin',
     });
     // Seed signups + waitlist with PII-bearing names
-    const now = new Date().toISOString();
-    await db().doc(`churches/${churchId()}/jobListings/${job.docId}`).update({
-      signups: [{ uid: u.memberA, name: 'PrivateMemberA', signedUpAt: now }],
-      waitlist: [{ uid: u.memberB, name: 'PrivateMemberB', addedAt: now }],
-      updatedAt: now,
-    });
+    await seedSignup(job.docId, { uid: u.memberA, name: 'PrivateMemberA' });
+    await seedWaitlistEntry(job.docId, { uid: u.memberB, name: 'PrivateMemberB' });
 
     // Open the share URL in a completely fresh context — no auth
     const ctx = await browser.newContext();

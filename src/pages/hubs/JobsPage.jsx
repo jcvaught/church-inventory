@@ -1,5 +1,7 @@
 import { useState, useMemo, useContext, useEffect, useRef, memo } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { collection, collectionGroup, query, where, onSnapshot, getDocs } from 'firebase/firestore';
+import { db } from '../../firebase.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
@@ -42,7 +44,7 @@ const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 const JobChip = memo(function JobChip({ job, onJobClick }) {
   const sc = JOB_STATUS_COLORS[job.status] || JOB_STATUS_COLORS.open;
-  const filled = (job.signups || []).length;
+  const filled = job.signupCount || 0;
   const total = job.spotsTotal || 1;
   const isFull = filled >= total && job.status === 'open';
   const chipBg = isFull ? '#FEF3E8' : sc.bg;
@@ -141,7 +143,7 @@ function JobCalendar({ jobs, onJobClick, isMobile, todayStr: todayStrProp }) {
                     <div style={{ fontSize:14, fontWeight:600, color:B.navy, fontFamily:f1 }}>{j.title}</div>
                     <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>{j.scheduledDate}{j.scheduledTime ? ' · '+formatTimeForDisplay(j.scheduledTime) : ''}</div>
                   </div>
-                  <span style={{ fontSize:12, color:sc.tx, fontFamily:f1 }}>{(j.signups||[]).length}/{j.spotsTotal||1}</span>
+                  <span style={{ fontSize:12, color:sc.tx, fontFamily:f1 }}>{(j.signupCount||0)}/{j.spotsTotal||1}</span>
                 </div>
               );
             })}
@@ -216,7 +218,7 @@ function JobStatusBadge({ status }) {
 }
 
 function SpotsBar({ job }) {
-  const filled = (job.signups || []).length;
+  const filled = job.signupCount || 0;
   const total = job.spotsTotal || 1;
   const pct = Math.min(100, (filled / total) * 100);
   const full = filled >= total;
@@ -235,7 +237,7 @@ function SpotsBar({ job }) {
   );
 }
 
-const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJobId, signed, full, onWaitlist, showRoster, onDetail, onWithdraw, onSignUp }) {
+const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJobId, signed, full, onWaitlist, onDetail, onWithdraw, onSignUp }) {
   // M-3 from the 2026-05-12 audit: skip hover affordances on mobile.
   // Otherwise a tap triggers onMouseEnter and the card stays in "hover"
   // state ("stuck hover") until the user taps elsewhere.
@@ -275,19 +277,14 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJ
         </div>
       )}
       <div style={{ marginBottom: 10 }}><SpotsBar job={job} /></div>
-      {showRoster && (job.signups || []).length > 0 && (
-        <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 10 }}>
-          {(job.signups || []).map(s => s.name).join(', ')}
-        </div>
-      )}
       {!isAdminOrManager && signed && (
         <div style={{ fontSize: 12, fontWeight: 700, color: B.teal, fontFamily: f1, marginBottom: 10 }}>✓ You're signed up</div>
       )}
       {!isAdminOrManager && onWaitlist && (
         <div style={{ fontSize: 12, fontWeight: 700, color: '#D97706', fontFamily: f1, marginBottom: 10 }}>⏳ You're on the waitlist</div>
       )}
-      {isAdminOrManager && (job.waitlist || []).length > 0 && (
-        <div style={{ fontSize: 11, color: '#92400E', fontFamily: f1, marginBottom: 6 }}>{(job.waitlist || []).length} on waitlist</div>
+      {isAdminOrManager && (job.waitlistCount || 0) > 0 && (
+        <div style={{ fontSize: 11, color: '#92400E', fontFamily: f1, marginBottom: 6 }}>{job.waitlistCount} on waitlist</div>
       )}
       {job.status === 'open' && (
         <div onClick={e => e.stopPropagation()}>
@@ -331,9 +328,9 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJ
   );
 });
 
-const MobileScheduleRow = memo(function MobileScheduleRow({ job, showRoster, onDetail }) {
+const MobileScheduleRow = memo(function MobileScheduleRow({ job, onDetail }) {
   const sc = JOB_STATUS_COLORS[job.status] || JOB_STATUS_COLORS.open;
-  const filled = (job.signups || []).length;
+  const filled = job.signupCount || 0;
   return (
     <div
       role="button" tabIndex={0}
@@ -349,16 +346,13 @@ const MobileScheduleRow = memo(function MobileScheduleRow({ job, showRoster, onD
         <span style={{ fontSize:11, fontWeight:700, color:sc.tx, background:sc.bg, padding:'2px 8px', borderRadius:12 }}>{job.status}</span>
       </div>
       <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}>{filled}/{job.spotsTotal||1} spots filled</div>
-      {showRoster && (job.signups||[]).length > 0 && (
-        <div style={{ fontSize:12, color:B.textLight, fontFamily:f2, marginTop:4 }}>{(job.signups||[]).map(s=>s.name).join(', ')}</div>
-      )}
     </div>
   );
 });
 
 const DesktopScheduleRow = memo(function DesktopScheduleRow({ job, todayStr, isAdminOrManager, rosterVisibility, showRoster, onDetail, onEdit }) {
   const sc = JOB_STATUS_COLORS[job.status] || JOB_STATUS_COLORS.open;
-  const filled = (job.signups || []).length;
+  const filled = job.signupCount || 0;
   const pct = Math.min(100, (filled / (job.spotsTotal||1)) * 100);
   const isPast = job.scheduledDate && job.scheduledDate < todayStr;
   return (
@@ -389,7 +383,7 @@ const DesktopScheduleRow = memo(function DesktopScheduleRow({ job, todayStr, isA
       {(isAdminOrManager || rosterVisibility !== 'admin') && (
         <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textMid, maxWidth:220 }}>
           {showRoster
-            ? ((job.signups||[]).length === 0 ? <span style={{ color:B.textLight, fontSize:12 }}>None</span> : (job.signups||[]).map(s=>s.name).join(', '))
+            ? <span style={{ fontSize:12 }}>{filled} signed up</span>
             : <span style={{ color:B.textLight, fontSize:12 }}>—</span>
           }
         </td>
@@ -451,6 +445,7 @@ export function JobsPage({ store, userProfile }) {
   const userId = userProfile?.id || userProfile?.uid;
   const userName = userProfile?.name || 'Unknown';
   const isAdminOrManager = userProfile?.role === 'admin' || userProfile?.role === 'manager';
+  const churchId = userProfile?.churchId;
   const todayStr = useMemo(() => localDateStr(new Date()), []);
 
   // ── All state before any useEffect ──
@@ -490,6 +485,15 @@ export function JobsPage({ store, userProfile }) {
   const [savingDelegates, setSavingDelegates] = useState(false);
   const [showPrintRosterModal, setShowPrintRosterModal] = useState(false);
   const [printRosterSelectedIds, setPrintRosterSelectedIds] = useState(() => new Set());
+  // Roster lives in protected subcollections (audit H1, 2026-05-22): the
+  // current user's own signup/waitlist status comes from a collectionGroup
+  // subscription; full rosters (names) are fetched on demand.
+  const [mySignupJobIds, setMySignupJobIds] = useState(() => new Set());
+  const [myWaitlistJobIds, setMyWaitlistJobIds] = useState(() => new Set());
+  const [detailSignups, setDetailSignups] = useState([]);
+  const [detailWaitlist, setDetailWaitlist] = useState([]);
+  const [detailRosterLoading, setDetailRosterLoading] = useState(false);
+  const [reportsSignups, setReportsSignups] = useState([]); // [{ ...signup, jobId }]
 
   function flash(text, isError = false) {
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
@@ -524,9 +528,9 @@ export function JobsPage({ store, userProfile }) {
   }
 
   // ── Derived state ──
-  const isSignedUp = (job) => (job.signups || []).some(s => s.uid === userId);
-  const isOnWaitlist = (job) => (job.waitlist || []).some(w => w.uid === userId);
-  const isFull = (job) => (job.signups || []).length >= (job.spotsTotal || 1);
+  const isSignedUp = (job) => mySignupJobIds.has(job._docId);
+  const isOnWaitlist = (job) => myWaitlistJobIds.has(job._docId);
+  const isFull = (job) => (job.signupCount || 0) >= (job.spotsTotal || 1);
   const rosterVisibility = settings?.jobsRosterVisibility ?? 'signups';
   const canSeeRoster = (job) => isAdminOrManager || rosterVisibility === 'all' || (rosterVisibility === 'signups' && isSignedUp(job));
   const recurrencePreviewCount = useMemo(() => generateRecurrenceDates(jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate).length, [jobForm.scheduledDate, recurrenceFreq, recurrenceSeriesEndDate]);
@@ -545,18 +549,21 @@ export function JobsPage({ store, userProfile }) {
       d.setDate(d.getDate() - (reportsScope === '30d' ? 30 : 90));
       return localDateStr(d);
     })();
+    const jobById = {};
+    (jobListings || []).forEach(j => { jobById[j._docId] = j; });
     const stats = {};
-    (jobListings || []).forEach(job => {
+    // reportsSignups is fetched from the signups subcollections (audit H1).
+    reportsSignups.forEach(s => {
+      const job = jobById[s.jobId];
+      if (!job) return;
       if (cutoff && job.scheduledDate && job.scheduledDate < cutoff) return;
-      (job.signups || []).forEach(s => {
-        if (!stats[s.uid]) stats[s.uid] = { uid: s.uid, name: s.name, jobs: 0, attended: 0, noShow: 0, totalPay: 0 };
-        stats[s.uid].jobs++;
-        if (s.attended === true) { stats[s.uid].attended++; stats[s.uid].totalPay += Number(job.pay || 0); }
-        else if (s.attended === false) stats[s.uid].noShow++;
-      });
+      if (!stats[s.uid]) stats[s.uid] = { uid: s.uid, name: s.name, jobs: 0, attended: 0, noShow: 0, totalPay: 0 };
+      stats[s.uid].jobs++;
+      if (s.attended === true) { stats[s.uid].attended++; stats[s.uid].totalPay += Number(job.pay || 0); }
+      else if (s.attended === false) stats[s.uid].noShow++;
     });
     return Object.values(stats).sort((a, b) => b.attended - a.attended || b.jobs - a.jobs || a.name.localeCompare(b.name));
-  }, [jobListings, reportsScope]);
+  }, [jobListings, reportsScope, reportsSignups]);
 
   const filteredJobs = useMemo(() => {
     let jobs = jobListings || [];
@@ -598,6 +605,62 @@ export function JobsPage({ store, userProfile }) {
     const stillExists = (jobListings || []).some(j => j._docId === showJobDetail._docId);
     if (!stillExists) setShowJobDetail(null);
   }, [jobListings, showJobDetail]);
+
+  // Subscribe to this member's own signup/waitlist docs across all jobs
+  // (collectionGroup query — the only roster reads a non-admin is granted by
+  // the firestore.rules; audit H1, 2026-05-22).
+  useEffect(() => {
+    if (!userId) return undefined;
+    const subSignups = onSnapshot(
+      query(collectionGroup(db, 'signups'), where('uid', '==', userId)),
+      snap => setMySignupJobIds(new Set(snap.docs.map(d => d.ref.parent.parent.id))),
+      err => console.error('[ChurchOpsHub] mySignups subscription failed', err),
+    );
+    const subWaitlist = onSnapshot(
+      query(collectionGroup(db, 'waitlist'), where('uid', '==', userId)),
+      snap => setMyWaitlistJobIds(new Set(snap.docs.map(d => d.ref.parent.parent.id))),
+      err => console.error('[ChurchOpsHub] myWaitlist subscription failed', err),
+    );
+    return () => { subSignups(); subWaitlist(); };
+  }, [userId]);
+
+  // Load the full roster (names) for the open job detail — fetched on open for
+  // viewers allowed to see it (admin/manager, or per the visibility setting).
+  useEffect(() => {
+    const jobId = liveDetail?._docId;
+    if (!jobId || !churchId || !canSeeRoster(liveDetail)) {
+      setDetailSignups([]); setDetailWaitlist([]); return undefined;
+    }
+    let cancelled = false;
+    setDetailRosterLoading(true);
+    Promise.all([
+      getDocs(collection(db, 'churches', churchId, 'jobListings', jobId, 'signups')),
+      getDocs(collection(db, 'churches', churchId, 'jobListings', jobId, 'waitlist')),
+    ]).then(([su, wl]) => {
+      if (cancelled) return;
+      setDetailSignups(su.docs.map(d => d.data()));
+      setDetailWaitlist(wl.docs.map(d => d.data()));
+      setDetailRosterLoading(false);
+    }).catch(err => {
+      if (cancelled) return;
+      console.error('[ChurchOpsHub] detail roster fetch failed', err);
+      setDetailRosterLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [liveDetail?._docId, liveDetail?.signupCount, liveDetail?.waitlistCount, churchId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reports leaderboard needs every job's signups — fetch on demand when the
+  // Reports tab is opened (admin/manager only).
+  useEffect(() => {
+    if (view !== 'reports' || !isAdminOrManager || !churchId) return undefined;
+    let cancelled = false;
+    Promise.all((jobListings || []).map(j =>
+      getDocs(collection(db, 'churches', churchId, 'jobListings', j._docId, 'signups'))
+        .then(snap => snap.docs.map(d => ({ ...d.data(), jobId: j._docId })))
+        .catch(() => [])
+    )).then(rows => { if (!cancelled) setReportsSignups(rows.flat()); });
+    return () => { cancelled = true; };
+  }, [view, isAdminOrManager, churchId, jobListings]);
 
   // ── Job form handlers ──
   function openNewJob() {
@@ -649,7 +712,7 @@ export function JobsPage({ store, userProfile }) {
     }
     const spots = Math.floor(rawSpots);
     const existingJob = editJobId ? (jobListings || []).find(j => j._docId === editJobId) : null;
-    const currentSignups = (existingJob?.signups || []).length;
+    const currentSignups = existingJob?.signupCount || 0;
     if (spots < currentSignups) {
       flash(`Cannot reduce spots below current signup count (${currentSignups}).`, true);
       return;
@@ -728,7 +791,7 @@ export function JobsPage({ store, userProfile }) {
 
   function handleNotifySignups(job) {
     if (!isAdminOrManager) return;
-    if (!window.confirm(`Send a cancellation email to ${(job.signups || []).length} signup${(job.signups || []).length !== 1 ? 's' : ''}?`)) return;
+    if (!window.confirm(`Send a cancellation email to ${job.signupCount || 0} signup${(job.signupCount || 0) !== 1 ? 's' : ''}?`)) return;
     const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
     fn({ churchId: userProfile?.churchId, jobDocId: job._docId })
       .then(result => {
@@ -744,7 +807,7 @@ export function JobsPage({ store, userProfile }) {
   async function notifySignupsForDelete(affectedJobs) {
     if (!notificationConfig?.enabled) return;
     const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
-    const withSignups = affectedJobs.filter(j => (j.signups || []).length > 0);
+    const withSignups = affectedJobs.filter(j => (j.signupCount || 0) > 0);
     if (withSignups.length === 0) return;
     await Promise.allSettled(withSignups.map(j =>
       fn({ churchId: userProfile?.churchId, jobDocId: j._docId })
@@ -754,7 +817,7 @@ export function JobsPage({ store, userProfile }) {
 
   async function handleDeleteJob(job) {
     if (!isAdminOrManager) return;
-    const signupCount = (job.signups || []).length;
+    const signupCount = job.signupCount || 0;
     const willNotify = signupCount > 0 && notificationConfig?.enabled;
     const confirmMsg = signupCount > 0
       ? (willNotify
@@ -773,7 +836,7 @@ export function JobsPage({ store, userProfile }) {
   async function handleDeleteSeries(job) {
     if (!isAdminOrManager) return;
     const seriesJobs = (jobListings || []).filter(j => j.recurrenceGroupId === job.recurrenceGroupId);
-    const signupCount = seriesJobs.reduce((sum, j) => sum + (j.signups || []).length, 0);
+    const signupCount = seriesJobs.reduce((sum, j) => sum + (j.signupCount || 0), 0);
     const willNotify = signupCount > 0 && notificationConfig?.enabled;
     const confirmMsg = signupCount > 0
       ? (willNotify
@@ -792,7 +855,7 @@ export function JobsPage({ store, userProfile }) {
   async function handleDeleteSeriesFrom(job) {
     if (!isAdminOrManager) return;
     const seriesJobs = (jobListings || []).filter(j => j.recurrenceGroupId === job.recurrenceGroupId && j.scheduledDate >= job.scheduledDate);
-    const signupCount = seriesJobs.reduce((sum, j) => sum + (j.signups || []).length, 0);
+    const signupCount = seriesJobs.reduce((sum, j) => sum + (j.signupCount || 0), 0);
     const willNotify = signupCount > 0 && notificationConfig?.enabled;
     const confirmMsg = signupCount > 0
       ? (willNotify
@@ -816,14 +879,10 @@ export function JobsPage({ store, userProfile }) {
       flash('This job has already happened and is no longer open for signups.', true);
       return;
     }
-    // Capacity-first: if the job is full, ask the user up front whether they
-    // want to join the waitlist before running compliance/waiver gates.
-    // Avoids the confusing "you need a Background Check" error for a job they
-    // wouldn't have fit into anyway (Jobs Hub audit #11).
-    const jobIsFull = (job.signups || []).length >= (job.spotsTotal || 1);
-    const onWaitlistAlready = (job.waitlist || []).some(w => w.uid === userId);
-    if (jobIsFull && !onWaitlistAlready) {
-      const wl = (job.waitlist || []).length;
+    // Capacity-first: if the job is full, confirm waitlist intent up front.
+    const jobIsFull = (job.signupCount || 0) >= (job.spotsTotal || 1);
+    if (jobIsFull && !isOnWaitlist(job)) {
+      const wl = job.waitlistCount || 0;
       if (wl >= 50) {
         flash('This job is full and the waitlist is at capacity.', true);
         return;
@@ -831,30 +890,18 @@ export function JobsPage({ store, userProfile }) {
       const ok = window.confirm(`This job is full. ${wl > 0 ? `${wl} other${wl !== 1 ? 's' : ''} on the waitlist. ` : ''}Join the waitlist?`);
       if (!ok) return;
     }
-    if ((job.requiredAccessTypes || []).length > 0) {
-      const linkedPersons = (accessPeople || []).filter(p => p.userId === userId);
-      if (linkedPersons.length === 0) {
-        flash('You need a People Access record linked to your account to sign up for this job.', true);
-        return;
-      }
-      const todayS = localDateStr(new Date());
-      const linkedIds = new Set(linkedPersons.map(p => p._docId));
-      const myRecords = (accessRecords || []).filter(r => linkedIds.has(r.personId));
-      for (const reqType of job.requiredAccessTypes) {
-        const hasValid = myRecords.some(r => r.type === reqType && (!r.expiryDate || r.expiryDate >= todayS));
-        if (!hasValid) {
-          flash(`You need a valid ${ACCESS_TYPE_LABELS[reqType] || reqType} on file to sign up for this job.`, true);
-          return;
-        }
-      }
-    }
+    // Waiver consent is shown here; the jobSignUp Cloud Function records
+    // acknowledgedWaiverAt. Background-Check / compliance is enforced
+    // server-side by that function — it returns a friendly error if the
+    // member isn't eligible, so no client-side compliance gate is needed.
+    let waiverAccepted = false;
     if (job.requiresWaiver && job.waiverText) {
-      const confirmed = window.confirm(`By signing up, you agree to the following:\n\n${job.waiverText}\n\nDo you agree?`);
-      if (!confirmed) return;
+      waiverAccepted = window.confirm(`By signing up, you agree to the following:\n\n${job.waiverText}\n\nDo you agree?`);
+      if (!waiverAccepted) return;
     }
     setSavingJobId(job._docId);
     try {
-      const result = await signUpForJob(job._docId, userId, userName);
+      const result = await signUpForJob(job._docId, userId, userName, waiverAccepted, job.jobNumber);
       if (result?.error) flash(result.error, true);
       else if (result?.wasWaitlisted) flash("You've been added to the waitlist!");
       else flash('You signed up!');
@@ -869,22 +916,15 @@ export function JobsPage({ store, userProfile }) {
     if (!window.confirm(onWL ? 'Remove yourself from the waitlist?' : 'Remove yourself from this job?')) return;
     setSavingJobId(job._docId);
     try {
-      const result = await withdrawFromJob(job._docId, userId, userId, userName);
+      const result = await withdrawFromJob(job._docId, userId, userId, userName, job.jobNumber);
       if (result?.wasSignedUp) {
         flash('Removed from job.');
         if (notificationConfig?.enabled) {
           const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
           fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'withdrawal', actorUid: userId, actorName: userName }).catch(err => { console.error('[ChurchOpsHub] CF sendJobPosterNotification (withdrawal) failed', err); });
         }
-        // F-RC-3 from the 2026-05-12 audit: await the promotion so a tab close
-        // between the withdrawal commit and the CF call doesn't drop the
-        // promotion entirely. The freed spot would otherwise stay empty
-        // forever despite an eligible waitlist.
-        try {
-          await httpsCallable(getFunctions(), 'promoteFromWaitlist')({ churchId: userProfile?.churchId, jobDocId: job._docId });
-        } catch (err) {
-          console.error('[ChurchOpsHub] CF promoteFromWaitlist failed', err);
-        }
+        // Waitlist promotion now runs inline + server-side inside jobWithdraw
+        // (audit M3) — no separate client call needed.
       } else if (result?.wasOnWaitlist) {
         flash('Removed from waitlist.');
       }
@@ -894,21 +934,23 @@ export function JobsPage({ store, userProfile }) {
 
   async function handleAdminRemoveSignup(job, uid) {
     if (!isAdminOrManager) return;
-    const removedSignup = (job.signups || []).find(s => s.uid === uid);
-    const removedWaiter = (job.waitlist || []).find(w => w.uid === uid);
+    const removedSignup = detailSignups.find(s => s.uid === uid);
+    const removedWaiter = detailWaitlist.find(w => w.uid === uid);
     const removed = removedSignup || removedWaiter;
     if (!window.confirm(`Remove ${removed?.name || 'this person'}?`)) return;
     try {
-      const result = await withdrawFromJob(job._docId, uid, userId, userName);
+      const result = await withdrawFromJob(job._docId, uid, userId, userName, job.jobNumber);
       if (result?.wasSignedUp) {
         flash('Removed.');
+        setDetailSignups(prev => prev.filter(s => s.uid !== uid));
         if (notificationConfig?.enabled && job.createdBy !== userId) {
           const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
           fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'admin_removal', actorUid: userId, actorName: userName, removedName: removed?.name || '' }).catch(err => { console.error('[ChurchOpsHub] CF sendJobPosterNotification (admin_removal) failed', err); });
         }
-        httpsCallable(getFunctions(), 'promoteFromWaitlist')({ churchId: userProfile?.churchId, jobDocId: job._docId }).catch(err => { console.error('[ChurchOpsHub] CF promoteFromWaitlist failed', err); });
+        // jobWithdraw promotes the waitlist inline + server-side (audit M3).
       } else if (result?.wasOnWaitlist) {
         flash('Removed from waitlist.');
+        setDetailWaitlist(prev => prev.filter(w => w.uid !== uid));
       }
     } catch { flash('Failed to remove.', true); }
   }
@@ -916,7 +958,12 @@ export function JobsPage({ store, userProfile }) {
   async function handleUpdateAttendance(job, uid, attended) {
     if (!isAdminOrManager) return;
     try {
-      await updateJobSignupAttendance(job._docId, uid, attended);
+      const res = await updateJobSignupAttendance(job._docId, uid, attended);
+      if (res?.updated) {
+        setDetailSignups(prev => prev.map(s => s.uid === uid ? { ...s, attended } : s));
+      } else {
+        flash('That person is no longer on this job — attendance not saved.', true);
+      }
     } catch { flash('Failed to update attendance.', true); }
   }
 
@@ -1107,7 +1154,7 @@ export function JobsPage({ store, userProfile }) {
               {filteredJobs.map(job => (
                 <JobCard key={job._docId} job={job}
                   todayStr={todayStr} isAdminOrManager={isAdminOrManager} savingJobId={savingJobId}
-                  signed={isSignedUp(job)} full={isFull(job)} onWaitlist={isOnWaitlist(job)} showRoster={canSeeRoster(job)}
+                  signed={isSignedUp(job)} full={isFull(job)} onWaitlist={isOnWaitlist(job)}
                   onDetail={setShowJobDetail} onWithdraw={handleWithdraw} onSignUp={handleSignUp} />
               ))}
             </div>
@@ -1136,7 +1183,7 @@ export function JobsPage({ store, userProfile }) {
               )}
               <button
                 onClick={() => exportJobsICS(
-                  scheduleJobs.filter(j => j.scheduledDate && (j.signups || []).some(s => s.uid === userId)),
+                  scheduleJobs.filter(j => j.scheduledDate && isSignedUp(j)),
                   config?.churchName || '',
                   { calendarLabel: 'My Jobs', filenamePrefix: 'my-jobs' }
                 )}
@@ -1162,8 +1209,7 @@ export function JobsPage({ store, userProfile }) {
           ) : isMobile ? (
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
               {scheduleJobs.map(job => (
-                <MobileScheduleRow key={job._docId} job={job}
-                  showRoster={canSeeRoster(job)} onDetail={setShowJobDetail} />
+                <MobileScheduleRow key={job._docId} job={job} onDetail={setShowJobDetail} />
               ))}
             </div>
           ) : (
@@ -1474,11 +1520,13 @@ export function JobsPage({ store, userProfile }) {
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: B.textMid, textTransform: 'uppercase', letterSpacing: .8, fontFamily: f1, marginBottom: 8 }}>Signed Up</div>
             {canSeeRoster(liveDetail) ? (
-              (liveDetail.signups || []).length === 0 ? (
+              detailRosterLoading ? (
+                <div style={{ fontSize: 13, color: B.textLight, fontFamily: f2 }}>Loading roster…</div>
+              ) : detailSignups.length === 0 ? (
                 <div style={{ fontSize: 13, color: B.textLight, fontFamily: f2 }}>No signups yet.</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {(liveDetail.signups || []).map(s => {
+                  {detailSignups.map(s => {
                     const isPastJob = liveDetail.scheduledDate && liveDetail.scheduledDate < todayStr;
                     return (
                       <div key={s.uid} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: B.warmGray, borderRadius: 8 }}>
@@ -1526,13 +1574,13 @@ export function JobsPage({ store, userProfile }) {
             )}
           </div>
           {/* Waitlist (admin only) */}
-          {isAdminOrManager && (liveDetail.waitlist || []).length > 0 && (
+          {isAdminOrManager && detailWaitlist.length > 0 && (
             <div style={{ marginBottom:16 }}>
               <div style={{ fontSize:12, fontWeight:700, color:B.textMid, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:8 }}>
-                Waitlist ({(liveDetail.waitlist || []).length})
+                Waitlist ({detailWaitlist.length})
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                {(liveDetail.waitlist || []).map((w, i) => (
+                {detailWaitlist.map((w, i) => (
                   <div key={w.uid} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 10px', background:'#FFF9C4', borderRadius:8, border:'1px solid #FDE68A' }}>
                     <span style={{ fontSize:13, fontFamily:f2, color:B.textDark }}>
                       <span style={{ fontSize:11, color:B.textLight, marginRight:6 }}>#{i+1}</span>{w.name}
@@ -1585,7 +1633,7 @@ export function JobsPage({ store, userProfile }) {
                       <button onClick={() => handleDeleteSeries(liveDetail)} style={{ ...btnD, fontSize: 13 }}>Delete Series</button>
                     </>
                   )}
-                  {['cancelled', 'closed'].includes(liveDetail.status) && (liveDetail.signups || []).length > 0 && notificationConfig?.enabled && (
+                  {['cancelled', 'closed'].includes(liveDetail.status) && (liveDetail.signupCount || 0) > 0 && notificationConfig?.enabled && (
                     <button onClick={() => handleNotifySignups(liveDetail)} style={{ ...btnS, fontSize: 13, color: B.teal, borderColor: B.tealLight }}>
                       Notify Signups
                     </button>
@@ -1593,7 +1641,7 @@ export function JobsPage({ store, userProfile }) {
                   {!liveDetail.linkedTaskDocId && (
                     <button onClick={() => openConvertToTask(liveDetail)} style={{ ...btnS, fontSize: 13 }}>→ Task</button>
                   )}
-                  <button onClick={() => printJobRoster([liveDetail], config?.churchName || '')} title="Print this job's roster" style={{ ...btnS, fontSize: 13 }}>
+                  <button onClick={() => printJobRoster([{ ...liveDetail, signups: detailSignups }], config?.churchName || '')} title="Print this job's roster" style={{ ...btnS, fontSize: 13 }}>
                     🖨 Print Roster
                   </button>
                 </>
@@ -1757,7 +1805,7 @@ export function JobsPage({ store, userProfile }) {
                   <span style={{ fontSize: 11, fontFamily: 'monospace', color: B.textLight, background: B.warmGray, padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>{j.jobNumber}</span>
                   <span style={{ flex: 1, fontSize: 13, fontFamily: f2, color: B.textDark }}>{j.title}</span>
                   <span style={{ fontSize: 12, fontFamily: f2, color: B.textLight, flexShrink: 0 }}>
-                    {formatJobDate(j.scheduledDate)} · {(j.signups || []).length}/{j.spotsTotal || 1}
+                    {formatJobDate(j.scheduledDate)} · {(j.signupCount || 0)}/{j.spotsTotal || 1}
                   </span>
                 </label>
               );
@@ -1767,9 +1815,17 @@ export function JobsPage({ store, userProfile }) {
             <button onClick={() => setShowPrintRosterModal(false)} style={btnS}>Cancel</button>
             <button
               disabled={printRosterSelectedIds.size === 0}
-              onClick={() => {
+              onClick={async () => {
                 const selected = scheduleJobs.filter(j => printRosterSelectedIds.has(j._docId));
-                printJobRoster(selected, config?.churchName || '');
+                // Roster names live in the signups subcollection (audit H1) —
+                // fetch each selected job's roster before printing.
+                const withRosters = await Promise.all(selected.map(async j => {
+                  try {
+                    const snap = await getDocs(collection(db, 'churches', churchId, 'jobListings', j._docId, 'signups'));
+                    return { ...j, signups: snap.docs.map(d => d.data()) };
+                  } catch { return { ...j, signups: [] }; }
+                }));
+                printJobRoster(withRosters, config?.churchName || '');
                 setShowPrintRosterModal(false);
               }}
               style={{ ...btnP, opacity: printRosterSelectedIds.size === 0 ? 0.5 : 1, cursor: printRosterSelectedIds.size === 0 ? 'not-allowed' : 'pointer' }}>

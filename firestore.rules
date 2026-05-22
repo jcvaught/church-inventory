@@ -14,6 +14,32 @@ service cloud.firestore {
     function isChurchAdmin(churchId)          { return isMember(churchId) && userIsAdmin(); }
     function isChurchAdminOrManager(churchId) { return isMember(churchId) && userIsAdminOrManager(); }
 
+    // ── Jobs Hub access (audit H3 + M1, 2026-05-22) ──────────────────────────
+    // jobsHubActive: the church's Jobs Hub subscription is active. Mirrors the
+    //   server-side subHasHub() minus the trial-expiry time check (rules cannot
+    //   compare a stored ISO date string to now — processTrialExpirations writes
+    //   freeHubsSelected on expiry so the post-trial state is reflected here).
+    // userHasJobsHub: this user is permitted the Jobs Hub (admins always are;
+    //   a missing allowedHubs array means legacy-full-access).
+    function jobsHubActive(churchId) {
+      let s = get(/databases/$(database)/documents/churches/$(churchId)/config/subscription).data;
+      return s != null && (
+        s.grandfathered == true
+        || s.plan == 'all_in'
+        || (s.freeHubsSelected is list && s.freeHubsSelected.hasAny(['jobs']))
+        || (s.freeHubsSelected == null && s.trialHubs is list && s.trialHubs.hasAny(['jobs']))
+        || (s.hubs is list && s.hubs.hasAny(['jobs']))
+      );
+    }
+    function userHasJobsHub() {
+      return userIsAdmin()
+        || !('allowedHubs' in userData())
+        || (userData().allowedHubs is list && userData().allowedHubs.hasAny(['jobs']));
+    }
+    function canUseJobsHub(churchId) {
+      return isMember(churchId) && jobsHubActive(churchId) && userHasJobsHub();
+    }
+
     // ── Church parent doc ─────────────────────────────────────────────────────
     // H-02 / Phase D from the 2026-05-12 audit: `allow list` removed. The
     // join-by-church-code lookup that previously needed list permission is now
@@ -162,96 +188,62 @@ service cloud.firestore {
       allow update, delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && request.auth.uid == resource.data.authorId);
     }
 
-    // ── Job Hub — jobs: public read (job board is public info); members sign up;
-    //    admins+mgrs create/delete/update fields.
-    //    Member-branch rule constraints:
-    //      • signups length must change by exactly ±1 (blocks mass-fill DoS and array rewrites)
-    //      • new signups.size() must not exceed spotsTotal (enforces capacity server-side)
-    //    Limitation: Firestore rules cannot iterate object arrays, so we cannot verify
-    //    that the added/removed entry belongs to request.auth.uid — the client-side
-    //    runTransaction in signUpForJob/withdrawFromJob enforces self-only semantics for
-    //    honest callers; the ±1 delta constraint closes the practical attack surface. ──
+    // ── Job Hub — job listings (audit H1/H2/H3/M1, 2026-05-22) ───────────────
+    //    The roster (signups/waitlist) lives in protected per-uid subcollections
+    //    below — NOT on this parent doc. The parent carries only non-PII fields
+    //    plus the server-maintained signupCount/waitlistCount integers. ALL
+    //    roster writes go through Cloud Functions (jobSignUp / jobWithdraw /
+    //    jobSetAttendance, Admin SDK) which enforce compliance/waiver/capacity
+    //    server-side; members never write this doc directly. Public job-board
+    //    reads are still served by the `getPublicJobs` callable.
     match /churches/{churchId}/jobListings/{docId} {
-      allow get:            if isMember(churchId);
-      // Public job-board reads are routed through the `getPublicJobs` callable
-      // (functions/index.js) so signups[]/waitlist[] are stripped before the
-      // response. Direct unauthenticated list/get is blocked here to prevent
-      // raw-SDK PII pulls (Jobs Hub audit, 2026-05-06).
-      allow list:           if isMember(churchId);
-      allow create, delete: if isChurchAdminOrManager(churchId);
-      // Update has multiple paths:
-      //   1a. Admin/manager general edit — broad write access, BUT cannot touch
-      //       signups[]/waitlist[] in the same write as other fields, and cannot
-      //       touch server-managed counters at all. F-16 from the 2026-05-12 audit.
-      //   1b. Admin attendance update — signups changes only (length unchanged,
-      //       entries mutated in place by updateJobSignupAttendance).
-      //   1c. Admin removal — signups OR waitlist length -1 (handleAdminRemoveSignup
-      //       reuses the member withdraw transaction; needs to work even when
-      //       status is not open, e.g., cleaning up a closed job's roster).
-      //   2.  Member — sign up / withdraw / join-or-leave-waitlist with strict
-      //       ±1 length-delta + capacity guards. Field-presence guards on
-      //       signups/waitlist/spotsTotal so legacy docs missing them don't
-      //       crash the rule (defense-in-depth; backfill recommended).
-      allow update:         if (
-        isChurchAdminOrManager(churchId) && (
-          // 1a. General edit — not touching arrays/server fields at all
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-            'signups', 'waitlist',
-            'createdBy', 'createdByName', 'createdAt', 'jobNumber',
-            'recurrenceGroupId', 'recurrenceFreq', 'seriesEndDate',
-            'cancellationEmailSentAt', 'lastReminderSentDate', 'lastPosterNotifiedByActors'
-          ])
-          ||
-          // 1b. Attendance update — signups only, length preserved
-          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signups', 'updatedAt']) &&
-           'signups' in resource.data &&
-           request.resource.data.signups.size() == resource.data.signups.size())
-          ||
-          // 1c. Admin remove signup — signups only, length -1
-          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signups', 'updatedAt']) &&
-           'signups' in resource.data &&
-           request.resource.data.signups.size() == resource.data.signups.size() - 1)
-          ||
-          // 1c. Admin remove waitlist entry — waitlist only, length -1
-          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['waitlist', 'updatedAt']) &&
-           'waitlist' in resource.data &&
-           request.resource.data.waitlist.size() == resource.data.waitlist.size() - 1)
-        )
-      ) || (
-        isMember(churchId) &&
-        resource.data.status == 'open' &&
-        'signups' in resource.data &&
-        'waitlist' in resource.data &&
-        'spotsTotal' in resource.data &&
-        (
-          // Sign up / withdraw
-          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signups', 'updatedAt']) &&
-           (request.resource.data.signups.size() == resource.data.signups.size() + 1 ||
-            request.resource.data.signups.size() == resource.data.signups.size() - 1) &&
-           request.resource.data.signups.size() <= resource.data.spotsTotal)
-          ||
-          // Join / leave waitlist (±1 size enforced here and in client transaction).
-          // Hard-cap at 50 to keep the doc under the 1MB Firestore limit and
-          // close a denial-of-service vector (Jobs Hub audit, 2026-05-06 #10).
-          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['waitlist', 'updatedAt']) &&
-           (request.resource.data.waitlist.size() == resource.data.waitlist.size() + 1 ||
-            request.resource.data.waitlist.size() == resource.data.waitlist.size() - 1) &&
-           request.resource.data.waitlist.size() <= 50)
-        )
-      );
+      allow get, list:      if canUseJobsHub(churchId);
+      allow create, delete: if isChurchAdminOrManager(churchId) && jobsHubActive(churchId);
+      // Admin/manager general edit only — cannot touch identity, recurrence,
+      // server-managed dedupe stamps, the (now-removed) roster arrays, or the
+      // server-maintained counters.
+      allow update:         if isChurchAdminOrManager(churchId)
+        && jobsHubActive(churchId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+             'signups', 'waitlist', 'signupCount', 'waitlistCount',
+             'createdBy', 'createdByName', 'createdAt', 'jobNumber',
+             'recurrenceGroupId', 'recurrenceFreq', 'seriesEndDate',
+             'cancellationEmailSentAt', 'lastReminderSentDate', 'lastPosterNotifiedByActors'
+           ]);
+    }
+
+    // ── Job Hub — signups / waitlist subcollections (audit H1) ───────────────
+    //    One doc per member, keyed by uid; volunteer names live here, never on
+    //    the parent. A member may read only their OWN doc — including via a
+    //    collectionGroup query filtered by uid (the {path=**} rules). Admin and
+    //    manager read the full roster via the church-scoped path rules. Writes
+    //    are Cloud Functions only (Admin SDK bypasses these rules).
+    match /{path=**}/signups/{signupId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+    }
+    match /{path=**}/waitlist/{waitlistId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+    }
+    match /churches/{churchId}/jobListings/{jobId}/signups/{signupId} {
+      allow read:  if isChurchAdminOrManager(churchId);
+      allow write: if false;
+    }
+    match /churches/{churchId}/jobListings/{jobId}/waitlist/{waitlistId} {
+      allow read:  if isChurchAdminOrManager(churchId);
+      allow write: if false;
     }
 
     // ── Job Hub — swap requests: members create own; admins+mgrs read+delete; member can delete own ──
     match /churches/{churchId}/jobSwapRequests/{docId} {
       allow read:   if isChurchAdminOrManager(churchId);
-      allow create: if isMember(churchId) && request.resource.data.uid == request.auth.uid;
+      allow create: if canUseJobsHub(churchId) && request.resource.data.uid == request.auth.uid;
       allow delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && resource.data.uid == request.auth.uid);
     }
 
-    // ── Job Hub — announcements: members read; admins+mgrs write ─────────────
+    // ── Job Hub — announcements: members (with hub access) read; admins+mgrs write ──
     match /churches/{churchId}/jobAnnouncements/{docId} {
-      allow read:  if isMember(churchId);
-      allow write: if isChurchAdminOrManager(churchId);
+      allow read:  if canUseJobsHub(churchId);
+      allow write: if isChurchAdminOrManager(churchId) && jobsHubActive(churchId);
     }
 
     // ── Rooms/Spaces — members read; admins+mgrs write ────────────────────────
