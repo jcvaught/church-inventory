@@ -40,6 +40,27 @@ service cloud.firestore {
       return isMember(churchId) && jobsHubActive(churchId) && userHasJobsHub();
     }
 
+    // ── Jobs Hub roster visibility (audit H1 follow-up, 2026-05-22) ───────────
+    // The church-configurable jobsRosterVisibility setting ('admin' | 'signups'
+    // | 'all', default 'signups') decides whether regular members may read a
+    // job's signups/waitlist roster. Previously a UI-only gate; now a real
+    // rule-enforced boundary on the protected subcollections.
+    function jobsRosterVisibility(churchId) {
+      let path = /databases/$(database)/documents/churches/$(churchId)/config/settings;
+      return exists(path) ? get(path).data.get('jobsRosterVisibility', 'signups') : 'signups';
+    }
+    // A member is signed up to this job iff their own signups/{uid} doc exists.
+    function isSignedUpToJob(churchId, jobId) {
+      return exists(/databases/$(database)/documents/churches/$(churchId)/jobListings/$(jobId)/signups/$(request.auth.uid));
+    }
+    // Admin/manager always; members per the visibility setting.
+    function canSeeJobRoster(churchId, jobId) {
+      let vis = jobsRosterVisibility(churchId);
+      return isChurchAdminOrManager(churchId)
+        || (isMember(churchId) && vis == 'all')
+        || (isMember(churchId) && vis == 'signups' && isSignedUpToJob(churchId, jobId));
+    }
+
     // ── Church parent doc ─────────────────────────────────────────────────────
     // H-02 / Phase D from the 2026-05-12 audit: `allow list` removed. The
     // join-by-church-code lookup that previously needed list permission is now
@@ -214,10 +235,11 @@ service cloud.firestore {
 
     // ── Job Hub — signups / waitlist subcollections (audit H1) ───────────────
     //    One doc per member, keyed by uid; volunteer names live here, never on
-    //    the parent. A member may read only their OWN doc — including via a
-    //    collectionGroup query filtered by uid (the {path=**} rules). Admin and
-    //    manager read the full roster via the church-scoped path rules. Writes
-    //    are Cloud Functions only (Admin SDK bypasses these rules).
+    //    the parent. Via a collectionGroup query a member reads only their OWN
+    //    doc (the {path=**} rules). Via the church-scoped path rules, admin and
+    //    manager always read the full roster, and regular members read it when
+    //    the jobsRosterVisibility setting permits (canSeeJobRoster). Writes are
+    //    Cloud Functions only (Admin SDK bypasses these rules).
     match /{path=**}/signups/{signupId} {
       allow read: if request.auth != null && request.auth.uid == resource.data.uid;
     }
@@ -225,11 +247,11 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.uid == resource.data.uid;
     }
     match /churches/{churchId}/jobListings/{jobId}/signups/{signupId} {
-      allow read:  if isChurchAdminOrManager(churchId);
+      allow read:  if canSeeJobRoster(churchId, jobId);
       allow write: if false;
     }
     match /churches/{churchId}/jobListings/{jobId}/waitlist/{waitlistId} {
-      allow read:  if isChurchAdminOrManager(churchId);
+      allow read:  if canSeeJobRoster(churchId, jobId);
       allow write: if false;
     }
 

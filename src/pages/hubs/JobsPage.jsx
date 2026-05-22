@@ -626,9 +626,12 @@ export function JobsPage({ store, userProfile }) {
 
   // Load the full roster (names) for the open job detail — fetched on open for
   // viewers allowed to see it (admin/manager, or per the visibility setting).
+  // `rosterAllowed` is in the deps so a late-arriving mySignups subscription
+  // (which flips canSeeRoster in 'signups' mode) re-triggers the fetch.
+  const rosterAllowed = canSeeRoster(liveDetail);
   useEffect(() => {
     const jobId = liveDetail?._docId;
-    if (!jobId || !churchId || !canSeeRoster(liveDetail)) {
+    if (!jobId || !churchId || !rosterAllowed) {
       setDetailSignups([]); setDetailWaitlist([]); return undefined;
     }
     let cancelled = false;
@@ -647,7 +650,7 @@ export function JobsPage({ store, userProfile }) {
       setDetailRosterLoading(false);
     });
     return () => { cancelled = true; };
-  }, [liveDetail?._docId, liveDetail?.signupCount, liveDetail?.waitlistCount, churchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [liveDetail?._docId, liveDetail?.signupCount, liveDetail?.waitlistCount, churchId, rosterAllowed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reports leaderboard needs every job's signups — fetch on demand when the
   // Reports tab is opened (admin/manager only).
