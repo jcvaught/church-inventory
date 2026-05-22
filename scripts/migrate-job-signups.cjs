@@ -45,6 +45,10 @@ async function main() {
     }
 
     // Phase 1 — backfill subcollections + counters.
+    // Skip docs already on the new model (no legacy arrays at all) so a
+    // re-run, or a signup that lands in the deploy→backfill window, never
+    // clobbers a server-maintained counter back to 0.
+    if (data.signups === undefined && data.waitlist === undefined) { skipped++; continue; }
     const signups = Array.isArray(data.signups) ? data.signups : [];
     const waitlist = Array.isArray(data.waitlist) ? data.waitlist : [];
     const batch = db.batch();
@@ -67,7 +71,7 @@ async function main() {
   if (FINALIZE) {
     console.log(`Phase 2 done — legacy arrays removed from ${finalized} docs (${skipped} already clean).`);
   } else {
-    console.log(`Phase 1 done — backfilled ${migrated} jobs into signups/waitlist subcollections + counters.`);
+    console.log(`Phase 1 done — backfilled ${migrated} jobs into signups/waitlist subcollections + counters (${skipped} already on the new model).`);
     console.log('Verify the app, then run with --finalize to drop the legacy arrays.');
   }
 }
