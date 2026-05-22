@@ -2195,4 +2195,155 @@ Volunteers will return for a well-run workday. They will not return for a chaoti
 Plan the day, then trust the volunteers to do the work.
     `.trim(),
   },
+  {
+    slug: 'tithely-vs-pushpay-vs-churchopshub',
+    title: "Tithely vs Pushpay vs ChurchOpsHub: Which Tools Belong in Your Church Stack?",
+    description: "Most churches don't need to pick one tool — they need two or three. Here's the honest breakdown of what Tithely, Pushpay, and ChurchOpsHub each do well, what they don't do, and how to stack them by church size without paying twice for the same thing.",
+    date: '2026-05-22',
+    keywords: 'tithely vs pushpay, church software stack, church management software comparison, tithely review, pushpay alternative, church giving platform, church operations software, churchopshub vs tithely, churchopshub vs pushpay, best church software for small church',
+    content: `
+## The Comparison Most Churches Get Wrong
+
+The way this question usually gets asked — "Tithely or Pushpay?" — already misses the point. A church doesn't need to pick one platform that does everything. A church needs to pick **two or three platforms that each do one thing well**, and make them play nicely.
+
+Tithely and Pushpay are both giving platforms first. They've each grown into broader church management suites — Tithely with its ChMS, Elvanto-style people management, and child check-in; Pushpay with its Church Community Builder integration and its app-builder tools. But the core of both products is **money moving from the congregation to the church**, and everything else is a layer on top of that core.
+
+ChurchOpsHub is a different kind of tool. It does not process giving. It does not run child check-in. It is the **operations** layer — the place where the physical stuff, the maintenance work, the volunteer accountability, the room reservations, the background checks, the job board, and the supply orders live. None of that is what Tithely or Pushpay were built for, and trying to bolt it onto a giving platform is most of why churches end up with a sprawl of half-used spreadsheets a year in.
+
+So the honest comparison is not *versus* — it's *and*. Here's what each one actually does, what each one doesn't, and how to combine them without paying twice for the same capability.
+
+## What Tithely Actually Does
+
+Tithely's core product is **digital giving**: text-to-give, online giving forms, recurring donations, donor statements, and the giving analytics that pastors look at. That core is mature and well-priced — the giving platform itself is free to set up, with per-transaction fees in the 2.9% + $0.30 range, which is normal for the category.
+
+On top of that core, Tithely has built out several adjacent products:
+
+- **Tithely ChMS** — basic people management (households, groups, attendance). Functional for small churches; not a Planning Center replacement.
+- **Tithely Sites** — drag-and-drop church website builder. Fine for a simple church site; doesn't compete with Squarespace for design.
+- **Tithely Events** — event registration with payment collection. Solid for paid events; thin for a 12-week ministry roster.
+- **Tithely Messaging** — basic email + SMS broadcast. Bare-bones; nobody picks Tithely for messaging specifically.
+- **Tithely App** — branded mobile app with giving, sermons, events.
+- **Tithely Child Check-In** — exactly what it says on the tin.
+
+**Where Tithely shines:** small and mid-size churches (under ~500 weekend attendance) who want one vendor for giving + a basic ChMS + a simple app and don't want to manage three different sets of logins. Pricing is bundle-friendly — most churches on Tithely's "Tithely Pro" or "Church Suite" tier pay between $0 (giving only, fee-supported) and roughly $100–$200/month depending on which add-ons they enable.
+
+**Where Tithely doesn't reach:** anything physical or operational. No inventory. No maintenance ticketing. No facilities or room reservation system. No background-check tracking. No volunteer job board. No key management. No supply ordering. The "operations gap" is total — and it's not a gap Tithely is trying to close.
+
+## What Pushpay Actually Does
+
+Pushpay started as a giving platform too, but its trajectory has been different — it's grown by **acquisition into the church management space** (notably Church Community Builder / CCB, now under the same umbrella) and it tends to fit a larger-church profile.
+
+The core capabilities:
+
+- **Pushpay Giving** — same giving primitives as Tithely (online, text, recurring, donor management), with stronger mid-market features around campaigns, pledging, and capital campaigns.
+- **Church Community Builder (CCB)** — full-fledged ChMS: groups, processes, check-in, communications, scheduling, reports.
+- **Pushpay App** — branded mobile app, more polished than Tithely's, with deeper sermon and content integration.
+- **Pushpay Resi** — streaming for multi-site churches.
+
+**Pricing for Pushpay is not public.** It's enterprise-quote-based and varies widely by church size and which products you bundle. For a church with weekend attendance under 200, Pushpay is typically overkill on price (often $300–$500+/month all in). For a mid-to-large multi-site church, Pushpay's giving + CCB combination is one of the strongest options in the category and pricing scales accordingly.
+
+**Where Pushpay shines:** mid-to-large multi-site churches (500+ weekend attendance) who need a serious ChMS, polished branded app, and enterprise-grade giving infrastructure. The CCB integration is the load-bearing piece — if you need a real ChMS, Pushpay's is among the best.
+
+**Where Pushpay doesn't reach:** same operations gap as Tithely. CCB has a "Forms" feature and basic facilities scheduling, but it's not built for the inventory / maintenance / facilities work that an operations role actually does day to day. A facilities director using CCB to track HVAC tickets ends up either back in spreadsheets or in a separate tool.
+
+## What ChurchOpsHub Does (And What It Doesn't)
+
+ChurchOpsHub is the **operations** layer that sits next to a giving platform and a ChMS. It does not process giving. It does not manage member households. It does not run child check-in. It is not trying to replace Tithely or CCB.
+
+What it does:
+
+- **Inventory Hub (free, 10 users)** — track every piece of physical equipment, where it is, who has it checked out, when it was last serviced. QR-coded asset labels, photos, location/ministry filters.
+- **Supplies Hub** — consumables tracking, reorder thresholds, who used what when. Stops the "we're out of K-cups again" surprise.
+- **Reservations Hub** — room and equipment reservation system. Recurring bookings, conflict detection, approval flow.
+- **Maintenance Hub** — ticketing system for facilities work. Members submit tickets, facilities manager assigns and tracks status, history per asset.
+- **People Access Hub** — background-check tracking, key assignments, certifications, expiration alerts. The compliance layer that lives in folders for most churches.
+- **Coordination Hub** — checkout bundles for ministries (VBS supply bundle, baptism setup bundle, etc.) so the same set of items can be reserved and returned as a group.
+- **Accountability Hub** — physical audits, chain of custody, insurance-export reports. The "prove you have a system" layer.
+- **Tasks Hub** — general-purpose Kanban for staff work, with assignees, due dates, recurring templates, ICS export.
+- **Job Hub** — teen-friendly volunteer job board with compliance + waiver gating, signup roster, attendance tracking, swap requests.
+
+Pricing: free Inventory + paid hubs at $5–$9/month each, or $29/month for the all-in bundle. New churches get a 90-day free trial of all paid hubs.
+
+**Where ChurchOpsHub shines:** any church that has more than ~$10K of physical equipment, runs a facilities operation, has a volunteer program with compliance requirements, or has gotten tired of running operations from a Google Drive folder.
+
+**Where ChurchOpsHub doesn't reach:** giving, donor management, child check-in, ChMS-style household/group management, sermon streaming, church website hosting, branded mobile app for sermons/events. Those are all categories where a dedicated tool (Tithely, Pushpay, Planning Center, Squarespace) is the right answer.
+
+## The Operations Gap
+
+Both Tithely and Pushpay are excellent at what they do — moving money and managing people. Neither was designed to track physical assets, schedule maintenance, run a volunteer job board with compliance gating, or document key assignments for insurance. That's not a flaw in those products. It's a scope choice.
+
+The problem is that **every church has the operations work whether the software supports it or not**. The work doesn't disappear because the giving platform doesn't have a maintenance module. It just migrates into a Google Sheet, a folder in Dropbox, a thread of text messages, and a sticky note on the facilities manager's monitor. We've written about that pattern at length in [The Hidden Cost of Running Church Operations on Spreadsheets](/blog/hidden-cost-of-spreadsheet-church-operations). It's expensive. It's risky. And it's basically invisible until something breaks.
+
+Bolting operations onto a giving platform also tends to fail for a structural reason: **giving platforms are optimized for the donor**, and operations tools are optimized for the staff. A donor opens a giving app once a week to give. A facilities manager needs to open a tool fifteen times a day to check tickets, approve reservations, look up an asset, log a maintenance event. The interaction patterns are completely different. A product built for the first pattern almost always makes the second pattern feel like a chore.
+
+That's why the right answer for most churches is **a giving platform plus an operations platform**, not one big do-everything suite.
+
+## Stack Recommendations by Church Size
+
+Here's the practical version. None of these are mandatory — they're starting points, not prescriptions.
+
+### Small church (under 200 weekend attendance)
+
+**Giving + lightweight ChMS:** Tithely (free giving + Tithely ChMS $19–$49/month range depending on tier). Free tier of Tithely Giving handles online + text-to-give just fine for this size.
+
+**Operations:** ChurchOpsHub free Inventory Hub + 1–2 paid hubs ($0 to ~$15/month). Most small churches add Maintenance or Reservations as the first paid hub depending on which pain is loudest.
+
+**Total monthly software spend:** $20–$70 (plus giving transaction fees).
+
+### Mid-size church (200–800 weekend attendance)
+
+**Giving + ChMS:** Tithely's Church Suite tier or Planning Center (popular alternative — $14/month per module, very modular). Pushpay is usually overkill at this size unless you're growing fast toward multi-site.
+
+**Operations:** ChurchOpsHub All-In Bundle ($29/month). At this scale, you're almost certainly running enough operational complexity (multiple ministries, multiple buildings or rooms, volunteer compliance requirements) that the bundle is cheaper than picking hubs individually.
+
+**Total monthly software spend:** $100–$250 (plus giving transaction fees).
+
+### Large / multi-site church (800+ weekend attendance)
+
+**Giving + ChMS:** Pushpay + CCB is the dominant choice at this size for good reason. Enterprise giving infrastructure, capital-campaign tooling, and a serious ChMS in one suite. Expect $300–$700+/month all in.
+
+**Operations:** ChurchOpsHub All-In Bundle ($29/month). The price of operations software does not need to scale with church size — a 2,000-member church and a 200-member church have roughly the same operations needs (more volume, similar structure). Spending $29/month on operations alongside $500/month on giving + ChMS is the right ratio.
+
+**Total monthly software spend:** $350–$750 (plus giving transaction fees).
+
+## How to Avoid Paying Twice
+
+The most common mistake when combining a giving platform with an operations platform is **paying for overlapping features and using neither version of them well**.
+
+Three categories to watch:
+
+1. **Event registration.** Tithely Events and Planning Center Registrations both handle event sign-ups with payment. Pushpay can too via CCB. If you're already paying for one of these, don't separately enable an event-sign-up workflow elsewhere — pick one source of truth for paid events, and use ChurchOpsHub's Job Hub for *unpaid volunteer* roster work (which is its actual lane).
+2. **Forms / surveys.** Most ChMS products include forms. Most operations products include a request flow (item requests, maintenance tickets). These shouldn't overlap if you use them correctly — forms for general communication/intake, operations tools for the operational request types. Don't recreate maintenance tickets as a CCB form.
+3. **Calendar.** Tithely, CCB, and ChurchOpsHub all have a calendar of some kind. The right architecture: ChMS calendar is your **public** calendar (services, classes, special events); operations calendar is your **internal** calendar (room reservations, maintenance windows, job schedules). Don't try to make one of them be both.
+
+If you're not sure whether a feature overlaps, the test is: *which staff role uses it daily?* If it's the giving/ChMS team, that lives in the giving platform. If it's the facilities/operations team, that lives in the operations platform. Almost everything resolves cleanly with that question.
+
+## When You Genuinely Only Need One
+
+There are two cases where the multi-tool answer is wrong:
+
+**Case 1: Brand-new church plant with <50 people.** You don't need an operations tool yet. Use Tithely's free tier for giving, a single Google Sheet for the handful of things you own, and revisit when you have a building or a real volunteer roster.
+
+**Case 2: Operations-heavy ministry that doesn't take giving online.** A church-adjacent non-profit (after-school program, food pantry, ministry that runs out of borrowed space) may not need a giving platform at all and can run on ChurchOpsHub plus a basic donation processor.
+
+For everyone else — which is most churches — the right answer is two tools, each doing what it's best at, with clear lines about which workflow lives where. The wrong answer is forcing one tool to do everything and ending up with operations data scattered across spreadsheets because the platform never had a module for it.
+
+## Bottom Line
+
+| Need | Best tool |
+|------|-----------|
+| Online + text-to-give for a small church | Tithely (free tier) |
+| Giving + basic ChMS bundle for a small/mid church | Tithely Pro / Church Suite |
+| Enterprise giving + serious ChMS for a large church | Pushpay + CCB |
+| Polished branded mobile app | Pushpay App (large) or Tithely App (small/mid) |
+| Inventory, maintenance, facilities, volunteer compliance, room reservations, job board | ChurchOpsHub |
+| Donor management + capital campaigns | Pushpay |
+| Child check-in | Tithely Child Check-In or Planning Center Check-Ins |
+| Church website | Squarespace / Wix / Tithely Sites |
+
+Pick the giving + ChMS layer that fits your size. Then add the operations layer separately. That's the stack that actually works — and it's almost always cheaper than the all-in-one alternative once you account for the spreadsheets you'd otherwise be paying staff to maintain.
+
+If you want to try the operations layer without committing, ChurchOpsHub's Inventory Hub is free forever for up to 10 users — set it up alongside whatever giving platform you already run, see if the workflow fits, and add paid hubs only as the pain shows up.
+    `.trim(),
+  },
 ];
