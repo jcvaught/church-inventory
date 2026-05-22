@@ -528,8 +528,8 @@ export function JobsPage({ store, userProfile }) {
   }
 
   // ── Derived state ──
-  const isSignedUp = (job) => mySignupJobIds.has(job._docId);
-  const isOnWaitlist = (job) => myWaitlistJobIds.has(job._docId);
+  const isSignedUp = (job) => !!job && mySignupJobIds.has(job._docId);
+  const isOnWaitlist = (job) => !!job && myWaitlistJobIds.has(job._docId);
   const isFull = (job) => (job.signupCount || 0) >= (job.spotsTotal || 1);
   const rosterVisibility = settings?.jobsRosterVisibility ?? 'signups';
   const canSeeRoster = (job) => isAdminOrManager || rosterVisibility === 'all' || (rosterVisibility === 'signups' && isSignedUp(job));
@@ -628,7 +628,9 @@ export function JobsPage({ store, userProfile }) {
   // viewers allowed to see it (admin/manager, or per the visibility setting).
   // `rosterAllowed` is in the deps so a late-arriving mySignups subscription
   // (which flips canSeeRoster in 'signups' mode) re-triggers the fetch.
-  const rosterAllowed = canSeeRoster(liveDetail);
+  // Guard on liveDetail — this runs every render, and canSeeRoster is only
+  // meaningful for an open job-detail modal.
+  const rosterAllowed = liveDetail ? canSeeRoster(liveDetail) : false;
   useEffect(() => {
     const jobId = liveDetail?._docId;
     if (!jobId || !churchId || !rosterAllowed) {
@@ -650,7 +652,7 @@ export function JobsPage({ store, userProfile }) {
       setDetailRosterLoading(false);
     });
     return () => { cancelled = true; };
-  }, [liveDetail?._docId, liveDetail?.signupCount, liveDetail?.waitlistCount, churchId, rosterAllowed]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [liveDetail?._docId, liveDetail?.signupCount, liveDetail?.waitlistCount, churchId, rosterAllowed]);
 
   // Reports leaderboard needs every job's signups — fetch on demand when the
   // Reports tab is opened (admin/manager only).
