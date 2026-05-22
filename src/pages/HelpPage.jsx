@@ -811,6 +811,7 @@ export function HelpPage({ onBack }) {
                 'Status — Open, Closed, Completed, or Cancelled',
               ]} />
               <P>Jobs are auto-numbered (JOB-001, JOB-002, …). Only admins and managers can post or delete jobs.</P>
+              <Tip>Admins can convert a job into a Tasks Hub task (or a task into a job) via the <strong>→ Task</strong> / <strong>→ Job</strong> button in the detail modal — the two stay linked via a backref chip so you can hop between them.</Tip>
             </Accordion>
 
             <Accordion title="Recurring series 🔁">
@@ -920,6 +921,7 @@ export function HelpPage({ onBack }) {
               <UL items={[
                 'Pin — pinned announcements always appear at the top',
                 'Expiry date — announcement automatically stops showing after this date',
+                'Repeat weekly — bumps the announcement’s date forward seven days each morning so a standing reminder ("Sunday childcare signups open") stays at the top of the list',
               ]} />
               <P>The last 3 active announcements also appear on the main Dashboard for users with Job Hub access.</P>
             </Accordion>
