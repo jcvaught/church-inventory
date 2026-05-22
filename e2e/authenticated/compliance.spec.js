@@ -9,8 +9,10 @@ import { purgeE2EArtifacts, createJob, getJobSignups, createAccessPerson, create
 // single unified error surfaced via the flash banner:
 //   "This job requires a valid <type> on file. Ask an admin to add yours
 //    under People Access."
-// The waiver still triggers a client-side window.confirm before the CF call;
-// decline → no signup, accept → signup with acknowledgedWaiverAt.
+// The waiver triggers a client-side Modal (audit L9 — was window.confirm)
+// before the CF call: the member must tick "I have read and agree" and click
+// "Agree & Sign Up". Decline (Cancel) → no signup; accept → signup with
+// acknowledgedWaiverAt.
 
 test.describe('§5 Compliance + waiver gates', () => {
   test.afterEach(async () => { await purgeE2EArtifacts(); });
@@ -35,11 +37,13 @@ test.describe('§5 Compliance + waiver gates', () => {
     });
 
     await navigateToJob(memberAPage, job.title);
-    // The waiver confirm fires client-side BEFORE the server-side compliance
+    // The waiver modal appears client-side BEFORE the server-side compliance
     // check — accept it so the flow reaches the jobSignUp CF, which is what
     // rejects the ineligible member.
-    memberAPage.once('dialog', dialog => dialog.accept().catch(() => {}));
     await memberAPage.getByRole('dialog').getByRole('button', { name: /^sign up$/i }).click();
+    const waiver = memberAPage.getByRole('dialog').filter({ hasText: 'Waiver & Consent' });
+    await waiver.getByRole('checkbox').check();
+    await waiver.getByRole('button', { name: /agree/i }).click();
 
     // Expect the flash banner with the server-side compliance error
     await expect(memberAPage.locator('text=Ask an admin to add yours')).toBeVisible({ timeout: 10_000 });
@@ -103,9 +107,10 @@ test.describe('§5 Compliance + waiver gates', () => {
     await createAccessRecord({ personId: person._docId, type: 'background_check', expiryDate: daysFromNowStr(180) });
 
     await navigateToJob(memberAPage, job.title);
-    // Dismiss the waiver confirm
-    memberAPage.once('dialog', dialog => dialog.dismiss().catch(() => {}));
+    // Cancel the waiver modal — no consent given.
     await memberAPage.getByRole('dialog').getByRole('button', { name: /^sign up$/i }).click();
+    const waiver = memberAPage.getByRole('dialog').filter({ hasText: 'Waiver & Consent' });
+    await waiver.getByRole('button', { name: /^cancel$/i }).click();
 
     // Give the page a moment in case it tries to fire signUpForJob anyway
     await memberAPage.waitForTimeout(1500);
@@ -127,8 +132,10 @@ test.describe('§5 Compliance + waiver gates', () => {
     await createAccessRecord({ personId: person._docId, type: 'background_check', expiryDate: daysFromNowStr(180) });
 
     await navigateToJob(memberAPage, job.title);
-    memberAPage.once('dialog', dialog => dialog.accept().catch(() => {}));
     await memberAPage.getByRole('dialog').getByRole('button', { name: /^sign up$/i }).click();
+    const waiver = memberAPage.getByRole('dialog').filter({ hasText: 'Waiver & Consent' });
+    await waiver.getByRole('checkbox').check();
+    await waiver.getByRole('button', { name: /agree/i }).click();
 
     await expect.poll(async () => (await getJobSignups(job.docId)).length, { timeout: 15_000 }).toBe(1);
     const final = await getJobSignups(job.docId);
