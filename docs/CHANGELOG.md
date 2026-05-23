@@ -4,6 +4,90 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-23 — Three-audit follow-up: protobufjs CVE + perf + observability
+
+Ran three parallel audits the 2026-05-22 pre-launch pass had skipped:
+**performance/cost**, **dependency/supply-chain**, **observability**. Combined
+tally: 2 Critical · 19 High · 62 Medium · 10 Low. Shipped the highest-leverage
+six findings as one branch (`audit-followup-2026-05-23`, commit `3caa446`).
+
+**Critical fixes:**
+- `protobufjs` arbitrary-code-execution advisory (GHSA-xq3m-2v4x-88gg) closed
+  via `npm overrides protobufjs: ^7.5.8` in `functions/package.json`. The
+  audit suggested bumping `firebase-admin` v12 → v13 — but `firebase-functions`
+  v4 peer-pins admin at `^12`, AND admin@13 still pulls `protobufjs@7.5.4`
+  (also in the vulnerable `<=7.5.7` range). The override is smaller, peer-dep
+  compatible, and gets the job done. `npm audit` functions tree: 0 critical
+  (was 1); 17 remaining vulns deferred to the firebase-functions v4 → v7
+  migration.
+- Anonymous `PublicJobsPage` bundle: split off the main app at `main.jsx`.
+  New `src/firebasePublic.js` calls `initializeApp` with `firebase/app` only
+  (no Auth/Firestore/Storage). `main.jsx` detects `?jobs=` in the URL and
+  dynamically imports the minimal pair (`firebasePublic` + `PublicJobsPage`).
+  Otherwise it dynamically imports `App.jsx` as before. Vite `manualChunks`
+  split into `vendor-firebase-min` (app + functions) and
+  `vendor-firebase-full` (auth + firestore + storage). `App.jsx` lost its
+  `PublicJobsPage` static import + `publicJobs` branch — that path now lives
+  in `main.jsx` so anonymous teen traffic never imports the authenticated
+  app. Bundle size for `?jobs=` URL drops from ~2 MB to ~480 KB raw
+  (~135 KB gzip), ~75% smaller.
+
+**Observability:**
+- `withScheduledRun(name, fn)` wrapper writes `scheduledJobRuns/{name}` per
+  invocation with `{ status, startedAt, finishedAt, durationMs, lastError }`.
+  Wraps the 5 scheduled jobs: `processTrialExpirations`, `sendTaskDueReminders`,
+  `closePastJobs`, `sendJobReminders`, `generateRecurringTemplateTasks`. A
+  cron that fails to fire is now distinguishable from a no-op (empty) run.
+  Heartbeat write failures are Sentry-captured but never block the actual job.
+- PostHog funnel events on the Jobs flow: `jobs_board_viewed` (auth + public
+  surfaces), `jobs_signup_attempted`, `jobs_signup_succeeded`,
+  `jobs_signup_waitlisted`, `jobs_signup_failed`, `jobs_signup_blocked_compliance`
+  (heuristic on error message), `jobs_attended_marked`. PostHog was
+  initialized but never `.capture()`'d before — the Jobs funnel was blind.
+- `isEmailSuppressed` Firestore-read failure now `Sentry.captureException`s
+  with an `extra: { email }` tag. Behavior stays fail-open (closing would
+  block all transactional email during any Firestore degradation — worse
+  failure mode than the rare bypass of an already-bounced address), but we
+  know when it happens now.
+
+**Performance:**
+- `getPublicJobs` callable gets a per-instance 60-second in-process cache
+  keyed on `churchId`. Callable protocol doesn't expose `Cache-Control`, so
+  warm-instance memoization is the next-best lever. Bursty share-link
+  previews, bot refreshes, and rapid teen reloads now hit memory. Cache
+  set on both the populated path and the two empty-list early returns.
+
+**Auth flow:** `?signin=1` query param opens `AuthScreen` in login mode (the
+public-jobs minimal tree's Sign In button uses this so it lands directly on
+login instead of bouncing through register-mode).
+
+**Deploy:** `firebase deploy --only functions` updated all 27 functions
+(2026-05-23 22:25 UTC). Webhook probes — stripeWebhook 400, sendgridEventWebhook
+401, getPublicJobs 400 — all 4xx-from-function (IAM intact). twilioInbound
+returned 403 "Forbidden" (9-byte body), which I initially misread as the
+Gen-2 invoker strip; the body is *also* what the function emits on Twilio
+signature mismatch (`functions/index.js:2350`). The 9-byte-body heuristic
+from the existing gotcha note is ambiguous — Cloud Logging is the real
+disambiguator. Frontend push triggered Vercel auto-deploy, new bundle hash
+`index-iTHbIMRw.js` serving by 22:35 UTC.
+
+**Deferred from the audits (queued as separate sessions):**
+- `firebase-functions` v4 → v7 migration (closes 4 high transitive vulns;
+  EOL major; ~3–5 hours).
+- `firebase` browser v10 → v12 + `stripe` v14 → v22 (closes `undici` highs;
+  ~2 hours).
+- Bound `jobListings` to upcoming-only + lazy-subscribe the two
+  `collectionGroup` listeners on JobsPage (audit perf H-3 + H-4).
+- Cloud Monitoring alert wiring (gcloud requires interactive alpha/beta
+  install; do via Console: severity≥ERROR on the 5 scheduled jobs + 3
+  webhooks → email `jcvaught@gmail.com`).
+- Legal/compliance audit for minors (COPPA, child-labor, waiver
+  enforceability).
+
+E2E: 56 passed / 4 skipped / 0 failed pre-deploy baseline.
+
+---
+
 ## 2026-05-22 — Blog post: Tithely vs. Pushpay vs. ChurchOpsHub
 
 New post `tithely-vs-pushpay-vs-churchopshub` (`src/data/blogPosts.js`) — brand-bound comparison positioning COH as complementary to giving platforms rather than competitive (Tithely/Pushpay = giving + ChMS; COH = operations). Stack recommendations by church size, overlap-avoidance guidance, internal link to the spreadsheet-cost post. Sitemap manually updated with the new URL (`public/sitemap.xml`). Prerender clean, 21 post pages emitted. Commit `f847126`.

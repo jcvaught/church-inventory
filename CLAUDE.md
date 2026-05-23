@@ -60,7 +60,8 @@ src/
 ├── useAuth.js                 ← Firebase Auth hook (email/password + Google, church setup/join)
 ├── useFirestore.js            ← All Firestore CRUD as a single hook (incl. maintenance)
 ├── firebase.js                ← Firebase app init; exports `db`, `auth`, `googleProvider`, `storage`
-├── main.jsx                   ← React entry point; initializes Sentry (@sentry/react v10) with browserTracing + captureConsole({levels:['error']}) — defaults also catch window.onerror, unhandled rejections, and breadcrumbs
+├── firebasePublic.js          ← Minimal init (firebase/app only, no Auth/Firestore/Storage); used by main.jsx when `?jobs=` is present so anonymous teen traffic never imports the authenticated SDKs (audit 2026-05-23 perf C-1)
+├── main.jsx                   ← React entry point; initializes Sentry (@sentry/react v10) with browserTracing + captureConsole({levels:['error']}) — defaults also catch window.onerror, unhandled rejections, and breadcrumbs. Routes `?jobs=` URLs to a minimal tree (firebasePublic + PublicJobsPage) BEFORE importing App.jsx — cut anonymous bundle from ~2 MB to ~480 KB raw
 ├── hooks/
 │   ├── useMobile.js           ← MobileCtx + useWindowWidth (breakpoint 768px)
 │   └── useSubscription.js     ← Subscription state hook: hasHub(), canAddUser(), isTrialing()
@@ -114,7 +115,7 @@ public/
 ├── sitemap.xml                ← Static sitemap: /, /?help, /blog, and all 3 blog post URLs
 └── google254ab6f07b8682a3.html ← Google Search Console ownership verification file
 functions/
-├── index.js                   ← Cloud Functions: createCheckoutSession, createPortalSession, stripeWebhook, getPublicJobs (onCall, no auth — sanitized public job board: takes churchId, strips signups[]/waitlist[]/attendance, returns display fields + signupCount; replaces direct-Firestore-list path which leaked teen names), sendReservationEmail, sendTicketAssignedEmail, sendJobAnnouncementEmails, sendJobCancelledEmails, sendJobReminders (scheduled 8am Central daily — emails all signups; also sends SMS to users with phone+smsRemindersEnabled via Twilio), closePastJobs (scheduled 2am Central daily — collectionGroup query flips `status: 'open' → 'completed'` when scheduledDate < today; prevents past-but-unfinished jobs accumulating in the Open filter), sendJobPosterNotification (onCall — poster + delegates notified on withdrawal or co-admin cancellation; 30s double-fire guard), sendTaskDueReminders (scheduled 8am Central daily — collectionGroup query on tasks.dueDate), sendTaskMentionEmail (onCall — notifies mentioned users when @name appears in task comment), generateRecurringTemplateTasks (scheduled 8am Central daily — creates tasks from templates with autoGenerate==true; also advances repeatWeekly job announcements), jobSignUp / jobWithdraw / jobSetAttendance (onCall — all Jobs Hub roster writes; operate on the signups/waitlist per-uid subcollections, maintain signupCount/waitlistCount, enforce compliance + waiver + capacity server-side; audit H1/H2, 2026-05-22), promoteFromWaitlist (onCall — moves the first waitlist subcollection entry into signups, sends transactional email; carries acknowledgedWaiverAt forward; jobWithdraw also promotes inline server-side), sendWelcomeEmail (Firestore onCreate trigger on churches/{churchId}), processTrialExpirations (scheduled 2am Central daily — trial expiry + 7-day warning emails), setEmailSuppressionActive (onCall, owner-only — flips emailSuppressions/{id}.active so the owner can re-subscribe/re-suppress an address from Settings → Email tab; audit L9); shared subHasHub() helper used by all hub-gating CFs (all email via SendGrid; SENDGRID_API_KEY in functions/.env; SMS via Twilio Programmable Messaging — TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, TWILIO_MESSAGING_SERVICE_SID in functions/.env; sendJobReminders sends via the A2P-registered Messaging Service (messagingServiceSid) when TWILIO_MESSAGING_SERVICE_SID is set, falling back to the bare from-number; sender: churchopshub@gmail.com; replyTo: jcvaught@gmail.com on welcome/trial emails)
+├── index.js                   ← Cloud Functions: createCheckoutSession, createPortalSession, stripeWebhook, getPublicJobs (onCall, no auth — sanitized public job board: takes churchId, strips signups[]/waitlist[]/attendance, returns display fields + signupCount; replaces direct-Firestore-list path which leaked teen names), sendReservationEmail, sendTicketAssignedEmail, sendJobAnnouncementEmails, sendJobCancelledEmails, sendJobReminders (scheduled 8am Central daily — emails all signups; also sends SMS to users with phone+smsRemindersEnabled via Twilio), closePastJobs (scheduled 2am Central daily — collectionGroup query flips `status: 'open' → 'completed'` when scheduledDate < today; prevents past-but-unfinished jobs accumulating in the Open filter), sendJobPosterNotification (onCall — poster + delegates notified on withdrawal or co-admin cancellation; 30s double-fire guard), sendTaskDueReminders (scheduled 8am Central daily — collectionGroup query on tasks.dueDate), sendTaskMentionEmail (onCall — notifies mentioned users when @name appears in task comment), generateRecurringTemplateTasks (scheduled 8am Central daily — creates tasks from templates with autoGenerate==true; also advances repeatWeekly job announcements), jobSignUp / jobWithdraw / jobSetAttendance (onCall — all Jobs Hub roster writes; operate on the signups/waitlist per-uid subcollections, maintain signupCount/waitlistCount, enforce compliance + waiver + capacity server-side; audit H1/H2, 2026-05-22), promoteFromWaitlist (onCall — moves the first waitlist subcollection entry into signups, sends transactional email; carries acknowledgedWaiverAt forward; jobWithdraw also promotes inline server-side), sendWelcomeEmail (Firestore onCreate trigger on churches/{churchId}), processTrialExpirations (scheduled 2am Central daily — trial expiry + 7-day warning emails), setEmailSuppressionActive (onCall, owner-only — flips emailSuppressions/{id}.active so the owner can re-subscribe/re-suppress an address from Settings → Email tab; audit L9); shared subHasHub() helper used by all hub-gating CFs; `withScheduledRun(name, fn)` heartbeat helper wraps every onSchedule body and writes `scheduledJobRuns/{name}` with `{ status, startedAt, finishedAt, durationMs, lastError }` so a missing/failed run is detectable (audit 2026-05-23 obs-H1; `getPublicJobs` also gets a per-instance 60s in-process cache, perf M-1); `isEmailSuppressed` fail-open with Sentry capture on read errors (obs-H4); (all email via SendGrid; SENDGRID_API_KEY in functions/.env; SMS via Twilio Programmable Messaging — TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, TWILIO_MESSAGING_SERVICE_SID in functions/.env; sendJobReminders sends via the A2P-registered Messaging Service (messagingServiceSid) when TWILIO_MESSAGING_SERVICE_SID is set, falling back to the bare from-number; sender: churchopshub@gmail.com; replyTo: jcvaught@gmail.com on welcome/trial emails)
 └── package.json               ← Node 22, firebase-functions v4, firebase-admin v12, stripe v14, @sentry/node (server-side error capture, same DSN as browser; defaults catch process uncaughtException + unhandledRejection)
 ```
 
@@ -282,15 +283,21 @@ Reproduced 2026-05-14 on `twilioInbound`. After `firebase deploy --only function
 **Always probe a redeployed webhook function before walking away:**
 ```bash
 curl -X POST <function-url> -d "test=1"
-# 403 with empty body or "Error: Forbidden" → IAM stripped
-# 403 with your function's signature-rejection log → IAM fine, code rejected
 ```
 
-**Re-grant:**
+A 403 with `content-type: text/html` and a 9-byte "Forbidden" body is **ambiguous** — the Google Frontend's IAM-strip response and the function's own signature-rejection (`twilioInbound` at `functions/index.js:2350`) look identical at the wire level (verified 2026-05-23). **Don't rely on the body alone.** The real disambiguator:
+- Check Cloud Logging for the function's `console.warn('twilioInbound: invalid signature', ...)` entry on your test request's trace ID. **No log entry → IAM stripped. Log entry present → IAM fine, function rejected.**
+- A 400/401 response = IAM fine (function returned a status code, so it reached the code path). Only 403 is ambiguous.
+
+**Re-grant (if needed):**
 ```bash
-gcloud run services add-iam-policy-binding twilioinbound \
+# Either form works — they target the same Cloud Run IAM binding:
+gcloud run services add-iam-policy-binding <service-name> \
   --region=us-central1 --project=church-inventory-9615c \
   --member=allUsers --role=roles/run.invoker
+# Or, the function-aware shorthand:
+gcloud functions add-invoker-policy-binding <FunctionName> \
+  --region=us-central1 --project=church-inventory-9615c --member=allUsers
 ```
 
 Applies to `twilioInbound`, `sendgridEventWebhook`, `stripeWebhook`, and any other Gen-2 `onRequest` function called by an unauthenticated third party.
