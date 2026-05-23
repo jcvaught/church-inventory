@@ -4,6 +4,10 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-22 — Blog post: Tithely vs. Pushpay vs. ChurchOpsHub
+
+New post `tithely-vs-pushpay-vs-churchopshub` (`src/data/blogPosts.js`) — brand-bound comparison positioning COH as complementary to giving platforms rather than competitive (Tithely/Pushpay = giving + ChMS; COH = operations). Stack recommendations by church size, overlap-avoidance guidance, internal link to the spreadsheet-cost post. Sitemap manually updated with the new URL (`public/sitemap.xml`). Prerender clean, 21 post pages emitted. Commit `f847126`.
+
 ## 2026-05-22 — stripeWebhook quiets scanner-probe Sentry noise
 
 After the audit L2 fix made `stripeWebhook` `invoker:'public'` (correctly,
