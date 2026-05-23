@@ -18,13 +18,10 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom'],
-          'vendor-firebase': [
-            'firebase/app',
-            'firebase/auth',
-            'firebase/firestore',
-            'firebase/storage',
-            'firebase/functions',
-          ],
+          // Minimum init the public ?jobs= route needs — keeps the anonymous
+          // teen bundle off the heavy Auth/Firestore/Storage chunk.
+          'vendor-firebase-min': ['firebase/app', 'firebase/functions'],
+          'vendor-firebase-full': ['firebase/auth', 'firebase/firestore', 'firebase/storage'],
         },
       },
     },

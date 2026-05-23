@@ -533,6 +533,9 @@ export function JobsPage({ store, userProfile }) {
   // Cleanup flash timer on unmount
   useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current); }, []);
 
+  // PostHog funnel: jobs_board_viewed (audit obs-H3). One event per mount.
+  useEffect(() => { window.posthog?.capture('jobs_board_viewed', { surface: 'authenticated' }); }, []);
+
   // Sync delegate list if userProfile updates (e.g. saved from another session or Settings)
   useEffect(() => { setJobDelegates(userProfile?.jobPosterDelegates || []); }, [userProfile?.jobPosterDelegates]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -945,12 +948,22 @@ export function JobsPage({ store, userProfile }) {
 
   async function performSignUp(job, waiverAccepted) {
     setSavingJobId(job._docId);
+    window.posthog?.capture('jobs_signup_attempted', { jobNumber: job.jobNumber, hasWaiver: !!job.requiresWaiver });
     try {
       const result = await signUpForJob(job._docId, userId, userName, waiverAccepted, job.jobNumber);
-      if (result?.error) flash(result.error, true);
-      else if (result?.wasWaitlisted) flash("You've been added to the waitlist!");
-      else flash('You signed up!');
+      if (result?.error) {
+        const isCompliance = /compliance|background|certif|consent|access/i.test(result.error);
+        window.posthog?.capture(isCompliance ? 'jobs_signup_blocked_compliance' : 'jobs_signup_failed', { jobNumber: job.jobNumber, reason: result.error });
+        flash(result.error, true);
+      } else if (result?.wasWaitlisted) {
+        window.posthog?.capture('jobs_signup_waitlisted', { jobNumber: job.jobNumber });
+        flash("You've been added to the waitlist!");
+      } else {
+        window.posthog?.capture('jobs_signup_succeeded', { jobNumber: job.jobNumber });
+        flash('You signed up!');
+      }
     } catch (err) {
+      window.posthog?.capture('jobs_signup_failed', { jobNumber: job.jobNumber, reason: err?.message || 'unknown' });
       flash(err?.message ? `Sign-up failed: ${err.message}` : 'Sign-up failed. Please try again.', true);
     }
     finally { setSavingJobId(null); }
@@ -1005,6 +1018,7 @@ export function JobsPage({ store, userProfile }) {
     try {
       const res = await updateJobSignupAttendance(job._docId, uid, attended);
       if (res?.updated) {
+        if (attended) window.posthog?.capture('jobs_attended_marked', { jobNumber: job.jobNumber });
         setDetailSignups(prev => prev.map(s => s.uid === uid ? { ...s, attended } : s));
       } else {
         flash('That person is no longer on this job — attendance not saved.', true);

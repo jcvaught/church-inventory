@@ -24,6 +24,7 @@ export function PublicJobsPage({ churchId, churchName, churchCode, onGetStarted 
 
   useEffect(() => {
     if (!churchId) return;
+    window.posthog?.capture('jobs_board_viewed', { surface: 'public', churchId });
     const fn = httpsCallable(getFunctions(), 'getPublicJobs');
     fn({ churchId })
       .then(res => setJobs(res.data?.jobs || []))

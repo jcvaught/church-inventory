@@ -49,8 +49,15 @@ async function isEmailSuppressed(email) {
     // Manual unsuppress: set { active: false } on the doc.
     return data.active !== false;
   } catch (err) {
+    // Fail-open + Sentry-capture (audit obs-H4): a Firestore read failure
+    // here historically swallowed silently, leaving us blind to suppression
+    // bypass during outages. Sentry surfaces the event so we know; keeping
+    // fail-open because closing would block ALL transactional email during
+    // any Firestore degradation, which is a worse failure mode than the
+    // rare bypass of an already-bounced/unsubscribed address.
     console.warn('[isEmailSuppressed] read failed for', norm, err.message);
-    return false; // fail-open — better to send than to silently drop
+    Sentry.captureException(err, { tags: { fn: 'isEmailSuppressed' }, extra: { email: norm } });
+    return false;
   }
 }
 
@@ -77,6 +84,59 @@ let twilioClient;
 try { twilioClient = require('twilio'); } catch { twilioClient = null; }
 
 initializeApp();
+
+// ─── Scheduled-job heartbeat (audit obs-H1) ────────────────────────────────
+// Per-run breadcrumb so we can detect "the cron didn't fire" — without this,
+// a missing run is indistinguishable from a no-op (empty) run. Writes the
+// latest run summary to scheduledJobRuns/{jobName} on every invocation. A
+// Cloud Monitoring uptime check on `finishedAt` going stale = dead-man's
+// switch. Wrap every onSchedule body with withScheduledRun.
+async function withScheduledRun(jobName, fn) {
+  const runRef = getFirestore().doc(`scheduledJobRuns/${jobName}`);
+  const startMs = Date.now();
+  try {
+    await runRef.set({
+      jobName,
+      status: 'running',
+      startedAt: FieldValue.serverTimestamp(),
+      finishedAt: null,
+      durationMs: null,
+      lastError: null,
+    }, { merge: false });
+  } catch (e) {
+    // Heartbeat write must not block the actual job. Capture and continue.
+    Sentry.captureException(e, { tags: { fn: 'withScheduledRun:start', scheduledJob: jobName } });
+  }
+  try {
+    const ret = await fn();
+    const summary = (ret && typeof ret === 'object') ? ret : null;
+    try {
+      await runRef.set({
+        status: 'completed',
+        finishedAt: FieldValue.serverTimestamp(),
+        durationMs: Date.now() - startMs,
+        lastError: null,
+        ...(summary && { lastSummary: summary }),
+      }, { merge: true });
+    } catch (e) {
+      Sentry.captureException(e, { tags: { fn: 'withScheduledRun:finish', scheduledJob: jobName } });
+    }
+    return ret;
+  } catch (err) {
+    try {
+      await runRef.set({
+        status: 'failed',
+        finishedAt: FieldValue.serverTimestamp(),
+        durationMs: Date.now() - startMs,
+        lastError: String(err?.message || err).slice(0, 500),
+      }, { merge: true });
+    } catch (e) {
+      Sentry.captureException(e, { tags: { fn: 'withScheduledRun:fail', scheduledJob: jobName } });
+    }
+    Sentry.captureException(err, { tags: { scheduledJob: jobName } });
+    throw err;
+  }
+}
 
 // Allowed origins for Stripe redirect URLs (successUrl, cancelUrl, returnUrl)
 const ALLOWED_REDIRECT_ORIGINS = [
@@ -263,6 +323,15 @@ exports.lookupChurchByCode = onCall({ cors: true }, async (req) => {
 // teen names are never exposed to anyone with the share link. Replaces the
 // previous direct-Firestore listener path that leaked names to anyone with
 // raw SDK access (Jobs Hub audit, 2026-05-06).
+//
+// Per-instance in-process cache (audit perf-M1): callable protocol doesn't
+// expose Cache-Control, so we memoize per warm instance for 60s. Bursty
+// share-link previews, bot refreshes, and rapid teen reloads hit the cache
+// instead of Firestore. churchId-keyed; TTL short enough that admins see
+// new jobs within the minute.
+const _publicJobsCache = new Map();
+const PUBLIC_JOBS_TTL_MS = 60_000;
+
 exports.getPublicJobs = onCall(
   { cors: true },
   async (req) => {
@@ -271,19 +340,28 @@ exports.getPublicJobs = onCall(
       throw new HttpsError('invalid-argument', 'churchId is required.');
     }
 
+    const cached = _publicJobsCache.get(churchId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.payload;
+    }
+
     const db = getFirestore();
     const churchSnap = await db.collection('churches').doc(churchId).get();
     // Return an empty list for a non-existent church too — so a caller cannot
     // distinguish "church does not exist" from "church exists, hub off / no jobs".
     // Closes a churchId (= {creatorUid}-church) enumeration oracle (audit H4).
     if (!churchSnap.exists) {
-      return { jobs: [] };
+      const payload = { jobs: [] };
+      _publicJobsCache.set(churchId, { expiresAt: Date.now() + PUBLIC_JOBS_TTL_MS, payload });
+      return payload;
     }
 
     const subSnap = await db.collection('churches').doc(churchId).collection('config').doc('subscription').get();
     if (!subHasHub(subSnap.data() || {}, 'jobs')) {
       // Hub inactive — return empty list rather than leak that the church exists.
-      return { jobs: [] };
+      const payload = { jobs: [] };
+      _publicJobsCache.set(churchId, { expiresAt: Date.now() + PUBLIC_JOBS_TTL_MS, payload });
+      return payload;
     }
 
     const jobsSnap = await db
@@ -322,7 +400,9 @@ exports.getPublicJobs = onCall(
       };
     });
 
-    return { jobs };
+    const payload = { jobs };
+    _publicJobsCache.set(churchId, { expiresAt: Date.now() + PUBLIC_JOBS_TTL_MS, payload });
+    return payload;
   }
 );
 
@@ -773,7 +853,7 @@ const HUB_ACTIONS = {
   jobs: ['post_job','signup_job','withdraw_job','update_job','delete_job','post_announcement','update_announcement','delete_announcement'],
 };
 
-exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 'America/Chicago' }, async () => {
+exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('processTrialExpirations', async () => {
   const db = getFirestore();
   const now = new Date();
   const nowStr = now.toISOString();
@@ -943,7 +1023,7 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
       Sentry.captureException(err);
     }
   }
-});
+}));
 
 // ── sendReservationEmail ──────────────────────────────────────────────────
 // Called from client when a reservation is approved or denied.
@@ -1203,7 +1283,7 @@ exports.clearCancellationStampOnReopen = onDocumentUpdated('churches/{churchId}/
 // covering the full upcoming week reduces send count by ~5–7× while
 // preserving the "don't let tasks slip" UX. Overdue + this-week's tasks
 // roll into one email per assignee.
-exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * 1', timeZone: 'America/Chicago' }, async () => {
+exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * 1', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendTaskDueReminders', async () => {
   if (!initSendGrid()) { console.warn('sendTaskDueReminders: SendGrid not configured, skipping.'); return; }
 
   const db = getFirestore();
@@ -1353,7 +1433,7 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * 1', timeZone: 'Am
     refsToStamp.forEach(ref => markBatch.update(ref, { lastReminderSentDate: todayStr }));
     await markBatch.commit();
   }
-});
+}));
 
 // ── closePastJobs ─────────────────────────────────────────────────────────
 // Runs daily at 2:00 AM Central time. Flips any `open` job whose
@@ -1364,7 +1444,7 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * 1', timeZone: 'Am
 // stale past jobs should still be tidied up (a data-hygiene op, not a hub
 // feature), and a per-church subscription lookup here would add a read per
 // job for no user benefit. Decision recorded in docs/JOBS-HUB-AUDIT.
-exports.closePastJobs = onSchedule({ schedule: '0 2 * * *', timeZone: 'America/Chicago' }, async () => {
+exports.closePastJobs = onSchedule({ schedule: '0 2 * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('closePastJobs', async () => {
   const db = getFirestore();
   const today = (() => {
     const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
@@ -1393,12 +1473,13 @@ exports.closePastJobs = onSchedule({ schedule: '0 2 * * *', timeZone: 'America/C
     total += chunk.length;
   }
   console.log(`closePastJobs: closed ${total} past jobs.`);
-});
+  return { processed: total };
+}));
 
 // ── sendJobReminders ──────────────────────────────────────────────────────
 // Runs every morning at 8:00 AM Central time.
 // Finds all jobs scheduled for today across all churches and emails each signup.
-exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'America/Chicago' }, async () => {
+exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendJobReminders', async () => {
   if (!initSendGrid()) { console.warn('sendJobReminders: SendGrid not configured, skipping.'); return; }
 
   const db = getFirestore();
@@ -1576,7 +1657,7 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     ...[...jobsWithSuccesses].map(ref => ref.update({ lastReminderSentDate: today })),
     ...[...smsJobSuccesses].map(ref => ref.update({ lastSmsReminderSentDate: today })),
   ]);
-});
+}));
 
 // ── sendJobPosterNotification ─────────────────────────────────────────────
 // Called on member withdrawal, admin removal, or co-admin cancellation. Emails the job poster + delegates.
@@ -2110,7 +2191,7 @@ exports.sendTaskMentionEmail = onCall({ cors: true }, async (req) => {
 
 // ── generateRecurringTemplateTasks ────────────────────────────────────────
 // Runs daily at 8am Central. Creates tasks from templates with autoGenerate enabled.
-exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', timeZone: 'America/Chicago' }, async () => {
+exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('generateRecurringTemplateTasks', async () => {
   const db = getFirestore();
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
   const pad = n => String(n).padStart(2, '0');
@@ -2227,7 +2308,7 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
     console.error('generateRecurringTemplateTasks: announcement sweep failed', err?.message);
     Sentry.captureException(err);
   }
-});
+}));
 
 // ── twilioInbound ─────────────────────────────────────────────────────────
 // Twilio inbound SMS webhook. Syncs users.smsRemindersEnabled when users reply

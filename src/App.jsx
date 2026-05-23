@@ -24,7 +24,6 @@ import { TermsPage } from './pages/TermsPage.jsx';
 import { PublicSMSProgramPage } from './pages/PublicSMSProgramPage.jsx';
 import { BlogIndex } from './pages/BlogIndex.jsx';
 import { BlogPost } from './pages/BlogPost.jsx';
-import { PublicJobsPage } from './pages/PublicJobsPage.jsx';
 import { RES_STATUS } from './utils/constants.js';
 
 
@@ -440,13 +439,8 @@ export default function App() {
     const cn = p.get('cn');
     return churchId ? { churchId, churchName: cn ? decodeURIComponent(cn) : '' } : null;
   });
-  const [publicJobs] = useState(() => {
-    const p = new URLSearchParams(window.location.search);
-    const churchId = p.get('jobs');
-    const cn = p.get('cn');
-    const cc = p.get('cc');
-    return churchId ? { churchId, churchName: cn ? decodeURIComponent(cn) : '', churchCode: cc ? decodeURIComponent(cc) : '' } : null;
-  });
+  // ?jobs= (PublicJobsPage) is gated at main.jsx so anonymous teen traffic
+  // never imports App.jsx or its authenticated-app dependencies.
   // Both clean paths (/privacy, /terms, /sms-program — via Vercel rewrites) and
   // the legacy query-param variants (?privacy, ?terms, ?sms-program) route to
   // the same pages. Pathname check is the primary; query-param is backward
@@ -459,9 +453,14 @@ export default function App() {
   const [showSmsProgram] = useState(() => _qs.get('sms-program') !== null || _path === '/sms-program');
   const [showAuth, setShowAuth] = useState(() => {
     const p = new URLSearchParams(window.location.search);
-    return p.get('signup') !== null || p.get('invite') !== null;
+    return p.get('signup') !== null || p.get('signin') !== null || p.get('invite') !== null;
   });
-  const [authInitialMode, setAuthInitialMode] = useState('login');
+  const [authInitialMode, setAuthInitialMode] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('signin') !== null) return 'login';
+    if (p.get('signup') !== null) return 'register';
+    return 'login';
+  });
 
   const handleGetStarted = (mode = 'register') => {
     setAuthInitialMode(mode);
@@ -473,7 +472,6 @@ export default function App() {
   if (pathname.startsWith('/blog/')) return <BlogPost slug={pathname.replace('/blog/', '')} onGetStarted={handleGetStarted} />;
 
   if (publicRequest) return <PublicRequestPage churchId={publicRequest.churchId} churchName={publicRequest.churchName} />;
-  if (publicJobs) return <PublicJobsPage churchId={publicJobs.churchId} churchName={publicJobs.churchName} churchCode={publicJobs.churchCode} onGetStarted={handleGetStarted} />;
 
   if (showHelp) return <HelpPage onBack={() => window.history.back()} />;
   if (showPrivacy) return <PrivacyPage />;
