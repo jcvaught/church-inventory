@@ -199,6 +199,7 @@ All phase work and dated fixes: `docs/CHANGELOG.md`.
 **Known limitations (documented, accepted):**
 - ~~Roster names readable by any church member via raw Firestore SDK queries~~ — **resolved 2026-05-22** (audit H1). The Jobs Hub roster moved into protected per-uid subcollections (`jobListings/{id}/signups/{uid}`, `…/waitlist/{uid}`); writes are Cloud Functions only; reads are gated by `firestore.rules` `canSeeJobRoster()` per the `jobsRosterVisibility` setting. See `docs/CHANGELOG.md` (2026-05-22) and `docs/JOBS-HUB-H1-REFACTOR-STATUS.md`.
 - Private task **comments** are visible to all church members via raw Firestore reads (Firestore rules cannot apply task.visibility to its comments subcollection). UI does not expose private-task comments to non-participants; the data-layer limitation is accepted.
+- Jobs Hub **Reports tab** (`reportsScope === 'all' | '90d'`) joins `reportsSignups` against the bounded `jobListings` array (`useFirestore.js:182`, capped at 500 most-recent by `createdAt`). A church past 500 historical jobs will see its all-time leaderboard silently undercount signups whose parent job fell off the window — same drop behavior as deleted jobs. Real fix is a lazy one-shot `getDocs` of older jobs when admin picks `'all'`/`'90d'`; queued for a future session.
 
 ---
 
