@@ -1,6 +1,6 @@
 import { useState, useMemo, useContext, useEffect, useRef, memo } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { collection, collectionGroup, query, where, onSnapshot, getDocs } from 'firebase/firestore';
+import { collection, collectionGroup, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
@@ -523,6 +523,7 @@ export function JobsPage({ store, userProfile }) {
   const [detailRosterLoading, setDetailRosterLoading] = useState(false);
   const [detailRosterError, setDetailRosterError] = useState(false);
   const [reportsSignups, setReportsSignups] = useState([]); // [{ ...signup, jobId }]
+  const [reportsExtraJobs, setReportsExtraJobs] = useState([]); // older jobs beyond the 500-cap, fetched on demand for 'all'-scope reports
 
   function flash(text, isError = false) {
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
@@ -583,7 +584,9 @@ export function JobsPage({ store, userProfile }) {
       return localDateStr(d);
     })();
     const jobById = {};
-    (jobListings || []).forEach(j => { jobById[j._docId] = j; });
+    // Live `jobListings` is bounded to 500 most-recent (useFirestore.js:182 H-3);
+    // `reportsExtraJobs` is the on-demand backfill for 'all'-scope when at-cap.
+    [...(jobListings || []), ...reportsExtraJobs].forEach(j => { jobById[j._docId] = j; });
     const stats = {};
     // reportsSignups is fetched from the signups subcollections (audit H1).
     reportsSignups.forEach(s => {
@@ -596,7 +599,7 @@ export function JobsPage({ store, userProfile }) {
       else if (s.attended === false) stats[s.uid].noShow++;
     });
     return Object.values(stats).sort((a, b) => b.attended - a.attended || b.jobs - a.jobs || a.name.localeCompare(b.name));
-  }, [jobListings, reportsScope, reportsSignups]);
+  }, [jobListings, reportsScope, reportsSignups, reportsExtraJobs]);
 
   const filteredJobs = useMemo(() => {
     let jobs = jobListings || [];
@@ -693,17 +696,51 @@ export function JobsPage({ store, userProfile }) {
   }, [liveDetail?._docId, liveDetail?.signupCount, liveDetail?.waitlistCount, churchId, rosterAllowed]);
 
   // Reports leaderboard needs every job's signups — fetch on demand when the
-  // Reports tab is opened (admin/manager only).
+  // Reports tab is opened (admin/manager only). When the live `jobListings`
+  // subscription is at its 500-cap AND the user picks 'all' scope, also fetch
+  // older jobs (and their signups) so the all-time leaderboard doesn't silently
+  // undercount signups whose parent fell off the cap window. '30d'/'90d' rarely
+  // fall outside the cap at plausible church sizes, so they skip the extras.
   useEffect(() => {
     if (view !== 'reports' || !isAdminOrManager || !churchId) return undefined;
     let cancelled = false;
-    Promise.all((jobListings || []).map(j =>
-      getDocs(collection(db, 'churches', churchId, 'jobListings', j._docId, 'signups'))
-        .then(snap => snap.docs.map(d => ({ ...d.data(), jobId: j._docId })))
-        .catch(() => [])
-    )).then(rows => { if (!cancelled) setReportsSignups(rows.flat()); });
+    (async () => {
+      const baseRows = await Promise.all((jobListings || []).map(j =>
+        getDocs(collection(db, 'churches', churchId, 'jobListings', j._docId, 'signups'))
+          .then(snap => snap.docs.map(d => ({ ...d.data(), jobId: j._docId })))
+          .catch(() => [])
+      ));
+      if (cancelled) return;
+
+      let extraJobs = [];
+      let extraRows = [];
+      const atCap = (jobListings || []).length >= 500;
+      if (atCap && reportsScope === 'all') {
+        const oldestCreatedAt = (jobListings || []).reduce((min, j) =>
+          (!min || (j.createdAt && j.createdAt < min)) ? j.createdAt : min, null);
+        if (oldestCreatedAt) {
+          const olderSnap = await getDocs(query(
+            collection(db, 'churches', churchId, 'jobListings'),
+            where('createdAt', '<', oldestCreatedAt),
+            orderBy('createdAt', 'desc')
+          )).catch(() => null);
+          if (olderSnap && !cancelled) {
+            extraJobs = olderSnap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+            const olderRowsArr = await Promise.all(extraJobs.map(j =>
+              getDocs(collection(db, 'churches', churchId, 'jobListings', j._docId, 'signups'))
+                .then(snap => snap.docs.map(d => ({ ...d.data(), jobId: j._docId })))
+                .catch(() => [])
+            ));
+            extraRows = olderRowsArr.flat();
+          }
+        }
+      }
+      if (cancelled) return;
+      setReportsExtraJobs(extraJobs);
+      setReportsSignups([...baseRows.flat(), ...extraRows]);
+    })();
     return () => { cancelled = true; };
-  }, [view, isAdminOrManager, churchId, jobListings]);
+  }, [view, isAdminOrManager, churchId, jobListings, reportsScope]);
 
   // ── Job form handlers ──
   function openNewJob() {
@@ -1351,6 +1388,11 @@ export function JobsPage({ store, userProfile }) {
               ))}
             </div>
           </div>
+          {reportsExtraJobs.length > 0 && (
+            <div style={{ fontSize:12, color:B.textLight, fontFamily:f2, marginBottom:12 }}>
+              Including {reportsExtraJobs.length} older job{reportsExtraJobs.length !== 1 ? 's' : ''} beyond the 500 most-recent in the live feed.
+            </div>
+          )}
           {leaderboard.length === 0 ? (
             <div style={{ textAlign:'center', padding:'48px 20px', color:B.textLight, fontFamily:f2, fontSize:14 }}>No signup data yet.</div>
           ) : (

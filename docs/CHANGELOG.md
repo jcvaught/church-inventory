@@ -4,6 +4,43 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-24 — Jobs Hub Reports: lazy-fetch older jobs on 'all' scope
+
+Closes the long-documented "known limitation" CLAUDE.md called out: the
+all-time leaderboard on the Reports tab silently undercounted signups whose
+parent job had fallen off the 500-most-recent `jobListings` window
+(bounded by audit perf H-3, 2026-05-23). Today no church is anywhere near
+500 historical jobs, so this is defensive future-proofing — but it
+removes the silent-data-loss seam.
+
+**Mechanics.** When the Reports tab opens, the existing on-demand fetch
+already loads signups for every job in the live `jobListings` snapshot.
+The new branch fires only when **both** `jobListings.length >= 500`
+**and** `reportsScope === 'all'`: it queries the older
+`churches/{churchId}/jobListings` docs (where `createdAt <` the oldest
+visible) ordered desc, then fans out per-job signup `getDocs` for them,
+and merges into a new `reportsExtraJobs` state. The `leaderboard`
+`useMemo` builds `jobById` from `[...jobListings, ...reportsExtraJobs]`
+so the enrichment + cutoff filter sees the full set. '30d'/'90d' scopes
+skip the extras — they rarely fall outside the cap at plausible church
+sizes, and the user's explicit "all time" intent is the only scope where
+the silent undercount actually bit. Small UI hint under the scope picker
+when extras are loaded: "Including N older jobs beyond the 500
+most-recent in the live feed."
+
+**No new index required.** Single-field `where('createdAt', '<', …)` +
+`orderBy('createdAt', 'desc')` uses Firestore's auto single-field
+indexes; no `firestore.indexes.json` change.
+
+**Verification.** `npm run lint` 0 errors / 45 baseline warnings;
+`npm run build` clean (3.90s, 0 jsxDEV, prod-bundle verifier ✓).
+Pre-ship E2E 55/4/1 (the well-documented `public-board.spec.js:52` cache
+flake, unchanged). The new branch is gated by `atCap === false` in every
+prod church today, so the existing `attendance.spec.js:68` Reports
+leaderboard coverage exercises the unchanged base path.
+
+---
+
 ## 2026-05-24 — Tasks Hub bulk paste-import (Paste Tasks)
 
 Closes the long-standing onboarding-friction blocker first surfaced 2026-05-01
