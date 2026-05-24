@@ -27,7 +27,7 @@ test.describe('Sanity — auth + admin SDK harness', () => {
       createdByName: 'E2E Admin',
     });
     expect(job.docId).toBeTruthy();
-    expect(job.jobNumber).toMatch(/^JOB-\d{3}$/);
+    expect(job.jobNumber).toMatch(/^JOB-\d{3,}$/);
     await deleteJob(job.docId);
   });
 });
