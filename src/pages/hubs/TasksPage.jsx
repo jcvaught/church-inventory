@@ -33,6 +33,98 @@ const PRIORITIES = ['High', 'Medium', 'Low'];
 const RECURRENCE_OPTIONS = [['', 'None'], ['weekly', 'Weekly'], ['biweekly', 'Every 2 weeks'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['annually', 'Annually']];
 const RECURRENCE_LABELS = { weekly:'Weekly', biweekly:'Every 2 wks', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' };
 
+// ── Bulk paste-import parsing ──
+// Per-import cap. Above this, hint that the user split into batches.
+const PASTE_MAX_ROWS = 200;
+const PASTE_TSV_HEADER_KEYS = {
+  'name':'name', 'task':'name', 'task name':'name', 'title':'name',
+  'description':'description', 'desc':'description', 'notes':'description',
+  'priority':'priority',
+  'status':'status',
+  'due':'dueDate', 'due date':'dueDate', 'duedate':'dueDate', 'date':'dueDate',
+  'assignee':'assignee', 'assigned':'assignee', 'assigned to':'assignee', 'owner':'assignee',
+};
+const PASTE_PRIORITY_MAP = {
+  'high':'High', 'urgent':'High', 'h':'High', '1':'High',
+  'medium':'Medium', 'med':'Medium', 'normal':'Medium', 'm':'Medium', '2':'Medium',
+  'low':'Low', 'l':'Low', '3':'Low',
+};
+const PASTE_STATUS_MAP = {
+  'backlog':'Backlog', 'todo':'Backlog', 'to do':'Backlog', 'open':'Backlog', 'new':'Backlog', 'not started':'Backlog',
+  'planning':'Planning', 'planned':'Planning',
+  'in progress':'In Progress', 'in-progress':'In Progress', 'doing':'In Progress', 'progress':'In Progress', 'active':'In Progress', 'wip':'In Progress',
+  'on hold':'On Hold', 'hold':'On Hold', 'paused':'On Hold', 'blocked':'On Hold',
+  'complete':'Complete', 'completed':'Complete', 'done':'Complete', 'closed':'Complete', 'finished':'Complete',
+  'cancelled':'Cancelled', 'canceled':'Cancelled',
+};
+function parsePasteDate(s) {
+  const t = String(s || '').trim();
+  if (!t) return null;
+  const iso = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2,'0')}-${iso[3].padStart(2,'0')}`;
+  const us = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (us) {
+    let [, m, d, y] = us;
+    if (y.length === 2) y = '20' + y;
+    return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
+  const dt = new Date(t);
+  if (!isNaN(dt.getTime())) return localDateStr(dt);
+  return null;
+}
+function parsePasteText(text, taskHubUsers) {
+  const lines = String(text || '').split(/\r?\n/).map(l => l.replace(/\s+$/, '')).filter(l => l.trim().length > 0);
+  if (lines.length === 0) return { mode: 'lines', rows: [] };
+  const userByName = new Map();
+  for (const u of (taskHubUsers || [])) {
+    if (u?.name) userByName.set(u.name.trim().toLowerCase(), u);
+  }
+  const firstHasTab = lines[0].includes('\t');
+  if (firstHasTab) {
+    const header = lines[0].split('\t').map(c => c.trim().toLowerCase());
+    const mapped = header.map(h => PASTE_TSV_HEADER_KEYS[h] || null);
+    if (mapped.some(k => k !== null)) {
+      const rows = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cells = lines[i].split('\t');
+        const row = { warnings: [] };
+        mapped.forEach((key, idx) => {
+          if (!key) return;
+          const raw = (cells[idx] || '').trim();
+          if (!raw) return;
+          if (key === 'priority') {
+            const p = PASTE_PRIORITY_MAP[raw.toLowerCase()];
+            if (p) row.priority = p; else row.warnings.push(`unknown priority "${raw}" → Medium`);
+          } else if (key === 'status') {
+            const s = PASTE_STATUS_MAP[raw.toLowerCase()];
+            if (s) row.status = s; else row.warnings.push(`unknown status "${raw}" → Backlog`);
+          } else if (key === 'dueDate') {
+            const d = parsePasteDate(raw);
+            if (d) row.dueDate = d; else row.warnings.push(`unparseable date "${raw}"`);
+          } else if (key === 'assignee') {
+            const u = userByName.get(raw.toLowerCase());
+            if (u) row.assignees = [{ uid: u.id, name: u.name }];
+            else row.warnings.push(`unknown assignee "${raw}" — left unassigned`);
+          } else {
+            row[key] = raw;
+          }
+        });
+        if (row.name) rows.push(row);
+      }
+      return { mode: 'tsv', rows };
+    }
+    // Tabs present but no recognized header — treat first column as name
+    return {
+      mode: 'lines',
+      rows: lines.map(l => ({ name: l.split('\t')[0].trim(), warnings: [] })).filter(r => r.name),
+    };
+  }
+  return {
+    mode: 'lines',
+    rows: lines.map(l => ({ name: l.trim(), warnings: [] })).filter(r => r.name),
+  };
+}
+
 
 const priorityColors = {
   High:   { bg: '#FEE8E8', tx: B.red,      dot: '#E87171' },
@@ -814,6 +906,103 @@ function TaskCalendar({ tasks, onTaskClick, isMobile }) {
   );
 }
 
+function PastePanel({ pasteText, setPasteText, taskHubUsers, pasteSaving, pasteProgress, onCancel, onSubmit }) {
+  const parsed = useMemo(() => parsePasteText(pasteText, taskHubUsers), [pasteText, taskHubUsers]);
+  const rows = parsed.rows;
+  const tooMany = rows.length > PASTE_MAX_ROWS;
+  const submittableRows = tooMany ? rows.slice(0, PASTE_MAX_ROWS) : rows;
+  const warningCount = rows.reduce((n, r) => n + (r.warnings?.length || 0), 0);
+  const isMobile = useContext(MobileCtx);
+
+  return (
+    <div style={{ display:'flex', flexDirection: isMobile ? 'column' : 'row', gap:16 }}>
+      {/* Input column */}
+      <div style={{ flex:'1 1 0', minWidth:0 }}>
+        <p style={{ fontSize:13, color:B.textMid, margin:'0 0 10px' }}>
+          Paste a task per line, or tab-separated columns with a header row.
+          <br/>
+          <span style={{ color:B.textLight, fontSize:12 }}>
+            Recognized columns: <strong>Name</strong>, Description, Priority, Status, Due Date, Assignee
+          </span>
+        </p>
+        <textarea
+          value={pasteText}
+          onChange={e => setPasteText(e.target.value)}
+          disabled={pasteSaving}
+          placeholder={"Order new robes\nSend volunteer thank-yous\nPrep Easter bulletin\n\n— or —\n\nName\\tPriority\\tDue Date\\tAssignee\nOrder new robes\\tHigh\\t2026-06-01\\tJane Doe"}
+          rows={12}
+          spellCheck={false}
+          style={{ ...inp, width:'100%', minHeight:240, fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize:13, lineHeight:1.5, resize:'vertical', whiteSpace:'pre', overflow:'auto' }}
+        />
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:8, fontSize:12, color:B.textLight }}>
+          <span>{parsed.mode === 'tsv' ? 'TSV with header detected' : 'Plain-line mode'}</span>
+          <span>{rows.length} task{rows.length !== 1 ? 's' : ''} found{warningCount > 0 ? ` · ${warningCount} warning${warningCount !== 1 ? 's' : ''}` : ''}</span>
+        </div>
+      </div>
+
+      {/* Preview column */}
+      <div style={{ flex:'1 1 0', minWidth:0, display:'flex', flexDirection:'column' }}>
+        <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:8 }}>
+          <strong style={{ fontFamily:f1, fontSize:13, color:B.navy }}>Preview</strong>
+          {tooMany && <span style={{ fontSize:12, color:B.red }}>Showing first {PASTE_MAX_ROWS} of {rows.length}</span>}
+        </div>
+        <div style={{ flex:1, minHeight:240, maxHeight:360, overflowY:'auto', border:'1px solid '+B.sand, borderRadius:8, background:B.white, padding: rows.length ? 6 : 0 }}>
+          {rows.length === 0 && (
+            <div style={{ height:'100%', minHeight:200, display:'flex', alignItems:'center', justifyContent:'center', color:B.textLight, fontSize:13, padding:16, textAlign:'center' }}>
+              Paste some lines on the left to preview them here.
+            </div>
+          )}
+          {submittableRows.map((r, i) => (
+            <div key={i} style={{ padding:'8px 10px', borderBottom: i < submittableRows.length - 1 ? '1px solid '+B.sand : 'none' }}>
+              <div style={{ display:'flex', gap:6, alignItems:'baseline' }}>
+                <span style={{ fontSize:11, color:B.textLight, fontFamily:f1, minWidth:24 }}>{i + 1}.</span>
+                <span style={{ fontSize:13, color:B.textDark, fontFamily:f2, fontWeight:600, wordBreak:'break-word' }}>{r.name}</span>
+              </div>
+              {(r.priority || r.status || r.dueDate || r.assignees?.length || r.description) && (
+                <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginTop:4, marginLeft:30 }}>
+                  {r.priority && <span style={{ fontSize:10, padding:'2px 6px', borderRadius:4, background:(priorityColors[r.priority]?.bg || B.warmGray), color:(priorityColors[r.priority]?.tx || B.textMid), fontFamily:f1, fontWeight:600 }}>{r.priority}</span>}
+                  {r.status && <span style={{ fontSize:10, padding:'2px 6px', borderRadius:4, background:(statusColors[r.status]?.bg || B.warmGray), color:(statusColors[r.status]?.tx || B.textMid), fontFamily:f1, fontWeight:600 }}>{r.status}</span>}
+                  {r.dueDate && <span style={{ fontSize:10, padding:'2px 6px', borderRadius:4, background:B.warmGray, color:B.textMid, fontFamily:f1 }}>Due {r.dueDate}</span>}
+                  {r.assignees?.length > 0 && <span style={{ fontSize:10, padding:'2px 6px', borderRadius:4, background:B.tealPale, color:B.teal, fontFamily:f1, fontWeight:600 }}>→ {r.assignees[0].name}</span>}
+                  {r.description && <span style={{ fontSize:10, padding:'2px 6px', borderRadius:4, background:B.warmGray, color:B.textLight, fontFamily:f1, fontStyle:'italic', maxWidth:280, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={r.description}>“{r.description}”</span>}
+                </div>
+              )}
+              {r.warnings?.length > 0 && (
+                <div style={{ marginTop:4, marginLeft:30, fontSize:11, color:'#9A5E10', fontFamily:f2 }}>
+                  ⚠ {r.warnings.join('; ')}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Footer (spans both columns) */}
+      <div style={{ flex:'0 0 100%', display:'flex', flexDirection:'column', gap:8, marginTop:8 }}>
+        {pasteSaving && pasteProgress && (
+          <div style={{ fontSize:13, color:B.textMid, textAlign:'center' }}>
+            Creating task {pasteProgress.done + 1} of {pasteProgress.total}…
+            <div style={{ height:6, background:B.warmGray, borderRadius:3, marginTop:6, overflow:'hidden' }}>
+              <div style={{ height:'100%', width: pasteProgress.total ? `${Math.round((pasteProgress.done / pasteProgress.total) * 100)}%` : '0%', background:B.teal, transition:'width 0.15s' }} />
+            </div>
+          </div>
+        )}
+        <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
+          <button type="button" onClick={onCancel} disabled={pasteSaving} style={{ ...btnS, opacity: pasteSaving ? .5 : 1, cursor: pasteSaving ? 'not-allowed' : 'pointer' }}>Cancel</button>
+          <button
+            type="button"
+            onClick={() => onSubmit(submittableRows)}
+            disabled={pasteSaving || submittableRows.length === 0}
+            style={{ ...btnP, opacity:(pasteSaving || submittableRows.length === 0) ? .5 : 1, cursor:(pasteSaving || submittableRows.length === 0) ? 'not-allowed' : 'pointer' }}
+          >
+            {pasteSaving ? 'Creating…' : `Create ${submittableRows.length} task${submittableRows.length !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', status:'Backlog', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], parentTaskId:null, blockedBy:[], linkedItemDocId:null, linkedTicketDocId:null, estimatedHours:null, actualHours:null, ministry:'' });
 
 export function TasksPage({ store, userProfile }) {
@@ -884,6 +1073,12 @@ export function TasksPage({ store, userProfile }) {
   const [msg, setMsg] = useState(null);
   const [collapsedStatuses, setCollapsedStatuses] = useState(new Set());
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
+
+  // ── Paste-import (bulk task creation from textarea) ──
+  const [showPaste, setShowPaste] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [pasteSaving, setPasteSaving] = useState(false);
+  const [pasteProgress, setPasteProgress] = useState(null); // { done, total } | null
 
   // ── Task defaults (per-user, persisted to users/{uid}) ──
   const [taskDefaults, setTaskDefaults] = useState(() => ({
@@ -1183,6 +1378,56 @@ export function TasksPage({ store, userProfile }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  function openPaste() {
+    setPasteText('');
+    setPasteProgress(null);
+    setShowPaste(true);
+  }
+
+  async function handlePasteSubmit(rows) {
+    // Sequential to avoid maxTaskNumber transaction contention; cap enforced upstream.
+    if (!rows || rows.length === 0) return;
+    setPasteSaving(true);
+    const total = rows.length;
+    let succeeded = 0;
+    let failed = 0;
+    for (let i = 0; i < total; i++) {
+      setPasteProgress({ done: i, total });
+      const row = rows[i];
+      try {
+        await addTask({
+          name: row.name.trim(),
+          description: row.description || '',
+          priority: row.priority || 'Medium',
+          status: row.status || 'Backlog',
+          tags: [],
+          dueDate: row.dueDate || null,
+          recurrence: null,
+          assignees: row.assignees || [],
+          checklist: [],
+          photos: [],
+          notes: null,
+          visibility: taskDefaults.visibility || 'team',
+          sharedWith: taskDefaults.visibility === 'shared' ? taskDefaults.sharedWith : [],
+          completedAt: null,
+          linkedItemDocId: null,
+          linkedTicketDocId: null,
+        }, userId, userName);
+        succeeded++;
+      } catch {
+        failed++;
+      }
+    }
+    setPasteProgress({ done: total, total });
+    setPasteSaving(false);
+    setShowPaste(false);
+    setPasteText('');
+    setPasteProgress(null);
+    if (failed === 0) flash(`Created ${succeeded} task${succeeded !== 1 ? 's' : ''}!`);
+    else if (succeeded === 0) flash('Failed to create tasks. Please try again.', true);
+    else flash(`Created ${succeeded} of ${total} tasks; ${failed} failed.`, true);
   }
 
   async function handleUpdateTask() {
@@ -1808,9 +2053,14 @@ export function TasksPage({ store, userProfile }) {
           <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:'0 0 2px' }}>Tasks Hub</h2>
           <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Track and manage church admin tasks</p>
         </div>
-        <button onClick={() => { setTaskForm({ ...getEmptyTask(), visibility: taskDefaults.visibility, sharedWith: [...taskDefaults.sharedWith] }); setPhotoFiles([]); setPhotoPreviews([]); setShowAdd(true); }} style={btnP}>
-          + New Task
-        </button>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          <button onClick={openPaste} style={btnS} title="Bulk-create tasks from a pasted list (one per line, or tab-separated columns)">
+            Paste Tasks
+          </button>
+          <button onClick={() => { setTaskForm({ ...getEmptyTask(), visibility: taskDefaults.visibility, sharedWith: [...taskDefaults.sharedWith] }); setPhotoFiles([]); setPhotoPreviews([]); setShowAdd(true); }} style={btnP}>
+            + New Task
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -2435,6 +2685,19 @@ export function TasksPage({ store, userProfile }) {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* ═══ PASTE TASKS MODAL ═══ */}
+      <Modal open={showPaste} onClose={() => { if (!pasteSaving) { setShowPaste(false); setPasteText(''); setPasteProgress(null); } }} title="Paste Tasks" wide>
+        <PastePanel
+          pasteText={pasteText}
+          setPasteText={setPasteText}
+          taskHubUsers={taskHubUsers}
+          pasteSaving={pasteSaving}
+          pasteProgress={pasteProgress}
+          onCancel={() => { if (!pasteSaving) { setShowPaste(false); setPasteText(''); setPasteProgress(null); } }}
+          onSubmit={handlePasteSubmit}
+        />
       </Modal>
 
       {/* ═══ TASK DEFAULTS MODAL ═══ */}

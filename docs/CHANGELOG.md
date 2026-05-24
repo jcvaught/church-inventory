@@ -4,6 +4,51 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-24 — Tasks Hub bulk paste-import (Paste Tasks)
+
+Closes the long-standing onboarding-friction blocker first surfaced 2026-05-01
+when a new admin tried to migrate a ClickUp list and nothing reasonable
+happened. New "Paste Tasks" button in the Tasks Hub header (next to "+ New
+Task") opens a modal with a textarea + live preview. Two auto-detected modes:
+
+- **Plain lines** — each non-empty line creates one task with that line as
+  `name` (uses caller's `taskDefaults` for visibility/sharedWith).
+- **TSV with header** — first line tab-separated and contains at least one
+  recognized column. Supported columns (case-insensitive): `Name` /
+  `Task` / `Title`, `Description` / `Desc` / `Notes`, `Priority`, `Status`,
+  `Due Date` / `Due`, `Assignee` / `Owner`. Priority maps high/med/low +
+  synonyms; Status maps backlog/todo/in-progress/done/etc.; dates accept
+  `YYYY-MM-DD`, `M/D/YYYY`, `M/D/YY`, or anything `new Date()` parses;
+  Assignee is resolved case-insensitively against `taskHubUsers` and
+  produces the canonical `[{uid, name}]` shape (the
+  `reference_modal_focus_pattern`-adjacent shape gotcha from the abortive
+  2026-05-06 ClickUp import — flat-string `sharedWith` entries silently
+  fail the `visibleTasks` filter). Unknown priority/status/assignee/date
+  values surface as inline `⚠` warnings on the preview row, not hard errors.
+
+Submission is **sequential**, not `Promise.allSettled` parallel: `addTask`
+runs a `runTransaction` against `config/main.maxTaskNumber`, and racing all
+N transactions causes Firestore contention retries that slow the bulk write
+down more than serial execution. Per-row progress bar in the footer.
+Per-import cap of 200 (above that, the preview shows "Showing first 200 of
+N" and only the first 200 submit). Each created task goes through the
+normal `addTask` → TSK-### numbering + `activityLog` write path; no new
+backend or rules surface.
+
+Implementation: one file (`src/pages/hubs/TasksPage.jsx`), ~210 LOC added.
+Module-level `PASTE_TSV_HEADER_KEYS` / `PASTE_PRIORITY_MAP` /
+`PASTE_STATUS_MAP` lookup tables + `parsePasteDate` / `parsePasteText`
+pure helpers; new `PastePanel` module-level component (memoized parse
+derivation via `useMemo` over `pasteText` + `taskHubUsers`); new
+`openPaste` / `handlePasteSubmit` handlers; 4 new state cells
+(`showPaste`, `pasteText`, `pasteSaving`, `pasteProgress`). No new
+imports. TasksPage chunk +~4 KB gzip.
+
+Verification: `npm run lint` 0 errors / 45 baseline warnings;
+`npm run build` clean (3.89s, 0 jsxDEV, prod-bundle verifier ✓).
+
+---
+
 ## 2026-05-24 — `processTrialExpirations` missing collection-group index (silent since day 1)
 
 Sentry surfaced `FAILED_PRECONDITION: The query requires a
