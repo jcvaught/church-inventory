@@ -18,7 +18,7 @@
   "dependencies": {
     "@sentry/react": "^10.43.0",
     "@zxing/browser": "^0.1.5",
-    "firebase": "^10.8.0",
+    "firebase": "^12.13.0",
     "posthog-js": "^1.373.4",
     "qrcode": "^1.5.4",
     "react": "^18.2.0",
