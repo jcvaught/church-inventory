@@ -4,6 +4,58 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-23 — `firebase-functions` v4 → v7
+
+Retires the EOL v4 major in `functions/package.json`. The 2026-05-23
+follow-up audit estimated "~3–5 hours" for this migration, but
+exploration showed `functions/index.js` is **already 100% v2-style**
+(every import is from `firebase-functions/v2/*` or
+`firebase-functions/params`; zero `functions.config()`; zero v1 trigger
+syntax), so the change reduced to a single-line dependency bump plus
+`package-lock.json` regeneration.
+
+Breaking-change scan from v5/v6/v7 release notes — none hit COH:
+v6's default-entrypoint switch (we import from v2 subpaths, not the
+bare package), v7's Node-16 drop (firebase.json already pins
+`nodejs22`), v7's `functions.config()` removal (unused), v7's
+TS5/ES2022 build (we're JS), v7's v1 `Event` → `LegacyEvent` rename
+(unused). v7's "unhandled async errors in `onRequest` return 500
+immediately in the **Emulator**" is the only behavior change to know
+about for future local dev.
+
+**Audit-prediction correction (worth recording):** the 2026-05-23
+follow-up audit attributed 4 high transitive vulns to
+`firebase-functions` v4. After the bump, `npm audit --omit=dev` still
+reports 17 vulnerabilities (1 low / 12 moderate / 4 high). The
+remaining highs — `axios`, `fast-xml-builder`, `fast-xml-parser`,
+`path-to-regexp` — actually transit through `firebase-admin@^12.0.0`,
+not `firebase-functions`. Closing them needs the still-deferred
+`firebase-admin` v12 → v13 bump (already permitted by v7's peer dep:
+`firebase-admin: ^11.10.0 || ^12.0.0 || ^13.0.0`).
+
+Verification before deploy: module-load smoke (`node -e
+"require('./index.js')"`) clean; pre-deploy E2E 55/1/4 (single failure
+on `public-board.spec.js:52` is pre-existing — the second test in §9
+Public job board races the 60s in-process cache on `getPublicJobs`
+added by audit perf M-1 and reads the first test's seeded job; not
+caused by the bump). After `firebase deploy --only functions` (all 27
+updated), webhook IAM probes per the `feedback_gen2_invoker_strip`
+gotcha: `stripeWebhook` 400 (missing signature header — function
+reached), `sendgridEventWebhook` 401 (unauthorized — function reached),
+`twilioInbound` 403 disambiguated via Cloud Logging — `twilioInbound:
+invalid signature` warn entry present on the probe's trace ID → IAM
+intact, no re-grant needed. Post-deploy E2E 55/1/4 — same single
+failure, no regression. Commit `7e853e6`.
+
+Out of scope (still deferred from the 2026-05-23 follow-up audit):
+`firebase` browser v10 → v12 + `stripe` v14 → v22 (closes browser
+`undici` highs), `firebase-admin` v12 → v13 (closes the 4 functions
+highs above), `jobListings` upcoming-only listener + lazy
+`collectionGroup` queries (perf H-3/H-4), Cloud Monitoring alerts
+(Console-only), minors compliance audit.
+
+---
+
 ## 2026-05-23 — Three-audit follow-up: protobufjs CVE + perf + observability
 
 Ran three parallel audits the 2026-05-22 pre-launch pass had skipped:
