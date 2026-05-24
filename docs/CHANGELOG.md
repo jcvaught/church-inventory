@@ -4,6 +4,41 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-24 — `processTrialExpirations` missing collection-group index (silent since day 1)
+
+Sentry surfaced `FAILED_PRECONDITION: The query requires a
+COLLECTION_GROUP_ASC index for collection config and field status` on the
+2am Central run. Root cause was the same well-documented pitfall in
+CLAUDE.md and [[feedback_firebase_collection_index]] — `firebase deploy`
+silently skips `COLLECTION_GROUP_ASC` field overrides. The query at
+`functions/index.js:863` (`db.collectionGroup('config').where('status',
+'==', 'trialing')`) has been failing every single night since the
+trial-expiry feature shipped in `8a95a8f`; it was previously invisible
+because the function ran outside any error-capturing wrapper. Yesterday's
+audit-followup commit (`3caa446`) wrapped it in `withScheduledRun`, which
+both writes a heartbeat doc AND lets Sentry capture exceptions — so the
+chronic failure surfaced on its first post-wrap run.
+
+**Fix:** field override created via the Firestore Admin REST API
+(`PATCH /v1/.../collectionGroups/config/fields/status` with both
+`COLLECTION` + `COLLECTION_GROUP` `ASCENDING` scopes). The PATCH is a
+full-replace, so the auto-default `COLLECTION_DESC` + `CONTAINS`
+exemptions were dropped; verified nothing in `src/` or `functions/` uses
+`orderBy('status', ...)` or array-contains on `status`. Override mirrored
+into `firestore.indexes.json` for intent (the deploy CLI still won't act
+on it — same gotcha — but the file documents what's actually deployed).
+
+**Blast radius:** none. The 2 churches currently in `trialing` status
+both have `trialEndsAt` 60+ days out, so neither was waiting on the
+function. Verified post-fix: manual trigger via `gcloud scheduler jobs
+run firebase-schedule-processTrialExpirations-us-central1` →
+heartbeat doc `scheduledJobRuns/processTrialExpirations` flipped to
+`{ status: 'completed', lastError: null, durationMs: 1600 }`. The chronic
+silent failure is now closed, and `withScheduledRun` will catch any
+future regression on the next 2am run.
+
+---
+
 ## 2026-05-23 — Jobs Hub perf H-3 + H-4: bounded the last two unbounded reads
 
 The Jobs Hub backlog's last code-actionable Highs from the 2026-05-23 perf
