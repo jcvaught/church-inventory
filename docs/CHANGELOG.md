@@ -4,6 +4,45 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-23 — Jobs Hub perf H-3 + H-4: bounded the last two unbounded reads
+
+The Jobs Hub backlog's last code-actionable Highs from the 2026-05-23 perf
+audit. Both diffs are one-spot caps; no behavior change at realistic scale.
+
+**H-3 — `jobListings` live subscription bounded.** `src/useFirestore.js:182`
+wrapped the collection ref in
+`query(..., orderBy('createdAt', 'desc'), limit(500))`, dropping the
+redundant client-side sort. Mirrors the `activityLog` bound at line 89.
+Single-field `createdAt` index is automatic — no `firestore.indexes.json`
+change. The bound caps a real-time subscription every signed-in user
+opens on app mount; previously reads scaled linearly with church age.
+
+**Known limitation (documented, not fixed here):** the Reports tab's
+`reportsScope === 'all'` admin view joins `reportsSignups` against the
+bounded `jobListings` via `jobById[s.jobId]`. A church past 500 historical
+jobs would see its all-time leaderboard silently undercount signups whose
+parent job fell off the window — same silent-drop behavior already present
+for deleted jobs. Real fix (lazy one-shot fetch of older jobs on
+`'all'`/`'90d'` scope select) is queued as a follow-up; pragmatically no
+church on the platform is anywhere near 500 historical job listings yet.
+
+**H-4 — `sendJobReminders` collectionGroup capped.** `functions/index.js:1492`
+chained `.limit(5000)` onto the cross-tenant `collectionGroup('jobListings')`
+query that fires at 8am Central daily. Matches the sibling
+`sendTaskDueReminders` pattern at line 1305 exactly. Existing dual
+idempotency stamps (`lastReminderSentDate`, `lastSmsReminderSentDate`)
+already protect against re-runs hitting the same docs; `withScheduledRun`
+heartbeat at `scheduledJobRuns/sendJobReminders` surfaces incomplete runs
+via `durationMs`/`lastError`. Per-job signups `.get()` at line 1548 left
+alone — that's a small per-doc cost (~5-20 rows typical), not the
+unbounded leg the audit flagged.
+
+Verification: pre-deploy E2E run + post-deploy `firebase deploy --only
+functions:sendJobReminders` + webhook IAM curl sanity (see
+[[feedback_gen2_invoker_strip]]).
+
+---
+
 ## 2026-05-23 — `firebase-admin` v12 → v13 + npm overrides finally close the 4 highs
 
 Bumped `firebase-admin` from `^12.0.0` to `^13.0.0` in

@@ -1488,10 +1488,14 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   })();
 
-  // Collection group query across all churches (requires composite index in firestore.indexes.json)
+  // Collection group query across all churches (requires composite index in firestore.indexes.json).
+  // .limit(5000) caps cross-tenant blast radius (audit 2026-05-23 perf H-4),
+  // matching the sendTaskDueReminders pattern. Idempotency stamps
+  // (lastReminderSentDate / lastSmsReminderSentDate) protect re-runs.
   const snap = await db.collectionGroup('jobListings')
     .where('scheduledDate', '==', today)
     .where('status', '==', 'open')
+    .limit(5000)
     .get();
 
   if (snap.empty) return;

@@ -178,13 +178,22 @@ export function useFirestore(churchId) {
       checkDone();
     }, (err) => { handleErr(err); checkDone(); }));
 
-    // Job Listings
-    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'jobListings'), (snap) => {
-      const jobs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
-      jobs.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-      setJobListings(jobs);
-      checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    // Job Listings — capped at 500 most-recently-created to avoid unbounded
+    // reads as churches age (audit 2026-05-23 perf H-3). Mirrors the
+    // activityLog bound at line 89. Server-side orderBy replaces the prior
+    // client-side sort. Known limitation: a church past 500 historical
+    // listings will see its admin Reports tab leaderboard ("all"/"90d"
+    // scopes) silently undercount signups whose parent job fell off the
+    // window — same silent-drop behavior as deleted jobs. Real fix is a
+    // lazy one-shot fetch in the Reports tab; queued as a follow-up.
+    unsubs.push(onSnapshot(
+      query(collection(db, 'churches', churchId, 'jobListings'), orderBy('createdAt', 'desc'), limit(500)),
+      (snap) => {
+        setJobListings(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
+        checkDone();
+      },
+      (err) => { handleErr(err); checkDone(); }
+    ));
 
     // Job Announcements
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'jobAnnouncements'), (snap) => {
