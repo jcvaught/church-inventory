@@ -35,6 +35,20 @@ Sentry.init({
     if (msg.includes('Connection to Indexed Database server lost')) {
       return null;
     }
+    // Intentional rule-block / user-error codes from Firebase callables
+    // (HttpsError) and the Firestore client SDK. These fire whenever a
+    // member tries something the rules disallow (admin-only mutation, no
+    // hub access, missing waiver/compliance precondition, signed-out
+    // session) — that's the system *working*, not breaking. Filtering
+    // here keeps the Sentry feed dominated by `internal`/`unknown`/
+    // unhandled exceptions, where real bugs live.
+    const code = (exc && exc.code) || '';
+    if (code === 'permission-denied' || code === 'failed-precondition' ||
+        code === 'unauthenticated' || code === 'not-found' ||
+        code === 'functions/permission-denied' || code === 'functions/failed-precondition' ||
+        code === 'functions/unauthenticated' || code === 'functions/not-found') {
+      return null;
+    }
     return event;
   },
 });

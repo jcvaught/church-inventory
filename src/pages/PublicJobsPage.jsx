@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import * as Sentry from '@sentry/react';
 import { B, f1, f2, btnP, btnS } from '../components/brand/tokens.js';
 import { FullLogo } from '../components/brand/Logo.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
@@ -28,8 +29,26 @@ export function PublicJobsPage({ churchId, churchName, churchCode, onGetStarted 
     const fn = httpsCallable(getFunctions(), 'getPublicJobs');
     fn({ churchId })
       .then(res => setJobs(res.data?.jobs || []))
-      .catch(() => setErr('Could not load jobs. The link may be invalid.'));
-  }, [churchId]);
+      .catch(err => {
+        // getPublicJobs deliberately returns `{ jobs: [] }` for a missing
+        // church or inactive hub (security: no enumeration oracle). So a
+        // thrown error here is a real failure — invalid-argument on a
+        // malformed share link, or a transient outage. Either way the
+        // user shouldn't be told "your link is invalid" for what may be
+        // a 30-second Firestore blip. Sentry-capture so we can see the
+        // truth from this end.
+        const code = err?.code || '';
+        if (code === 'functions/invalid-argument') {
+          setErr('This link is missing required information. Please ask the church for a fresh link.');
+        } else {
+          setErr('Could not load jobs right now. Please refresh in a moment — if it keeps happening, let the church know.');
+        }
+        Sentry.captureException(err, {
+          tags: { area: 'public-board', fn: 'getPublicJobs', errorCode: code || 'unknown' },
+          extra: { churchId, churchCode },
+        });
+      });
+  }, [churchId, churchCode]);
 
   const displayName = churchName || 'Church';
 

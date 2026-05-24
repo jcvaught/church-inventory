@@ -1,6 +1,7 @@
 import { useState, useMemo, useContext, useEffect, useRef, memo } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, collectionGroup, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
+import * as Sentry from '@sentry/react';
 import { db } from '../../firebase.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
@@ -553,11 +554,35 @@ export function JobsPage({ store, userProfile }) {
     try { localStorage.setItem('jobs_showPast', String(showPastJobs)); } catch { /* ignore */ }
   }, [showPastJobs]);
 
+  // Centralized email-callable invoker for the Jobs Hub. Replaces a half-dozen
+  // fire-and-forget `.catch(console.error)` call sites that swallowed
+  // SendGrid/Twilio outages silently — an admin posted an announcement, the
+  // delivery failed, and nobody knew until "did the email go out?" came up
+  // hours later. Now: explicit toast + Sentry capture with callable name and
+  // recipient context. Returns the callable result on success, null on failure.
+  async function invokeEmailCF(name, payload, { context, userMsgOnFail } = {}) {
+    try {
+      const fn = httpsCallable(getFunctions(), name);
+      const { data } = await fn(payload);
+      return data ?? null;
+    } catch (err) {
+      console.error(`[ChurchOpsHub] CF ${name} failed`, err);
+      Sentry.captureException(err, {
+        tags: { area: 'jobs-hub-email', cf: name, errorCode: err?.code || 'unknown' },
+        extra: { churchId: payload?.churchId, jobDocId: payload?.jobDocId, context },
+      });
+      if (userMsgOnFail) flash(userMsgOnFail, true);
+      return null;
+    }
+  }
+
   function sendAnnouncementEmails(title, body) {
     if (!(notificationConfig?.enabled)) return;
-    const fn = httpsCallable(getFunctions(), 'sendJobAnnouncementEmails');
-    // Note: postedBy is now derived server-side from the caller's user profile
-    fn({ churchId: userProfile?.churchId, title, body }).catch(err => { console.error('[ChurchOpsHub] CF sendJobAnnouncementEmails failed', err); });
+    // Note: postedBy is now derived server-side from the caller's user profile.
+    invokeEmailCF('sendJobAnnouncementEmails', { churchId: userProfile?.churchId, title, body }, {
+      context: 'announcement-post',
+      userMsgOnFail: 'Announcement posted, but the email notification failed. Admins were notified.',
+    });
   }
 
   // ── Derived state ──
@@ -828,13 +853,14 @@ export function JobsPage({ store, userProfile }) {
         // On a series cancellation, fan out per-job emails to existing signups.
         // sendJobCancelledEmails has a 1-hour debounce so a re-fire is safe.
         if (jobForm.status === 'cancelled' && affected) {
-          const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
-          affected
-            .filter((a) => a.signupCount > 0)
-            .forEach((a) => {
-              fn({ churchId: userProfile?.churchId, jobDocId: a.docId })
-                .catch((err) => console.error('[ChurchOpsHub] CF sendJobCancelledEmails (series) failed', err));
-            });
+          const withSignups = affected.filter((a) => a.signupCount > 0);
+          if (withSignups.length > 0) {
+            const results = await Promise.allSettled(withSignups.map((a) =>
+              invokeEmailCF('sendJobCancelledEmails', { churchId: userProfile?.churchId, jobDocId: a.docId }, { context: 'series-cancellation' })
+            ));
+            const failed = results.filter(r => r.status === 'fulfilled' && r.value === null).length;
+            if (failed > 0) flash(`${failed} of ${withSignups.length} cancellation email${withSignups.length !== 1 ? 's' : ''} failed to send. Admins were notified.`, true);
+          }
         }
         flash(`${count} job${count !== 1 ? 's' : ''} updated.`);
         setShowNewJob(false);
@@ -842,14 +868,21 @@ export function JobsPage({ store, userProfile }) {
       } else if (editJobId) {
         await updateJobListing(editJobId, data, userId, userName, existingJob?.jobNumber);
         if (willNotify) {
-          const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
-          fn({ churchId: userProfile?.churchId, jobDocId: editJobId }).catch(err => { console.error('[ChurchOpsHub] CF sendJobCancelledEmails failed', err); });
+          // Awaited so the user sees a real outcome before the flash() below.
+          await invokeEmailCF('sendJobCancelledEmails', { churchId: userProfile?.churchId, jobDocId: editJobId }, {
+            context: 'single-cancellation',
+            userMsgOnFail: 'Job updated, but the cancellation email failed to send. Admins were notified.',
+          });
         }
         // Notify original poster if a co-admin cancelled their job
         if (jobForm.status === 'cancelled' && existingJob?.createdBy && existingJob.createdBy !== userId && notificationConfig?.enabled) {
-          const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
-          fn({ churchId: userProfile?.churchId, jobDocId: editJobId, event: 'cancellation', actorUid: userId, actorName: userName })
-            .catch(err => { console.error('[ChurchOpsHub] CF sendJobPosterNotification (cancellation) failed', err); });
+          // Fire-and-forget is fine here — the *poster* notification is a
+          // courtesy; failure shouldn't block the admin's update flow or
+          // surface a confusing toast about an email they didn't request.
+          // Sentry still catches it via invokeEmailCF.
+          invokeEmailCF('sendJobPosterNotification', {
+            churchId: userProfile?.churchId, jobDocId: editJobId, event: 'cancellation', actorUid: userId, actorName: userName,
+          }, { context: 'poster-cancellation' });
         }
         flash('Job updated.' + (willNotify ? ' Signups notified.' : ''));
         setShowNewJob(false);
@@ -869,16 +902,16 @@ export function JobsPage({ store, userProfile }) {
     setSaving(false);
   }
 
-  function handleNotifySignups(job) {
+  async function handleNotifySignups(job) {
     if (!isAdminOrManager) return;
     if (!window.confirm(`Send a cancellation email to ${job.signupCount || 0} signup${(job.signupCount || 0) !== 1 ? 's' : ''}?`)) return;
-    const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
-    fn({ churchId: userProfile?.churchId, jobDocId: job._docId })
-      .then(result => {
-        if (result.data?.skipped) flash('Already notified recently — no new emails sent.');
-        else flash('Signups notified.');
-      })
-      .catch(err => { console.error('[ChurchOpsHub] CF sendJobCancelledEmails (notify) failed', err); flash('Failed to send notifications.', true); });
+    const data = await invokeEmailCF('sendJobCancelledEmails', { churchId: userProfile?.churchId, jobDocId: job._docId }, {
+      context: 'notify-signups',
+      userMsgOnFail: 'Failed to send notifications. Admins were notified.',
+    });
+    if (data === null) return;
+    if (data?.skipped) flash('Already notified recently — no new emails sent.');
+    else flash('Signups notified.');
   }
 
   // Fires sendJobCancelledEmails for each affected job that has signups.
@@ -886,13 +919,13 @@ export function JobsPage({ store, userProfile }) {
   // The CF has a 1-hour debounce, so a soft-cancel-then-delete won't double-fire.
   async function notifySignupsForDelete(affectedJobs) {
     if (!notificationConfig?.enabled) return;
-    const fn = httpsCallable(getFunctions(), 'sendJobCancelledEmails');
     const withSignups = affectedJobs.filter(j => (j.signupCount || 0) > 0);
     if (withSignups.length === 0) return;
-    await Promise.allSettled(withSignups.map(j =>
-      fn({ churchId: userProfile?.churchId, jobDocId: j._docId })
-        .catch(err => { console.error('[ChurchOpsHub] CF sendJobCancelledEmails (pre-delete) failed', err); })
+    const results = await Promise.allSettled(withSignups.map(j =>
+      invokeEmailCF('sendJobCancelledEmails', { churchId: userProfile?.churchId, jobDocId: j._docId }, { context: 'pre-delete-cancellation' })
     ));
+    const failed = results.filter(r => r.status === 'fulfilled' && r.value === null).length;
+    if (failed > 0) flash(`${failed} of ${withSignups.length} cancellation email${withSignups.length !== 1 ? 's' : ''} failed to send. Admins were notified.`, true);
   }
 
   async function handleDeleteJob(job) {
@@ -985,18 +1018,24 @@ export function JobsPage({ store, userProfile }) {
 
   async function performSignUp(job, waiverAccepted) {
     setSavingJobId(job._docId);
+    Sentry.addBreadcrumb({ category: 'jobs-hub', message: 'signup attempted', level: 'info', data: { jobNumber: job.jobNumber, hasWaiver: !!job.requiresWaiver } });
     window.posthog?.capture('jobs_signup_attempted', { jobNumber: job.jobNumber, hasWaiver: !!job.requiresWaiver });
     try {
       const result = await signUpForJob(job._docId, userId, userName, waiverAccepted, job.jobNumber);
       if (result?.error) {
-        const isCompliance = /compliance|background|certif|consent|access/i.test(result.error);
-        window.posthog?.capture(isCompliance ? 'jobs_signup_blocked_compliance' : 'jobs_signup_failed', { jobNumber: job.jobNumber, reason: result.error });
+        // T1d: switch on the structured code from jobSignUp instead of
+        // regex-matching the error message (which broke whenever copy changed).
+        const isCompliance = result.code === 'compliance-missing';
+        window.posthog?.capture(isCompliance ? 'jobs_signup_blocked_compliance' : 'jobs_signup_failed', { jobNumber: job.jobNumber, reason: result.error, code: result.code });
+        Sentry.addBreadcrumb({ category: 'jobs-hub', message: 'signup blocked', level: 'warning', data: { jobNumber: job.jobNumber, code: result.code } });
         flash(result.error, true);
       } else if (result?.wasWaitlisted) {
         window.posthog?.capture('jobs_signup_waitlisted', { jobNumber: job.jobNumber });
+        Sentry.addBreadcrumb({ category: 'jobs-hub', message: 'signup waitlisted', level: 'info', data: { jobNumber: job.jobNumber } });
         flash("You've been added to the waitlist!");
       } else {
         window.posthog?.capture('jobs_signup_succeeded', { jobNumber: job.jobNumber });
+        Sentry.addBreadcrumb({ category: 'jobs-hub', message: 'signup succeeded', level: 'info', data: { jobNumber: job.jobNumber } });
         flash('You signed up!');
       }
     } catch (err) {
@@ -1010,13 +1049,17 @@ export function JobsPage({ store, userProfile }) {
     const onWL = isOnWaitlist(job);
     if (!window.confirm(onWL ? 'Remove yourself from the waitlist?' : 'Remove yourself from this job?')) return;
     setSavingJobId(job._docId);
+    Sentry.addBreadcrumb({ category: 'jobs-hub', message: 'withdraw attempted', level: 'info', data: { jobNumber: job.jobNumber, fromWaitlist: onWL } });
     try {
       const result = await withdrawFromJob(job._docId, userId, userId, userName, job.jobNumber);
       if (result?.wasSignedUp) {
         flash('Removed from job.');
         if (notificationConfig?.enabled) {
-          const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
-          fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'withdrawal', actorUid: userId, actorName: userName }).catch(err => { console.error('[ChurchOpsHub] CF sendJobPosterNotification (withdrawal) failed', err); });
+          // Fire-and-forget — poster courtesy notification, failure should
+          // not surface a toast to the member who just successfully withdrew.
+          invokeEmailCF('sendJobPosterNotification', {
+            churchId: userProfile?.churchId, jobDocId: job._docId, event: 'withdrawal', actorUid: userId, actorName: userName,
+          }, { context: 'withdrawal' });
         }
         // Waitlist promotion now runs inline + server-side inside jobWithdraw
         // (audit M3) — no separate client call needed.
@@ -1033,14 +1076,17 @@ export function JobsPage({ store, userProfile }) {
     const removedWaiter = detailWaitlist.find(w => w.uid === uid);
     const removed = removedSignup || removedWaiter;
     if (!window.confirm(`Remove ${removed?.name || 'this person'}?`)) return;
+    Sentry.addBreadcrumb({ category: 'jobs-hub', message: 'admin remove attempted', level: 'info', data: { jobNumber: job.jobNumber, targetUid: uid } });
     try {
       const result = await withdrawFromJob(job._docId, uid, userId, userName, job.jobNumber);
       if (result?.wasSignedUp) {
         flash('Removed.');
         setDetailSignups(prev => prev.filter(s => s.uid !== uid));
         if (notificationConfig?.enabled && job.createdBy !== userId) {
-          const fn = httpsCallable(getFunctions(), 'sendJobPosterNotification');
-          fn({ churchId: userProfile?.churchId, jobDocId: job._docId, event: 'admin_removal', actorUid: userId, actorName: userName, removedName: removed?.name || '' }).catch(err => { console.error('[ChurchOpsHub] CF sendJobPosterNotification (admin_removal) failed', err); });
+          // Fire-and-forget — poster courtesy notification; Sentry catches via invokeEmailCF.
+          invokeEmailCF('sendJobPosterNotification', {
+            churchId: userProfile?.churchId, jobDocId: job._docId, event: 'admin_removal', actorUid: userId, actorName: userName, removedName: removed?.name || '',
+          }, { context: 'admin-removal' });
         }
         // jobWithdraw promotes the waitlist inline + server-side (audit M3).
       } else if (result?.wasOnWaitlist) {
@@ -1105,6 +1151,7 @@ export function JobsPage({ store, userProfile }) {
   async function handleSubmitSwapRequest() {
     if (!liveDetail) return;
     setSwapSaving(true);
+    Sentry.addBreadcrumb({ category: 'jobs-hub', message: 'swap request submitted', level: 'info', data: { jobNumber: liveDetail.jobNumber } });
     try {
       await addJobSwapRequest(liveDetail._docId, userId, userName, swapNote.trim());
       setShowSwapModal(false);

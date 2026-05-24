@@ -1955,9 +1955,9 @@ exports.jobSignUp = onCall({ cors: true }, async (req) => {
 
   const jobRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}`);
   const preSnap = await jobRef.get();
-  if (!preSnap.exists) return { error: 'Job not found.' };
+  if (!preSnap.exists) return { error: 'Job not found.', code: 'job-not-found' };
   const job = preSnap.data();
-  if (job.status !== 'open') return { error: 'This job is no longer open.' };
+  if (job.status !== 'open') return { error: 'This job is no longer open.', code: 'job-not-open' };
 
   // H2: server-side compliance enforcement (was UI-only).
   const requiredTypes = job.requiredAccessTypes || [];
@@ -1970,12 +1970,15 @@ exports.jobSignUp = onCall({ cors: true }, async (req) => {
     const accessRecords = recordsSnap.docs.map(d => ({ _docId: d.id, ...d.data() }));
     const todayS = new Date().toISOString().slice(0, 10);
     if (!isAccessEligible(uid, requiredTypes, accessPeople, accessRecords, todayS)) {
-      return { error: `This job requires a valid ${requiredTypes.join(' + ')} on file. Ask an admin to add yours under People Access.` };
+      return {
+        error: `This job requires a valid ${requiredTypes.join(' + ')} on file. Ask an admin to add yours under People Access.`,
+        code: 'compliance-missing',
+      };
     }
   }
   // H2: a waiver-required job needs explicit acceptance.
   if (job.requiresWaiver && waiverAccepted !== true) {
-    return { error: 'You must accept the waiver to sign up for this job.' };
+    return { error: 'You must accept the waiver to sign up for this job.', code: 'waiver-required' };
   }
 
   const signupRef = db.doc(`churches/${churchId}/jobListings/${jobDocId}/signups/${uid}`);
@@ -1984,11 +1987,11 @@ exports.jobSignUp = onCall({ cors: true }, async (req) => {
   let result = null;
   await db.runTransaction(async (t) => {
     const [jobS, suS, wlS] = await Promise.all([t.get(jobRef), t.get(signupRef), t.get(waitlistRef)]);
-    if (!jobS.exists) { result = { error: 'Job not found.' }; return; }
+    if (!jobS.exists) { result = { error: 'Job not found.', code: 'job-not-found' }; return; }
     const j = jobS.data();
-    if (j.status !== 'open') { result = { error: 'This job is no longer open.' }; return; }
-    if (suS.exists) { result = { error: 'You are already signed up.' }; return; }
-    if (wlS.exists) { result = { error: 'You are already on the waitlist.' }; return; }
+    if (j.status !== 'open') { result = { error: 'This job is no longer open.', code: 'job-not-open' }; return; }
+    if (suS.exists) { result = { error: 'You are already signed up.', code: 'already-signed-up' }; return; }
+    if (wlS.exists) { result = { error: 'You are already on the waitlist.', code: 'already-waitlisted' }; return; }
     const signupCount = j.signupCount || 0;
     const waitlistCount = j.waitlistCount || 0;
     const name = caller.name || '';
@@ -1999,7 +2002,7 @@ exports.jobSignUp = onCall({ cors: true }, async (req) => {
       t.update(jobRef, { signupCount: signupCount + 1, updatedAt: now });
       result = { success: true };
     } else if (waitlistCount >= WAITLIST_CAP) {
-      result = { error: 'This job is full and the waitlist is at capacity (50 max).' };
+      result = { error: 'This job is full and the waitlist is at capacity (50 max).', code: 'waitlist-full' };
     } else {
       const entry = { uid, name, addedAt: now };
       if (j.requiresWaiver) entry.acknowledgedWaiverAt = now;
@@ -2008,7 +2011,7 @@ exports.jobSignUp = onCall({ cors: true }, async (req) => {
       result = { wasWaitlisted: true };
     }
   });
-  return result || { error: 'Sign-up failed. Please try again.' };
+  return result || { error: 'Sign-up failed. Please try again.', code: 'tx-no-result' };
 });
 
 // ── jobWithdraw ───────────────────────────────────────────────────────────
@@ -2313,6 +2316,86 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
     Sentry.captureException(err);
   }
 }));
+
+// ── monitorScheduledJobs ──────────────────────────────────────────────────
+// Hourly dead-man's switch for every other scheduled job in this file. Reads
+// each expected `scheduledJobRuns/{name}` heartbeat doc (written by
+// withScheduledRun) and Sentry-captures any of:
+//   - missing doc (job has never written a heartbeat)
+//   - finishedAt is older than the per-job staleness threshold (cron didn't fire)
+//   - status === 'failed' on the latest run (the run itself crashed)
+//   - status === 'running' for longer than its expected duration cap (hung)
+// Each alert is one Sentry event tagged with the job name, so the dashboard
+// groups them and a single Sentry alert rule can page on any of them.
+const SCHEDULED_JOB_REGISTRY = [
+  { name: 'processTrialExpirations',       cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },
+  { name: 'sendTaskDueReminders',          cadence: 'weekly', maxRunMs:  10 * 60 * 1000 },
+  { name: 'closePastJobs',                 cadence: 'daily',  maxRunMs:   5 * 60 * 1000 },
+  { name: 'sendJobReminders',              cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },
+  { name: 'generateRecurringTemplateTasks', cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },
+];
+// Daily gets a 2h grace beyond 24h; weekly gets a 24h grace beyond 7d.
+const CADENCE_STALE_MS = { daily: 26 * 3600 * 1000, weekly: (7 * 24 + 24) * 3600 * 1000 };
+
+exports.monitorScheduledJobs = onSchedule({ schedule: '0 * * * *', timeZone: 'America/Chicago' }, async () => {
+  const db = getFirestore();
+  const now = Date.now();
+  for (const job of SCHEDULED_JOB_REGISTRY) {
+    try {
+      const snap = await db.doc(`scheduledJobRuns/${job.name}`).get();
+      if (!snap.exists) {
+        // Tolerate brand-new deploys: only fire once the job has had time to
+        // fire at least once at its expected cadence. The first hourly tick
+        // after deploy will skip; subsequent ticks past the stale window
+        // will surface it.
+        Sentry.captureMessage(`scheduledJob:${job.name} has never written a heartbeat`, {
+          level: 'warning',
+          tags: { area: 'job-monitor', scheduledJob: job.name, reason: 'no-heartbeat' },
+        });
+        continue;
+      }
+      const data = snap.data() || {};
+      const status = data.status || 'unknown';
+      const startedAt = data.startedAt?.toMillis?.() ?? null;
+      const finishedAt = data.finishedAt?.toMillis?.() ?? null;
+      const staleMs = CADENCE_STALE_MS[job.cadence];
+
+      if (status === 'failed') {
+        Sentry.captureMessage(`scheduledJob:${job.name} last run failed`, {
+          level: 'error',
+          tags: { area: 'job-monitor', scheduledJob: job.name, reason: 'last-run-failed' },
+          extra: { lastError: data.lastError, finishedAt, durationMs: data.durationMs },
+        });
+        continue;
+      }
+
+      if (status === 'running' && startedAt && (now - startedAt) > job.maxRunMs) {
+        Sentry.captureMessage(`scheduledJob:${job.name} has been running for ${Math.round((now - startedAt) / 60000)}m (cap ${Math.round(job.maxRunMs / 60000)}m)`, {
+          level: 'error',
+          tags: { area: 'job-monitor', scheduledJob: job.name, reason: 'hung' },
+          extra: { startedAt, maxRunMs: job.maxRunMs },
+        });
+        continue;
+      }
+
+      // For a completed run, the relevant timestamp is finishedAt. If still
+      // marked 'running' (no finishedAt yet), fall back to startedAt — a
+      // genuinely-stuck run gets caught by the 'hung' branch above; this
+      // branch catches the "cron stopped firing" case.
+      const latestMs = finishedAt ?? startedAt;
+      if (latestMs && (now - latestMs) > staleMs) {
+        Sentry.captureMessage(`scheduledJob:${job.name} heartbeat is stale by ${Math.round((now - latestMs) / 3600000)}h (cadence: ${job.cadence})`, {
+          level: 'error',
+          tags: { area: 'job-monitor', scheduledJob: job.name, reason: 'stale' },
+          extra: { latestMs, staleThresholdMs: staleMs },
+        });
+      }
+    } catch (err) {
+      console.error(`monitorScheduledJobs: check failed for ${job.name}`, err);
+      Sentry.captureException(err, { tags: { area: 'job-monitor', scheduledJob: job.name } });
+    }
+  }
+});
 
 // ── twilioInbound ─────────────────────────────────────────────────────────
 // Twilio inbound SMS webhook. Syncs users.smsRemindersEnabled when users reply

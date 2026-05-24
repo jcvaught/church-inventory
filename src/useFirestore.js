@@ -35,17 +35,28 @@ export function useFirestore(churchId) {
   const [error, setError] = useState(null);
   const clearError = useCallback(() => setError(null), []);
 
-  function handleErr(err) {
+  function handleErr(err, ctx = {}) {
     // Audit overnight 2026-05-12 / Error-resilience #1: this is the single
-    // chokepoint for ~80 Firestore writes in this hook. Previously we only
-    // console.error'd, which Sentry's captureConsole would pick up as a
-    // string (no stack, no Firestore error code, no operation context).
-    // Calling captureException directly preserves the full error object so
-    // engineering can see code (permission-denied / unavailable / etc.) and
-    // stack trace in Sentry.
+    // chokepoint for ~80 Firestore writes in this hook. Calling
+    // captureException directly preserves the full error object so engineering
+    // can see code (permission-denied / unavailable / etc.) and stack trace.
+    // `ctx` is an optional `{ op, hub, silent }` — `op` names the operation
+    // (e.g. 'logActivity', 'signUpForJob') so the Sentry tag is specific
+    // instead of a generic 'firestore-write'; `silent: true` skips setError so
+    // post-success audit-log failures don't surface a confusing toast over a
+    // user action that actually succeeded.
     console.error('[ChurchOpsHub]', err);
-    try { Sentry.captureException(err, { tags: { area: 'firestore-write' } }); } catch { /* never let Sentry break the app */ }
-    setError(err.message);
+    try {
+      Sentry.captureException(err, {
+        tags: {
+          area: 'firestore-write',
+          op: ctx.op || 'unknown',
+          ...(ctx.hub && { hub: ctx.hub }),
+          ...(err?.code && { errorCode: err.code }),
+        },
+      });
+    } catch { /* never let Sentry break the app */ }
+    if (!ctx.silent) setError(err.message);
   }
 
   // Subscribe to all collections
@@ -415,7 +426,13 @@ export function useFirestore(churchId) {
         timestamp: new Date().toISOString(),
         details
       });
-    } catch (err) { handleErr(err); }
+    } catch (err) {
+      // Audit-log writes follow successful user actions. A failure here
+      // means the action committed but the trail is missing — engineering
+      // needs to see it in Sentry, but the user shouldn't see a confusing
+      // toast over the operation they just successfully completed.
+      handleErr(err, { op: 'logActivity', silent: true });
+    }
   }, [churchId]);
 
   // ── Reservations ──
@@ -1125,14 +1142,22 @@ export function useFirestore(churchId) {
     try {
       const fn = httpsCallable(getFunctions(), 'jobSignUp');
       const { data } = await fn({ churchId, jobDocId: docId, waiverAccepted: !!waiverAccepted });
-      if (data?.error) return { error: data.error };
+      // The server returns a structured `{ error, code }` for user-facing
+      // signup blocks (job full waitlist-cap reached, already signed up,
+      // compliance missing, waiver required, hub off). Surfaced verbatim
+      // by the caller; `code` lets the UI route compliance vs. capacity
+      // vs. waiver without regex-matching the message.
+      if (data?.error) return { error: data.error, code: data.code || 'unknown' };
       if (data?.wasWaitlisted) {
         await logActivity('signup_job', jobNumber || docId, userId, userName, { waitlisted: true });
         return { wasWaitlisted: true };
       }
       await logActivity('signup_job', jobNumber || docId, userId, userName, {});
       return { success: true };
-    } catch (err) { handleErr(err); return { error: 'Sign-up failed. Please try again.' }; }
+    } catch (err) {
+      handleErr(err, { op: 'signUpForJob', hub: 'jobs' });
+      return { error: 'Sign-up failed. Please try again.', code: 'thrown' };
+    }
   }, [churchId]);
 
   const withdrawFromJob = useCallback(async (docId, uid, actorId, actorName, jobNumber) => {
@@ -1146,7 +1171,7 @@ export function useFirestore(churchId) {
         await logActivity(action, jobNumber || docId, actorId, actorName, { removedUid: uid });
       }
       return { wasSignedUp, wasOnWaitlist };
-    } catch (err) { handleErr(err); throw err; }
+    } catch (err) { handleErr(err, { op: 'withdrawFromJob', hub: 'jobs' }); throw err; }
   }, [churchId]);
 
   const updateJobSignupAttendance = useCallback(async (docId, uid, attended) => {
@@ -1154,7 +1179,7 @@ export function useFirestore(churchId) {
       const fn = httpsCallable(getFunctions(), 'jobSetAttendance');
       const { data } = await fn({ churchId, jobDocId: docId, uid, attended });
       return { updated: !!data?.updated };
-    } catch (err) { handleErr(err); throw err; }
+    } catch (err) { handleErr(err, { op: 'updateJobSignupAttendance', hub: 'jobs' }); throw err; }
   }, [churchId]);
 
   // ── Job Swap Requests ──

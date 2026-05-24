@@ -4,6 +4,93 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-24 — Jobs Hub error-handling hardening (pre-launch)
+
+Jobs Hub is about to be the most-trafficked surface in ChurchOpsHub. The
+existing audit had closed the Critical/High security work, but the
+error-handling pass surfaced four launch-day silent-failure risks plus a
+broader visibility gap in Sentry: every capture used a generic
+`area:firestore-write` tag, expected rule-block codes drowned out real bugs,
+and the only public unauthenticated surface (`PublicJobsPage`) swallowed
+its errors with a misleading "your link is invalid" message. This change
+closes all of it. See [docs/SENTRY-ALERTS.md](SENTRY-ALERTS.md) for the
+alert rules to set up in the Sentry UI.
+
+**T1 — silent-failure fixes**
+- `PublicJobsPage.jsx`: `getPublicJobs` failures now `Sentry.captureException`
+  with `area:public-board` + `fn:getPublicJobs` + `errorCode` tags and
+  `{ churchId, churchCode }` extra. The user-facing copy distinguishes
+  `functions/invalid-argument` (bad link) from a transient outage ("Could
+  not load jobs right now. Please refresh…"). No more "link is invalid"
+  for a 30-second Firestore blip.
+- `JobsPage.jsx`: every fire-and-forget email callable
+  (`sendJobAnnouncementEmails` / `sendJobCancelledEmails` /
+  `sendJobPosterNotification` — 7 call sites) is routed through a new
+  `invokeEmailCF(name, payload, { context, userMsgOnFail })` helper that
+  awaits the callable, Sentry-captures with `area:jobs-hub-email` +
+  `cf:<name>` + `errorCode` tags + `{ churchId, jobDocId, context }`
+  extra, and shows a user toast on failure for admin-initiated actions
+  (announcements, cancellations, notify-signups, pre-delete). Poster
+  courtesy notifications stay fire-and-forget by design — Sentry still
+  catches them, but a failed courtesy email shouldn't toast the user
+  whose own action just succeeded.
+- `useFirestore.js` `logActivity`: switched to a silent capture path via
+  `handleErr(err, { op: 'logActivity', silent: true })`. Audit-log writes
+  follow already-committed actions, so a failure now Sentry-captures for
+  engineering visibility without setting global error state that would
+  toast a confusing message over the user's successful operation.
+- `jobSignUp` Cloud Function: every user-error return path now carries a
+  structured `code` field (`job-not-found`, `job-not-open`,
+  `compliance-missing`, `waiver-required`, `already-signed-up`,
+  `already-waitlisted`, `waitlist-full`, `tx-no-result`). `performSignUp`
+  switches on the code instead of regex-matching the message — the
+  brittle `/compliance|background|certif|consent|access/i` check is gone.
+  PostHog `jobs_signup_failed` / `jobs_signup_blocked_compliance` events
+  now also carry the code.
+
+**T2 — Sentry signal quality**
+- `useFirestore.js` `handleErr` now takes an optional `ctx` =
+  `{ op, hub, silent }`. Every Sentry capture is tagged with `area`,
+  `op`, optional `hub`, and the underlying Firestore `errorCode`. The
+  three Jobs Hub callable wrappers (`signUpForJob`, `withdrawFromJob`,
+  `updateJobSignupAttendance`) pass `{ op: '…', hub: 'jobs' }` so the
+  dashboard filters cleanly by hub.
+- `main.jsx` `beforeSend`: filters `permission-denied`,
+  `failed-precondition`, `unauthenticated`, and `not-found` from both
+  Firebase callables (`functions/<code>`) and the Firestore client SDK
+  (bare code). These are intentional rule-blocks — the system *working*,
+  not breaking. Issue feed is now dominated by `internal`/`unknown` and
+  unhandled exceptions, where real bugs live.
+- `JobsPage.jsx`: `Sentry.addBreadcrumb({ category: 'jobs-hub', … })`
+  on signup attempt/succeeded/waitlisted/blocked, withdraw attempt,
+  admin-remove attempt, and swap-request submit. When an error fires
+  later, the Sentry event carries the last few user actions inline —
+  collapses "what was the user doing?" debugging.
+
+**T3 — monitoring + alerts**
+- `functions/index.js`: new `monitorScheduledJobs` hourly cron
+  (`'0 * * * *'` America/Chicago) reads `scheduledJobRuns/{name}` for
+  every known scheduled job (5 total — 4 daily, 1 weekly Mondays) and
+  Sentry-captures any of: missing heartbeat, `status === 'failed'`,
+  `status === 'running'` past its `maxRunMs` cap, or `finishedAt` older
+  than the per-cadence staleness threshold (26h daily / 8d weekly).
+  Tagged with `area:job-monitor` + `scheduledJob:<name>` +
+  `reason:<no-heartbeat|stale|failed|hung>`.
+- `docs/SENTRY-ALERTS.md`: new doc listing the 4 Sentry alert rules to
+  configure in the console (first-occurrence on `area:public-board`,
+  volume-spike on internal errors, first-occurrence on `area:job-monitor`,
+  optional volume-spike on `area:jobs-hub-email`), plus useful saved
+  searches and a "what does NOT page (by design)" section.
+
+**Verification.** `npm run lint` 0 errors / 45 baseline warnings;
+`npm run build` clean (4.00s, 0 jsxDEV, prod-bundle verifier ✓); functions
+`node --check` clean. E2E 55/4/1 — single fail is the documented
+`public-board.spec.js:52` 60s in-process-cache flake, unrelated to these
+changes. Functions deploy ✓ (all 28 functions including the new
+`monitorScheduledJobs`). Webhook IAM probes intact post-deploy.
+
+---
+
 ## 2026-05-24 — firebase browser v10.8 → v12.13 + auth.setup hydration fix
 
 Bumped `firebase` browser SDK to match the rest of the fleet (MH/CC/Echo
