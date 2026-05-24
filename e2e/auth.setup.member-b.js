@@ -13,8 +13,14 @@ setup('authenticate member B', async ({ page }) => {
   await page.goto(BASE_URL);
   await page.waitForLoadState('domcontentloaded');
 
+  // Landing HTML is pre-rendered; click can fire before React hydration binds
+  // the onClick. Retry until the email input appears (real navigation signal).
   const signInBtn = page.getByRole('button', { name: /^sign in$/i }).first();
-  if (await signInBtn.count() > 0) await signInBtn.click().catch(() => {});
+  for (let i = 0; i < 8; i++) {
+    if (await page.locator('input[type="email"]').count() > 0) break;
+    if (await signInBtn.count() > 0) await signInBtn.click().catch(() => {});
+    await page.waitForTimeout(500);
+  }
 
   await page.waitForSelector('input[type="email"]', { timeout: 15_000 });
   await page.fill('input[type="email"]', EMAIL);

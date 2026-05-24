@@ -4,6 +4,38 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-24 — firebase browser v10.8 → v12.13 + auth.setup hydration fix
+
+Bumped `firebase` browser SDK to match the rest of the fleet (MH/CC/Echo
+already on v12). Closes the residual undici browser highs that the 5-23
+dependency audit left open. No source changes — package.json + lockfile
+only; all `firebase/auth`, `firebase/firestore`, `firebase/storage`, and
+`firebase/functions` APIs we use are stable across v10→v12. Lint clean,
+build clean (0 jsxDEV, prod-bundle verifier ✓).
+
+**Auth.setup E2E flake fix (same commit):** the first attempt after the
+v12 deploy exposed a pre-existing race in the 3 auth setup scripts. The
+landing page HTML is pre-rendered, so the `button "Sign In"` element
+appears in the DOM before React hydrates and binds its `onClick`. The
+old setup did `domcontentloaded` → click → `waitForSelector('email')` —
+when hydration was slow enough, the click fired before binding, was
+silently swallowed by the `.catch(() => {})`, and the 15s email-input
+wait timed out. Member B (always [1/60] = first browser context) caught
+the brunt; Members A and Admin ran in a warm context and almost never
+hit it. The v12 bundle is marginally larger, pushing first-context
+hydration past the timeout consistently rather than occasionally.
+
+Fix: replace the single click + 15s wait with an 8-iteration loop that
+clicks, checks for the email input, waits 500ms, repeats — up to ~4s
+of pre-wait retries before the existing 15s `waitForSelector` kicks
+in. When hydration is fast (Members A, Admin, retries) the loop exits
+on iteration 1 with no extra cost. Applied to all 3 setups for
+defense-in-depth in case run order changes. E2E baseline restored to
+55/4/1 (the documented `public-board.spec.js:52` 60s in-process cache
+race on `getPublicJobs`).
+
+---
+
 ## 2026-05-24 — Jobs Hub Reports: lazy-fetch older jobs on 'all' scope
 
 Closes the long-documented "known limitation" CLAUDE.md called out: the

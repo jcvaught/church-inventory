@@ -18,10 +18,16 @@ setup('authenticate admin', async ({ page }) => {
   // an email input field.
   await page.waitForLoadState('domcontentloaded');
 
-  // Click sign-in if we're on the marketing landing page
+  // Click sign-in if we're on the marketing landing page. The landing HTML is
+  // pre-rendered, so the Sign In button exists before React hydrates and binds
+  // its onClick handler; a click that fires before hydration is silently lost
+  // (no exception, no navigation). Retry the click until the AuthScreen's email
+  // input appears, which is the real signal that navigation actually happened.
   const signInBtn = page.getByRole('button', { name: /^sign in$/i }).first();
-  if (await signInBtn.count() > 0) {
-    await signInBtn.click().catch(() => {});
+  for (let i = 0; i < 8; i++) {
+    if (await page.locator('input[type="email"]').count() > 0) break;
+    if (await signInBtn.count() > 0) await signInBtn.click().catch(() => {});
+    await page.waitForTimeout(500);
   }
 
   await page.waitForSelector('input[type="email"]', { timeout: 15_000 });
