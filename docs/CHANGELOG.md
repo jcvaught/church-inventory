@@ -4,6 +4,78 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-23 — `firebase-admin` v12 → v13 + npm overrides finally close the 4 highs
+
+Bumped `firebase-admin` from `^12.0.0` to `^13.0.0` in
+`functions/package.json` — already permitted by `firebase-functions@7`
+peer dep (`^11.10.0 || ^12.0.0 || ^13.0.0`). Scripts/ devDep was
+already on `^13.9.0` at the repo root, so this only changed what the
+deployed Cloud Functions run.
+
+**v13.0.0 breaking-change scan** (per the GitHub release notes), none
+affect COH: Remote Config evaluation-hash change (we don't use RC),
+deprecated FCM API removal (no FCM — the lone `messaging` hit in
+`functions/index.js` is Twilio's `messagingServiceSid`), Node 16 →
+Node 18 minimum (already on Node 22), and an internal credentials
+refactor to `google-auth-library` (transparent for our
+`admin.credential.cert(serviceAccountObject)` and default-ADC paths).
+
+**Second audit-prediction miss recorded.** After the bump, `npm audit
+--omit=dev` still showed the same 4 highs the v4→v7 bump didn't close
+either. `npm ls` traced each one and confirmed they sit deep in
+third-party transitive deps that no package-major release in the COH
+tree currently fixes:
+- `axios` → `@sendgrid/mail` 8.1.6 + `twilio` 6.0.0 (both pin axios
+  `^1.x` and pull <1.15.1)
+- `fast-xml-parser` + `fast-xml-builder` → `firebase-admin@13.10.0` →
+  `@google-cloud/storage@7.19.0` (the latest admin still ships the
+  vulnerable parser)
+- `path-to-regexp` → `firebase-functions@7.2.5` → `express@4.22.1`
+  (express 4 is pinned to the 0.1.x line of `path-to-regexp`; the
+  unpatched-by-default 0.1.12 needs forcing to 0.1.13)
+
+**The real fix was npm overrides** — same mechanism already used for
+`protobufjs`. Added 3 forced bumps to `functions/package.json`:
+
+```json
+"overrides": {
+  "protobufjs":      "^7.5.8",
+  "axios":           "^1.16.0",
+  "fast-xml-parser": "^5.5.6",
+  "path-to-regexp":  "0.1.13"
+}
+```
+
+`path-to-regexp` is intentionally pinned to the patch (`0.1.13`, not
+`^0.1.13` or anything broader): the 0.2/1/2/.../8 majors all changed
+the route-pattern API and would break express 4 at startup. Keep the
+pin in the 0.1.x line.
+
+Result: vulnerabilities dropped 17 → 14 (1L/12M/**4H** → 1L/13M/**0H**).
+**All 4 highs that originally motivated this work are finally closed**;
+the 13 remaining moderates are all `qs` / `uuid` / `retry-request`
+chain — separately tracked, not blocking.
+
+Verification: module-load smoke clean; pre-deploy E2E 55/1/4 (same
+pre-existing `public-board.spec.js:52` cache flake); post-deploy
+all-27-functions deploy clean; webhook IAM probes confirmed intact
+(`stripeWebhook` 400, `sendgridEventWebhook` 401, `twilioInbound` 403
+disambiguated via Cloud Logging — `invalid signature` warn at
+`01:00:40` matched the probe trace, IAM intact); post-deploy E2E
+54/2/4 — same `public-board.spec.js:52` failure plus a new
+**unrelated** failure on `e2e/authenticated/sanity.spec.js:19` whose
+`/^JOB-\d{3}$/` regex finally tripped when this church's job counter
+crossed JOB-1000 (now at JOB-1025). Fixed inline to `/^JOB-\d{3,}$/`.
+
+**Lesson recorded twice now:** when an audit attributes a vuln to a
+package, run `npm ls <vulnerable-pkg>` first to find the true root in
+the dep tree. The 2026-05-23 follow-up audit conflated "vulns in the
+functions install tree" with "vulns caused by firebase-functions
+itself"; the same mistake was repeated for firebase-admin. See
+`reference_firebase_functions_vuln_attribution` memory.
+
+---
+
 ## 2026-05-23 — `firebase-functions` v4 → v7
 
 Retires the EOL v4 major in `functions/package.json`. The 2026-05-23
