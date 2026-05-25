@@ -26,6 +26,16 @@ export const E2E_PREFIX = '[E2E]';
 export function e2eTitle(label) { return `${E2E_PREFIX} ${label}`; }
 
 // Wipe any leftover E2E jobs + announcements + access records from prior runs.
+//
+// Uses firestore.recursiveDelete() instead of a flat batch so the per-uid
+// subcollections under jobListings (signups/, waitlist/, and any future
+// children like comments/) get cleaned up too — the 2026-05-22 Jobs Hub H1
+// refactor moved the roster into protected subcollections, and Firestore
+// has no cascade-delete, so a parent-only batch left orphans that polluted
+// later waitlist specs. See docs/E2E-ISOLATION-PLAN-2026-05-25.md.
+//
+// recursiveDelete is destructive — every ref passed here MUST come from an
+// [E2E]-prefixed query result so a stray ref can't take out real data.
 export async function purgeE2EArtifacts() {
   const f = db();
   const jobsSnap = await f.collection(`churches/${CHURCH_ID}/jobListings`).where('title', '>=', E2E_PREFIX).where('title', '<', E2E_PREFIX + '~').get();
@@ -35,12 +45,10 @@ export async function purgeE2EArtifacts() {
   const arSnap = e2eAPIds.length
     ? await f.collection(`churches/${CHURCH_ID}/accessRecords`).where('personId', 'in', e2eAPIds.slice(0, 30)).get()
     : { docs: [], size: 0 };
-  const batch = f.batch();
-  jobsSnap.docs.forEach(d => batch.delete(d.ref));
-  annSnap.docs.forEach(d => batch.delete(d.ref));
-  apSnap.docs.forEach(d => batch.delete(d.ref));
-  arSnap.docs.forEach(d => batch.delete(d.ref));
-  if (jobsSnap.size + annSnap.size + apSnap.size + arSnap.size > 0) await batch.commit();
+  for (const doc of jobsSnap.docs) await f.recursiveDelete(doc.ref);
+  for (const doc of annSnap.docs) await f.recursiveDelete(doc.ref);
+  for (const doc of apSnap.docs) await f.recursiveDelete(doc.ref);
+  for (const doc of arSnap.docs) await f.recursiveDelete(doc.ref);
   return { jobs: jobsSnap.size, announcements: annSnap.size, accessPeople: apSnap.size, accessRecords: arSnap.size };
 }
 

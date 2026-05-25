@@ -4,6 +4,38 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-25 — E2E isolation Layer 2: recursive purge
+
+`e2e/admin-helpers.js` `purgeE2EArtifacts()` now calls
+`firestore.recursiveDelete()` on every `[E2E]`-prefixed parent instead of
+issuing a flat `batch.delete()`. Closes the cleanup gap exposed by the
+2026-05-22 Jobs Hub H1 refactor — `jobListings/{id}/signups/{uid}` and
+`…/waitlist/{uid}` are protected subcollections that the previous
+parent-only delete left orphaned forever. Plan + sequencing in
+`docs/E2E-ISOLATION-PLAN-2026-05-25.md`; Layer 1 (dedicated
+`e2e-test-church`) still pending a focused session, but unblocked
+(OQ 1 + OQ 2 both resolved 2026-05-25).
+
+The recursiveDelete pattern is applied uniformly across all 4 cleanup
+paths (jobListings, jobAnnouncements, accessPeople, accessRecords) as
+cheap insurance against future schema growth — only jobListings has
+subcollections today, but the cost is negligible and the call site is
+already locked to `[E2E]`-filtered refs, so a stray non-test ref can't
+slip through.
+
+**Re-run note:** the post-Layer-2 E2E run produced the same 47/16/4 as
+the pre-Layer-2 run, which forced a re-diagnosis. 11 of the 16 failures
+turn out to be Phase 2 fallout — the test suite's
+`page.once('dialog', d => d.accept())` handlers (Playwright's *native*
+browser-dialog API) no-op against the React `ConfirmDialog` modal
+Phase 2 introduced, so destructive actions never fire. See
+`docs/E2E-ISOLATION-PLAN-2026-05-25.md` "Correction" section + the new
+**Layer 1.5** plan that addresses this. Layer 2's change is still
+correct defensive cleanup — orphans from crashed runs will get reaped —
+it just doesn't surface in today's results.
+
+---
+
 ## 2026-05-25 — UI audit Phase 7: polish backlog
 
 Phase 7 of `docs/UI-AUDIT-2026-05-24-PLAN.md`. Single-pass cleanup of the

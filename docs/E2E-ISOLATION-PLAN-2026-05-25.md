@@ -170,10 +170,26 @@ to being purely operational.
    - The `excludeTestAccounts` filter in `src/utils/testAccounts.js`
      can drop the `jcvaught@gmail.com` special-case once the suite no
      longer references that address.
-2. Do we provision the new tenant via the create-church UI flow once
-   (and snapshot the resulting docs), or codify the whole bootstrap in
-   `scripts/setup-e2e-tenant.mjs` so it can be torn down + rebuilt at
-   will?
+2. ~~Do we provision the new tenant via the create-church UI flow…~~
+   **Resolved 2026-05-25: scripted bootstrap.** Write
+   `scripts/setup-e2e-tenant.mjs` (and a sibling
+   `scripts/teardown-e2e-tenant.mjs`) so the church can be torn down
+   and rebuilt deterministically. The script:
+   - Mints the three Auth users (`e2e-admin@`, `e2e-member-a@`,
+     `e2e-member-b@` — all `@churchopshub.com`) via Admin SDK
+     `auth().createUser()` if they don't already exist.
+   - Creates `churches/{churchId}` with config docs that mirror the
+     production shape (`config/main`, `config/subscription`).
+   - Writes the three `users/{uid}` docs with the right `churchId`,
+     `role`, and `allowedHubs: ['*']`.
+   - Mints a subscription doc with `trialExpiresAt` set far in the
+     future (year 2099 — internal-only tenant, no Stripe involvement).
+   - Idempotent: re-running tops up missing pieces without
+     duplicating.
+   Justification: a UI-driven setup is a one-off snapshot that rots
+   the moment the create-church flow changes; the script stays
+   exercised because we'll call it from CI when (if) we ever go to
+   ephemeral-per-run.
 
 ---
 
@@ -207,13 +223,115 @@ dedicated-church + recursive-purge pair turns out to drift again.
 
 ---
 
+## Correction — root cause re-diagnosis (2026-05-25)
+
+The Layer 2 re-run produced the **same 16 failures** as before, which
+forced a closer look. Most of the failures aren't orphan data at all —
+they're Phase 2 fallout the original diagnosis missed:
+
+- Phase 2 replaced all 41 `window.confirm(...)` calls in the app with
+  the new `ConfirmDialog` React modal (commit `548aac7`,
+  `src/components/primitives/ConfirmDialog.jsx`).
+- The test suite has 11 sites using `page.once('dialog', d => d.accept())`
+  (Playwright's *native* browser-dialog handler). Those handlers
+  silently no-op against a React modal, so the destructive action
+  (admin Remove, member Withdraw, hard-delete-with-emails, delete-series,
+  Share Board copy) never runs.
+- That maps exactly to 11 of the 16 failures: 3 waitlist (admin remove
+  + member withdraw), 3 notifications-gate, 1 signup-flow withdraw,
+  1 edge-cases hard-delete, 1 recurring delete-series, 1 public-board,
+  1 UAT M10 Share Board (which also has a stale `/PUBLIC page/`
+  case-sensitive regex that needs to match the lowercase wording
+  Phase 2 introduced).
+
+The other 5 failures (the a11y axe suite) really are FXCC data-state
+pollution — those still need Layer 1 to clear.
+
+**Implication:** Layer 2's recursive-delete change is correct and ships
+anyway as defensive cleanup (orphan docs that *do* accumulate from
+crashed runs will now get cleaned), but it doesn't surface in today's
+results. The real next priority is **Layer 1.5 — Phase 2 test
+follow-up**: replace the native-dialog handlers with React-dialog
+assertions.
+
+---
+
+## Layer 1.5 — Phase 2 test follow-up (~30 min, ships next)
+
+**Goal:** unblock the 11 tests Phase 2 quietly broke by aligning the
+spec patterns with the new `ConfirmDialog` modal.
+
+### Change
+
+Add a tiny helper in `e2e/admin-helpers.js` (or a new
+`e2e/ui-helpers.js`):
+
+```js
+// Click the primary CTA inside the active ConfirmDialog modal.
+// Pass the exact confirmLabel the call site uses (e.g. 'Remove',
+// 'Withdraw', 'Delete series'). Caller is responsible for triggering
+// the dialog first.
+export async function acceptConfirm(page, label) {
+  const dialog = page.getByRole('dialog');
+  await dialog.waitFor({ state: 'visible', timeout: 5_000 });
+  await dialog.getByRole('button', { name: new RegExp('^' + label + '$', 'i') }).click();
+}
+```
+
+Then sweep the 11 sites identified by
+`grep -n "page.once.*dialog\|page.on.*dialog\|memberAPage.once.*dialog" e2e/authenticated/*.spec.js`
+and replace each native handler with the helper. Per call-site labels
+(sourced from `JobsPage.jsx` `confirmLabel:` values):
+
+| Spec / line | Action | confirmLabel |
+|------|------|------|
+| waitlist.spec.js:41 | admin removes signup | `Remove` |
+| waitlist.spec.js:73 | admin removes only signup | `Remove` |
+| waitlist.spec.js:101 | member self-withdraws | `Withdraw` |
+| signup-flow.spec.js:78 | member self-withdraws | `Withdraw` |
+| notifications-gate.spec.js:44 | admin removes signup | `Remove` |
+| notifications-gate.spec.js:74 | admin removes signup | `Remove` |
+| notifications-gate.spec.js:100 | member self-withdraws | `Withdraw` |
+| edge-cases.spec.js:84 | hard-delete with emails | `Send emails` |
+| recurring.spec.js:57 | admin deletes series | `Delete series` |
+| public-board.spec.js | admin changes status | TBC during sweep |
+| uat-ui.spec.js:97 | Share Board copy-link | `Copy link` |
+| crud.spec.js:88 | (cancel path — `dialog.dismiss()`) | use `Cancel` |
+
+Also update `uat-ui.spec.js` M10's expectation from
+`/PUBLIC page/` → `/public page/i` (or just `/public page/`) to match
+Phase 2's lowercase + `<strong>`-bolded copy.
+
+### Acceptance
+
+- All 11 dialog-related failures from the 2026-05-25 re-run flip green.
+- A11y axe specs still red (they need Layer 1 — FXCC data state).
+- No new failures introduced.
+
+### Risks
+
+- A few of the call sites may use a *different* `confirmLabel` than
+  what's tabulated above (e.g. `public-board.spec.js` needs inspection).
+  Mitigation: do the sweep test-by-test, run incrementally, fix labels
+  inline if `acceptConfirm` times out finding the button.
+
+---
+
 ## Status
 
-- Layer 2: **not started** (this doc is the plan; implementation lands
-  in the next session focused on E2E hardening).
-- Layer 1: **unblocked** as of 2026-05-25 — OQ 1 resolved (use
-  `e2e-member-a@churchopshub.com`, retire `jcvaught@gmail.com` from the
-  suite). Still pending the focused session to execute steps 3–9.
+- Layer 2: **SHIPPED 2026-05-25** — `purgeE2EArtifacts()` in
+  `e2e/admin-helpers.js` now calls `firestore.recursiveDelete()` on
+  every `[E2E]`-filtered parent. Re-run was still 47/16/4 — the
+  failures aren't orphans; see "Correction" section above. Layer 2 is
+  defensive cleanup that will pay off the next time a crashed run
+  leaves child docs behind.
+- Layer 1.5: **not started** — the actual fix for 11/16 failures.
+  Sweep the 11 native-dialog handlers + update M10's regex. Ships next.
+- Layer 1: **unblocked** as of 2026-05-25 — both open questions
+  resolved (OQ 1: use `e2e-member-a@churchopshub.com`, retire
+  `jcvaught@gmail.com` from the suite; OQ 2: scripted bootstrap via
+  `scripts/setup-e2e-tenant.mjs`). Pending the focused session to
+  execute steps 3–9. Will close the remaining 5 a11y failures.
 
 Updates to this plan get tracked here, not in CHANGELOG, until the
 layers actually ship.
