@@ -79,7 +79,7 @@ src/
 │   │   ├── DataTableDisclosure.jsx ← Screen-reader fallback for Recharts SVGs: renders `<details>` with a real `<table>` of the underlying data. Applied to every chart in InsightsPage (audit 2026-05-24 Phase 1)
 │   │   ├── StatusDot.jsx      ← Colored dot + accessible label (visible or sr-only) for status indicators; default role="img" + aria-label. Stops color-only conveyance (audit 2026-05-24 Phase 4)
 │   │   ├── EmojiIcon.jsx      ← Wraps an emoji in either decorative (aria-hidden) or semantic (role="img" + aria-label) mode. Use whenever an emoji appears in JSX (audit 2026-05-24 Phase 4)
-│   │   └── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive
+│   │   └── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive. Optional `previewSrc`/`previewAlt` renders a hub screenshot above the card with a `mask-image` bottom fade (audit 2026-05-24 Phase 6). Subscribe + Contact buttons fire `window.posthog?.capture('upgrade_gate_click', { hubName, action })` — telemetry is try/catch'd so it never blocks Stripe checkout. JPEG previews live in `public/upgrade-previews/<hub>.jpg`.
 │   └── SEO.jsx                ← Reusable SEO component (react-helmet-async); sets title, description, canonical, OG tags, Twitter card, JSON-LD
 ├── pages/
 │   ├── LandingPage.jsx        ← Marketing landing page; includes SoftwareApplication JSON-LD schema and pain points copy
