@@ -156,11 +156,20 @@ to being purely operational.
 
 ### Open questions
 
-1. `jcvaught@gmail.com` is the human owner's address. Do we keep it as
-   the "Member A" E2E account (then it has to belong to the test
-   church, and the human can't keep using it as a real FXCC member),
-   or do we mint a new `e2e-member-a@churchopshub.com` and retire the
-   personal address from the suite?
+1. ~~`jcvaught@gmail.com` is the human owner's address. Do we keep it as
+   the "Member A" E2E account…~~ **Resolved 2026-05-25: retire the
+   personal address from the suite.** Mint a new
+   `e2e-member-a@churchopshub.com` (or similar) and use that as Member A
+   instead. Cleanup steps after the new tenant lands:
+   - Remove `jcvaught@gmail.com` from `e2e/playwright.config.js` /
+     auth-state fixtures wherever it's currently referenced as Member A.
+   - Delete the `jcvaught@gmail.com` user doc that lives under FXCC's
+     `users/{uid}` *only if* the human owner doesn't actively use FXCC
+     as a member; otherwise leave it (it's just not invoked by the
+     test suite anymore).
+   - The `excludeTestAccounts` filter in `src/utils/testAccounts.js`
+     can drop the `jcvaught@gmail.com` special-case once the suite no
+     longer references that address.
 2. Do we provision the new tenant via the create-church UI flow once
    (and snapshot the resulting docs), or codify the whole bootstrap in
    `scripts/setup-e2e-tenant.mjs` so it can be torn down + rebuilt at
@@ -174,16 +183,18 @@ to being purely operational.
 |------|-------|--------|---------|-----------|
 | Recursive `purgeE2EArtifacts` | 2 | ~15 min | none | **1** |
 | Re-run E2E (expect waitlist green, a11y still failing on FXCC data) | — | ~7 min | Layer 2 | 2 |
-| Decide Open Question 1 (jcvaught@ vs. new test-member-a) | — | discussion | — | 3 |
-| Stand up `e2e-test-church` + subscription doc | 1 | ~45 min | OQ 1 resolved | 4 |
-| Move test users into new tenant | 1 | ~15 min | new church exists | 5 |
-| Update `e2e/admin-helpers.js` churchId | 1 | ~2 min | users moved | 6 |
+| ~~Decide Open Question 1~~ — **resolved 2026-05-25: mint `e2e-member-a@churchopshub.com`** | — | — | — | done |
+| Mint new `e2e-member-a@churchopshub.com` Auth user + service-account creds | 1 | ~5 min | none | 3 |
+| Stand up `e2e-test-church` + subscription doc | 1 | ~45 min | step 3 | 4 |
+| Move test users into new tenant (including new Member A) | 1 | ~15 min | new church exists | 5 |
+| Update `e2e/admin-helpers.js` churchId + auth-state fixtures | 1 | ~5 min | users moved | 6 |
 | Full smoke run | — | ~7 min | step 6 | 7 |
-| Decommission test accounts in FXCC | 1 | ~5 min | suite green on new tenant | 8 |
+| Decommission `jcvaught@gmail.com` from auth-state + test fixtures | 1 | ~5 min | suite green on new tenant | 8 |
+| Decommission FXCC-side `e2e-admin@` / `e2e-member-b@` test docs | 1 | ~5 min | step 8 | 9 |
 
 Layer 2 closes the bleeding waitlist failures within an hour. Layer 1
-is the structural fix and lands when there's a focused session to
-attend to OQ 1 and the tenant bootstrap.
+is the structural fix and lands when there's a focused session for the
+tenant bootstrap; OQ 1 is no longer a blocker.
 
 ## Gold-plated alternative (deferred)
 
@@ -200,7 +211,9 @@ dedicated-church + recursive-purge pair turns out to drift again.
 
 - Layer 2: **not started** (this doc is the plan; implementation lands
   in the next session focused on E2E hardening).
-- Layer 1: **blocked on OQ 1** (jcvaught@gmail.com test-account decision).
+- Layer 1: **unblocked** as of 2026-05-25 — OQ 1 resolved (use
+  `e2e-member-a@churchopshub.com`, retire `jcvaught@gmail.com` from the
+  suite). Still pending the focused session to execute steps 3–9.
 
 Updates to this plan get tracked here, not in CHANGELOG, until the
 layers actually ship.
