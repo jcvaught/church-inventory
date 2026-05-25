@@ -4,6 +4,7 @@ import { B, f1, f2, inp, btnP, btnS, btnD } from '../components/brand/tokens.js'
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { Stat } from '../components/primitives/Stat.jsx';
+import { useConfirm } from '../components/primitives/ConfirmDialog.jsx';
 import { exportReservationsCSV } from '../utils/csv.js';
 import { ITEM_STATUS, RES_STATUS, RESOURCE_TYPE } from '../utils/constants.js';
 import { localDateStr, generateRecurrenceDates } from '../utils/date.js';
@@ -17,6 +18,7 @@ export function ReservationsPage({ store, userProfile }) {
   const [showDetail, setShowDetail] = useState(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
+  const { confirm, ConfirmHost } = useConfirm();
 
   const userId = userProfile?.id || userProfile?.uid;
   const userName = userProfile?.name || "Unknown";
@@ -479,22 +481,32 @@ export function ReservationsPage({ store, userProfile }) {
             {/* Actions */}
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end", flexWrap:"wrap" }}>
               {r.status === RES_STATUS.PENDING && (r.requestedBy === userId || isAdmin) && (
-                <button onClick={()=>{ if (window.confirm("Cancel this reservation request?")) handleCancel(r); }} disabled={saving} style={{ ...btnS, color:B.red, borderColor:"#FECACA" }}>Cancel Request</button>
+                <button onClick={async ()=>{
+                  if (!await confirm({ title: 'Cancel request?', message: 'Cancel this reservation request?', confirmLabel: 'Cancel request', danger: true })) return;
+                  handleCancel(r);
+                }} disabled={saving} style={{ ...btnS, color:B.red, borderColor:"#FECACA" }}>Cancel Request</button>
               )}
               {r.status === RES_STATUS.PENDING && canApproveReservation(r) && <>
-                <button onClick={()=>{ if (window.confirm("Deny this reservation request?")) handleDeny(r); }} disabled={saving} style={btnD}>Deny</button>
+                <button onClick={async ()=>{
+                  if (!await confirm({ title: 'Deny request?', message: 'Deny this reservation request?', confirmLabel: 'Deny', danger: true })) return;
+                  handleDeny(r);
+                }} disabled={saving} style={btnD}>Deny</button>
                 <button onClick={()=>handleApprove(r)} disabled={saving} style={btnP}>Approve</button>
               </>}
               {r.status === RES_STATUS.APPROVED && r.resourceType !== RESOURCE_TYPE.ROOM && canApproveReservation(r) && (
                 <button onClick={()=>handleCheckOutFromRes(r)} disabled={saving} style={{ ...btnP, background:"#1A65C7" }}>Check Out Now</button>
               )}
               {r.status === RES_STATUS.APPROVED && r.resourceType === RESOURCE_TYPE.ROOM && canApproveReservation(r) && (
-                <button onClick={()=>{ if (window.confirm("Mark this space booking as complete?")) handleMarkRoomComplete(r); }} disabled={saving} style={btnP}>Mark Complete</button>
+                <button onClick={async ()=>{
+                  if (!await confirm({ title: 'Mark complete?', message: 'Mark this space booking as complete?', confirmLabel: 'Mark complete' })) return;
+                  handleMarkRoomComplete(r);
+                }} disabled={saving} style={btnP}>Mark Complete</button>
               )}
             </div>
           </>;
         })()}
       </Modal>
+      <ConfirmHost />
     </div>
   );
 }

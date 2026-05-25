@@ -4,6 +4,8 @@ import { MobileCtx } from '../hooks/useMobile.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
+import { useConfirm } from '../components/primitives/ConfirmDialog.jsx';
+import { UndoToast } from '../components/primitives/UndoToast.jsx';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, getDocs } from 'firebase/firestore';
 import { app, db } from '../firebase.js';
@@ -53,6 +55,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
   const [requestLinkCopied, setRequestLinkCopied] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [undo, setUndo] = useState(null);
+  const { confirm, ConfirmHost } = useConfirm();
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -154,7 +158,12 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   async function handleChangeCode() {
     const code = newCode.trim().toUpperCase();
     if (code.length < 3) return;
-    if (!window.confirm(`Change the church code to "${code}"? Anyone using the old code to join will no longer be able to.`)) return;
+    if (!await confirm({
+      title: 'Change church code?',
+      message: `Change the church code to "${code}"? Anyone using the old code to join will no longer be able to.`,
+      confirmLabel: 'Change code',
+      danger: true,
+    })) return;
     // Phase D / H-02: server-side lookup so we don't need `allow list` on churches.
     try {
       const fn = httpsCallable(getFunctions(), 'lookupChurchByCode');
@@ -790,11 +799,34 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                       Edit Access
                     </button>
                     {u.active ? (
-                      <button onClick={()=>{ if(window.confirm(`Deactivate ${u.name}? They will lose access to the app immediately.`)) updateUser(u.id, {active:false}); }} style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.red, borderColor:"#FECACA" }}>Deactivate</button>
+                      <button onClick={async ()=>{
+                        const ok = await confirm({
+                          title: 'Deactivate team member?',
+                          message: `${u.name} will lose access to the app immediately. You can reactivate them at any time.`,
+                          confirmLabel: 'Deactivate',
+                          danger: true,
+                        });
+                        if (!ok) return;
+                        await updateUser(u.id, {active:false});
+                        setUndo({
+                          message: `${u.name} deactivated.`,
+                          onUndo: () => updateUser(u.id, {active:true}),
+                        });
+                      }} style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.red, borderColor:"#FECACA" }}>Deactivate</button>
                     ) : (
                       <button onClick={()=>updateUser(u.id, {active:true})} style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.teal, borderColor:B.tealPale }}>Reactivate</button>
                     )}
-                    <button onClick={()=>{ if(window.confirm(`Remove ${u.name} from your church? They will no longer have access.`)) removeUser(u.id); }}
+                    <button onClick={async ()=>{
+                      const ok = await confirm({
+                        title: 'Remove team member?',
+                        message: <>Permanently remove <strong>{u.name}</strong> from your church. They will lose access immediately and this cannot be undone — you'd need to invite them again.</>,
+                        confirmLabel: 'Remove',
+                        danger: true,
+                        typeToConfirm: u.name,
+                      });
+                      if (!ok) return;
+                      await removeUser(u.id);
+                    }}
                       style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.red, borderColor:"#FECACA" }}>Remove</button>
                   </div>
                 )}
@@ -1292,7 +1324,17 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                 style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:13, fontWeight:600, padding:"4px 8px" }}>Edit</button>
               {r.active === false
                 ? <button onClick={() => updateRoom(r._docId, { active:true })} style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:13, fontWeight:600, padding:"4px 8px" }}>Restore</button>
-                : <button onClick={() => { if (window.confirm(`Archive "${r.name}"? It will no longer appear as a reservable space.`)) updateRoom(r._docId, { active:false }); }} style={{ background:"none", border:"none", color:B.red, cursor:"pointer", fontSize:13, fontWeight:600, padding:"4px 8px" }}>Archive</button>
+                : <button onClick={async () => {
+                    const ok = await confirm({
+                      title: 'Archive space?',
+                      message: <>Archive <strong>{r.name}</strong>. It will no longer appear as a reservable space.</>,
+                      confirmLabel: 'Archive',
+                      danger: true,
+                    });
+                    if (!ok) return;
+                    await updateRoom(r._docId, { active:false });
+                    setUndo({ message: `"${r.name}" archived.`, onUndo: () => updateRoom(r._docId, { active:true }) });
+                  }} style={{ background:"none", border:"none", color:B.red, cursor:"pointer", fontSize:13, fontWeight:600, padding:"4px 8px" }}>Archive</button>
               }
             </div>
           ))}
@@ -1328,6 +1370,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           {editList.items.length === 0 && <p style={{ color:B.textLight, fontSize:14, textAlign:"center", padding:20 }}>No items yet. Add some above.</p>}
         </>}
       </Modal>
+      <ConfirmHost />
+      {undo && <UndoToast {...undo} onDismiss={() => setUndo(null)} />}
     </div>
   );
 }

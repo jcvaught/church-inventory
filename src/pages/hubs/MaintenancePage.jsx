@@ -9,6 +9,7 @@ import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { Spinner } from '../../components/primitives/Spinner.jsx';
 import { RichTextarea } from '../../components/primitives/RichTextarea.jsx';
+import { useConfirm } from '../../components/primitives/ConfirmDialog.jsx';
 import { resizeImageForUpload } from '../../utils/imageResize.js';
 import { localDateStr, calculateNextDue } from '../../utils/date.js';
 
@@ -508,6 +509,7 @@ export function MaintenancePage({ store, userProfile }) {
   const [showVendors, setShowVendors] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
+  const { confirm, ConfirmHost } = useConfirm();
   const [collapsedStatuses, setCollapsedStatuses] = useState(new Set());
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
@@ -589,8 +591,16 @@ export function MaintenancePage({ store, userProfile }) {
     return false;
   }
 
-  function closeDetail() {
-    if (isDetailDirty() && !window.confirm('You have unsaved changes. Close without saving?')) return;
+  async function closeDetail() {
+    if (isDetailDirty()) {
+      const ok = await confirm({
+        title: 'Discard changes?',
+        message: 'You have unsaved changes. Close without saving?',
+        confirmLabel: 'Discard',
+        danger: true,
+      });
+      if (!ok) return;
+    }
     setShowDetail(null);
     setDetailEdits({});
     setDetailSnapshot({});
@@ -757,7 +767,12 @@ export function MaintenancePage({ store, userProfile }) {
 
   async function handleDeleteComment(commentId) {
     if (!showDetail?._docId) return;
-    if (!window.confirm('Delete this comment?')) return;
+    if (!await confirm({
+      title: 'Delete comment?',
+      message: 'Delete this comment? This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    })) return;
     await deleteTicketComment(showDetail._docId, commentId);
   }
 
@@ -821,7 +836,13 @@ export function MaintenancePage({ store, userProfile }) {
   }
 
   async function handleDeleteVendor(vendor) {
-    if (!window.confirm(`Delete "${vendor.name}"? This cannot be undone.`)) return;
+    const ok = await confirm({
+      title: 'Delete vendor?',
+      message: <>Delete <strong>{vendor.name}</strong>. Existing tickets that reference this vendor keep their stored name.</>,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     await deleteVendor(vendor._docId);
     flash('Vendor deleted.');
   }
@@ -831,7 +852,13 @@ export function MaintenancePage({ store, userProfile }) {
     if (!ticket || ticket.status === newStatus) return;
     if (newStatus === 'Complete' || newStatus === 'Cancelled') {
       const extra = newStatus === 'Complete' && ticket.recurrence ? ' A new recurring ticket will be created.' : '';
-      if (!window.confirm(`Move "${ticket.name}" to ${newStatus}?${extra}`)) return;
+      const ok = await confirm({
+        title: `Move to ${newStatus}?`,
+        message: <>Move <strong>{ticket.name}</strong> to {newStatus}.{extra}</>,
+        confirmLabel: newStatus,
+        danger: newStatus === 'Cancelled',
+      });
+      if (!ok) return;
     }
     const wasComplete = ticket.status === 'Complete';
     const isNowComplete = newStatus === 'Complete';
@@ -875,7 +902,13 @@ export function MaintenancePage({ store, userProfile }) {
 
   async function handleDeleteTicket() {
     if (!showDetail?._docId) return;
-    if (!window.confirm(`Delete "${showDetail.name}"? This cannot be undone.`)) return;
+    const ok = await confirm({
+      title: 'Delete ticket?',
+      message: <>Permanently delete <strong>{showDetail.name}</strong>. This cannot be undone.</>,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     await deleteTicket(showDetail._docId);
     setShowDetail(null);
     setDetailEdits({});
@@ -1405,6 +1438,7 @@ export function MaintenancePage({ store, userProfile }) {
           {saving ? 'Saving...' : 'Add Vendor'}
         </button>
       </Modal>
+      <ConfirmHost />
     </div>
   );
 }

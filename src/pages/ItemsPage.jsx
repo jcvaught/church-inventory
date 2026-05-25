@@ -7,6 +7,8 @@ import { MobileCtx } from '../hooks/useMobile.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { Badge } from '../components/primitives/Badge.jsx';
+import { useConfirm } from '../components/primitives/ConfirmDialog.jsx';
+import { UndoToast } from '../components/primitives/UndoToast.jsx';
 import { resizeImageForUpload } from '../utils/imageResize.js';
 import { printLabel, printInventory } from '../utils/print.js';
 import { exportItemsCSV } from '../utils/csv.js';
@@ -135,6 +137,8 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   const [retireForm, setRetireForm] = useState({ reason:"Broken", date:"", notes:"", recoveryValue:"" });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [undo, setUndo] = useState(null);
+  const { confirm, ConfirmHost } = useConfirm();
   const [showMoveToSupply, setShowMoveToSupply] = useState(null);
   const [moveSupplyForm, setMoveSupplyForm] = useState({ supplyId:"", quantity:"0", minQuantity:"5", unit:"each" });
   const [photoFile, setPhotoFile] = useState(null);
@@ -208,7 +212,11 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   async function handleBulkCheckout() {
     if (!coForm.person.trim()) { flash('Please enter who is checking out the items.'); return; }
     if (coForm.returnDate && coForm.date && coForm.returnDate < coForm.date) { flash('Return date cannot be before checkout date.'); return; }
-    if (!window.confirm(`Check out ${bulkCoItems.length} item${bulkCoItems.length !== 1 ? 's' : ''}?`)) return;
+    if (!await confirm({
+      title: 'Check out items?',
+      message: `Check out ${bulkCoItems.length} item${bulkCoItems.length !== 1 ? 's' : ''}?`,
+      confirmLabel: 'Check out',
+    })) return;
     setSaving(true);
     await Promise.all(bulkCoItems.map(item =>
       checkOutItem(item._docId, { itemId:item.itemId, person:coForm.person.trim(), purpose:coForm.purpose.trim(), ministry:coForm.ministry, date:coForm.date, returnDate:coForm.returnDate }, userId, userName)
@@ -228,7 +236,11 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     else setBulkModal('ret');
   }
   async function handleBulkReturn() {
-    if (!window.confirm(`Return ${bulkRetItems.length} item${bulkRetItems.length !== 1 ? 's' : ''}?`)) return;
+    if (!await confirm({
+      title: 'Return items?',
+      message: `Return ${bulkRetItems.length} item${bulkRetItems.length !== 1 ? 's' : ''}?`,
+      confirmLabel: 'Return',
+    })) return;
     setSaving(true);
     await Promise.all(bulkRetItems.map(item =>
       returnItem(item._docId, { itemId:item.itemId, condition:bulkRetCondition, person:item.assignedTo||'' }, userId, userName)
@@ -243,7 +255,11 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   async function handleBulkLocation() {
     if (!bulkNewLoc) { flash('Please select a location.'); return; }
     const sel = displayItems.filter(i => selectedIds.has(i._docId));
-    if (!window.confirm(`Change location for ${sel.length} item${sel.length !== 1 ? 's' : ''} to "${bulkNewLoc}"?`)) return;
+    if (!await confirm({
+      title: 'Move items?',
+      message: `Change location for ${sel.length} item${sel.length !== 1 ? 's' : ''} to "${bulkNewLoc}"?`,
+      confirmLabel: 'Move',
+    })) return;
     setSaving(true);
     await Promise.all(sel.map(item =>
       updateItem(item._docId, { location:bulkNewLoc }, userId, userName)
@@ -405,9 +421,10 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   async function handleRetire() {
     if (!showRetire) return;
     if (retireForm.recoveryValue !== "" && Number(retireForm.recoveryValue) < 0) { flash("Recovery value cannot be negative."); return; }
+    const target = showRetire;
     setSaving(true);
-    await retireItem(showRetire._docId, {
-      itemId: showRetire.itemId,
+    await retireItem(target._docId, {
+      itemId: target.itemId,
       reason: retireForm.reason,
       date: retireForm.date || today,
       notes: retireForm.notes,
@@ -416,12 +433,26 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     setActiveModal(null);
     setRetireForm({ reason:"Broken", date:"", notes:"", recoveryValue:"" });
     setSaving(false);
-    flash("Item retired.");
+    setUndo({
+      message: `${target.itemId} retired.`,
+      onUndo: () => updateItem(target._docId, {
+        status: target.status || 'Available',
+        disposedReason: null, disposedDate: null, disposedBy: null,
+        disposedNotes: null, recoveryValue: null,
+      }, userId, userName),
+    });
   }
 
   // ── Delete ──
   async function handleDeleteItem(item) {
-    if (!window.confirm(`Permanently delete "${item.description}" (${item.itemId})?\n\nThis cannot be undone. Activity history will be preserved.`)) return;
+    const ok = await confirm({
+      title: 'Delete item?',
+      message: <>Permanently delete <strong>{item.description}</strong> ({item.itemId}). Activity history is preserved, but the item itself cannot be recovered.</>,
+      confirmLabel: 'Delete',
+      danger: true,
+      typeToConfirm: item.itemId,
+    });
+    if (!ok) return;
     await deleteItem(item._docId, item.itemId, userId, userName);
     setActiveModal(null);
     flash("Item deleted.");
@@ -624,7 +655,15 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
                   {req.notes && <div style={{ fontSize:12, color:B.textLight, marginTop:4 }}>{req.notes}</div>}
                   {req.submittedAt && <div style={{ fontSize:11, color:B.textLight, marginTop:4 }}>{req.submittedAt.split("T")[0]}</div>}
                 </div>
-                <button onClick={()=>{ if (window.confirm(`Dismiss request from ${req.name}?`)) dismissPublicRequest(req._docId); }} style={{ ...btnS, fontSize:12, padding:"5px 12px", flexShrink:0 }}>Dismiss</button>
+                <button onClick={async ()=>{
+                  const ok = await confirm({
+                    title: 'Dismiss request?',
+                    message: <>Dismiss the request from <strong>{req.name}</strong>?</>,
+                    confirmLabel: 'Dismiss',
+                  });
+                  if (!ok) return;
+                  await dismissPublicRequest(req._docId);
+                }} style={{ ...btnS, fontSize:12, padding:"5px 12px", flexShrink:0 }}>Dismiss</button>
               </div>
             ))}
           </div>
@@ -1134,6 +1173,9 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
           {saving ? "Moving..." : `Move ${selectedIds.size} Item${selectedIds.size !== 1 ? "s" : ""}`}
         </button>
       </Modal>
+
+      <ConfirmHost />
+      {undo && <UndoToast {...undo} onDismiss={() => setUndo(null)} />}
     </div>
   );
 }

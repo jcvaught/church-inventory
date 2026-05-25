@@ -10,6 +10,7 @@ import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { Spinner } from '../../components/primitives/Spinner.jsx';
 import { RichTextarea } from '../../components/primitives/RichTextarea.jsx';
+import { useConfirm } from '../../components/primitives/ConfirmDialog.jsx';
 import { resizeImageForUpload } from '../../utils/imageResize.js';
 import { exportTasksCSV } from '../../utils/csv.js';
 import { exportTasksICS } from '../../utils/ical.js';
@@ -1071,6 +1072,7 @@ export function TasksPage({ store, userProfile }) {
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkAssigneeId, setBulkAssigneeId] = useState('');
   const [msg, setMsg] = useState(null);
+  const { confirm, ConfirmHost } = useConfirm();
   const [collapsedStatuses, setCollapsedStatuses] = useState(new Set());
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
@@ -1268,8 +1270,16 @@ export function TasksPage({ store, userProfile }) {
     setDetailChecklistInput('');
   }
 
-  function closeDetail() {
-    if (isDetailDirtyNow && !window.confirm('You have unsaved changes. Close without saving?')) return;
+  async function closeDetail() {
+    if (isDetailDirtyNow) {
+      const ok = await confirm({
+        title: 'Discard changes?',
+        message: 'You have unsaved changes. Close without saving?',
+        confirmLabel: 'Discard',
+        danger: true,
+      });
+      if (!ok) return;
+    }
     setShowDetail(null);
     setDetailEdits({});
     setDetailSnapshot({});
@@ -1436,7 +1446,12 @@ export function TasksPage({ store, userProfile }) {
     const isNowComplete = detailEdits.status === 'Complete';
     const blockers = detailEdits.blockedBy || [];
     if (!wasComplete && isNowComplete && blockers.length > 0) {
-      if (!window.confirm(`This task is marked as blocked by ${blockers.join(', ')}. Mark it Complete anyway?`)) return;
+      const ok = await confirm({
+        title: 'Force complete?',
+        message: `This task is marked as blocked by ${blockers.join(', ')}. Mark it Complete anyway?`,
+        confirmLabel: 'Complete anyway',
+      });
+      if (!ok) return;
     }
     setSaving(true);
     try {
@@ -1507,7 +1522,12 @@ export function TasksPage({ store, userProfile }) {
 
   async function handleDeleteComment(commentId) {
     if (!showDetail?._docId) return;
-    if (!window.confirm('Delete this comment?')) return;
+    if (!await confirm({
+      title: 'Delete comment?',
+      message: 'Delete this comment? This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    })) return;
     try {
       await deleteTaskComment(showDetail._docId, commentId);
     } catch { flash('Failed to delete comment.', true); }
@@ -1536,7 +1556,12 @@ export function TasksPage({ store, userProfile }) {
 
   async function handleDetailPhotoRemove(index) {
     if (!showDetail?._docId) return;
-    if (!window.confirm('Remove this photo?')) return;
+    if (!await confirm({
+      title: 'Remove photo?',
+      message: 'Remove this photo from the task? It will be permanently deleted from storage.',
+      confirmLabel: 'Remove',
+      danger: true,
+    })) return;
     const photoUrl = (showDetail.photos || [])[index];
     const updatedPhotos = (showDetail.photos || []).filter((_, i) => i !== index);
     setUploadingPhotos(true);
@@ -1571,11 +1596,22 @@ export function TasksPage({ store, userProfile }) {
     const task = visibleTasks.find(t => t._docId === docId);
     if (!task || task.status === newStatus) return;
     if (newStatus === 'Complete' && task.blockedBy?.length > 0) {
-      if (!window.confirm(`"${task.name}" is blocked by ${task.blockedBy.join(', ')}. Mark it Complete anyway?`)) return;
+      const ok = await confirm({
+        title: 'Force complete?',
+        message: <><strong>{task.name}</strong> is blocked by {task.blockedBy.join(', ')}. Mark it Complete anyway?</>,
+        confirmLabel: 'Complete anyway',
+      });
+      if (!ok) return;
     }
     if (newStatus === 'Complete' || newStatus === 'Cancelled') {
       const extra = newStatus === 'Complete' && task.recurrence ? ' A new recurring task will be created.' : '';
-      if (!window.confirm(`Move "${task.name}" to ${newStatus}?${extra}`)) return;
+      const ok = await confirm({
+        title: `Move to ${newStatus}?`,
+        message: <>Move <strong>{task.name}</strong> to {newStatus}.{extra}</>,
+        confirmLabel: newStatus,
+        danger: newStatus === 'Cancelled',
+      });
+      if (!ok) return;
     }
     const wasComplete = task.status === 'Complete';
     const isNowComplete = newStatus === 'Complete';
@@ -1606,10 +1642,16 @@ export function TasksPage({ store, userProfile }) {
   async function handleDeleteTask() {
     if (!showDetail?._docId) return;
     const subtasks = (tasks || []).filter(t => t.parentTaskId === showDetail._docId);
-    const confirmMsg = subtasks.length > 0
-      ? `Delete "${showDetail.name}" and its ${subtasks.length} subtask${subtasks.length !== 1 ? 's' : ''}? This cannot be undone.`
-      : `Delete "${showDetail.name}"? This cannot be undone.`;
-    if (!window.confirm(confirmMsg)) return;
+    const subtaskNote = subtasks.length > 0
+      ? <> and its <strong>{subtasks.length}</strong> subtask{subtasks.length !== 1 ? 's' : ''}</>
+      : null;
+    const ok = await confirm({
+      title: 'Delete task?',
+      message: <>Permanently delete <strong>{showDetail.name}</strong>{subtaskNote}. This cannot be undone.</>,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     setSaving(true);
     try {
       const subtaskResults = await Promise.allSettled(subtasks.map(st => deleteTask(st._docId, st, userId, userName)));
@@ -1661,7 +1703,14 @@ export function TasksPage({ store, userProfile }) {
     const tasksToUpdate = [...selectedTaskIds].map(docId => tasksByDocId[docId]).filter(Boolean);
     if (bulkStatus === 'Complete') {
       const blocked = tasksToUpdate.filter(t => (t.blockedBy || []).length > 0 && t.status !== 'Complete' && t.status !== 'Cancelled');
-      if (blocked.length > 0 && !window.confirm(`${blocked.length} selected task${blocked.length !== 1 ? 's' : ''} ha${blocked.length !== 1 ? 've' : 's'} open dependencies. Mark complete anyway?`)) return;
+      if (blocked.length > 0) {
+        const ok = await confirm({
+          title: 'Force complete?',
+          message: `${blocked.length} selected task${blocked.length !== 1 ? 's' : ''} ha${blocked.length !== 1 ? 've' : 's'} open dependencies. Mark complete anyway?`,
+          confirmLabel: 'Complete anyway',
+        });
+        if (!ok) return;
+      }
     }
     setBulkSaving(true);
     try {
@@ -1714,7 +1763,12 @@ export function TasksPage({ store, userProfile }) {
 
   async function handleBulkDelete() {
     if (selectedTaskIds.size === 0) return;
-    if (!window.confirm(`Delete ${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+    if (!await confirm({
+      title: 'Bulk delete tasks?',
+      message: `Permanently delete ${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''}. This cannot be undone.`,
+      confirmLabel: 'Delete',
+      danger: true,
+    })) return;
     setBulkSaving(true);
     try {
       const results = await Promise.allSettled([...selectedTaskIds].map(docId => {
@@ -2446,7 +2500,18 @@ export function TasksPage({ store, userProfile }) {
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, padding:'10px 14px', borderRadius:8, background:'#FEF3E8', border:'1px solid #F59E42', marginBottom:14 }}>
                 <span style={{ fontSize:13, color:'#7A4A10', fontFamily:f2 }}>This task was updated by another team member.</span>
                 <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-                  <button type="button" style={{ ...btnP, padding:'4px 12px', fontSize:12 }} onClick={() => { if (isDetailDirtyNow && !window.confirm('Reload will discard your unsaved changes. Continue?')) return; openDetail(remoteUpdate); }}>Reload</button>
+                  <button type="button" style={{ ...btnP, padding:'4px 12px', fontSize:12 }} onClick={async () => {
+                    if (isDetailDirtyNow) {
+                      const ok = await confirm({
+                        title: 'Discard changes?',
+                        message: 'Reloading will discard your unsaved changes. Continue?',
+                        confirmLabel: 'Reload',
+                        danger: true,
+                      });
+                      if (!ok) return;
+                    }
+                    openDetail(remoteUpdate);
+                  }}>Reload</button>
                   <button type="button" style={{ ...btnS, padding:'4px 12px', fontSize:12 }} onClick={() => setRemoteUpdate(null)}>Dismiss</button>
                 </div>
               </div>
@@ -2780,7 +2845,17 @@ export function TasksPage({ store, userProfile }) {
                 </div>
                 <div style={{ display:'flex', gap:6, flexShrink:0 }}>
                   <button onClick={() => applyTemplate(t)} style={{ ...btnP, fontSize:12, padding:'6px 12px' }}>Use</button>
-                  {canOperate && <button onClick={async () => { if (window.confirm(`Delete template "${t.name}"?`)) { await deleteTaskTemplate(t._docId, userId, userName); setShowTemplates(false); }}} style={{ ...btnD, fontSize:12, padding:'6px 10px' }} aria-label={`Delete template ${t.name}`}>✕</button>}
+                  {canOperate && <button onClick={async () => {
+                    const ok = await confirm({
+                      title: 'Delete template?',
+                      message: <>Delete template <strong>{t.name}</strong>. Existing tasks created from it are not affected.</>,
+                      confirmLabel: 'Delete',
+                      danger: true,
+                    });
+                    if (!ok) return;
+                    await deleteTaskTemplate(t._docId, userId, userName);
+                    setShowTemplates(false);
+                  }} style={{ ...btnD, fontSize:12, padding:'6px 10px' }} aria-label={`Delete template ${t.name}`}>✕</button>}
                 </div>
               </div>
             ))}
@@ -2822,6 +2897,7 @@ export function TasksPage({ store, userProfile }) {
           </button>
         </div>
       </Modal>
+      <ConfirmHost />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { B, f1, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
+import { useConfirm } from '../components/primitives/ConfirmDialog.jsx';
 import { exportSuppliesCSV } from '../utils/csv.js';
 import { canManageSupply } from '../utils/roleHelpers.js';
 
@@ -60,6 +61,7 @@ export function SuppliesPage({ store, userProfile }) {
   const [restockForm, setRestockForm] = useState({ qty:"", source:"" });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
+  const { confirm, ConfirmHost } = useConfirm();
   const [photoPreview, setPhotoPreview] = useState(null);
   const [identifying, setIdentifying] = useState(false);
 
@@ -207,7 +209,14 @@ export function SuppliesPage({ store, userProfile }) {
 
   // ── Delete ──
   async function handleDelete(s) {
-    if (!window.confirm(`Delete "${s.description}" (${s.supplyId})?\n\nThis cannot be undone. Activity history will be preserved.`)) return;
+    const ok = await confirm({
+      title: 'Delete supply?',
+      message: <>Permanently delete <strong>{s.description}</strong> ({s.supplyId}). Activity history is preserved, but the supply itself cannot be recovered.</>,
+      confirmLabel: 'Delete',
+      danger: true,
+      typeToConfirm: s.supplyId,
+    });
+    if (!ok) return;
     await deleteSupply(s._docId, s.supplyId, userId, userName);
     flash("Supply deleted.");
   }
@@ -592,6 +601,7 @@ export function SuppliesPage({ store, userProfile }) {
           {saving ? "Restocking..." : "Restock Supply"}
         </button>
       </Modal>
+      <ConfirmHost />
     </div>
   );
 }

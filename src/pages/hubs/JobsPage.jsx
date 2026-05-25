@@ -6,6 +6,7 @@ import { db } from '../../firebase.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
+import { useConfirm } from '../../components/primitives/ConfirmDialog.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { localDateStr, generateRecurrenceDates } from '../../utils/date.js';
 import { printJobRoster } from '../../utils/print.js';
@@ -488,6 +489,7 @@ export function JobsPage({ store, userProfile }) {
   const [saving, setSaving] = useState(false);
   const [savingJobId, setSavingJobId] = useState(null);
   const [msg, setMsg] = useState(null);
+  const { confirm, ConfirmHost } = useConfirm();
   const [reportsScope, setReportsScope] = useState('90d'); // 'all' | '90d' | '30d'
   const [showPastJobs, setShowPastJobs] = useState(() => {
     try { return localStorage.getItem('jobs_showPast') === 'true'; } catch { return false; }
@@ -829,7 +831,12 @@ export function JobsPage({ store, userProfile }) {
       const confirmMsg = willNotify
         ? `This job has ${currentSignups} signup${currentSignups !== 1 ? 's' : ''}. Changing to "${jobForm.status}" will send them a cancellation email. Continue?`
         : `This job has ${currentSignups} signup${currentSignups !== 1 ? 's' : ''}. Changing to "${jobForm.status}" will not notify them. Continue?`;
-      if (!window.confirm(confirmMsg)) return;
+      if (!await confirm({
+        title: `Change status to ${jobForm.status}?`,
+        message: confirmMsg,
+        confirmLabel: 'Change status',
+        danger: true,
+      })) return;
     }
     // Validate recurring series config before creating
     if (!editJobId && isRecurring) {
@@ -847,7 +854,13 @@ export function JobsPage({ store, userProfile }) {
       if (editJobId && seriesEditScope === 'future' && editJobSeriesGroupId) {
         // Series edit — apply changes to this and all future jobs
         if (isGoingTerminal) {
-          if (!window.confirm(`Change status to "${jobForm.status}" for this and all future jobs in the series? Existing signups will be emailed.`)) { setSaving(false); return; }
+          const ok = await confirm({
+            title: 'Update entire series?',
+            message: `Change status to "${jobForm.status}" for this and all future jobs in the series? Existing signups will be emailed.`,
+            confirmLabel: 'Update series',
+            danger: true,
+          });
+          if (!ok) { setSaving(false); return; }
         }
         const { count, affected } = await updateJobListingSeries(editJobSeriesGroupId, editJobFromDate, data, userId, userName);
         // On a series cancellation, fan out per-job emails to existing signups.
@@ -904,7 +917,11 @@ export function JobsPage({ store, userProfile }) {
 
   async function handleNotifySignups(job) {
     if (!isAdminOrManager) return;
-    if (!window.confirm(`Send a cancellation email to ${job.signupCount || 0} signup${(job.signupCount || 0) !== 1 ? 's' : ''}?`)) return;
+    if (!await confirm({
+      title: 'Send cancellation emails?',
+      message: `Send a cancellation email to ${job.signupCount || 0} signup${(job.signupCount || 0) !== 1 ? 's' : ''}?`,
+      confirmLabel: 'Send emails',
+    })) return;
     const data = await invokeEmailCF('sendJobCancelledEmails', { churchId: userProfile?.churchId, jobDocId: job._docId }, {
       context: 'notify-signups',
       userMsgOnFail: 'Failed to send notifications. Admins were notified.',
@@ -934,10 +951,15 @@ export function JobsPage({ store, userProfile }) {
     const willNotify = signupCount > 0 && notificationConfig?.enabled;
     const confirmMsg = signupCount > 0
       ? (willNotify
-          ? `Delete "${job.title}"? ${signupCount} signup${signupCount !== 1 ? 's' : ''} will be emailed about the cancellation. This cannot be undone.`
-          : `Delete "${job.title}"? ${signupCount} signup${signupCount !== 1 ? 's' : ''} will NOT be notified (notifications are off). This cannot be undone.`)
-      : `Delete "${job.title}"? This cannot be undone.`;
-    if (!window.confirm(confirmMsg)) return;
+          ? <>Delete <strong>{job.title}</strong>. {signupCount} signup{signupCount !== 1 ? 's' : ''} will be emailed about the cancellation. This cannot be undone.</>
+          : <>Delete <strong>{job.title}</strong>. {signupCount} signup{signupCount !== 1 ? 's' : ''} will NOT be notified (notifications are off). This cannot be undone.</>)
+      : <>Delete <strong>{job.title}</strong>. This cannot be undone.</>;
+    if (!await confirm({
+      title: 'Delete job?',
+      message: confirmMsg,
+      confirmLabel: 'Delete',
+      danger: true,
+    })) return;
     try {
       await notifySignupsForDelete([job]);
       await deleteJobListing(job._docId, userId, userName, job.jobNumber);
@@ -953,10 +975,15 @@ export function JobsPage({ store, userProfile }) {
     const willNotify = signupCount > 0 && notificationConfig?.enabled;
     const confirmMsg = signupCount > 0
       ? (willNotify
-          ? `Delete the entire recurring series for "${job.title}"? ${signupCount} signup${signupCount !== 1 ? 's' : ''} across ${seriesJobs.length} job${seriesJobs.length !== 1 ? 's' : ''} will be emailed about the cancellation.`
-          : `Delete the entire recurring series for "${job.title}"? ${signupCount} signup${signupCount !== 1 ? 's' : ''} will NOT be notified (notifications are off).`)
-      : `Delete the entire recurring series for "${job.title}"? All jobs in this series will be permanently deleted.`;
-    if (!window.confirm(confirmMsg)) return;
+          ? <>Delete the entire recurring series for <strong>{job.title}</strong>. {signupCount} signup{signupCount !== 1 ? 's' : ''} across {seriesJobs.length} job{seriesJobs.length !== 1 ? 's' : ''} will be emailed about the cancellation.</>
+          : <>Delete the entire recurring series for <strong>{job.title}</strong>. {signupCount} signup{signupCount !== 1 ? 's' : ''} will NOT be notified (notifications are off).</>)
+      : <>Delete the entire recurring series for <strong>{job.title}</strong>. All jobs in this series will be permanently deleted.</>;
+    if (!await confirm({
+      title: 'Delete entire series?',
+      message: confirmMsg,
+      confirmLabel: 'Delete series',
+      danger: true,
+    })) return;
     try {
       await notifySignupsForDelete(seriesJobs);
       await deleteJobListingSeries(job.recurrenceGroupId, userId, userName);
@@ -972,10 +999,15 @@ export function JobsPage({ store, userProfile }) {
     const willNotify = signupCount > 0 && notificationConfig?.enabled;
     const confirmMsg = signupCount > 0
       ? (willNotify
-          ? `Delete "${job.title}" and all future jobs in this series? ${signupCount} signup${signupCount !== 1 ? 's' : ''} across ${seriesJobs.length} job${seriesJobs.length !== 1 ? 's' : ''} will be emailed about the cancellation.`
-          : `Delete "${job.title}" and all future jobs in this series? ${signupCount} signup${signupCount !== 1 ? 's' : ''} will NOT be notified (notifications are off).`)
-      : `Delete "${job.title}" and all future jobs in this series? Past jobs are kept.`;
-    if (!window.confirm(confirmMsg)) return;
+          ? <>Delete <strong>{job.title}</strong> and all future jobs in this series. {signupCount} signup{signupCount !== 1 ? 's' : ''} across {seriesJobs.length} job{seriesJobs.length !== 1 ? 's' : ''} will be emailed about the cancellation.</>
+          : <>Delete <strong>{job.title}</strong> and all future jobs in this series. {signupCount} signup{signupCount !== 1 ? 's' : ''} will NOT be notified (notifications are off).</>)
+      : <>Delete <strong>{job.title}</strong> and all future jobs in this series. Past jobs are kept.</>;
+    if (!await confirm({
+      title: 'Delete this and future jobs?',
+      message: confirmMsg,
+      confirmLabel: 'Delete',
+      danger: true,
+    })) return;
     try {
       await notifySignupsForDelete(seriesJobs);
       await deleteJobListingSeriesFrom(job.recurrenceGroupId, job.scheduledDate, userId, userName);
@@ -1000,7 +1032,11 @@ export function JobsPage({ store, userProfile }) {
         flash('This job is full and the waitlist is at capacity.', true);
         return;
       }
-      const ok = window.confirm(`This job is full. ${wl > 0 ? `${wl} other${wl !== 1 ? 's' : ''} on the waitlist. ` : ''}Join the waitlist?`);
+      const ok = await confirm({
+        title: 'Join the waitlist?',
+        message: `This job is full. ${wl > 0 ? `${wl} other${wl !== 1 ? 's' : ''} on the waitlist. ` : ''}Join the waitlist?`,
+        confirmLabel: 'Join waitlist',
+      });
       if (!ok) return;
     }
     // Audit L9: waiver consent is a real Modal + checkbox (not window.confirm)
@@ -1047,7 +1083,12 @@ export function JobsPage({ store, userProfile }) {
 
   async function handleWithdraw(job) {
     const onWL = isOnWaitlist(job);
-    if (!window.confirm(onWL ? 'Remove yourself from the waitlist?' : 'Remove yourself from this job?')) return;
+    if (!await confirm({
+      title: onWL ? 'Leave the waitlist?' : 'Withdraw from this job?',
+      message: onWL ? 'Remove yourself from the waitlist?' : 'Remove yourself from this job? Your spot may be filled by someone on the waitlist.',
+      confirmLabel: onWL ? 'Leave waitlist' : 'Withdraw',
+      danger: true,
+    })) return;
     setSavingJobId(job._docId);
     Sentry.addBreadcrumb({ category: 'jobs-hub', message: 'withdraw attempted', level: 'info', data: { jobNumber: job.jobNumber, fromWaitlist: onWL } });
     try {
@@ -1075,7 +1116,12 @@ export function JobsPage({ store, userProfile }) {
     const removedSignup = detailSignups.find(s => s.uid === uid);
     const removedWaiter = detailWaitlist.find(w => w.uid === uid);
     const removed = removedSignup || removedWaiter;
-    if (!window.confirm(`Remove ${removed?.name || 'this person'}?`)) return;
+    if (!await confirm({
+      title: 'Remove from job?',
+      message: <>Remove <strong>{removed?.name || 'this person'}</strong> from this job?</>,
+      confirmLabel: 'Remove',
+      danger: true,
+    })) return;
     Sentry.addBreadcrumb({ category: 'jobs-hub', message: 'admin remove attempted', level: 'info', data: { jobNumber: job.jobNumber, targetUid: uid } });
     try {
       const result = await withdrawFromJob(job._docId, uid, userId, userName, job.jobNumber);
@@ -1216,7 +1262,12 @@ export function JobsPage({ store, userProfile }) {
 
   async function handleDeleteAnn(ann) {
     if (!isAdminOrManager) return;
-    if (!window.confirm('Delete this announcement?')) return;
+    if (!await confirm({
+      title: 'Delete announcement?',
+      message: 'Delete this announcement? This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    })) return;
     try {
       await deleteJobAnnouncement(ann._docId, userId, userName);
       flash('Deleted.');
@@ -1278,16 +1329,21 @@ export function JobsPage({ store, userProfile }) {
             {isAdminOrManager && (
               <div style={{ display:'flex', gap:8 }}>
                 <button onClick={() => setShowDelegatesModal(true)} style={{ ...btnS, padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }} title="Manage who receives your job notification emails" aria-label="Delegates — manage who receives your job notification emails">📧 Delegates</button>
-                <button onClick={() => {
+                <button onClick={async () => {
                   // Audit M10: the shared board is a public, no-login page —
                   // anyone with the link sees every open job's title,
                   // description, date, location and pay. Warn before copying
                   // so an admin doesn't unknowingly publish minor PII.
-                  const ok = window.confirm(
-                    'The shared job board is a PUBLIC page — anyone with the link can see each open job\'s title, description, date, location and pay.\n\n'
-                    + 'Make sure no job description or location contains a minor\'s name or a private address before sharing.\n\n'
-                    + 'Copy the public link?'
-                  );
+                  const ok = await confirm({
+                    title: 'Copy public job board link?',
+                    message: (
+                      <>
+                        The shared job board is a <strong>public page</strong> — anyone with the link can see each open job&apos;s title, description, date, location and pay.
+                        <div style={{ marginTop: 12 }}>Make sure no job description or location contains a minor&apos;s name or a private address before sharing.</div>
+                      </>
+                    ),
+                    confirmLabel: 'Copy link',
+                  });
                   if (!ok) return;
                   const url = `${window.location.origin}?jobs=${userProfile?.churchId}&cn=${encodeURIComponent(config?.churchName || '')}&cc=${encodeURIComponent(config?.churchCode || '')}`;
                   navigator.clipboard.writeText(url).then(() => flash('Job board link copied!')).catch(() => flash('Could not copy link.', true));
@@ -2077,6 +2133,7 @@ export function JobsPage({ store, userProfile }) {
           </div>
         </Modal>
       )}
+      <ConfirmHost />
     </div>
   );
 }

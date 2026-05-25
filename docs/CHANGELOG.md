@@ -4,6 +4,58 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-25 — UI audit Phase 2: destructive-actions pattern
+
+Phase 2 of `docs/UI-AUDIT-2026-05-24-PLAN.md`. Replaced every `window.confirm(...)`
+call across the app (41 sites in 10 files) with two new primitives so destructive
+verbs have a consistent, themed, focus-trapped surface — and the reversible ones
+offer a 5-second Undo instead of a permanent action.
+
+**New primitives:**
+- `src/components/primitives/ConfirmDialog.jsx` — `useConfirm()` hook returns an
+  imperative `confirm(opts)` (promise of true/false) plus a `<ConfirmHost />`
+  JSX node. Supports title / message (string OR ReactNode) / cancel + confirm
+  labels / danger styling / optional **type-to-confirm** gate (e.g. team-member
+  name, item ID).
+- `src/components/primitives/UndoToast.jsx` — fixed-position toast with a live
+  countdown and `Undo` button; auto-dismisses after `durationMs` (default 5s).
+
+**Undo wired on the reversible verbs:**
+- People Access — Archive person (`updateAccessPerson(active:true)`)
+- Settings — Deactivate team member (`updateUser(active:true)`)
+- Settings — Archive space (`updateRoom(active:true)`)
+- Items — Retire/dispose (restores status + clears dispose metadata)
+
+**Type-to-confirm gates on the highest-blast-radius verbs:**
+- Settings — Remove team member (must type the name)
+- Items — Permanently delete (must type the item ID)
+- Supplies — Permanently delete (must type the supply ID)
+
+**Files touched:**
+`src/components/primitives/{ConfirmDialog,UndoToast}.jsx` (new);
+`src/pages/{SettingsPage,ItemsPage,SuppliesPage,ReservationsPage}.jsx`;
+`src/pages/hubs/{PeopleAccessPage,MaintenancePage,TasksPage,JobsPage,CoordinationPage}.jsx`.
+The bespoke confirm-archive / confirm-delete modals previously hand-rolled
+inside PeopleAccessPage were also removed in favour of the new primitive.
+
+**Acceptance (matches the plan):**
+- `grep -rn "window.confirm" src/` returns zero call sites (the only matches
+  are comments — `ConfirmDialog.jsx` header and the `waiverModal` audit-L9
+  comment in JobsPage).
+- Every destructive verb routes through `ConfirmDialog`.
+- Reversible verbs surface `UndoToast` and restore prior state in <5s.
+
+**Tests:** new `e2e/authenticated/destructive-actions.spec.js` exercises Cancel +
+Confirm + Undo on People Access archive, and the type-to-confirm disable gate on
+Settings → Remove team member. The spec runs against prod — it will only pass
+after this commit deploys. `npm run build` clean. `npm run lint` 0 errors / 45
+warnings (existing baseline). Deferred from the plan because they need new
+features rather than confirm-replacement: SettingsPage *transfer church
+ownership* and *delete church* (no data model / Cloud Function for either yet),
+and MaintenancePage *close ticket without resolution* (no such surface today).
+
+---
+
 ## 2026-05-25 — monitorScheduledJobs: self-healing no-heartbeat tolerance
 
 `monitorScheduledJobs` fired a Sentry warning at 2026-05-25 06:00 UTC for

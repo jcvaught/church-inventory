@@ -2,6 +2,7 @@ import { useState, useMemo, useContext } from 'react';
 import { B, f1, inp, btnP, btnS } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
+import { useConfirm } from '../../components/primitives/ConfirmDialog.jsx';
 import { Stat } from '../../components/primitives/Stat.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { localDateStr } from '../../utils/date.js';
@@ -24,6 +25,7 @@ export function CoordinationPage({ store, userProfile }) {
   const today = localDateStr(new Date());
 
   const [msg, setMsg] = useState(null);
+  const { confirm, ConfirmHost } = useConfirm();
   function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
 
   // ── Bundle modal state ──
@@ -93,7 +95,13 @@ export function CoordinationPage({ store, userProfile }) {
   }
 
   async function handleDeleteBundle(b) {
-    if (!window.confirm(`Delete bundle "${b.name}"? This cannot be undone.`)) return;
+    const ok = await confirm({
+      title: 'Delete bundle?',
+      message: <>Delete bundle <strong>{b.name}</strong>. The items in it stay in inventory; only the bundle grouping is removed.</>,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     await deleteBundle(b._docId);
     flash('Bundle deleted.');
   }
@@ -407,6 +415,7 @@ export function CoordinationPage({ store, userProfile }) {
           </>;
         })()}
       </Modal>
+      <ConfirmHost />
     </div>
   );
 }

@@ -2,6 +2,8 @@ import { useState, useContext } from 'react';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
+import { useConfirm } from '../../components/primitives/ConfirmDialog.jsx';
+import { UndoToast } from '../../components/primitives/UndoToast.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { exportAccessRecordsCSV } from '../../utils/csv.js';
 import { localDateStr } from '../../utils/date.js';
@@ -54,8 +56,8 @@ export function PeopleAccessPage({ store, userProfile }) {
   const [newReqName, setNewReqName] = useState('');
   const [newReqHasExpiry, setNewReqHasExpiry] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [confirmArchive, setConfirmArchive] = useState(null);
-  const [confirmDeleteRecord, setConfirmDeleteRecord] = useState(null);
+  const [undo, setUndo] = useState(null);
+  const { confirm, ConfirmHost } = useConfirm();
   const [showBulkEntry, setShowBulkEntry] = useState(false);
   const [bulkType, setBulkType] = useState('background_check');
   const [bulkExpiryMode, setBulkExpiryMode] = useState('interval');
@@ -221,17 +223,31 @@ export function PeopleAccessPage({ store, userProfile }) {
     await updateAccessRecord(record._docId, { returnedDate: localDateStr(new Date()) });
   }
 
-  async function handleDeleteRecord() {
-    if (!confirmDeleteRecord) return;
-    await deleteAccessRecord(confirmDeleteRecord._docId);
-    setConfirmDeleteRecord(null);
+  async function handleDeleteRecord(record) {
+    const ok = await confirm({
+      title: 'Delete Record?',
+      message: `This will permanently remove the ${TYPE_LABELS[record.type] || 'record'} entry. This cannot be undone.`,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    await deleteAccessRecord(record._docId);
   }
 
-  async function handleArchivePerson() {
-    if (!confirmArchive) return;
-    await archiveAccessPerson(confirmArchive._docId);
-    setConfirmArchive(null);
+  async function handleArchivePerson(person) {
+    const ok = await confirm({
+      title: 'Archive Person?',
+      message: `${person.name} will be moved to the archived list. Their records will be preserved.`,
+      confirmLabel: 'Archive',
+      danger: true,
+    });
+    if (!ok) return;
+    await archiveAccessPerson(person._docId);
     setDetailPersonId(null);
+    setUndo({
+      message: `${person.name} archived.`,
+      onUndo: () => updateAccessPerson(person._docId, { active: true }),
+    });
   }
 
   async function handleAddRequirement() {
@@ -576,7 +592,7 @@ export function PeopleAccessPage({ store, userProfile }) {
               {canEdit && (
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                   <button onClick={e => openEditPerson(detailPerson, e)} style={{ ...btnS, padding: '7px 14px', fontSize: 12 }}>Edit</button>
-                  <button onClick={() => setConfirmArchive(detailPerson)} style={{ ...btnD, padding: '7px 14px', fontSize: 12 }}>Archive</button>
+                  <button onClick={() => handleArchivePerson(detailPerson)} style={{ ...btnD, padding: '7px 14px', fontSize: 12 }}>Archive</button>
                 </div>
               )}
             </div>
@@ -690,7 +706,7 @@ export function PeopleAccessPage({ store, userProfile }) {
                             )}
                             <button onClick={e => openEditRecord(record, e)}
                               style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.textLight, fontSize: 13, padding: '4px 6px' }}>✏</button>
-                            <button onClick={() => setConfirmDeleteRecord(record)}
+                            <button onClick={() => handleDeleteRecord(record)}
                               style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.red, fontSize: 16, padding: '4px 6px' }}>×</button>
                           </div>
                         )}
@@ -846,33 +862,8 @@ export function PeopleAccessPage({ store, userProfile }) {
         </Modal>
       )}
 
-      {/* ══════════════════════════ CONFIRM ARCHIVE ═══════════════════════ */}
-      {confirmArchive && (
-        <Modal open onClose={() => setConfirmArchive(null)}>
-          <h3 style={{ margin: '0 0 12px', fontFamily: f1, color: B.navy }}>Archive Person?</h3>
-          <p style={{ margin: '0 0 20px', fontSize: 14, fontFamily: f2, color: B.textMid }}>
-            {confirmArchive.name} will be moved to the archived list. Their records will be preserved.
-          </p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-            <button onClick={() => setConfirmArchive(null)} style={btnS}>Cancel</button>
-            <button onClick={handleArchivePerson} style={btnD}>Archive</button>
-          </div>
-        </Modal>
-      )}
-
-      {/* ══════════════════════════ CONFIRM DELETE RECORD ═════════════════ */}
-      {confirmDeleteRecord && (
-        <Modal open onClose={() => setConfirmDeleteRecord(null)}>
-          <h3 style={{ margin: '0 0 12px', fontFamily: f1, color: B.navy }}>Delete Record?</h3>
-          <p style={{ margin: '0 0 20px', fontSize: 14, fontFamily: f2, color: B.textMid }}>
-            This will permanently remove the {TYPE_LABELS[confirmDeleteRecord.type] || 'record'} entry. This cannot be undone.
-          </p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-            <button onClick={() => setConfirmDeleteRecord(null)} style={btnS}>Cancel</button>
-            <button onClick={handleDeleteRecord} style={btnD}>Delete</button>
-          </div>
-        </Modal>
-      )}
+      <ConfirmHost />
+      {undo && <UndoToast {...undo} onDismiss={() => setUndo(null)} />}
 
       {/* ══════════════════════════ BULK ENTRY MODAL ══════════════════════ */}
       {showBulkEntry && (

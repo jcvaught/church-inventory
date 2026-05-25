@@ -63,7 +63,7 @@ export async function getAnnouncement(docId) {
 
 export async function createAccessPerson({ name, userId = null }) {
   const ref = await db().collection(`churches/${CHURCH_ID}/accessPeople`).add({
-    name, userId, ministry: null, notes: null,
+    name, userId, ministry: null, notes: null, active: true,
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   });
   return { _docId: ref.id, name, userId };

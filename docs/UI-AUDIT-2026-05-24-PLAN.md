@@ -39,9 +39,11 @@ Destructive-action confirms (Phase 2; needs a pattern decision first).
 
 ---
 
-## Phase 2 — Destructive actions pattern (one session, ~3h)
+## Phase 2 — Destructive actions pattern (one session, ~3h) — **SHIPPED 2026-05-25**
 
 **Goal:** introduce one reusable pattern for confirm-then-undo on destructive actions; apply across the app in a single pass.
+
+**Outcome:** new `ConfirmDialog` (`useConfirm()` hook + imperative API + optional type-to-confirm gate) and `UndoToast` primitives. All 41 `window.confirm(...)` calls across 10 page files replaced. Undo wired to the four reversible verbs (PeopleAccess archive, Settings deactivate, Settings archive-space, Items retire/dispose). Type-to-confirm gates added to the three highest-blast-radius verbs (Settings remove team member, Items delete, Supplies delete). The audit-listed "delete church" and "transfer church ownership" were deferred — they're new features rather than confirm-replacements (no data model / Cloud Function exists yet). MaintenancePage "close ticket without resolution" was also deferred for the same reason. See `docs/CHANGELOG.md`.
 
 ### Pattern
 New primitive `src/components/primitives/ConfirmDestructive.jsx`:
