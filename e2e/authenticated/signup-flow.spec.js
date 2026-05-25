@@ -1,6 +1,6 @@
 // @ts-check
 import { test, expect } from '../firebase-fixtures.js';
-import { purgeE2EArtifacts, createJob, getJobSignups, seedSignup, uids, daysFromNowStr, e2eTitle } from '../admin-helpers.js';
+import { purgeE2EArtifacts, createJob, getJobSignups, seedSignup, uids, daysFromNowStr, e2eTitle, acceptConfirm } from '../admin-helpers.js';
 
 // §3 of docs/TEST-JOBS-HUB-2026-05-07.md — Member signup happy path.
 // Roster lives in the signups subcollection (audit H1, 2026-05-22): seed via
@@ -75,8 +75,10 @@ test.describe('§3 Member signup happy path', () => {
     await seedSignup(job.docId, { uid: u.memberA, name: 'Member A Test' });
 
     await openJobDetail(memberAPage, job.title);
-    memberAPage.once('dialog', dialog => dialog.accept().catch(() => {}));
+    // Click "Withdraw" inside the job detail modal, then confirm in the
+    // ConfirmDialog that opens on top (Phase 2, 2026-05-25).
     await memberAPage.getByRole('dialog').getByRole('button', { name: /^withdraw$/i }).click();
+    await acceptConfirm(memberAPage, 'Withdraw');
 
     await expect.poll(async () => (await getJobSignups(job.docId)).length, { timeout: 15_000 }).toBe(0);
   });

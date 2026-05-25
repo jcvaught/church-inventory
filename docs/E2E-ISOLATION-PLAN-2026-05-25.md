@@ -256,7 +256,15 @@ assertions.
 
 ---
 
-## Layer 1.5 — Phase 2 test follow-up (~30 min, ships next)
+## Layer 1.5 — Phase 2 test follow-up — **SHIPPED 2026-05-25**
+
+**Outcome:** all 10 dialog-related failures flipped green. Suite went
+from 47/16/4 → 57/6/4. Remaining 6 = 5 a11y (still need Layer 1) +
+1 public-board cache race (new finding, see below).
+
+### Layer 1.5 changes
+
+
 
 **Goal:** unblock the 11 tests Phase 2 quietly broke by aligning the
 spec patterns with the new `ConfirmDialog` modal.
@@ -315,21 +323,53 @@ Phase 2's lowercase + `<strong>`-bolded copy.
   Mitigation: do the sweep test-by-test, run incrementally, fix labels
   inline if `acceptConfirm` times out finding the button.
 
+### What actually shipped
+
+- `e2e/admin-helpers.js` — exported `acceptConfirm(page, label)` and
+  `dismissConfirm(page, label='Cancel')`. Both use
+  `getByRole('dialog').last()` so they target the topmost modal when
+  ConfirmDialog opens on top of an existing content modal (e.g. job
+  detail → Withdraw → confirm).
+- Swept 11 sites across 7 spec files: waitlist (3), notifications-gate
+  (3), signup-flow (1), edge-cases (1), recurring (1), uat-ui M10 (1),
+  crud cancel-path (1). Native-dialog handlers replaced with
+  `acceptConfirm` / `dismissConfirm`.
+- `uat-ui.spec.js` M10 now reads the warning copy via
+  `dialog.innerText()` and matches `/public page/i` (was
+  `/PUBLIC page/`), reflecting the Phase 2 lowercase + bolded copy.
+- `crud.spec.js` cancel-path was passing for the wrong reason (the
+  no-op native handler left the modal hanging; the delete never
+  fired); now it genuinely clicks Cancel in the ConfirmDialog.
+
+### Findings during the sweep
+
+- `public-board.spec.js:52` is *not* a dialog issue — the test creates
+  a new `[E2E] Public Visible` job and the public board doesn't show
+  it within the 20s wait. Root cause: `getPublicJobs` Cloud Function
+  has a 60s per-instance in-process cache (perf M-1 from the 2026-05-23
+  audit-followup). The test was written before that cache landed.
+  Fix is to either (a) bump the test's waitFor to 70s, (b) clear the
+  cache between tests via a CF endpoint, or (c) hit Firestore directly
+  to verify the docs exist with the right `status`. Tracked as a
+  separate post-Layer-1.5 follow-up.
+
 ---
 
 ## Status
 
 - Layer 2: **SHIPPED 2026-05-25** — `purgeE2EArtifacts()` in
   `e2e/admin-helpers.js` now calls `firestore.recursiveDelete()` on
-  every `[E2E]`-filtered parent. Re-run was still 47/16/4 — the
-  failures aren't orphans; see "Correction" section above. Layer 2 is
-  defensive cleanup that will pay off the next time a crashed run
-  leaves child docs behind.
-- Layer 1.5: **not started** — the actual fix for 11/16 failures.
-  Sweep the 11 native-dialog handlers + update M10's regex. Ships next.
-- Layer 1: **unblocked** as of 2026-05-25 — both open questions
-  resolved (OQ 1: use `e2e-member-a@churchopshub.com`, retire
-  `jcvaught@gmail.com` from the suite; OQ 2: scripted bootstrap via
+  every `[E2E]`-filtered parent. Defensive cleanup against orphan
+  subcollections from crashed runs.
+- Layer 1.5: **SHIPPED 2026-05-25** — `acceptConfirm` /
+  `dismissConfirm` helpers + sweep of 11 native-dialog sites + M10
+  regex fix. Closed all 10 dialog-related failures. Suite went
+  47/16/4 → 57/6/4.
+- Public-board cache race: **deferred** — `getPublicJobs` 60s cache
+  vs. fresh-seed test (see "Findings" above). One-line follow-up.
+- Layer 1: **unblocked** — both open questions resolved (OQ 1: use
+  `e2e-member-a@churchopshub.com`, retire `jcvaught@gmail.com` from
+  the suite; OQ 2: scripted bootstrap via
   `scripts/setup-e2e-tenant.mjs`). Pending the focused session to
   execute steps 3–9. Will close the remaining 5 a11y failures.
 

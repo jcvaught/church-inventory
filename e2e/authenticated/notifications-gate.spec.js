@@ -1,6 +1,6 @@
 // @ts-check
 import { test, expect } from '../firebase-fixtures.js';
-import { purgeE2EArtifacts, createJob, getJob, getJobSignups, seedSignup, setNotifications, uids, daysFromNowStr, e2eTitle } from '../admin-helpers.js';
+import { purgeE2EArtifacts, createJob, getJob, getJobSignups, seedSignup, setNotifications, uids, daysFromNowStr, e2eTitle, acceptConfirm } from '../admin-helpers.js';
 
 // §10 of docs/TEST-JOBS-HUB-2026-05-07.md — Notifications spot-check.
 //
@@ -41,8 +41,8 @@ test.describe('§10 Notifications gate', () => {
     await page.getByRole('button', { name: /^hubs$/i }).first().click();
     await page.locator('text=Job Hub').first().click();
     await page.locator('text=' + job.title).first().click();
-    page.once('dialog', dialog => dialog.accept().catch(() => {}));
     await page.getByRole('button', { name: /Remove Member A Test/ }).click();
+    await acceptConfirm(page, 'Remove');
 
     // Wait for the admin-remove transaction to commit
     await expect.poll(async () => (await getJobSignups(job.docId)).length, { timeout: 15_000 }).toBe(0);
@@ -71,8 +71,8 @@ test.describe('§10 Notifications gate', () => {
     await page.getByRole('button', { name: /^hubs$/i }).first().click();
     await page.locator('text=Job Hub').first().click();
     await page.locator('text=' + job.title).first().click();
-    page.once('dialog', dialog => dialog.accept().catch(() => {}));
     await page.getByRole('button', { name: /Remove Member A Test/ }).click();
+    await acceptConfirm(page, 'Remove');
 
     // The F-fix-15 transaction stamps lastPosterNotifiedByActors[adminUid]
     // BEFORE the SendGrid call, so we don't wait for email delivery.
@@ -97,8 +97,10 @@ test.describe('§10 Notifications gate', () => {
     await memberAPage.getByRole('button', { name: /^hubs$/i }).first().click();
     await memberAPage.locator('text=Job Hub').first().click();
     await memberAPage.getByRole('button').filter({ hasText: job.title }).first().click();
-    memberAPage.once('dialog', dialog => dialog.accept().catch(() => {}));
+    // Click "Withdraw" inside the job detail modal, then confirm in the
+    // ConfirmDialog that opens on top (Phase 2, 2026-05-25).
     await memberAPage.getByRole('dialog').getByRole('button', { name: /^withdraw$/i }).click();
+    await acceptConfirm(memberAPage, 'Withdraw');
 
     await expect.poll(async () => (await getJobSignups(job.docId)).length, { timeout: 15_000 }).toBe(0);
 

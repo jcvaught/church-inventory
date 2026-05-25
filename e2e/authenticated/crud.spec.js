@@ -1,6 +1,6 @@
 // @ts-check
 import { test, expect } from '../firebase-fixtures.js';
-import { purgeE2EArtifacts, createJob, getJob, uids, daysFromNowStr, e2eTitle, db, churchId } from '../admin-helpers.js';
+import { purgeE2EArtifacts, createJob, getJob, uids, daysFromNowStr, e2eTitle, db, churchId, dismissConfirm } from '../admin-helpers.js';
 
 // §2 of docs/TEST-JOBS-HUB-2026-05-07.md — Admin CRUD flows.
 // Existing coverage in edge-cases.spec.js focuses on validation; this spec
@@ -84,12 +84,13 @@ test.describe('§2 Admin CRUD flows', () => {
     await page.locator('text=Job Hub').first().click();
     await page.locator('text=' + job.title).first().click();
 
-    // Dismiss the native confirm dialog when the Delete button fires it
-    page.once('dialog', dialog => dialog.dismiss().catch(() => {}));
+    // Click Delete in the job detail modal, then back out of the ConfirmDialog
+    // that opens on top (Phase 2 wrapped the verb in a React modal).
     await page.getByRole('button', { name: /^delete$/i }).first().click();
+    await dismissConfirm(page, 'Cancel');
 
-    // Give the dismiss + any subsequent code a beat to settle
-    await page.waitForTimeout(2_000);
+    // Give any subsequent code a beat to settle
+    await page.waitForTimeout(1_000);
 
     // Job must still exist in Firestore
     const final = await getJob(job.docId);

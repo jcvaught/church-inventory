@@ -2,7 +2,7 @@
 import { test, expect } from '../firebase-fixtures.js';
 import {
   purgeE2EArtifacts, createJob, createAccessPerson, createAccessRecord,
-  uids, daysFromNowStr, e2eTitle, db, churchId,
+  uids, daysFromNowStr, e2eTitle, db, churchId, dismissConfirm,
 } from '../admin-helpers.js';
 
 // UAT — Part 2 manual checklist, automated where viable.
@@ -83,7 +83,11 @@ test.describe('UAT — UI automation (Part 2 subset)', () => {
     await dialog.getByRole('button', { name: /^cancel$/i }).click();
   });
 
-  // ── M10 — Share Board fires window.confirm with the public-warning text ──
+  // ── M10 — Share Board fires the public-warning ConfirmDialog ──
+  // Phase 2 (2026-05-25) replaced window.confirm with a React ConfirmDialog,
+  // so we read the warning copy out of the rendered dialog instead of
+  // capturing dialog.message(). The wording also went from "PUBLIC page" to
+  // "public page" inside a <strong> wrapper.
   test('M10 — Share Board click fires a confirm dialog with the public-warning text', async ({ page }) => {
     await page.goto('/');
     const onboardingClose = page.getByRole('button', { name: /^×$|^close$/i }).first();
@@ -91,18 +95,16 @@ test.describe('UAT — UI automation (Part 2 subset)', () => {
     await page.getByRole('button', { name: /^hubs$/i }).first().click();
     await page.locator('text=Job Hub').first().click();
 
-    // Capture the confirm dialog, assert its message, dismiss it.
-    /** @type {string} */
-    let dialogMessage = '';
-    page.once('dialog', async (dialog) => {
-      dialogMessage = dialog.message();
-      await dialog.dismiss();
-    });
     await page.getByRole('button', { name: /^share board$/i }).click();
-    // page.once handler is async; wait a tick for it to fire.
-    await page.waitForTimeout(500);
-    expect(dialogMessage).toMatch(/PUBLIC page/);
-    expect(dialogMessage).toMatch(/minor's name or a private address/);
+
+    const dialog = page.getByRole('dialog').last();
+    await dialog.waitFor({ state: 'visible', timeout: 5_000 });
+    const dialogText = await dialog.innerText();
+    expect(dialogText).toMatch(/public page/i);
+    expect(dialogText).toMatch(/minor's name or a private address/);
+
+    // Back out — leave the clipboard untouched.
+    await dismissConfirm(page, 'Cancel');
   });
 
   // ── L9 — waiver Modal: checkbox gates the Agree button ──

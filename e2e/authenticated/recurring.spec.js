@@ -1,6 +1,6 @@
 // @ts-check
 import { test, expect } from '../firebase-fixtures.js';
-import { purgeE2EArtifacts, createJob, getJob, seedSignup, getJobSignups, uids, daysFromNowStr, e2eTitle, db, churchId } from '../admin-helpers.js';
+import { purgeE2EArtifacts, createJob, getJob, seedSignup, getJobSignups, uids, daysFromNowStr, e2eTitle, db, churchId, acceptConfirm } from '../admin-helpers.js';
 
 // §11 of docs/TEST-JOBS-HUB-2026-05-07.md — recurring series operations.
 // Series jobs share a `recurrenceGroupId`. The most error-prone operation
@@ -53,9 +53,9 @@ test.describe('§11 Recurring series', () => {
     await page.locator('text=' + jobs[0].title).first().click();
 
     // The "Delete Series" button only appears for jobs with a recurrenceGroupId.
-    // Accept both confirmation dialogs (some series-delete UIs prompt twice).
-    page.on('dialog', dialog => dialog.accept().catch(() => {}));
+    // Phase 2 (2026-05-25) replaced window.confirm with a React ConfirmDialog.
     await page.getByRole('button', { name: /^delete series/i }).click();
+    await acceptConfirm(page, 'Delete series');
 
     // Poll Firestore until all four docs are gone
     await expect.poll(async () => {

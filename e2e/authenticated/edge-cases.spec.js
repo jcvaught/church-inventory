@@ -1,6 +1,6 @@
 // @ts-check
 import { test, expect } from '../firebase-fixtures.js';
-import { purgeE2EArtifacts, createJob, getJob, seedSignup, setNotifications, uids, daysFromNowStr, e2eTitle, db, churchId } from '../admin-helpers.js';
+import { purgeE2EArtifacts, createJob, getJob, seedSignup, setNotifications, uids, daysFromNowStr, e2eTitle, db, churchId, acceptConfirm } from '../admin-helpers.js';
 
 // §11 of docs/TEST-JOBS-HUB-2026-05-07.md — Bonus / edge cases.
 // Selected the highest-value sub-tests from the manual plan and skipped
@@ -81,8 +81,10 @@ test.describe('§11 Edge cases', () => {
     await page.getByRole('button', { name: /^hubs$/i }).first().click();
     await page.locator('text=Job Hub').first().click();
     await page.getByRole('button').filter({ hasText: job.title }).first().click();
-    page.once('dialog', d => d.accept().catch(() => {}));
+    // Click "Delete" inside the job detail modal, then confirm in the
+    // ConfirmDialog that opens on top (Phase 2, 2026-05-25).
     await page.getByRole('dialog').getByRole('button', { name: /^delete$/i }).first().click();
+    await acceptConfirm(page, 'Delete');
 
     // Job should be deleted
     await expect.poll(async () => (await getJob(job.docId)) === null, { timeout: 15_000 }).toBe(true);

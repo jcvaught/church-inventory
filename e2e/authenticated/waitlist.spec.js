@@ -1,6 +1,6 @@
 // @ts-check
 import { test, expect } from '../firebase-fixtures.js';
-import { purgeE2EArtifacts, createJob, getJobSignups, getJobWaitlist, seedSignup, seedWaitlistEntry, uids, daysFromNowStr, e2eTitle } from '../admin-helpers.js';
+import { purgeE2EArtifacts, createJob, getJobSignups, getJobWaitlist, seedSignup, seedWaitlistEntry, uids, daysFromNowStr, e2eTitle, acceptConfirm } from '../admin-helpers.js';
 
 // §4 of docs/TEST-JOBS-HUB-2026-05-07.md — Waitlist + auto-promotion.
 // Roster lives in signups/waitlist subcollections (audit H1, 2026-05-22).
@@ -38,8 +38,8 @@ test.describe('§4 Waitlist + auto-promotion', () => {
     });
     await page.locator('text=' + job.title).first().click();
 
-    page.once('dialog', dialog => dialog.accept().catch(() => {}));
     await page.getByRole('button', { name: /Remove Member A Test/ }).click();
+    await acceptConfirm(page, 'Remove');
 
     // jobWithdraw deletes the signup, then promotes the head of the waitlist
     // inline + server-side. Poll for the end-state: Member B promoted.
@@ -70,8 +70,8 @@ test.describe('§4 Waitlist + auto-promotion', () => {
     await page.getByRole('button', { name: /^hubs$/i }).first().click();
     await page.locator('text=Job Hub').first().click();
     await page.locator('text=' + job.title).first().click();
-    page.once('dialog', dialog => dialog.accept().catch(() => {}));
     await page.getByRole('button', { name: /Remove Member A Test/ }).click();
+    await acceptConfirm(page, 'Remove');
 
     await expect.poll(async () => (await getJobSignups(job.docId)).length, { timeout: 15_000 }).toBe(0);
     expect(await getJobWaitlist(job.docId)).toHaveLength(0);
@@ -98,8 +98,10 @@ test.describe('§4 Waitlist + auto-promotion', () => {
     await memberAPage.getByRole('button', { name: /^hubs$/i }).first().click();
     await memberAPage.locator('text=Job Hub').first().click();
     await memberAPage.getByRole('button').filter({ hasText: job.title }).first().click();
-    memberAPage.once('dialog', dialog => dialog.accept().catch(() => {}));
+    // Click "Withdraw" inside the job detail modal, then confirm in the
+    // ConfirmDialog that opens on top (Phase 2 wrapped the verb in a modal).
     await memberAPage.getByRole('dialog').getByRole('button', { name: /^withdraw$/i }).click();
+    await acceptConfirm(memberAPage, 'Withdraw');
 
     await expect.poll(async () => {
       const [signups, waitlist] = await Promise.all([getJobSignups(job.docId), getJobWaitlist(job.docId)]);

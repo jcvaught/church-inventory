@@ -4,6 +4,40 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-25 — E2E isolation Layer 1.5: Phase 2 test follow-up
+
+Closed all 10 dialog-related failures from the post-Phase-7 E2E run.
+Suite went 47/16/4 → 57/6/4. Remaining 6 = 5 a11y axe scans (need
+Layer 1, FXCC data state) + 1 public-board test (separate finding:
+the 2026-05-23 `getPublicJobs` 60s in-process cache races a freshly-
+seeded test job; tracked as a one-line follow-up).
+
+Why these 10 broke in the first place: Phase 2 (2026-05-25) replaced
+all 41 `window.confirm()` calls with the React `ConfirmDialog` modal.
+The E2E suite had 11 sites using
+`page.once('dialog', d => d.accept())` — Playwright's *native* browser
+dialog API, which silently no-ops against a React modal. The
+destructive verbs (admin Remove, member Withdraw, hard-delete,
+delete-series, Share Board copy) never fired in the test.
+
+Changes:
+- `e2e/admin-helpers.js` — new `acceptConfirm(page, label)` and
+  `dismissConfirm(page, label='Cancel')` exports. Use
+  `getByRole('dialog').last()` so they target the topmost modal when
+  ConfirmDialog stacks on top of a content modal.
+- 11 sites swept across 7 spec files (waitlist ×3, notifications-gate
+  ×3, signup-flow, edge-cases, recurring, uat-ui M10, crud cancel-path).
+- M10 dialog assertion updated: `dialog.innerText()` instead of
+  `dialog.message()`, regex relaxed to `/public page/i` to match the
+  Phase 2 lowercase + `<strong>`-bolded copy.
+- crud.spec.js cancel-path was passing for the wrong reason (no-op
+  handler left modal hanging, delete never fired); now genuinely
+  clicks Cancel in the ConfirmDialog.
+
+Plan + sequencing: `docs/E2E-ISOLATION-PLAN-2026-05-25.md`.
+
+---
+
 ## 2026-05-25 — E2E isolation Layer 2: recursive purge
 
 `e2e/admin-helpers.js` `purgeE2EArtifacts()` now calls

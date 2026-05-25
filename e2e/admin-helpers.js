@@ -172,6 +172,30 @@ export async function uids() {
   return out;
 }
 
+// Click the primary CTA inside the active ConfirmDialog modal (Phase 2,
+// 2026-05-25). Pass the exact confirmLabel the call site uses
+// (e.g. 'Remove', 'Withdraw', 'Delete series', 'Copy link'). Caller is
+// responsible for triggering the dialog first. Replaces the old
+// `page.once('dialog', d => d.accept())` pattern, which is for *native*
+// browser dialogs and silently no-ops against React modals.
+//
+// Uses .last() because ConfirmDialog often opens on top of an existing
+// content modal (e.g. job detail → Withdraw → confirm), so the topmost
+// dialog in DOM-insertion order is the one the test wants to confirm.
+export async function acceptConfirm(page, label) {
+  const dialog = page.getByRole('dialog').last();
+  await dialog.waitFor({ state: 'visible', timeout: 5_000 });
+  await dialog.getByRole('button', { name: new RegExp('^' + label + '$', 'i') }).click();
+}
+
+// Same pattern, but clicks the Cancel button. Use for tests that want to
+// verify the dialog appeared but back out instead of confirming.
+export async function dismissConfirm(page, label = 'Cancel') {
+  const dialog = page.getByRole('dialog').last();
+  await dialog.waitFor({ state: 'visible', timeout: 5_000 });
+  await dialog.getByRole('button', { name: new RegExp('^' + label + '$', 'i') }).click();
+}
+
 export function tomorrowStr() {
   const d = new Date();
   d.setDate(d.getDate() + 1);
