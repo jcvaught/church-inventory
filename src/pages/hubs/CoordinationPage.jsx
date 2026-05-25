@@ -4,6 +4,7 @@ import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { useConfirm } from '../../components/primitives/ConfirmDialog.jsx';
 import { Stat } from '../../components/primitives/Stat.jsx';
+import { StatusDot } from '../../components/primitives/StatusDot.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { localDateStr } from '../../utils/date.js';
 
@@ -291,7 +292,10 @@ export function CoordinationPage({ store, userProfile }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: notifActive ? B.teal : B.sand }} />
+                    <StatusDot
+                      color={notifActive ? B.teal : B.sand}
+                      label={notifActive ? 'Notifications enabled' : 'Notifications disabled'}
+                    />
                     <span style={{ fontWeight: 600, fontSize: 14, color: B.textDark }}>
                       {notifActive ? 'Notifications enabled' : 'Notifications disabled'}
                     </span>

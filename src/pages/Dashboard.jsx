@@ -6,6 +6,7 @@ import { Stat } from '../components/primitives/Stat.jsx';
 import { MobileCtx, useBreakpoint } from '../hooks/useMobile.js';
 import { localDateStr } from '../utils/date.js';
 import { actionLabels, actionIcons } from '../utils/activityLabels.js';
+import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
 
 export function Dashboard({ store, userProfile, canSeeJobHub }) {
   const { items, supplies, activityLog, reservations, jobAnnouncements } = store;
@@ -119,14 +120,14 @@ export function Dashboard({ store, userProfile, canSeeJobHub }) {
       {recentAnnouncements.length > 0 && (
         <div style={{ background: B.white, borderRadius: 14, padding: 24, border: '1px solid ' + B.sand, boxShadow: '0 1px 3px rgba(27,42,74,0.06)', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <span style={{ fontSize: 18 }}>📢</span>
+            <EmojiIcon emoji="📢" decorative style={{ fontSize: 18 }} />
             <h3 style={{ margin: 0, fontFamily: f1, fontSize: 17, fontWeight: 700, color: B.navy }}>Job Hub Announcements</h3>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {recentAnnouncements.map(ann => (
               <div key={ann._docId} style={{ padding: '12px 16px', borderRadius: 10, background: ann.pinned ? B.tealPale : B.warmGray, border: '1px solid ' + (ann.pinned ? B.tealLight : B.sand) }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  {ann.pinned && <span style={{ fontSize: 11, fontWeight: 700, color: B.teal, fontFamily: f1 }}>📌</span>}
+                  {ann.pinned && <EmojiIcon emoji="📌" label="Pinned" style={{ fontSize: 11, fontWeight: 700, color: B.teal, fontFamily: f1 }} />}
                   <span style={{ fontWeight: 700, fontSize: 14, color: B.navy, fontFamily: f1 }}>{ann.title}</span>
                   <span style={{ fontSize: 11, color: B.textLight, marginLeft: 'auto', fontFamily: f2 }}>{ann.createdAt?.slice(0, 10)}</span>
                 </div>
@@ -187,7 +188,7 @@ export function Dashboard({ store, userProfile, canSeeJobHub }) {
             : <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                 {activityFiltered.slice(0, activityVisible).map(l => (
                   <div key={l._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", borderRadius:8, background:B.warmGray }}>
-                    <span style={{ fontSize:16 }}>{icons[l.action]||"📋"}</span>
+                    <EmojiIcon emoji={icons[l.action]||"📋"} decorative style={{ fontSize:16 }} />
                     <div style={{ flex:1 }}>
                       <span style={{ fontWeight:600, fontSize:13 }}>{labels[l.action]||l.action.replace(/_/g," ")}</span>
                       <span style={{ color:B.textLight, fontSize:12, marginLeft:6 }}>({l.itemId})</span>

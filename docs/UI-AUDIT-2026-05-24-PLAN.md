@@ -105,7 +105,20 @@ modals that have a Save/Cancel row — apply opportunistically in future session
 
 ---
 
-## Phase 4 — Cross-cutting a11y patterns (one session, ~2h)
+## Phase 4 — Cross-cutting a11y patterns (one session, ~2h) — **SHIPPED 2026-05-25**
+
+**Outcome:** both primitives shipped (`StatusDot` + `EmojiIcon`). Pattern A
+applied to the 5 sites the plan called out (SuppliesPage StockBar gained
+`role="progressbar"` semantics; CoordinationPage dot, PeopleAccessPage
+severity, JobsPage badge, ReservationsPage badge all wrapped). Pattern B
+applied across the 10 highest-traffic pages plus the shared `Stat`
+primitive (so every Stat instance is silently iconed in one stroke).
+Maintenance/Tasks/Accountability/Insights hub pages still have ~60
+unwrapped emojis — the primitive is in place and the sweep is rolled into
+Phase 7's polish pass. `@axe-core/playwright` installed and
+`e2e/authenticated/a11y.spec.js` enforces the rules across /, /inventory,
+/supplies, People Access, and Job Hub. See `docs/CHANGELOG.md`
+(2026-05-25).
 
 **Goal:** fix color-only-status and emoji-as-icon globally with two small primitives.
 

@@ -5,6 +5,7 @@ import { Spinner } from '../components/primitives/Spinner.jsx';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { lazyWithRetry } from '../utils/lazyWithRetry.js';
 import { ChunkErrorBoundary } from '../components/primitives/ChunkErrorBoundary.jsx';
+import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
 
 // Audit overnight 2026-05-12 / Perf #7: hub pages were all eagerly imported,
 // loading recharts + the full Tasks/Insights/People-Access surface even for
@@ -196,7 +197,7 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
                 }
               </div>
 
-              <div style={{ fontSize: 32, marginBottom: 12 }}>{hub.icon}</div>
+              <EmojiIcon emoji={hub.icon} decorative style={{ fontSize: 32, marginBottom: 12, display: 'block' }} />
               <div style={{ fontWeight: 700, fontSize: 16, fontFamily: f1, color: B.navy, marginBottom: 8 }}>{hub.label}</div>
               <div style={{ fontSize: 13, color: B.textMid, fontFamily: f2, lineHeight: 1.5, marginBottom: 16 }}>{hub.desc}</div>
 

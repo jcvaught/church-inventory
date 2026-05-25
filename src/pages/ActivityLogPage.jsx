@@ -2,6 +2,7 @@ import { useState, useMemo, useContext } from 'react';
 import { B, f1, inp, btnS } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { actionLabels, actionIcons, actionColors } from '../utils/activityLabels.js';
+import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
 
 // Audit overnight 2026-05-12 / Perf #1: the activityLog subscription is
 // capped at 100 most-recent entries to avoid unbounded reads. Older entries
@@ -147,7 +148,7 @@ export function ActivityLogPage({ store }) {
       <div style={{ background:B.white, borderRadius:14, border:"1px solid "+B.sand, overflow:"hidden", boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
         {pageItems.length === 0 ? (
           <div style={{ padding:"48px 32px", textAlign:"center" }}>
-            <div style={{ fontSize:40, marginBottom:12 }}>📋</div>
+            <div aria-hidden="true" style={{ fontSize:40, marginBottom:12 }}>📋</div>
             <p style={{ color:B.textLight, fontSize:15 }}>{hasFilters ? "No entries match your filters." : "No activity recorded yet."}</p>
           </div>
         ) : (
@@ -160,7 +161,7 @@ export function ActivityLogPage({ store }) {
                   style={{ borderBottom: i < pageItems.length-1 ? "1px solid "+B.sand : "none", cursor: dets ? "pointer" : "default" }}
                   onClick={() => dets && setExpanded(isOpen ? null : l._docId)}>
                   <div style={{ display:"flex", alignItems:"center", gap:12, padding:"14px 22px" }}>
-                    <span style={{ fontSize:18, flexShrink:0 }}>{actionIcons[l.action]||"📋"}</span>
+                    <EmojiIcon emoji={actionIcons[l.action]||"📋"} decorative style={{ fontSize:18, flexShrink:0 }} />
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
                         <span style={{ fontWeight:700, fontSize:14, fontFamily:f1, color: actionColors[l.action] || B.navy }}>{actionLabels[l.action]||l.action}</span>

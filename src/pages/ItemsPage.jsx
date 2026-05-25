@@ -9,6 +9,7 @@ import { FF } from '../components/primitives/FF.jsx';
 import { Badge } from '../components/primitives/Badge.jsx';
 import { useConfirm } from '../components/primitives/ConfirmDialog.jsx';
 import { UndoToast } from '../components/primitives/UndoToast.jsx';
+import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
 import { resizeImageForUpload } from '../utils/imageResize.js';
 import { printLabel, printInventory } from '../utils/print.js';
 import { exportItemsCSV } from '../utils/csv.js';
@@ -587,13 +588,13 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
           <input type="checkbox" aria-label={`Select ${item.description || 'item'}`} checked={selectedIds.has(item._docId)} onChange={()=>toggleSelect(item._docId)} onClick={e=>e.stopPropagation()} style={{ width:16, height:16, cursor:"pointer", flexShrink:0, accentColor:B.teal }} />
         )}
         <div style={{ display:"flex", alignItems:"center", gap:12, flex:1, minWidth:0 }}>
-          <div style={{ width:38, height:38, borderRadius:10, background:B.tealPale, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>📋</div>
+          <div style={{ width:38, height:38, borderRadius:10, background:B.tealPale, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }} aria-hidden="true">📋</div>
           <div style={{ minWidth:0 }}>
             <div title={item.description || "Unnamed"} style={{ fontWeight:600, fontSize:14, color:B.navy, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.description || "Unnamed"}</div>
             <div style={{ fontSize:12, color:B.textLight, display:"flex", gap:8, flexWrap:"wrap", marginTop:2 }}>
               <span style={{ fontFamily:"monospace", letterSpacing:1 }}>{item.itemId}</span>
-              {item.location && !isMob && <span>📍 {item.location}</span>}
-              {item.assignedTo && <span>👤 {item.assignedTo}</span>}
+              {item.location && !isMob && <span><EmojiIcon emoji="📍" decorative /> {item.location}</span>}
+              {item.assignedTo && <span><EmojiIcon emoji="👤" decorative /> {item.assignedTo}</span>}
               {overdue && <span style={{ color:B.red, fontWeight:700 }}>OVERDUE</span>}
             </div>
           </div>
@@ -680,7 +681,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
               placeholder="Search by name or ID..."
               value={search} onChange={e=>setSearch(e.target.value)}
             />
-            <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:14, color:B.textLight }}>🔍</span>
+            <span aria-hidden="true" style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:14, color:B.textLight }}>🔍</span>
           </div>
           <select value={statusFilter} onChange={e=>setStatus(e.target.value)} style={{...inp, width:"auto", flex:"0 1 180px"}}>
             <option value="all">All Statuses ({counts.all})</option>
@@ -721,8 +722,8 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
           </span>
           {selectedIds.size > 0 && <>
             <button onClick={startBulkCheckout} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>Check Out</button>
-            <button onClick={startBulkReturn} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>↩ Return</button>
-            {locations.length > 0 && (isAdmin || isManager) && <button onClick={()=>{setBulkData(d=>({...d,newLoc:''}));setBulkModal('loc');}} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>📍 Location</button>}
+            <button onClick={startBulkReturn} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}><EmojiIcon emoji="↩" decorative /> Return</button>
+            {locations.length > 0 && (isAdmin || isManager) && <button onClick={()=>{setBulkData(d=>({...d,newLoc:''}));setBulkModal('loc');}} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}><EmojiIcon emoji="📍" decorative /> Location</button>}
             <button aria-label="Export selected items as CSV" onClick={handleBulkExport} style={{ ...btnS, fontSize:12, padding:"6px 12px" }}>⬇ Export</button>
           </>}
           <button onClick={exitBulkMode} style={{ background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", borderRadius:8, color:"#fff", cursor:"pointer", fontSize:12, padding:"6px 12px", fontFamily:f1, fontWeight:600 }}>Cancel</button>
@@ -733,7 +734,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
         {displayItems.length === 0 ? (
           <div style={{ background:B.white, borderRadius:18, padding:"48px 32px", border:"1px solid "+B.sand, textAlign:"center" }}>
-            <div style={{ fontSize:48, marginBottom:16 }}>📋</div>
+            <div aria-hidden="true" style={{ fontSize:48, marginBottom:16 }}>📋</div>
             <h3 style={{ fontFamily:f1, color:B.navy, margin:"0 0 8px", fontSize:18 }}>
               {activeItems.length === 0 ? "No items yet" : search ? "No items match your search" : "No items match your filters"}
             </h3>
@@ -835,7 +836,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
                 <div style={{ maxHeight:200, overflowY:"auto", borderRadius:8, border:"1px solid "+B.sand }}>
                   {history.slice(0, 50).map((l, i) => (
                     <div key={l._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderBottom:i<history.length-1?"1px solid "+B.sand:"none", background:i%2===0?B.white:B.warmGray }}>
-                      <span style={{ fontSize:14, flexShrink:0 }}>{icons[l.action]||"📋"}</span>
+                      <EmojiIcon emoji={icons[l.action]||"📋"} decorative style={{ fontSize:14, flexShrink:0 }} />
                       <div style={{ flex:1, minWidth:0 }}>
                         <span style={{ fontSize:12, fontWeight:600, color:B.textDark }}>{labels[l.action]||l.action.replace(/_/g," ")}</span>
                         {l.details?.person && <span style={{ fontSize:12, color:B.textMid }}> · {l.details.person}</span>}

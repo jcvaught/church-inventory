@@ -243,13 +243,23 @@ export function SuppliesPage({ store, userProfile }) {
     flash("Moved to inventory.");
   }
 
-  // Stock level indicator
+  // Stock level indicator. Audit 2026-05-24 Phase 4 — added progressbar
+  // semantics + status word in the aria-label so screen-reader users hear
+  // "Out of stock"/"Low stock"/"In stock" instead of just the colored fill.
   function StockBar({ quantity, minQuantity }) {
     const pct = minQuantity > 0 ? Math.min(100, (quantity / (minQuantity * 2)) * 100) : 100;
     const isLow = quantity <= minQuantity;
     const isEmpty = quantity === 0;
+    const statusWord = isEmpty ? 'Out of stock' : isLow ? 'Low stock' : 'In stock';
+    const max = minQuantity > 0 ? minQuantity * 2 : Math.max(quantity, 1);
     return (
-      <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:120 }}>
+      <div
+        role="progressbar"
+        aria-valuenow={quantity}
+        aria-valuemin={0}
+        aria-valuemax={max}
+        aria-label={`${statusWord}: ${quantity} of ${minQuantity} minimum`}
+        style={{ display:"flex", alignItems:"center", gap:10, minWidth:120 }}>
         <div style={{ flex:1, height:6, borderRadius:3, background:B.sand, overflow:"hidden" }}>
           <div style={{
             height:"100%", borderRadius:3, transition:"width 0.3s",
@@ -257,7 +267,7 @@ export function SuppliesPage({ store, userProfile }) {
             background: isEmpty ? B.red : isLow ? B.gold : B.teal
           }}/>
         </div>
-        <span style={{ fontSize:13, fontWeight:700, fontFamily:f1, minWidth:24, textAlign:"right",
+        <span aria-hidden="true" style={{ fontSize:13, fontWeight:700, fontFamily:f1, minWidth:24, textAlign:"right",
           color: isEmpty ? B.red : isLow ? "#96750E" : B.teal
         }}>{quantity}</span>
       </div>

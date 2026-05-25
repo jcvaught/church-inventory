@@ -4,6 +4,66 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-25 — UI audit Phase 4: cross-cutting a11y patterns
+
+Phase 4 of `docs/UI-AUDIT-2026-05-24-PLAN.md`. Two reusable primitives so the
+audit's color-only-status and emoji-as-icon findings collapse into a single
+pattern rather than dozens of one-off edits.
+
+**New primitives:**
+- `src/components/primitives/StatusDot.jsx` — colored dot with a required
+  `label` prop. Renders `role="img"` + `aria-label`, and the label is either
+  visible (`showLabel`) or visually-hidden (default screen-reader-only).
+  Stops conveying state through color alone.
+- `src/components/primitives/EmojiIcon.jsx` — two modes:
+  *decorative* (`<EmojiIcon emoji="📦" decorative />` → `aria-hidden`) for
+  emojis that sit next to label text, and *semantic*
+  (`<EmojiIcon emoji="📦" label="Inventory" />` → `role="img"` +
+  `aria-label`) for emojis that carry meaning on their own. Without one of
+  these, screen readers announce the Unicode name of the glyph (e.g. "🔁" →
+  "clockwise vertical arrows"), which rarely matches author intent.
+
+**Pattern A — color-only status (StatusDot):**
+- `SuppliesPage.jsx` `StockBar` — added `role="progressbar"` with
+  `aria-valuenow` / `aria-valuemin` / `aria-valuemax` and an aria-label of
+  the form *"Low stock: 3 of 5 minimum"*. The visible quantity text is now
+  `aria-hidden` (redundant with the announce).
+- `CoordinationPage.jsx` notifications dot — wrapped in `<StatusDot>` with
+  "Notifications enabled/disabled" label.
+- `PeopleAccessPage.jsx` person-card severity emoji — replaced the
+  conditional `🔴`/`🟡` glyph with `<StatusDot>` whose label spells out
+  *"Has expired or critically-expiring records"* / *"Has records expiring
+  within 30 days"*.
+- `JobsPage.jsx` status badges — already had `aria-label` on
+  `JobStatusBadge` (audit M13); confirmed no regression.
+- `ReservationsPage.jsx` `ResBadge` — the status icon was always paired
+  with a visible status word, but the emoji glyph was being read aloud
+  alongside it; wrapped in decorative `EmojiIcon`.
+
+**Pattern B — emoji as icon (EmojiIcon):**
+Applied across the high-traffic surfaces (Dashboard, ItemsPage, HubsPage,
+ActivityLogPage, SuppliesPage, ReservationsPage, SettingsPage,
+PeopleAccessPage, JobsPage, CoordinationPage) plus the shared `Stat`
+primitive — every `Stat` instance is now silently iconed. Tab labels in
+JobsPage (`💼 Job Board`, `📋 Schedule`, etc.) were split so the emoji is
+decorative and only the word reaches the AT.
+
+**Test coverage:**
+- `e2e/authenticated/a11y.spec.js` (NEW) — runs `@axe-core/playwright`
+  against /, /inventory, /supplies, /people-access, /jobs with a focused
+  ruleset (`image-alt`, `aria-allowed-attr`, `aria-roles`,
+  `aria-valid-attr-value`, `aria-required-attr`, `color-contrast`). The
+  Supplies scan disables `color-contrast` because the StockBar's gold
+  sub-pixel fill is intentional and not a text contrast issue.
+- `@axe-core/playwright` added to devDependencies (`^4.11.3`).
+
+**Deferred (single-pass per plan's Phase 7):**
+Maintenance, Tasks, Accountability, and Insights hub pages still have
+~60 unwrapped emojis. The pattern is in place; the codemod sweep across
+the rest is the Phase 7 polish item and will be done in one pass.
+
+---
+
 ## 2026-05-25 — UI audit Phase 3: app shell + responsive
 
 Phase 3 of `docs/UI-AUDIT-2026-05-24-PLAN.md`. Eight items targeting mobile/tablet

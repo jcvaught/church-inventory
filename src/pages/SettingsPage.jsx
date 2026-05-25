@@ -6,6 +6,7 @@ import { FF } from '../components/primitives/FF.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
 import { useConfirm } from '../components/primitives/ConfirmDialog.jsx';
 import { UndoToast } from '../components/primitives/UndoToast.jsx';
+import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, getDocs } from 'firebase/firestore';
 import { app, db } from '../firebase.js';
@@ -367,7 +368,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     return (
       <div style={{ background:B.white, borderRadius:14, padding:"20px 22px", border:"1px solid "+B.sand, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-          <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>{icon} {title}</h3>
+          <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}><EmojiIcon emoji={icon} decorative /> {title}</h3>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <span style={{ fontSize:13, color:B.textLight }}>{items.length} items</span>
             {(isAdmin || isManager) && <button onClick={() => openListEditor(key, title)} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>Edit</button>}
@@ -588,7 +589,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                   const es = accessExpiryStatus(r.expiryDate);
                   return (
                     <div key={r._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:10, background:B.warmGray }}>
-                      <span style={{ fontSize:18 }}>{ACCESS_TYPE_ICONS[r.type] || '✅'}</span>
+                      <EmojiIcon emoji={ACCESS_TYPE_ICONS[r.type] || '✅'} decorative style={{ fontSize:18 }} />
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontWeight:600, fontSize:13, fontFamily:f1, color:B.navy }}>
                           {ACCESS_TYPE_LABELS[r.type] || r.type}
@@ -601,8 +602,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                           {r.expiryDate && (
                             <span style={{ color: es === 'expired' ? B.red : es === 'warning' ? '#92400E' : B.textMid }}>
                               {' '}· Expires {r.expiryDate}
-                              {es === 'expired' && ' 🔴'}
-                              {es === 'warning' && ' 🟡'}
+                              {es === 'expired' && <> <EmojiIcon emoji="🔴" label="Expired" /></>}
+                              {es === 'warning' && <> <EmojiIcon emoji="🟡" label="Expires within 30 days" /></>}
                             </span>
                           )}
                           {r.type === 'key_assignment' && !r.returnedDate && <span style={{ color:B.gold }}> · Key not returned</span>}
@@ -837,7 +838,11 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                           color: u.role==="admin"?"#96750E":u.role==="manager"?B.teal:B.textMid }}>{u.role}</span>
                         {!u.active && <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background:B.redPale, color:B.red }}>Inactive</span>}
                         {getUserComplianceBadge(u.id) && (
-                          <span title="Has compliance records requiring attention" style={{ fontSize:14, lineHeight:1 }}>{getUserComplianceBadge(u.id)}</span>
+                          <EmojiIcon
+                            emoji={getUserComplianceBadge(u.id)}
+                            label={getUserComplianceBadge(u.id) === '🔴' ? 'Has expired compliance records' : 'Has compliance records expiring soon'}
+                            style={{ fontSize:14, lineHeight:1 }}
+                          />
                         )}
                       </div>
                       <div style={{ fontSize:12, color:B.textLight }}>{u.email}</div>

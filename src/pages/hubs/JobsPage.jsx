@@ -12,6 +12,7 @@ import { localDateStr, generateRecurrenceDates } from '../../utils/date.js';
 import { printJobRoster } from '../../utils/print.js';
 import { exportJobsICS } from '../../utils/ical.js';
 import { formatTimeForDisplay } from '../../utils/time.js';
+import { EmojiIcon } from '../../components/primitives/EmojiIcon.jsx';
 
 function formatJobDate(dateStr) {
   if (!dateStr) return '—';
@@ -272,16 +273,16 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJ
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <div style={{ display:'flex', alignItems:'center', gap:6 }}>
           <span style={{ fontSize: isMobile ? 12 : 11, fontFamily: 'monospace', color: B.textLight, background: B.warmGray, padding: '2px 6px', borderRadius: 4 }}>{job.jobNumber}</span>
-          {job.recurrenceGroupId && <span title="Recurring series" role="img" aria-label="Recurring series" style={{ fontSize: isMobile ? 13 : 11, color:B.teal }}>🔁</span>}
+          {job.recurrenceGroupId && <EmojiIcon emoji="🔁" label="Recurring series" style={{ fontSize: isMobile ? 13 : 11, color:B.teal }} />}
         </div>
         <JobStatusBadge status={job.status} />
       </div>
       <div style={{ fontWeight: 700, fontSize: 15, fontFamily: f1, color: B.navy, marginBottom: 6 }}>{job.title}</div>
       <div style={{ fontSize: isMobile ? 13 : 12, color: B.textMid, fontFamily: f2, marginBottom: 2 }}>
-        📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' at ' + formatTimeForDisplay(job.scheduledTime) : ''}
+        <EmojiIcon emoji="📅" decorative /> {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' at ' + formatTimeForDisplay(job.scheduledTime) : ''}
       </div>
       {job.location && (
-        <div style={{ fontSize: isMobile ? 13 : 12, color: B.textMid, fontFamily: f2, marginBottom: 8 }}>📍 {job.location}</div>
+        <div style={{ fontSize: isMobile ? 13 : 12, color: B.textMid, fontFamily: f2, marginBottom: 8 }}><EmojiIcon emoji="📍" decorative /> {job.location}</div>
       )}
       {job.pay != null && (
         <div style={{ fontSize: 14, fontWeight: 700, color: '#16A34A', fontFamily: f1, marginBottom: 10 }}>
@@ -364,7 +365,7 @@ const MobileScheduleRow = memo(function MobileScheduleRow({ job, onDetail }) {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
         <div>
           <div style={{ fontSize:14, fontWeight:700, color:B.navy, fontFamily:f1 }}>{job.title}</div>
-          <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}>📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' · '+formatTimeForDisplay(job.scheduledTime) : ''}</div>
+          <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}><EmojiIcon emoji="📅" decorative /> {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' · '+formatTimeForDisplay(job.scheduledTime) : ''}</div>
         </div>
         <span style={{ fontSize:11, fontWeight:700, color:sc.tx, background:sc.bg, padding:'2px 8px', borderRadius:12 }}>{job.status}</span>
       </div>
@@ -446,7 +447,7 @@ const AnnouncementCard = memo(function AnnouncementCard({ ann, isAdminOrManager,
               title={ann.pinned ? 'Unpin' : 'Pin to top'}
               aria-label={ann.pinned ? 'Unpin announcement' : 'Pin announcement to top'}
               style={{ ...btnS, padding: '5px 9px', fontSize: 13 }}>
-              {ann.pinned ? '📌' : '📍'}
+              <EmojiIcon emoji={ann.pinned ? '📌' : '📍'} decorative />
             </button>
             <button onClick={() => onEdit(ann)} style={{ ...btnS, padding: '5px 9px', fontSize: 13 }}>Edit</button>
             <button onClick={() => onDelete(ann)} style={{ ...btnD, padding: '5px 9px', fontSize: 13 }}>Delete</button>
@@ -1305,10 +1306,10 @@ export function JobsPage({ store, userProfile }) {
           horizontal-scroll row instead of wrap-to-N-rows so we don't push
           content way below the fold. */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: isMobile ? 'nowrap' : 'wrap', overflowX: isMobile ? 'auto' : 'visible', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', paddingBottom: isMobile ? 4 : 0 }}>
-        {[['jobs', '💼 Job Board'], ['schedule', '📋 Schedule'], ['calendar', '📅 Calendar'], ['announcements', '📢 Announcements'], ...(isAdminOrManager ? [['reports', '📊 Reports']] : [])].map(([v, label]) => (
+        {[['jobs', '💼', 'Job Board'], ['schedule', '📋', 'Schedule'], ['calendar', '📅', 'Calendar'], ['announcements', '📢', 'Announcements'], ...(isAdminOrManager ? [['reports', '📊', 'Reports']] : [])].map(([v, emoji, label]) => (
           <button key={v} onClick={() => setView(v)}
             style={{ padding: '8px 18px', borderRadius: 20, border: '1px solid ' + (view === v ? B.teal : B.sand), background: view === v ? B.tealPale : B.white, color: view === v ? B.teal : B.textMid, fontFamily: f1, fontWeight: 700, fontSize: 13, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
-            {label}
+            <EmojiIcon emoji={emoji} decorative /> {label}
           </button>
         ))}
       </div>
@@ -1651,7 +1652,7 @@ export function JobsPage({ store, userProfile }) {
             <div style={{ borderTop: '1px solid ' + B.sand, paddingTop: 14, marginTop: 4 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: isRecurring ? 12 : 0 }}>
                 <input type="checkbox" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)} style={{ width: 16, height: 16 }} />
-                <span style={{ fontSize: 13, fontFamily: f1, fontWeight: 600, color: B.textDark }}>Recurring series 🔁</span>
+                <span style={{ fontSize: 13, fontFamily: f1, fontWeight: 600, color: B.textDark }}>Recurring series <EmojiIcon emoji="🔁" decorative /></span>
               </label>
               {isRecurring && (
                 <div>
@@ -1705,7 +1706,7 @@ export function JobsPage({ store, userProfile }) {
           <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
             <JobStatusBadge status={liveDetail.status} />
             {liveDetail.recurrenceGroupId && (
-              <span style={{ fontSize:12, color:B.teal, fontWeight:600, fontFamily:f1 }}>🔁 Recurring series</span>
+              <span style={{ fontSize:12, color:B.teal, fontWeight:600, fontFamily:f1 }}><EmojiIcon emoji="🔁" decorative /> Recurring series</span>
             )}
           </div>
           {liveDetail.description && (

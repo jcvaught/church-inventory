@@ -8,6 +8,7 @@ import { useConfirm } from '../components/primitives/ConfirmDialog.jsx';
 import { exportReservationsCSV } from '../utils/csv.js';
 import { ITEM_STATUS, RES_STATUS, RESOURCE_TYPE } from '../utils/constants.js';
 import { localDateStr, generateRecurrenceDates } from '../utils/date.js';
+import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
 
 export function ReservationsPage({ store, userProfile }) {
   const { items, settings, reservations, users, rooms, notificationConfig, config, addReservation, updateReservation, checkOutItem, logActivity } = store;
@@ -55,7 +56,7 @@ export function ReservationsPage({ store, userProfile }) {
 
   function ResBadge({ status }) {
     const s = statusMap[status] || statusMap.Pending;
-    return <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"3px 12px", borderRadius:20, fontSize:12, fontWeight:600, fontFamily:f1, background:s.bg, color:s.tx }}>{s.icon} {status}</span>;
+    return <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"3px 12px", borderRadius:20, fontSize:12, fontWeight:600, fontFamily:f1, background:s.bg, color:s.tx }}><EmojiIcon emoji={s.icon} decorative /> {status}</span>;
   }
 
   const filtered = useMemo(() =>

@@ -4,6 +4,8 @@ import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { useConfirm } from '../../components/primitives/ConfirmDialog.jsx';
 import { UndoToast } from '../../components/primitives/UndoToast.jsx';
+import { StatusDot } from '../../components/primitives/StatusDot.jsx';
+import { EmojiIcon } from '../../components/primitives/EmojiIcon.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { exportAccessRecordsCSV } from '../../utils/csv.js';
 import { localDateStr } from '../../utils/date.js';
@@ -372,7 +374,7 @@ export function PeopleAccessPage({ store, userProfile }) {
           {criticalRecords.length > 0 && (
             <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: '12px 16px', marginBottom: 8 }}>
               <div style={{ fontSize: 13, fontWeight: 700, fontFamily: f1, color: B.red, marginBottom: 6 }}>
-                🔴 {criticalRecords.length} record{criticalRecords.length > 1 ? 's' : ''} expired or expiring within 7 days
+                <EmojiIcon emoji="🔴" decorative /> {criticalRecords.length} record{criticalRecords.length > 1 ? 's' : ''} expired or expiring within 7 days
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {criticalRecords.slice(0, 5).map(r => (
@@ -390,7 +392,7 @@ export function PeopleAccessPage({ store, userProfile }) {
           {warningRecords.length > 0 && (
             <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: '12px 16px' }}>
               <div style={{ fontSize: 13, fontWeight: 700, fontFamily: f1, color: '#92400E', marginBottom: 6 }}>
-                🟡 {warningRecords.length} record{warningRecords.length > 1 ? 's' : ''} expiring within 30 days
+                <EmojiIcon emoji="🟡" decorative /> {warningRecords.length} record{warningRecords.length > 1 ? 's' : ''} expiring within 30 days
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {warningRecords.slice(0, 3).map(r => (
@@ -493,17 +495,21 @@ export function PeopleAccessPage({ store, userProfile }) {
                             {(person.ministries || []).map(m => pill(m, B.tealPale, B.teal))}
                           </div>
                         )}
-                        {person.email && <div style={{ fontSize: 12, color: B.textLight, fontFamily: f2 }}>✉ {person.email}</div>}
-                        {person.phone && <div style={{ fontSize: 12, color: B.textLight, fontFamily: f2 }}>📞 {person.phone}</div>}
+                        {person.email && <div style={{ fontSize: 12, color: B.textLight, fontFamily: f2 }}><EmojiIcon emoji="✉" label="Email" /> {person.email}</div>}
+                        {person.phone && <div style={{ fontSize: 12, color: B.textLight, fontFamily: f2 }}><EmojiIcon emoji="📞" label="Phone" /> {person.phone}</div>}
                       </div>
                       {pStatus && (
-                        <span style={{ fontSize: 18, flexShrink: 0 }}>{pStatus === 'critical' ? '🔴' : '🟡'}</span>
+                        <StatusDot
+                          color={pStatus === 'critical' ? B.red : B.gold}
+                          label={pStatus === 'critical' ? 'Has expired or critically-expiring records' : 'Has records expiring within 30 days'}
+                          size={14}
+                        />
                       )}
                     </div>
                     <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 11, color: B.textLight, fontFamily: f1 }}>{pRecords.length} record{pRecords.length !== 1 ? 's' : ''}</span>
-                      {activeKeys.length > 0 && <span style={{ fontSize: 11, color: B.textMid, fontFamily: f1 }}>🔑 {activeKeys.length} key{activeKeys.length > 1 ? 's' : ''} out</span>}
-                      {person.userId && <span style={{ fontSize: 11, color: B.teal, fontFamily: f1 }}>🔗 Linked</span>}
+                      {activeKeys.length > 0 && <span style={{ fontSize: 11, color: B.textMid, fontFamily: f1 }}><EmojiIcon emoji="🔑" decorative /> {activeKeys.length} key{activeKeys.length > 1 ? 's' : ''} out</span>}
+                      {person.userId && <span style={{ fontSize: 11, color: B.teal, fontFamily: f1 }}><EmojiIcon emoji="🔗" decorative /> Linked</span>}
                     </div>
                   </div>
                 );
@@ -542,7 +548,7 @@ export function PeopleAccessPage({ store, userProfile }) {
               {customRequirements.map(req => (
                 <div key={req.id} style={{ background: B.white, borderRadius: 10, padding: '12px 16px', border: `1px solid ${B.sand}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                   <div>
-                    <span style={{ fontWeight: 600, fontSize: 14, fontFamily: f1, color: B.navy }}>✅ {req.name}</span>
+                    <span style={{ fontWeight: 600, fontSize: 14, fontFamily: f1, color: B.navy }}><EmojiIcon emoji="✅" decorative /> {req.name}</span>
                     {req.hasExpiry && <span style={{ marginLeft: 8, fontSize: 11, color: B.textLight, fontFamily: f1 }}>has expiry date</span>}
                   </div>
                   {canEdit && (
@@ -670,7 +676,7 @@ export function PeopleAccessPage({ store, userProfile }) {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                         <div style={{ flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 16 }}>{TYPE_ICONS[record.type]}</span>
+                            <EmojiIcon emoji={TYPE_ICONS[record.type]} decorative style={{ fontSize: 16 }} />
                             <span style={{ fontWeight: 700, fontSize: 14, fontFamily: f1, color: B.navy }}>{TYPE_LABELS[record.type] || record.type}</span>
                             {record.keyIdentifier && <span style={{ fontSize: 12, color: B.textMid, fontFamily: f1 }}>{record.keyIdentifier}</span>}
                             {record.certType && <span style={{ fontSize: 12, color: B.textMid, fontFamily: f1 }}>{record.certType}</span>}
@@ -682,14 +688,14 @@ export function PeopleAccessPage({ store, userProfile }) {
                             {record.expiryDate && (
                               <span style={{ color: eStatus && eStatus !== 'ok' ? expiryColor(eStatus) : B.textMid }}>
                                 Expires: <strong>{record.expiryDate}</strong>
-                                {eStatus === 'expired' && ' 🔴'}
-                                {eStatus === 'critical' && ' 🔴'}
-                                {eStatus === 'warning' && ' 🟡'}
+                                {eStatus === 'expired' && <> <EmojiIcon emoji="🔴" label="Expired" /></>}
+                                {eStatus === 'critical' && <> <EmojiIcon emoji="🔴" label="Expires within 7 days" /></>}
+                                {eStatus === 'warning' && <> <EmojiIcon emoji="🟡" label="Expires within 30 days" /></>}
                               </span>
                             )}
                             {record.type === 'key_assignment' && (
                               <span style={{ color: record.returnedDate ? B.teal : B.textMid }}>
-                                {record.returnedDate ? `Returned: ${record.returnedDate}` : '⚠ Not returned'}
+                                {record.returnedDate ? `Returned: ${record.returnedDate}` : <><EmojiIcon emoji="⚠" decorative /> Not returned</>}
                               </span>
                             )}
                             {record.issuingOrganization && <span>Issuer: {record.issuingOrganization}</span>}
@@ -880,7 +886,7 @@ export function PeopleAccessPage({ store, userProfile }) {
                 background: bulkResult.skipped.length > 0 ? '#FFFBEB' : '#F0FDF4',
                 border: `1px solid ${bulkResult.skipped.length > 0 ? '#FDE68A' : '#BBF7D0'}` }}>
                 <div style={{ fontWeight: 700, fontSize: 13, fontFamily: f1, color: bulkResult.skipped.length > 0 ? '#92400E' : B.teal }}>
-                  ✅ {bulkResult.saved} record{bulkResult.saved !== 1 ? 's' : ''} saved
+                  <EmojiIcon emoji="✅" decorative /> {bulkResult.saved} record{bulkResult.saved !== 1 ? 's' : ''} saved
                   {bulkResult.skipped.length > 0 && ` — ${bulkResult.skipped.length} name${bulkResult.skipped.length > 1 ? 's' : ''} not found`}
                 </div>
                 {bulkResult.skipped.length > 0 && (
