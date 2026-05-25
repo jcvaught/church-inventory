@@ -162,13 +162,13 @@ test.describe('UAT — UI automation (Part 2 subset)', () => {
     expect(signupsSnap.size).toBe(0);
   });
 
-  // ── M8 — textLight token computes to #5F6878 (rgb(95,104,120)), WCAG AA ──
-  // Original audit M8 (2026-05-25) darkened #8B93A1 → #6B7280 for the white-bg
-  // case. E2E Layer 1 darkened again #6B7280 → #5F6878 because the previous
-  // value was 4.24:1 on B.warmGray (#F2F0EB) — just below WCAG-AA's 4.5:1.
-  // New value is ~4.95:1 on warmGray, ~5.5:1 on cream/white. See
-  // docs/E2E-ISOLATION-PLAN-2026-05-25.md.
-  test('M8 — textLight subtitles render at rgb(95, 104, 120) (#5F6878)', async ({ page }) => {
+  // ── M8 — textLight token computes to #58606E (rgb(88,96,110)), WCAG AA ──
+  // Token darkened three times:
+  //   audit M8 (#8B93A1 → #6B7280) — fixed white-bg.
+  //   Layer 1 (#6B7280 → #5F6878) — fixed warmGray (was 4.24:1).
+  //   Layer 1 follow-up (#5F6878 → #58606E) — fixed sand (was 4.43:1).
+  // Final value: 5.02:1 on B.sand, 5.55:1 on B.warmGray, 5.97:1 on cream.
+  test('M8 — textLight subtitles render at rgb(88, 96, 110) (#58606E)', async ({ page }) => {
     const u = await uids();
     const job = await createJob({
       title: e2eTitle('M8 Contrast'),
@@ -189,7 +189,7 @@ test.describe('UAT — UI automation (Part 2 subset)', () => {
     await row.waitFor({ timeout: 15_000 });
     const jobNumberCell = row.getByText(job.jobNumber, { exact: true });
     const color = await jobNumberCell.evaluate(el => getComputedStyle(el).color);
-    expect(color).toBe('rgb(95, 104, 120)');
+    expect(color).toBe('rgb(88, 96, 110)');
   });
 
   // ── L8 — recurring chip on JobCard has aria-label="Recurring series" ──
