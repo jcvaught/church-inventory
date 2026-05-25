@@ -4,6 +4,68 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-25 — UI audit Phase 6: upgrade-gate preview
+
+Phase 6 of `docs/UI-AUDIT-2026-05-24-PLAN.md`. The paywall used to show a
+generic "🔒 + price + Subscribe Now" card with no visual context for what
+the user is being asked to buy. Non-subscribers landed on a wall and bounced.
+Phase 6 turns each gate into a *"see what you get"* preview by showing the
+real hub UI above the upgrade card.
+
+**`src/components/primitives/UpgradeGate.jsx`**
+- Added optional `previewSrc` / `previewAlt` props. When `previewSrc` is
+  passed, an image block renders above the existing upgrade card with a
+  soft `mask-image: linear-gradient(to bottom, black 80%, transparent)`
+  bottom-edge fade and a small "Preview" chip top-left.
+- Image is `aria-hidden="true"` + `loading="lazy"` (the upgrade card
+  already names the hub + price, so the image is decorative for AT).
+- Wired PostHog: both the Subscribe and Contact buttons now fire
+  `window.posthog?.capture('upgrade_gate_click', { hubName, action })`
+  with `action: 'subscribe' | 'contact'`. PostHog wrapper is try/catch'd
+  so telemetry never blocks Stripe checkout. Pattern matches the
+  existing `jobs_signup_attempted` event in JobsPage.
+- Existing props (`hubName`, `hubLabel`, `hubPrice`, `hubDescription`,
+  `hasHub`, `children`) and the Stripe `createCheckoutSession` flow are
+  unchanged — preview is purely opt-in.
+
+**`src/pages/HubsPage.jsx`**
+- New `UPGRADE_PREVIEWS` constant maps each paid hub key to its
+  `'/upgrade-previews/<hub>.jpg'` URL.
+- The single `<UpgradeGate />` callsite (~line 137) now passes
+  `previewSrc={UPGRADE_PREVIEWS[hubKey]}` and
+  `previewAlt={hubLabel + ' preview'}`.
+
+**`public/upgrade-previews/`**
+- 7 new JPEG screenshots (one per paid hub) captured from the live
+  prod ChurchOpsHub at 1440px viewport using Playwright signed in
+  as `e2e-admin@churchopshub.com`. Personally-identifiable names in
+  People Access / Tasks / Jobs were rewritten to placeholder names
+  via in-page DOM substitution before each screenshot.
+- Compressed via `sips` to JPEG @ 65–78% quality, resampled to
+  1040–1120px wide. All under 80KB each (insights 61K, maintenance
+  74K, coordination 70K, accountability 58K, people-access 56K,
+  tasks 81K, jobs 54K). Lazy-loaded, so no impact on hub picker LCP.
+
+**Why JPEG instead of PNG**: the audit plan called for PNG, but sips
+(only image tool available on this Mac without installing pngquant) won't
+quantize PNGs effectively. JPEG at 70–78% quality hits the size budget
+cleanly and the bottom-fade mask plus aria-hidden semantics mean lossy
+artifacts are invisible.
+
+**Verification**: production build clean (`npm run build` ✓, 4.0s,
+prerender + verifier all green). Lint at baseline (0 errors, 47
+exhaustive-deps warnings — baseline is ~45). Manual smoke deferred —
+the gated state requires a no-hubs account, which doesn't exist in
+the FXCC test church (all accounts trial the full suite).
+
+**Out of scope** (deferred): option (b) live-data preview mode
+(`previewMode={true}` swapping Firestore for fixtures), PostHog funnel
+dashboard for `upgrade_gate_click` → checkout conversion, and any
+A/B test of preview-on vs preview-off. Single variant ships; measure
+conversion lift naturally over the next ~2 weeks via PostHog.
+
+---
+
 ## 2026-05-25 — UI audit Phase 5: hub-specific high-impact UX
 
 Phase 5 of `docs/UI-AUDIT-2026-05-24-PLAN.md`. Nine targeted hub-specific items

@@ -98,6 +98,16 @@ const UPGRADE_PRICES = {
   insights: '$7', maintenance: '$7', coordination: '$7', accountability: '$5', people_access: '$7', tasks: '$7', jobs: '$7',
 };
 
+const UPGRADE_PREVIEWS = {
+  insights: '/upgrade-previews/insights.jpg',
+  maintenance: '/upgrade-previews/maintenance.jpg',
+  coordination: '/upgrade-previews/coordination.jpg',
+  accountability: '/upgrade-previews/accountability.jpg',
+  people_access: '/upgrade-previews/people-access.jpg',
+  tasks: '/upgrade-previews/tasks.jpg',
+  jobs: '/upgrade-previews/jobs.jpg',
+};
+
 function HubContent({ hubKey, store, userProfile }) {
   let page = null;
   if (hubKey === 'insights') page = <InsightsPage store={store} userProfile={userProfile} />;
@@ -140,6 +150,8 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
           hubPrice={UPGRADE_PRICES[hubKey]}
           hubDescription={UPGRADE_DESCRIPTIONS[hubKey]}
           hasHub={hubHas}
+          previewSrc={UPGRADE_PREVIEWS[hubKey]}
+          previewAlt={hubLabel + ' preview'}
         >
           {userCanSeeHub(hubKey)
             ? <HubContent hubKey={hubKey} store={store} userProfile={userProfile} />

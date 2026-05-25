@@ -190,7 +190,18 @@ HubsPage People Access filter was already in place from a prior phase.
 
 ---
 
-## Phase 6 — Upgrade-gate preview (one session, ~3h)
+## Phase 6 — Upgrade-gate preview (one session, ~3h) — **SHIPPED 2026-05-25**
+
+**Outcome:** shipped option (a) with JPEGs in `public/upgrade-previews/`. `UpgradeGate.jsx`
+gained optional `previewSrc` / `previewAlt` props; when passed, a preview block renders
+above the upgrade card with a `mask-image` bottom fade and a "Preview" chip. `HubsPage.jsx`
+got a `UPGRADE_PREVIEWS` map and passes the props through. 7 hub screenshots captured
+from prod via Playwright signed in as `e2e-admin@churchopshub.com`, PII names rewritten
+to placeholders via DOM-substitution before each screenshot, then compressed via `sips`
+to JPEG @ 65–78% at 1040–1120px wide (all under 80KB). PostHog `upgrade_gate_click`
+event with `{ hubName, action: 'subscribe' | 'contact' }` fires from both buttons,
+wrapped in try/catch so telemetry can never block Stripe checkout. See `docs/CHANGELOG.md`
+(2026-05-25).
 
 **Goal:** turn the upgrade wall into a "see what you get" preview.
 
@@ -203,8 +214,8 @@ HubsPage People Access filter was already in place from a prior phase.
   - Recommended: **(a)** for v1, plan **(b)** later if needed.
 
 ### Acceptance
-- [ ] Visiting each paid hub as a non-subscriber shows a preview, not a wall.
-- [ ] CTA tracks click-through (PostHog event `upgrade_gate_click` with hub name).
+- [x] Visiting each paid hub as a non-subscriber shows a preview, not a wall.
+- [x] CTA tracks click-through (PostHog event `upgrade_gate_click` with hub name).
 
 ---
 
