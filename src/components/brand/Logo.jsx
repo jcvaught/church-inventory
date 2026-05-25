@@ -24,7 +24,7 @@ export function FullLogo({ size = 38, light = false }) {
         <div style={{ fontFamily:f1, fontSize:size*0.46, fontWeight:700, color, letterSpacing:-0.5 }}>
           ChurchOps<span style={{ color: light ? "rgba(255,255,255,0.7)" : B.teal }}>Hub</span>
         </div>
-        <div style={{ fontFamily:f1, fontSize:size*0.2, fontWeight:400, color: light ? "rgba(255,255,255,0.45)" : B.textLight, letterSpacing:1.5, textTransform:"uppercase", marginTop:1 }}>
+        <div style={{ fontFamily:f1, fontSize:size*0.2, fontWeight:400, color: light ? "rgba(255,255,255,0.6)" : B.textLight, letterSpacing:1.5, textTransform:"uppercase", marginTop:1 }}>
           Run Your Church
         </div>
       </div>

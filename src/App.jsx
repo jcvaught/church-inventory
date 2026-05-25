@@ -540,7 +540,8 @@ function AppShell({ authHook }) {
     fontSize:13, fontWeight:600, fontFamily:f1, letterSpacing:.2,
     transition:"all 0.2s", whiteSpace:"nowrap",
     background: tab===k ? "rgba(42,125,110,0.18)" : "transparent",
-    color: tab===k ? B.white : "rgba(255,255,255,0.45)",
+    // Inactive tab bumped 0.45 → 0.6 for WCAG-AA on navy (Layer 1 a11y pass).
+    color: tab===k ? B.white : "rgba(255,255,255,0.6)",
   });
 
   const lowStock = (store.supplies || []).filter(c => c.quantity <= c.minQuantity);
@@ -708,11 +709,14 @@ function AppShell({ authHook }) {
       {!isMobile && (
         <div style={{ background:B.navy, padding:"24px 28px", textAlign:"center" }}>
           <FullLogo size={26} light={true} />
-          <p style={{ color:"rgba(255,255,255,0.25)", fontSize:11, fontFamily:f1, marginTop:10 }}>churchopshub.com</p>
+          {/* Bumped from rgba 0.25 → 0.6 for WCAG-AA contrast on navy
+              (Layer 1 a11y pass, 2026-05-25). Previous values were
+              2.22:1 (text) and 4.1:1 (links) — both below 4.5:1. */}
+          <p style={{ color:"rgba(255,255,255,0.6)", fontSize:11, fontFamily:f1, marginTop:10 }}>churchopshub.com</p>
           <div style={{ display:"flex", gap:16, justifyContent:"center", alignItems:"center" }}>
-            <a href="?help" style={{ color:"rgba(255,255,255,0.35)", fontSize:11, fontFamily:f1, textDecoration:"none" }}>Help Center</a>
-            <span style={{ color:"rgba(255,255,255,0.15)", fontSize:11 }}>·</span>
-            <a href="/blog" style={{ color:"rgba(255,255,255,0.35)", fontSize:11, fontFamily:f1, textDecoration:"none" }}>Blog</a>
+            <a href="?help" style={{ color:"rgba(255,255,255,0.6)", fontSize:11, fontFamily:f1, textDecoration:"none" }}>Help Center</a>
+            <span style={{ color:"rgba(255,255,255,0.3)", fontSize:11 }}>·</span>
+            <a href="/blog" style={{ color:"rgba(255,255,255,0.6)", fontSize:11, fontFamily:f1, textDecoration:"none" }}>Blog</a>
           </div>
         </div>
       )}
