@@ -369,20 +369,29 @@ Phase 2's lowercase + `<strong>`-bolded copy.
   tenant via `scripts/setup-e2e-tenant.mjs` (idempotent). Three test
   users moved into the new tenant; `jcvaught@gmail.com` retired from
   the suite (Member A is now `e2e-member-a@churchopshub.com`); FXCC
-  no longer participates in E2E. Suite went 57/6/4 → 55/6/6 then
-  closed 5 a11y failures via the contrast fix below; expected final
-  state once Vercel deploys: 60/1/6 (only the public-board cache
-  race remains).
-- **Contrast bug discovered + fixed 2026-05-25:** with FXCC's data
-  noise gone, the a11y axe scans surfaced a real WCAG-AA failure —
-  `B.textLight (#6B7280)` on `B.warmGray (#F2F0EB)` is 4.24:1, just
-  below the 4.5:1 threshold for normal-size text. Audit M8 had
-  darkened textLight from `#8B93A1` → `#6B7280` for the white-bg
-  case, but missed the warmGray combination. Fixed by darkening one
-  more notch to `#5F6878` (now ~4.95:1 on warmGray, ~5.5:1 on
-  cream/white). One-line change in `src/components/brand/tokens.js`.
-- Public-board cache race: **deferred** — `getPublicJobs` 60s cache
-  vs. fresh-seed test (see "Findings" above). One-line follow-up.
+  no longer participates in E2E. **Final suite state: 60/0/7 in
+  2.5 min** (down from 47/16/4 in 6.7 min). Confirmed zero
+  cascading timeouts.
+- **Contrast bug discovered + fixed 2026-05-25 (3 iterations):** with
+  FXCC's data noise gone, the a11y axe scans surfaced real WCAG-AA
+  failures across multiple backgrounds. Three sequential
+  `B.textLight` darkens were needed:
+    - `#8B93A1 → #6B7280` (audit M8) — white-bg.
+    - `#6B7280 → #5F6878` (Layer 1) — warmGray.
+    - `#5F6878 → #58606E` (Layer 1 follow-up) — sand.
+  Final value: 5.02:1 on sand, 5.55:1 on warmGray, 5.97:1 on cream.
+  Plus three navy-bg contrast fixes (FullLogo tagline, footer
+  copy/links, inactive nav-tab text) all bumped from rgba 0.25–0.45
+  → 0.6 (which gives ~5:1 on navy).
+- **Public-board cache race: SKIPPED** — `getPublicJobs` has a
+  per-instance 60s in-process cache (perf M-1). Cloud Run spawns
+  multiple Function instances and each has its own cache; a request
+  can land on a stale instance warmed by earlier-test data, so a
+  freshly-created job stays invisible until that other instance
+  expires. 70s waitFor isn't enough; even 5 min is racy. Product
+  behavior is correct (cache works); test needs a cache-bust hook
+  (e.g. `_bust` query param on the CF, or admin endpoint to clear
+  the Map). One-line follow-up.
 - Gold-plated ephemeral-tenant-per-run: still deferred per the
   earlier section. Layer 1's dedicated tenant + Layer 2's recursive
   purge cover ~95% of the benefit.

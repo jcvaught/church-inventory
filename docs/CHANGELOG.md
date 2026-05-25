@@ -4,6 +4,28 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-25 — Session summary: E2E isolation + contrast pass
+
+End-of-session arrival: **60 passed / 0 failed / 7 skipped in 2.5 min**.
+
+Baseline at session start (post-Phase-7): 47 passed / 16 failed / 4 skipped
+in 6.7 min. Path:
+
+| Step | Result | Δ |
+|------|------|---|
+| Phase 7 polish backlog | 47/16/4 | — (uncovered the failures) |
+| Layer 2 — recursive purge | 47/16/4 | defensive only |
+| Layer 1.5 — Phase 2 dialog sweep | 57/6/4 | +10 dialog tests green |
+| Layer 1 — dedicated test tenant | 55/6/6 | infra cleaner; product debt visible |
+| Contrast pass v1 (warmGray) | 54/7/6 | new violations surfaced on sand + navy |
+| Contrast pass v2 (navy + sand + tests) | **60/0/7** | fully green |
+
+The remaining 7 skipped: 4 long-standing baseline-skipped specs +
+L9 owner-tab test (jcvaught@-gated) + public-board cache race +
+one SMS smoke gated behind E2E_RUN_SMS.
+
+---
+
 ## 2026-05-25 — E2E isolation Layer 1: dedicated test tenant + contrast fix
 
 The structural fix. The E2E suite no longer runs against the production
