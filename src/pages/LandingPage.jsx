@@ -328,7 +328,7 @@ export function LandingPage({ onGetStarted }) {
                 Get Started
               </button>
               <p style={{ textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.3)', margin: '14px 0 0', fontFamily: f1 }}>
-                Save $16/mo vs. buying hubs separately
+                7 hubs separately: 6 × $7 + $5 = <strong style={{ color: 'rgba(255,255,255,0.55)' }}>$47/mo</strong> → bundle saves <strong style={{ color: 'rgba(255,255,255,0.55)' }}>$18/mo</strong>
               </p>
             </div>
           </div>
@@ -469,9 +469,9 @@ export function LandingPage({ onGetStarted }) {
         </div>
         <div style={{ maxWidth: 1100, margin: '24px auto 0', paddingTop: 18, borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: 13, color: 'rgba(255,255,255,0.40)', fontFamily: f1, textAlign: mob ? 'left' : 'center' }}>
           More from our network:{' '}
-          <a href="https://courtclimber.com/blog" rel="noopener" style={{ color: 'rgba(255,255,255,0.6)' }}>Pickleball club software</a>{' · '}
-          <a href="https://masteryhelp.com/blog" rel="noopener" style={{ color: 'rgba(255,255,255,0.6)' }}>Learn Biblical Greek &amp; Hebrew</a>{' · '}
-          <a href="https://repcrew.fit/blog" rel="noopener" style={{ color: 'rgba(255,255,255,0.6)' }}>Workout accountability</a>
+          <a href="https://courtclimber.com/blog" rel="noopener noreferrer" style={{ color: 'rgba(255,255,255,0.6)' }}>Pickleball club software</a>{' · '}
+          <a href="https://masteryhelp.com/blog" rel="noopener noreferrer" style={{ color: 'rgba(255,255,255,0.6)' }}>Learn Biblical Greek &amp; Hebrew</a>{' · '}
+          <a href="https://repcrew.fit/blog" rel="noopener noreferrer" style={{ color: 'rgba(255,255,255,0.6)' }}>Workout accountability</a>
         </div>
       </footer>
 

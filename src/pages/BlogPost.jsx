@@ -143,7 +143,7 @@ export function BlogPost({ slug, onGetStarted }) {
           fontFamily: f1, fontSize: 13, fontWeight: 600, color: B.teal,
           textDecoration: 'none', display: 'inline-block', marginBottom: 32,
         }}>
-          ← All Articles
+          ← Back to Blog
         </a>
 
         {/* Post meta */}

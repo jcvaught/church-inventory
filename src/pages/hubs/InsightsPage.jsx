@@ -10,6 +10,7 @@ import { MobileCtx } from '../../hooks/useMobile.js';
 import { localDateStr } from '../../utils/date.js';
 import { Stat } from '../../components/primitives/Stat.jsx';
 import { DataTableDisclosure } from '../../components/primitives/DataTableDisclosure.jsx';
+import { EmojiIcon } from '../../components/primitives/EmojiIcon.jsx';
 
 /* ─── Helpers ─────────────────────────────────────────────── */
 
@@ -288,7 +289,7 @@ function SeasonalSection({ activityLog, isMobile }) {
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke={B.sand} />
-          <XAxis dataKey="month" tick={{ fontFamily: f1, fontSize: 10, fill: B.textLight }} />
+          <XAxis dataKey="month" tick={{ fontFamily: f1, fontSize: 10, fill: B.textLight }} angle={isMobile ? -35 : 0} textAnchor={isMobile ? 'end' : 'middle'} height={isMobile ? 44 : 30} interval={isMobile ? 0 : 'preserveEnd'} />
           <YAxis allowDecimals={false} tick={{ fontFamily: f1, fontSize: 10, fill: B.textLight }} />
           <Tooltip {...tooltipStyle} formatter={(v) => [v + ' checkouts', 'Checkouts']} />
           <Area type="monotone" dataKey="checkouts" stroke={B.teal} strokeWidth={2} fill="url(#tealGrad)" dot={{ r: 3, fill: B.teal }} />
@@ -349,7 +350,7 @@ function FinancialSection({ items, isMobile: _isMobile }) {
 
       {warrantyAlerts.length > 0 && (
         <div style={{ background: B.redPale, border: '1px solid #FECACA', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
-          <div style={{ fontFamily: f1, fontWeight: 700, color: B.red, fontSize: 13, marginBottom: 6 }}>⚠️ Warranty Alerts ({warrantyAlerts.length})</div>
+          <div style={{ fontFamily: f1, fontWeight: 700, color: B.red, fontSize: 13, marginBottom: 6 }}><EmojiIcon emoji="⚠️" label="Warning" /> Warranty Alerts ({warrantyAlerts.length})</div>
           {warrantyAlerts.map(i => (
             <div key={i._docId} style={{ fontSize: 13, color: B.textDark, display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
               <span>{i.description}</span>
@@ -432,7 +433,7 @@ function SuppliesSection({ supplies, activityLog, isMobile }) {
 
       {runningOutSoon.length > 0 && (
         <div style={{ background: B.redPale, border: '1px solid #FECACA', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
-          <div style={{ fontFamily: f1, fontWeight: 700, color: B.red, fontSize: 13, marginBottom: 6 }}>⚠️ Running Out Soon</div>
+          <div style={{ fontFamily: f1, fontWeight: 700, color: B.red, fontSize: 13, marginBottom: 6 }}><EmojiIcon emoji="⚠️" label="Warning" /> Running Out Soon</div>
           {runningOutSoon.map(s => (
             <div key={s._docId} style={{ fontSize: 13, color: B.textDark, display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
               <span>{s.description}</span>
@@ -522,7 +523,7 @@ function LocationSection({ items, supplies, settings, isMobile }) {
         </select>
         {loc && (
           <button onClick={exportCSV} style={{ ...btnS, fontSize: 13, padding: '8px 14px' }} aria-label="Export location report CSV">
-            ⬇ Export CSV
+            <EmojiIcon emoji="⬇" decorative /> Export CSV
           </button>
         )}
       </div>
@@ -699,7 +700,7 @@ export function InsightsPage({ store, userProfile: _userProfile }) {
           onClick={() => printInsightsReport({ utilization: utilizationForPrint, ministry: ministryForPrint, financial: financialForPrint, churchName: config?.churchName })}
           style={{ ...btnS, fontSize: 13, padding: '9px 18px' }}
         >
-          🖨 Print Report
+          <EmojiIcon emoji="🖨" decorative /> Print Report
         </button>
       </div>
 

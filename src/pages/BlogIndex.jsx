@@ -104,10 +104,13 @@ export function BlogIndex({ onGetStarted }) {
               <article style={{
                 background: B.white, borderRadius: 16, padding: mob ? '28px 24px' : '36px 40px',
                 border: `1px solid ${B.sand}`,
-                transition: 'box-shadow 0.15s',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                transition: 'box-shadow 0.15s, transform 0.1s',
               }}
                 onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 24px rgba(0,0,0,0.08)'}
-                onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
+                onMouseLeave={e => e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.04)'}
+                onTouchStart={e => e.currentTarget.style.transform = 'scale(0.99)'}
+                onTouchEnd={e => e.currentTarget.style.transform = 'scale(1)'}
               >
                 <div style={{ fontSize: 13, color: B.textLight, fontFamily: f1, marginBottom: 12 }}>
                   {formatDate(post.date)}

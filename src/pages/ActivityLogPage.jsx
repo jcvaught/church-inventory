@@ -81,6 +81,12 @@ export function ActivityLogPage({ store }) {
     return d.toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }) + " " +
            d.toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit" });
   }
+  function tsTitle(ts) {
+    if (!ts) return undefined;
+    const d = new Date(ts);
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
+    return `${d.toLocaleString("en-US", { dateStyle:"full", timeStyle:"long" })} (${tz})`;
+  }
 
   function detailRows(details) {
     if (!details || Object.keys(details).length === 0) return null;
@@ -108,7 +114,12 @@ export function ActivityLogPage({ store }) {
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           <div>
             <label style={{ display:"block", fontSize:11, fontWeight:600, color:B.textLight, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1 }}>Search</label>
-            <input style={inp} value={search} onChange={e=>{setSearch(e.target.value);setPage(0);setExpanded(null);}} placeholder="Item ID, person, details..." />
+            <div style={{ position:"relative" }}>
+              <input style={{ ...inp, paddingRight: search ? 36 : undefined }} value={search} onChange={e=>{setSearch(e.target.value);setPage(0);setExpanded(null);}} placeholder="Item ID, person, details..." />
+              {search && (
+                <button type="button" onClick={()=>{setSearch("");setPage(0);setExpanded(null);}} aria-label="Clear search" title="Clear search" style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:B.textLight, fontSize:18, lineHeight:1, padding:"4px 8px" }}>×</button>
+              )}
+            </div>
           </div>
           <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4, 1fr)", gap:10 }}>
             <div>
@@ -169,7 +180,7 @@ export function ActivityLogPage({ store }) {
                       </div>
                       <div style={{ fontSize:13, color:B.textMid, marginTop:2 }}>
                         by <span style={{ fontWeight:600 }}>{l.performedByName||"Unknown"}</span>
-                        <span style={{ color:B.textLight, marginLeft:8 }}>{formatTs(l.timestamp)}</span>
+                        <span title={tsTitle(l.timestamp)} style={{ color:B.textLight, marginLeft:8 }}>{formatTs(l.timestamp)}</span>
                       </div>
                     </div>
                     {dets && (

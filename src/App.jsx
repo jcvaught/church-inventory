@@ -79,9 +79,9 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
       <input type="checkbox" id="tos" checked={agreedToTerms} onChange={e=>setAgreedToTerms(e.target.checked)} style={{ marginTop:2, accentColor:B.teal, cursor:"pointer" }} />
       <label htmlFor="tos" style={{ cursor:"pointer", lineHeight:1.5 }}>
         I agree to the{" "}
-        <button type="button" onClick={()=>setShowLegal("terms")} style={{ background:"none", border:"none", color:B.teal, fontWeight:600, cursor:"pointer", fontSize:13, padding:0, fontFamily:f2 }}>Terms of Service</button>
+        <button type="button" onClick={()=>setShowLegal("terms")} style={{ background:"none", border:"none", color:B.teal, fontWeight:600, cursor:"pointer", fontSize:13, padding:0, fontFamily:f2, textDecoration:"underline" }}>Terms of Service</button>
         {" "}and{" "}
-        <button type="button" onClick={()=>setShowLegal("privacy")} style={{ background:"none", border:"none", color:B.teal, fontWeight:600, cursor:"pointer", fontSize:13, padding:0, fontFamily:f2 }}>Privacy Policy</button>
+        <button type="button" onClick={()=>setShowLegal("privacy")} style={{ background:"none", border:"none", color:B.teal, fontWeight:600, cursor:"pointer", fontSize:13, padding:0, fontFamily:f2, textDecoration:"underline" }}>Privacy Policy</button>
       </label>
     </div>
   );

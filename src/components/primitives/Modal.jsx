@@ -100,7 +100,7 @@ export function Modal({ open, onClose, title, wide, maxWidth, children }) {
     <div ref={panelRef} tabIndex={-1} style={{ position:"relative", background:B.cream, borderRadius:isMobile?"18px 18px 0 0":18, padding:hasFooter?0:(isMobile?"22px 18px calc(28px + env(safe-area-inset-bottom, 0px))":"30px 34px"), maxWidth:resolvedMaxWidth, width:isMobile?"100%":"92%", maxHeight:isMobile?"92dvh":"88dvh", overflowY:hasFooter?"hidden":"auto", display:hasFooter?"flex":undefined, flexDirection:hasFooter?"column":undefined, boxShadow:"0 -8px 40px rgba(27,42,74,0.18)" }} onClick={e=>e.stopPropagation()}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:hasFooter?0:22, padding:hasFooter?(isMobile?"22px 18px 14px":"26px 30px 16px"):0, flexShrink:0 }}>
         <h3 id={titleId} style={{ margin:0, fontSize:isMobile?17:20, fontFamily:f1, fontWeight:700, color:B.navy }}>{title}</h3>
-        <button onClick={onClose} aria-label="Close dialog" style={{ background:"none", border:"none", fontSize:24, cursor:"pointer", color:B.textLight, padding:"6px 10px", lineHeight:1 }}>&times;</button>
+        <button onClick={onClose} aria-label="Close dialog" title="Close" style={{ background:"none", border:"none", fontSize:24, cursor:"pointer", color:B.textLight, padding:"6px 10px", lineHeight:1 }}>&times;</button>
       </div>
       {hasFooter ? (
         <>

@@ -631,7 +631,15 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       </div>
 
       {/* Success message */}
-      {msg && <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError?'#FEE8E8':B.tealPale, border:`1px solid ${msg.isError?'#FECACA':B.teal}`, borderRadius:10, padding:"10px 16px", marginBottom:16, color:msg.isError?B.red:B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}><span>{msg.text}</span><button onClick={()=>setMsg(null)} style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button></div>}
+      {msg && (
+        <div style={{ position:'relative', overflow:'hidden', background:msg.isError?'#FEE8E8':B.tealPale, border:`1px solid ${msg.isError?'#FECACA':B.teal}`, borderRadius:10, marginBottom:16, color:msg.isError?B.red:B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:"10px 16px" }}>
+            <span>{msg.text}</span>
+            <button onClick={()=>setMsg(null)} style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button>
+          </div>
+          <div key={msg.text + msg.isError} aria-hidden="true" style={{ position:'absolute', left:0, bottom:0, height:2, background:'currentColor', opacity:.4, animation:'coh-toast-countdown 5s linear forwards' }} />
+        </div>
+      )}
 
       {/* Public Requests Panel — admin only */}
       {isAdmin && publicRequests?.length > 0 && (
@@ -678,7 +686,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
             <input
               ref={searchRef}
               style={{...inp, paddingLeft:36}}
-              placeholder="Search by name or ID..."
+              placeholder="Search by name, ID, location, or tag..."
               value={search} onChange={e=>setSearch(e.target.value)}
             />
             <span aria-hidden="true" style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:14, color:B.textLight }}>🔍</span>

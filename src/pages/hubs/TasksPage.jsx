@@ -11,6 +11,7 @@ import { FF } from '../../components/primitives/FF.jsx';
 import { Spinner } from '../../components/primitives/Spinner.jsx';
 import { RichTextarea } from '../../components/primitives/RichTextarea.jsx';
 import { useConfirm } from '../../components/primitives/ConfirmDialog.jsx';
+import { EmojiIcon } from '../../components/primitives/EmojiIcon.jsx';
 import { resizeImageForUpload } from '../../utils/imageResize.js';
 import { exportTasksCSV } from '../../utils/csv.js';
 import { exportTasksICS } from '../../utils/ical.js';
@@ -186,7 +187,7 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
         </div>
       </div>
       {task.blockedBy?.length > 0 && task.status !== 'Complete' && task.status !== 'Cancelled' && (
-        <div style={{ fontSize:11, fontWeight:700, color:B.red, fontFamily:f1, marginBottom:3 }}>⛔ Blocked by {task.blockedBy.join(', ')}</div>
+        <div style={{ fontSize:11, fontWeight:700, color:B.red, fontFamily:f1, marginBottom:3 }}><EmojiIcon emoji="⛔" label="Blocked" /> Blocked by {task.blockedBy.join(', ')}</div>
       )}
       {parentName && <div style={{ fontSize:11, color:B.textLight, fontFamily:f1, marginBottom:3 }}>Parent: {parentName}</div>}
       <div style={{ fontWeight:600, fontSize:14, color:B.navy, marginBottom:4, lineHeight:1.3 }}>{task.name}</div>
@@ -205,7 +206,7 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
       )}
       {(task.recurrence || task.checklist?.length > 0 || subtaskCount > 0) && (
         <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
-          {task.recurrence && <span style={{ fontSize:12, color:B.teal, fontFamily:f1 }}>🔁 {RECURRENCE_LABELS[task.recurrence]}</span>}
+          {task.recurrence && <span style={{ fontSize:12, color:B.teal, fontFamily:f1 }}><EmojiIcon emoji="🔁" decorative /> {RECURRENCE_LABELS[task.recurrence]}</span>}
           {task.checklist?.length > 0 && (
             <span style={{ fontSize:12, color:task.checklist.filter(c=>c.done).length===task.checklist.length ? B.teal : B.textMid, fontFamily:f1 }}>
               ✓ {task.checklist.filter(c=>c.done).length}/{task.checklist.length}
@@ -220,11 +221,11 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
       )}
       {(task.photos?.length > 0 || task.dueDate || task.estimatedHours != null || task.actualHours != null) && (
         <div style={{ display:'flex', justifyContent:'flex-end', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-          {task.photos?.length > 0 && <span style={{ fontSize:11, color:B.textLight }}>📷 {task.photos.length}</span>}
+          {task.photos?.length > 0 && <span style={{ fontSize:11, color:B.textLight }}><EmojiIcon emoji="📷" label="Photos" /> {task.photos.length}</span>}
           {(task.estimatedHours != null || task.actualHours != null) && (
             <span style={{ fontSize:11, color:B.textLight }}>⏱ {task.actualHours != null ? task.actualHours : '—'}/{task.estimatedHours != null ? task.estimatedHours : '—'}h</span>
           )}
-          {task.dueDate && <span style={{ fontSize:11, color: isOverdue ? B.red : B.textLight }}>📅 {task.dueDate}</span>}
+          {task.dueDate && <span style={{ fontSize:11, color: isOverdue ? B.red : B.textLight }}><EmojiIcon emoji="📅" label="Due date" /> {task.dueDate}</span>}
         </div>
       )}
       {isMobile && onStatusChange && (
@@ -789,7 +790,7 @@ const TaskChip = memo(function TaskChip({ task, todayStr, onTaskClick }) {
       style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 5px', borderRadius:5, background:isOverdue ? '#FEE8E8' : pc.bg, borderLeft:'3px solid '+pc.dot, cursor:'pointer', marginBottom:2, overflow:'hidden' }}
       title={task.name}>
       <span style={{ fontSize:11, color:isOverdue ? B.red : pc.tx, fontWeight:600, fontFamily:f1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flex:1 }}>{task.name}</span>
-      {task.recurrence && <span style={{ fontSize:10, flexShrink:0 }}>🔁</span>}
+      {task.recurrence && <EmojiIcon emoji="🔁" label="Recurring" style={{ fontSize:10, flexShrink:0 }} />}
     </div>
   );
 });
@@ -851,7 +852,7 @@ function TaskCalendar({ tasks, onTaskClick, isMobile }) {
                 <span style={{ width:8, height:8, borderRadius:'50%', background:(priorityColors[t.priority]||priorityColors.Medium).dot, flexShrink:0 }}/>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:14, fontWeight:600, color:B.navy, fontFamily:f1 }}>{t.name}</div>
-                  <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>{t.dueDate}{t.recurrence ? ' · 🔁' : ''}</div>
+                  <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>{t.dueDate}{t.recurrence ? <> · <EmojiIcon emoji="🔁" label="Recurring" /></> : ''}</div>
                 </div>
               </div>
             ))}
@@ -2260,7 +2261,7 @@ export function TasksPage({ store, userProfile }) {
       {/* Empty state — no tasks at all */}
       {visibleTasks.length === 0 && !loading && (
         <div style={{ background:B.white, borderRadius:18, padding:'48px 32px', border:'1px solid '+B.sand, textAlign:'center' }}>
-          <div style={{ fontSize:48, marginBottom:16 }}>✅</div>
+          <EmojiIcon emoji="✅" decorative style={{ fontSize:48, marginBottom:16, display:'block' }} />
           <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 8px', fontSize:18 }}>No tasks yet</h3>
           <p style={{ color:B.textLight, fontSize:14 }}>Create a task to start tracking your church admin work.</p>
         </div>
@@ -2269,7 +2270,7 @@ export function TasksPage({ store, userProfile }) {
       {/* Empty state — My Tasks filter active but no assigned tasks */}
       {filterMyTasks && filteredTasks.length === 0 && visibleTasks.length > 0 && (
         <div style={{ background:B.white, borderRadius:14, padding:'32px 24px', border:'1px solid '+B.sand, textAlign:'center', marginBottom:16 }}>
-          <div style={{ fontSize:36, marginBottom:12 }}>👤</div>
+          <EmojiIcon emoji="👤" decorative style={{ fontSize:36, marginBottom:12, display:'block' }} />
           <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 6px', fontSize:16 }}>No tasks assigned to you</h3>
           <p style={{ color:B.textLight, fontSize:13, margin:'0 0 12px' }}>Open any task and click <strong>Me</strong> in the Assignees field, then save to assign yourself.</p>
           <button type="button" onClick={() => setFilterMyTasks(false)} style={{ padding:'8px 18px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.teal, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:600 }}>
@@ -2451,6 +2452,11 @@ export function TasksPage({ store, userProfile }) {
                 {RECURRENCE_OPTIONS.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
               </select>
             </FF>
+            {taskForm.recurrence && taskForm.dueDate && (
+              <div style={{ fontSize:12, color:B.textLight, marginTop:4, fontFamily:f1 }}>
+                <EmojiIcon emoji="🔁" decorative /> Next recurrence: <strong style={{ color:B.textMid }}>{calculateNextDue(taskForm.dueDate, taskForm.recurrence) || '—'}</strong>
+              </div>
+            )}
           </div>
         </div>
         <FF label="Tags">
@@ -2524,6 +2530,26 @@ export function TasksPage({ store, userProfile }) {
       <Modal open={!!showDetail} onClose={closeDetail} title={(showDetail?.taskNumber || '') + (showDetail?.name ? ' — ' + showDetail.name.slice(0, 40) : '')} wide>
         {showDetail && (
           <div>
+            {showDetail.taskNumber && (
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, fontFamily:'monospace', fontSize:12, color:B.textLight }}>
+                <span>{showDetail.taskNumber}</span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(showDetail.taskNumber);
+                      flash(`Copied ${showDetail.taskNumber}`);
+                    } catch {
+                      flash('Could not copy to clipboard', true);
+                    }
+                  }}
+                  aria-label={`Copy ${showDetail.taskNumber}`}
+                  title="Copy to clipboard"
+                  style={{ background:'none', border:'none', cursor:'pointer', padding:'2px 6px', color:B.teal, fontSize:12, fontFamily:f1 }}>
+                  <EmojiIcon emoji="📋" decorative /> Copy
+                </button>
+              </div>
+            )}
             {remoteUpdate && (
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, padding:'10px 14px', borderRadius:8, background:'#FEF3E8', border:'1px solid #F59E42', marginBottom:14 }}>
                 <span style={{ fontSize:13, color:'#7A4A10', fontFamily:f2 }}>This task was updated by another team member.</span>
@@ -2568,6 +2594,11 @@ export function TasksPage({ store, userProfile }) {
                 <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.recurrence} onChange={e => setDetailEdits(d => ({ ...d, recurrence:e.target.value }))}>
                   {RECURRENCE_OPTIONS.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
                 </select>
+                {detailEdits.recurrence && detailEdits.dueDate && (
+                  <div style={{ fontSize:12, color:B.textLight, marginTop:4, fontFamily:f1 }}>
+                    <EmojiIcon emoji="🔁" decorative /> Next recurrence: <strong style={{ color:B.textMid }}>{calculateNextDue(detailEdits.dueDate, detailEdits.recurrence) || '—'}</strong>
+                  </div>
+                )}
               </FF>
             </div>
             <FF label="Tags">
@@ -2726,7 +2757,7 @@ export function TasksPage({ store, userProfile }) {
             {/* Linked job chip */}
             {showDetail.linkedJobDocId && (
               <div style={{ marginBottom:12, padding:'8px 12px', borderRadius:8, background:'#EDF2FF', border:'1px solid #C7D2FE', display:'flex', alignItems:'center', gap:8 }}>
-                <span style={{ fontSize:12, color:'#3730A3', fontFamily:f1, fontWeight:600 }}>💼 Linked Job</span>
+                <span style={{ fontSize:12, color:'#3730A3', fontFamily:f1, fontWeight:600 }}><EmojiIcon emoji="💼" decorative /> Linked Job</span>
                 <span style={{ fontSize:12, color:'#4F46E5', fontFamily:'monospace' }}>{showDetail.linkedJobDocId.slice(0,8)}…</span>
               </div>
             )}

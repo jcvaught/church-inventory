@@ -3,6 +3,7 @@ import { B, f1, f2, inp, btnP, btnS } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { Stat } from '../../components/primitives/Stat.jsx';
+import { EmojiIcon } from '../../components/primitives/EmojiIcon.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { localDateStr } from '../../utils/date.js';
 
@@ -208,7 +209,7 @@ export function AccountabilityPage({ store, userProfile }) {
 
         {auditItems.length === 0 && (
           <div style={{ textAlign:'center', padding:'40px 20px', color:B.textLight }}>
-            <div style={{ fontSize:40, marginBottom:12 }}>📦</div>
+            <EmojiIcon emoji="📦" decorative style={{ fontSize:40, marginBottom:12, display:'block' }} />
             <p style={{ fontFamily:f1 }}>No items assigned to this location.</p>
           </div>
         )}
@@ -296,16 +297,16 @@ export function AccountabilityPage({ store, userProfile }) {
       <div style={{ display:'flex', gap:10, marginBottom:28, flexWrap:'wrap' }}>
         {canRunAudit && (
           <button onClick={() => setAuditStep('setup')} style={{ ...btnP, display:'flex', alignItems:'center', gap:8 }}>
-            <span>📋</span> Start New Audit
+            <EmojiIcon emoji="📋" decorative /> Start New Audit
           </button>
         )}
         <button onClick={() => { setShowChain(true); setChainSearch(''); setChainItem(null); }}
           style={{ ...btnS, display:'flex', alignItems:'center', gap:8 }}>
-          <span>🔗</span> Chain of Custody
+          <EmojiIcon emoji="🔗" decorative /> Chain of Custody
         </button>
         {isAdmin && (
           <button onClick={exportInsuranceCSV} style={{ ...btnS, display:'flex', alignItems:'center', gap:8 }}>
-            <span>📄</span> Insurance Export
+            <EmojiIcon emoji="📄" decorative /> Insurance Export
           </button>
         )}
       </div>
@@ -315,7 +316,7 @@ export function AccountabilityPage({ store, userProfile }) {
 
       {sortedAudits.length === 0 ? (
         <div style={{ background:B.white, borderRadius:14, padding:'40px 24px', textAlign:'center', border:'1px solid '+B.sand }}>
-          <div style={{ fontSize:48, marginBottom:12 }}>📋</div>
+          <EmojiIcon emoji="📋" decorative style={{ fontSize:48, marginBottom:12, display:'block' }} />
           <p style={{ fontFamily:f1, fontWeight:600, color:B.navy, margin:'0 0 8px' }}>No audits yet</p>
           <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Start a physical audit to confirm items are where they should be.</p>
         </div>
@@ -370,9 +371,9 @@ export function AccountabilityPage({ store, userProfile }) {
         {viewingAudit && (
           <div>
             <div style={{ display:'flex', gap:20, marginBottom:20, fontSize:13, color:B.textLight, flexWrap:'wrap' }}>
-              <span>📅 {formatDateTime(viewingAudit.completedAt)}</span>
-              <span>👤 {viewingAudit.conductedByName}</span>
-              <span>📦 {viewingAudit.itemsChecked} items</span>
+              <span><EmojiIcon emoji="📅" label="Date" /> {formatDateTime(viewingAudit.completedAt)}</span>
+              <span><EmojiIcon emoji="👤" label="Conducted by" /> {viewingAudit.conductedByName}</span>
+              <span><EmojiIcon emoji="📦" label="Items checked" /> {viewingAudit.itemsChecked} items</span>
               {(viewingAudit.discrepancyCount || 0) > 0 &&
                 <span style={{ color:B.red, fontWeight:600 }}>⚠ {viewingAudit.discrepancyCount} discrepanc{viewingAudit.discrepancyCount === 1 ? 'y' : 'ies'}</span>}
             </div>

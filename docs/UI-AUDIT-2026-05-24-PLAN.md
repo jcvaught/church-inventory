@@ -219,7 +219,27 @@ wrapped in try/catch so telemetry can never block Stripe checkout. See `docs/CHA
 
 ---
 
-## Phase 7 — Polish backlog (deferred, single-pass when convenient)
+## Phase 7 — Polish backlog (deferred, single-pass when convenient) — **SHIPPED 2026-05-25**
+
+**Outcome:** all listed groups touched in a single pass.
+LandingPage shows real pricing math ($47/mo → $29 bundle saves $18/mo) and
+upgrades external `rel="noopener"` to `noopener noreferrer`; App.jsx auth
+checkbox TOS/Privacy links now underlined; BlogPost back link unified to
+"← Back to Blog"; BlogIndex cards gain a resting shadow + touch-press
+animation; ActivityLog search has a clear-X and timestamps get a long-form
++ timezone tooltip; ItemsPage search placeholder reflects all matched
+fields and the success toast gets a 5s countdown bar
+(`@keyframes coh-toast-countdown` in `index.html`); SuppliesPage grid
+gains a 1600px max-width and 320px column minmax; `Modal` close-X gets
+`title="Close"`; InsightsPage seasonal chart rotates mobile X-axis labels
+-35°; JobsPage mobile calendar groups are collapsible with chevron + (N)
+count; TasksPage detail modal gains a "📋 Copy" button on TSK-### and a
+"🔁 Next recurrence" preview on both the create form and detail edit.
+Emoji aria sweep wrapped the high-traffic standalone emoji spans across
+Maintenance, Tasks, Accountability, and Insights via `EmojiIcon`
+decorative / labeled modes (recurrence, photos, due dates, vendor
+contact, empty-state glyphs, blocked-by, warranty, export, print, audit
+metadata). See `docs/CHANGELOG.md` (2026-05-25).
 
 Single-PR cleanup pass for Medium/Low/Nit items grouped by file:
 

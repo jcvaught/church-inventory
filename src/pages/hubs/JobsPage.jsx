@@ -73,6 +73,7 @@ function JobCalendar({ jobs, onJobClick, isMobile, todayStr: todayStrProp }) {
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const [expandedDay, setExpandedDay] = useState(null);
+  const [collapsedGroups, setCollapsedGroups] = useState({});
 
   // todayStr is passed down from the parent which also computes it via useMemo([]);
   // if not provided fall back to computing here (shouldn't happen in practice).
@@ -131,8 +132,15 @@ function JobCalendar({ jobs, onJobClick, isMobile, todayStr: todayStrProp }) {
       <div>
         {groups.map(g => g.jobs.length > 0 && (
           <div key={g.label} style={{ marginBottom:20 }}>
-            <div style={{ fontFamily:f1, fontWeight:700, fontSize:13, color:g.label==='Overdue' ? B.red : B.textMid, textTransform:'uppercase', letterSpacing:.8, marginBottom:8 }}>{g.label}</div>
-            {g.jobs.map(j => {
+            <button
+              type="button"
+              onClick={() => setCollapsedGroups(c => ({ ...c, [g.label]: !c[g.label] }))}
+              aria-expanded={!collapsedGroups[g.label]}
+              style={{ background:'none', border:'none', cursor:'pointer', padding:0, marginBottom:8, display:'flex', alignItems:'center', gap:6, fontFamily:f1, fontWeight:700, fontSize:13, color:g.label==='Overdue' ? B.red : B.textMid, textTransform:'uppercase', letterSpacing:.8 }}>
+              <span aria-hidden="true" style={{ fontSize:10, transition:'transform .15s', transform: collapsedGroups[g.label] ? 'rotate(-90deg)' : 'none' }}>▾</span>
+              {g.label} <span style={{ fontWeight:500, color:B.textLight, letterSpacing:0 }}>({g.jobs.length})</span>
+            </button>
+            {!collapsedGroups[g.label] && g.jobs.map(j => {
               const sc = JOB_STATUS_COLORS[j.status] || JOB_STATUS_COLORS.open;
               return (
                 <div key={j._docId}

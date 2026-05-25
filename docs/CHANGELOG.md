@@ -4,6 +4,68 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-25 — UI audit Phase 7: polish backlog
+
+Phase 7 of `docs/UI-AUDIT-2026-05-24-PLAN.md`. Single-pass cleanup of the
+Medium/Low/Nit findings grouped by file. Build + lint clean (0 errors,
+47 baseline warnings).
+
+- **LandingPage** — pricing math now shows the breakdown ("7 hubs separately:
+  6 × $7 + $5 = $47/mo → bundle saves $18/mo") instead of the stale, un-mathed
+  "Save $16/mo"; external network links upgraded from `rel="noopener"` to
+  `rel="noopener noreferrer"`.
+- **App.jsx** auth-screen TOS/Privacy checkbox — Terms of Service and
+  Privacy Policy buttons now have `text-decoration:underline` so they read
+  as links inside the prose-style checkbox label.
+- **BlogPost.jsx** — second back-link unified to "← Back to Blog" (was
+  inconsistent with the rest of the app pattern).
+- **BlogIndex.jsx** — post cards gain a permanent subtle resting shadow
+  + a touch-press scale animation (`onTouchStart`/`onTouchEnd`) so touch
+  users get visual feedback instead of relying on `:hover`-only shadow.
+- **ActivityLogPage.jsx** — search input gets a clear-X button when
+  non-empty; timestamps get a `title=…` tooltip showing full long-format
+  time + IANA timezone (e.g. "Tuesday, May 25, 2026 at 10:42 AM EDT
+  (America/New_York)"); chevron+row clickability already gated correctly
+  via `dets`, no change needed.
+- **ItemsPage.jsx** — search placeholder updated from "Search by name or
+  ID..." to "Search by name, ID, location, or tag..." (matches actual
+  search behavior); success toast gains a 5s linear countdown bar
+  (`@keyframes coh-toast-countdown` in `index.html`).
+- **SuppliesPage.jsx** — supplies grid gains `maxWidth: 1600` with
+  `margin: '0 auto'` so cards don't sprawl on ultrawide displays; minmax
+  bumped 300→320px for slightly better card density.
+- **Modal.jsx** — close-X button gets `title="Close"` tooltip alongside
+  the existing `aria-label="Close dialog"`.
+- **InsightsPage.jsx — Seasonal chart** — X-axis labels now rotate -35°
+  on mobile (with `textAnchor:'end'`, `height:44`, `interval:0`) so the
+  monthly labels don't collide on narrow screens.
+- **JobsPage.jsx — Mobile calendar** — Overdue / This Week / Next 30
+  Days / Later groups are now collapsible with a chevron toggle and
+  `(N)` count beside the heading. State held in component-local
+  `collapsedGroups`. Pay frequency unit was already present ("per
+  person") — no edit needed.
+- **TasksPage.jsx** — Task detail modal gains a "📋 Copy" button next
+  to the TSK-### number (uses `navigator.clipboard.writeText`, fires a
+  flash). Both the create-task form and detail modal Recurrence field
+  gain a "🔁 Next recurrence: <date>" preview line driven by
+  `calculateNextDue(dueDate, recurrence)`.
+- **Emoji aria sweep — Maintenance / Tasks / Accountability / Insights**
+  — added `EmojiIcon` import to each and wrapped the standalone-emoji
+  patterns the Phase 4 outcome flagged as outstanding (recurrence 🔁,
+  photos 📷, due-date 📅, vendor 📞 / ✉️, empty-state icons, "Linked
+  Job" 💼, blocked-by ⛔, warranty/running-out ⚠️, export ⬇, print 🖨,
+  audit metadata 📅/👤/📦). Screen readers now announce a meaningful
+  label or skip via `aria-hidden`, instead of falling back to the
+  Unicode glyph name. Some emoji-as-icon spans remain (Stat icons are
+  already handled by the Stat primitive); the high-traffic standalone
+  cases on these 4 hubs are covered.
+
+Audit doc untouched (the closed-item strikethroughs would be sprawling
+for a 30+ item polish pass — the SHIPPED stamp on Phase 7 in the plan
+doc is the closure marker).
+
+---
+
 ## 2026-05-25 — UI audit Phase 6: upgrade-gate preview
 
 Phase 6 of `docs/UI-AUDIT-2026-05-24-PLAN.md`. The paywall used to show a

@@ -342,7 +342,7 @@ export function SuppliesPage({ store, userProfile }) {
           </p>
         </div>
       ) : (
-        <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill, minmax(300px, 1fr))", gap:12 }}>
+        <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill, minmax(320px, 1fr))", gap:12, maxWidth:1600, margin:"0 auto" }}>
           {filtered.map(s => {
             const isLow = s.quantity <= s.minQuantity;
             const isEmpty = s.quantity === 0;

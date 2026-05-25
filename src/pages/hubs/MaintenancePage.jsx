@@ -10,6 +10,7 @@ import { FF } from '../../components/primitives/FF.jsx';
 import { Spinner } from '../../components/primitives/Spinner.jsx';
 import { RichTextarea } from '../../components/primitives/RichTextarea.jsx';
 import { useConfirm } from '../../components/primitives/ConfirmDialog.jsx';
+import { EmojiIcon } from '../../components/primitives/EmojiIcon.jsx';
 import { resizeImageForUpload } from '../../utils/imageResize.js';
 import { localDateStr, calculateNextDue } from '../../utils/date.js';
 
@@ -101,7 +102,7 @@ function TicketCard({ ticket, onClick, onDragStart, onStatusChange, isMobile }) 
       )}
       {(ticket.recurrence || ticket.checklist?.length > 0) && (
         <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
-          {ticket.recurrence && <span style={{ fontSize:12, color:B.teal, fontFamily:f1 }}>🔁 {RECURRENCE_LABELS[ticket.recurrence]}</span>}
+          {ticket.recurrence && <span style={{ fontSize:12, color:B.teal, fontFamily:f1 }}><EmojiIcon emoji="🔁" decorative /> {RECURRENCE_LABELS[ticket.recurrence]}</span>}
           {ticket.checklist?.length > 0 && (
             <span style={{ fontSize:12, color:ticket.checklist.filter(c=>c.done).length===ticket.checklist.length ? B.teal : B.textMid, fontFamily:f1 }}>
               ✓ {ticket.checklist.filter(c=>c.done).length}/{ticket.checklist.length}
@@ -111,8 +112,8 @@ function TicketCard({ ticket, onClick, onDragStart, onStatusChange, isMobile }) 
       )}
       {(ticket.photos?.length > 0 || ticket.dueDate) && (
         <div style={{ display:'flex', justifyContent:'flex-end', gap:8, alignItems:'center' }}>
-          {ticket.photos?.length > 0 && <span style={{ fontSize:11, color:B.textLight }}>📷 {ticket.photos.length}</span>}
-          {ticket.dueDate && <span style={{ fontSize:11, color: isOverdue ? B.red : B.textLight }}>📅 {ticket.dueDate}</span>}
+          {ticket.photos?.length > 0 && <span style={{ fontSize:11, color:B.textLight }}><EmojiIcon emoji="📷" label="Photos" /> {ticket.photos.length}</span>}
+          {ticket.dueDate && <span style={{ fontSize:11, color: isOverdue ? B.red : B.textLight }}><EmojiIcon emoji="📅" label="Due date" /> {ticket.dueDate}</span>}
         </div>
       )}
       {isMobile && onStatusChange && (
@@ -359,7 +360,7 @@ function TicketChip({ ticket, compact, todayStr, onTicketClick }) {
       style={{ display:'flex', alignItems:'center', gap:4, padding:compact ? '2px 5px' : '3px 7px', borderRadius:5, background:isOverdue ? '#FEE8E8' : pc.bg, borderLeft:'3px solid '+pc.dot, cursor:'pointer', marginBottom:2, overflow:'hidden' }}
       title={ticket.name}>
       <span style={{ fontSize:11, color:isOverdue ? B.red : pc.tx, fontWeight:600, fontFamily:f1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flex:1 }}>{ticket.name}</span>
-      {ticket.recurrence && <span style={{ fontSize:10, flexShrink:0 }}>🔁</span>}
+      {ticket.recurrence && <EmojiIcon emoji="🔁" label="Recurring" style={{ fontSize:10, flexShrink:0 }} />}
     </div>
   );
 }
@@ -422,7 +423,7 @@ function MaintenanceCalendar({ tickets, onTicketClick, isMobile }) {
                 <span style={{ width:8, height:8, borderRadius:'50%', background:(priorityColors[t.priority]||priorityColors.Medium).dot, flexShrink:0 }}/>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:14, fontWeight:600, color:B.navy, fontFamily:f1 }}>{t.name}</div>
-                  <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>{t.dueDate}{t.recurrence ? ' · 🔁' : ''}</div>
+                  <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>{t.dueDate}{t.recurrence ? <> · <EmojiIcon emoji="🔁" label="Recurring" /></> : ''}</div>
                 </div>
               </div>
             ))}
@@ -1049,8 +1050,8 @@ export function MaintenancePage({ store, userProfile }) {
                       </div>}
                     </div>
                     {v.specialty && <div style={{ fontSize:12, color:B.teal, fontFamily:f1, marginBottom:4 }}>{v.specialty}</div>}
-                    {v.phone && <div style={{ fontSize:12, color:B.textMid }}>📞 <a href={`tel:${v.phone.replace(/[^0-9+]/g, '')}`} style={{ color:B.teal, textDecoration:'none' }}>{v.phone}</a></div>}
-                    {v.email && <div style={{ fontSize:12, color:B.textMid }}>✉️ <a href={`mailto:${v.email}`} style={{ color:B.teal, textDecoration:'none' }}>{v.email}</a></div>}
+                    {v.phone && <div style={{ fontSize:12, color:B.textMid }}><EmojiIcon emoji="📞" label="Phone" /> <a href={`tel:${v.phone.replace(/[^0-9+]/g, '')}`} style={{ color:B.teal, textDecoration:'none' }}>{v.phone}</a></div>}
+                    {v.email && <div style={{ fontSize:12, color:B.textMid }}><EmojiIcon emoji="✉️" label="Email" /> <a href={`mailto:${v.email}`} style={{ color:B.teal, textDecoration:'none' }}>{v.email}</a></div>}
                     {v.notes && <div style={{ fontSize:11, color:B.textLight, marginTop:4 }}>{v.notes}</div>}
                   </div>
                 ))}
@@ -1125,7 +1126,7 @@ export function MaintenancePage({ store, userProfile }) {
       {/* Empty state — no tickets at all */}
       {maintenanceTickets.length === 0 && !loading && (
         <div style={{ background:B.white, borderRadius:18, padding:'48px 32px', border:'1px solid '+B.sand, textAlign:'center' }}>
-          <div style={{ fontSize:48, marginBottom:16 }}>🔧</div>
+          <EmojiIcon emoji="🔧" decorative style={{ fontSize:48, marginBottom:16, display:'block' }} />
           <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 8px', fontSize:18 }}>No maintenance tickets yet</h3>
           <p style={{ color:B.textLight, fontSize:14 }}>{canOperate ? 'Create a ticket to track repairs and maintenance tasks.' : 'No tickets yet. Ask an admin or manager to create one.'}</p>
         </div>
@@ -1134,7 +1135,7 @@ export function MaintenancePage({ store, userProfile }) {
       {/* Empty state — My Tickets filter active but no assigned tickets */}
       {filterMyTickets && filteredTickets.length === 0 && maintenanceTickets.length > 0 && (
         <div style={{ background:B.white, borderRadius:14, padding:'32px 24px', border:'1px solid '+B.sand, textAlign:'center', marginBottom:16 }}>
-          <div style={{ fontSize:36, marginBottom:12 }}>👤</div>
+          <EmojiIcon emoji="👤" decorative style={{ fontSize:36, marginBottom:12, display:'block' }} />
           <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 6px', fontSize:16 }}>No tickets assigned to you</h3>
           <p style={{ color:B.textLight, fontSize:13, margin:'0 0 12px' }}>Open any ticket and click <strong>Me</strong> in the Assignees field, then save to assign yourself.</p>
           <button type="button" onClick={() => setFilterMyTickets(false)} style={{ padding:'8px 18px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.teal, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:600 }}>
