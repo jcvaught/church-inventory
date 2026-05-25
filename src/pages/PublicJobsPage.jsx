@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/react';
 import { B, f1, f2, btnP, btnS } from '../components/brand/tokens.js';
 import { FullLogo } from '../components/brand/Logo.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
+import { SEO } from '../components/SEO.jsx';
 import { formatTimeForDisplay } from '../utils/time.js';
 
 function formatJobDate(dateStr) {
@@ -51,9 +52,16 @@ export function PublicJobsPage({ churchId, churchName, churchCode, onGetStarted 
   }, [churchId, churchCode]);
 
   const displayName = churchName || 'Church';
+  const openCount = jobs?.filter(j => (j.signupCount ?? 0) < (j.spotsTotal || 1)).length ?? 0;
+  const seoTitle = `${displayName} — Job Board | ChurchOpsHub`;
+  const seoDescription = openCount > 0
+    ? `${openCount} open volunteer ${openCount === 1 ? 'shift' : 'shifts'} at ${displayName}. Sign up to serve.`
+    : `Volunteer job board for ${displayName}. Sign up to serve your community.`;
+  const seoCanonical = churchId ? `/?jobs=${encodeURIComponent(churchId)}` : '/';
 
   return (
     <div style={{ fontFamily: f2, minHeight: '100vh', background: `linear-gradient(170deg, ${B.cream} 0%, ${B.warmGray} 100%)` }}>
+      <SEO title={seoTitle} description={seoDescription} canonical={seoCanonical} />
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet"/>
       <div style={{ background: `linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 60%, #2C4066 100%)`, padding: '18px 28px 24px', color: B.white }}>
         <div style={{ maxWidth: 860, margin: '0 auto' }}>

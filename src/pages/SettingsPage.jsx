@@ -503,6 +503,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                     placeholder="(555) 555-5555"
                     value={phoneInput}
                     onChange={e => { setPhoneInput(e.target.value); if (phoneError) setPhoneError(''); }}
+                    aria-label="Phone number for SMS reminders"
+                    aria-invalid={!!phoneError}
+                    aria-describedby={phoneError ? 'sms-phone-error' : undefined}
                     style={{ ...inp, width:160, fontSize:14, borderColor: phoneError ? B.red : undefined }}
                   />
                   <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, fontFamily:f2, color:B.textMid, cursor:'pointer' }}>
@@ -533,7 +536,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                   )}
                 </div>
                 {phoneError && (
-                  <div style={{ fontSize:12, color:B.red, marginTop:6, fontFamily:f2 }}>{phoneError}</div>
+                  <div id="sms-phone-error" role="alert" style={{ fontSize:12, color:B.red, marginTop:6, fontFamily:f2 }}>{phoneError}</div>
                 )}
                 <div style={{ fontSize:11, color:B.textLight, marginTop:8, fontFamily:f2, maxWidth:480 }}>
                   By providing your phone number and enabling SMS reminders, you consent to receive automated text messages from ChurchOpsHub for job-shift reminders. US and Canada numbers only. Message and data rates may apply. Message frequency varies (typically 1-5 messages per week). Reply STOP to unsubscribe or HELP for help.

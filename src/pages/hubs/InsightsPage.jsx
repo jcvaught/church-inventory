@@ -9,6 +9,7 @@ import { escapeHtml } from '../../utils/print.js';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { localDateStr } from '../../utils/date.js';
 import { Stat } from '../../components/primitives/Stat.jsx';
+import { DataTableDisclosure } from '../../components/primitives/DataTableDisclosure.jsx';
 
 /* ─── Helpers ─────────────────────────────────────────────── */
 
@@ -150,6 +151,11 @@ function UtilizationSection({ items, activityLog, isMobile }) {
               <Bar dataKey="checkouts" fill={B.teal} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
+          <DataTableDisclosure
+            caption={`Top ${top10.length} most used items`}
+            headers={['Item', 'Checkouts']}
+            rows={top10.map(i => [i.full, i.checkouts])}
+          />
         </div>
       )}
 
@@ -225,6 +231,11 @@ function MinistrySection({ activityLog, isMobile }) {
           ))}
         </div>
       </div>
+      <DataTableDisclosure
+        caption="Checkouts by ministry"
+        headers={['Ministry', 'Checkouts', 'Share']}
+        rows={ministryData.map(d => [d.name, d.value, Math.round(d.value / total * 100) + '%'])}
+      />
     </>
   );
 }
@@ -283,6 +294,11 @@ function SeasonalSection({ activityLog, isMobile }) {
           <Area type="monotone" dataKey="checkouts" stroke={B.teal} strokeWidth={2} fill="url(#tealGrad)" dot={{ r: 3, fill: B.teal }} />
         </AreaChart>
       </ResponsiveContainer>
+      <DataTableDisclosure
+        caption="Monthly checkouts — last 12 months"
+        headers={['Month', 'Checkouts']}
+        rows={monthlyData.map(m => [m.month, m.checkouts])}
+      />
     </>
   );
 }
@@ -438,6 +454,11 @@ function SuppliesSection({ supplies, activityLog, isMobile }) {
               <Bar dataKey="used" fill={B.gold} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
+          <DataTableDisclosure
+            caption="Top consumed supplies — last 90 days"
+            headers={['Supply', 'Units used (90d)']}
+            rows={top10Chart.map(s => [s.name, s.used])}
+          />
         </div>
       )}
 

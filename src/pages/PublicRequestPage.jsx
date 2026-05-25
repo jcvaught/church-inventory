@@ -4,8 +4,15 @@ import { db } from '../firebase.js';
 import { B, f1, f2, inp, btnP } from '../components/brand/tokens.js';
 import { FF } from '../components/primitives/FF.jsx';
 import { FullLogo } from '../components/brand/Logo.jsx';
+import { SEO } from '../components/SEO.jsx';
 
 export function PublicRequestPage({ churchId, churchName }) {
+  const seoTitle = churchName ? `Submit a Request | ${churchName}` : 'Submit an Item Request | ChurchOpsHub';
+  const seoDescription = churchName
+    ? `Request an item from ${churchName}. Submit a quick form — they'll be in touch if they can help.`
+    : 'Submit an item request to a ChurchOpsHub-powered church. Quick form — they’ll be in touch if they can help.';
+  const seoCanonical = churchId ? `/?request=${encodeURIComponent(churchId)}` : '/';
+
   const [form, setForm] = useState({
     name: '', email: '', phone: '', itemDescription: '',
     quantity: '', dateNeeded: '', urgency: 'Medium', notes: '',
@@ -46,6 +53,7 @@ export function PublicRequestPage({ churchId, churchName }) {
   if (submitted) {
     return (
       <div style={{ minHeight:'100vh', background:B.cream, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+        <SEO title={seoTitle} description={seoDescription} canonical={seoCanonical} />
         <div style={{ maxWidth:480, width:'100%', textAlign:'center' }}>
           <FullLogo />
           <div style={{ marginTop:32, background:B.white, borderRadius:20, padding:'40px 32px', border:'1px solid '+B.sand }}>
@@ -65,6 +73,7 @@ export function PublicRequestPage({ churchId, churchName }) {
 
   return (
     <div style={{ minHeight:'100vh', background:B.cream, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'32px 24px' }}>
+      <SEO title={seoTitle} description={seoDescription} canonical={seoCanonical} />
       <div style={{ maxWidth:560, width:'100%' }}>
         <div style={{ textAlign:'center', marginBottom:28 }}>
           <FullLogo />

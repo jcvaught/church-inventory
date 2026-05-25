@@ -4,6 +4,53 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-24 — UI audit remediation, Phase 1 (trust + critical a11y)
+
+Companion: `docs/UI-AUDIT-2026-05-24-PLAN.md`, audit at
+`docs/UI-AUDIT-2026-05-24.md`. Phase 1 closes the Critical-severity items
+that affect legal trust, public findability, and screen-reader access. No
+new patterns introduced — surgical fixes only.
+
+- **Terms/Privacy modal dates synced and content unified** — the auth-screen
+  Terms/Privacy modal had drifted to "March 14, 2026" while the
+  standalone `/terms` and `/privacy` pages said "April 26, 2026". The
+  modal body had also fallen behind the standalone pages (missing the
+  SMS Communications section among others). Extracted shared
+  `<TermsBody />` and `<PrivacyBody />` components in
+  `src/components/legal/` and rendered them in both surfaces. Single
+  source of truth — drift can't recur.
+- **SEO on public surfaces** — `PublicJobsPage.jsx` and
+  `PublicRequestPage.jsx` now render `<SEO>` so a shared link from the
+  church into Slack/iMessage produces a real preview card, and search
+  engines see church-specific titles and descriptions instead of the
+  generic landing meta. Mirrors the pattern in
+  `PublicSMSProgramPage.jsx`.
+- **Chart screen-reader fallback** — new
+  `src/components/primitives/DataTableDisclosure.jsx` renders a
+  collapsed `<details>` block under a Recharts SVG; expanding exposes
+  the same numbers in a real `<table>` with header semantics. Applied
+  to all four `InsightsPage.jsx` charts (Utilization BarChart, Ministry
+  PieChart, Seasonal AreaChart, Supply Burn BarChart). VoiceOver +
+  similar tools now have something to read.
+- **SMS phone-input a11y** — `SettingsPage.jsx` SMS phone field now
+  emits `aria-invalid` + `aria-describedby` tied to a `role="alert"`
+  error node when `phoneError` is truthy. Sighted users got the red
+  border; screen-reader users got nothing. Now both do.
+- **Reservation modal autofocus** — `ReservationsPage.jsx` "New
+  Reservation" modal now `autoFocus`es the resource select (Equipment
+  or Space) so keyboard users don't have to mouse into the first
+  required field.
+- Bulk "Select all" on `ItemsPage.jsx` was already labeled
+  (`aria-label="Select all visible items"` at line 673) — no change
+  needed.
+
+Out of scope this phase: destructive-action confirms (Phase 2 — needs a
+reusable pattern decision first), responsive/tablet breakpoint work
+(Phase 3), color-only-status + emoji-icon sweeps (Phase 4),
+upgrade-gate previews (Phase 6).
+
+---
+
 ## 2026-05-24 — Jobs Hub error-handling hardening (pre-launch)
 
 Jobs Hub is about to be the most-trafficked surface in ChurchOpsHub. The

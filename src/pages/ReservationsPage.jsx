@@ -343,7 +343,7 @@ export function ReservationsPage({ store, userProfile }) {
             {activeRooms.length === 0 ? (
               <div style={{ fontSize:13, color:B.textLight, fontFamily:f2, padding:'10px 12px', background:B.warmGray, borderRadius:8 }}>No spaces defined yet. Add spaces in Settings → Spaces.</div>
             ) : (
-              <select style={{...inp, cursor:"pointer"}} value={form.roomDocId} onChange={e => {
+              <select autoFocus style={{...inp, cursor:"pointer"}} value={form.roomDocId} onChange={e => {
                 const room = activeRooms.find(r => r._docId === e.target.value);
                 setForm(f => ({ ...f, roomDocId: e.target.value, roomName: room?.name || '' }));
               }}>
@@ -355,7 +355,7 @@ export function ReservationsPage({ store, userProfile }) {
           </FF>
         ) : (
           <FF label="Equipment" required>
-            <select style={{...inp, cursor:"pointer"}} value={form.itemDocId} onChange={e=>handleSelectItem(e.target.value)}>
+            <select autoFocus style={{...inp, cursor:"pointer"}} value={form.itemDocId} onChange={e=>handleSelectItem(e.target.value)}>
               <option value="">Select an item...</option>
               {activeItems.map(i => <option key={i._docId} value={i._docId}>{i.description} ({i.itemId}) — {i.status}</option>)}
             </select>

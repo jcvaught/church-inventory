@@ -24,6 +24,8 @@ import { TermsPage } from './pages/TermsPage.jsx';
 import { PublicSMSProgramPage } from './pages/PublicSMSProgramPage.jsx';
 import { BlogIndex } from './pages/BlogIndex.jsx';
 import { BlogPost } from './pages/BlogPost.jsx';
+import { TermsBody } from './components/legal/TermsBody.jsx';
+import { PrivacyBody } from './components/legal/PrivacyBody.jsx';
 import { RES_STATUS } from './utils/constants.js';
 
 
@@ -307,114 +309,8 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
               </h2>
               <button onClick={()=>setShowLegal(null)} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", color:B.textLight, lineHeight:1 }}>×</button>
             </div>
-            <div style={{ padding:"20px 24px", overflowY:"auto", fontSize:13, color:B.textDark, lineHeight:1.7 }}>
-              {showLegal === "terms" ? (
-                <>
-                  <p style={{ color:B.textLight, fontSize:12, marginTop:0 }}>Last updated: March 14, 2026</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy, marginTop:0 }}>1. Acceptance of Terms</h3>
-                  <p>By creating an account or using ChurchOpsHub ("the Service," "we," "us," or "our"), you ("you" or "User") agree to be bound by these Terms of Service ("Terms"). If you are accepting on behalf of a church or organization, you represent that you have authority to bind that organization. If you do not agree, do not use the Service.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>2. Description of Service</h3>
-                  <p>ChurchOpsHub is a cloud-based inventory and operations management platform designed for churches and religious organizations. Features include equipment tracking, supply management, reservations, maintenance ticketing, team management, and reporting. The Service is provided on a subscription basis with a free tier and optional paid hubs.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>3. Eligibility</h3>
-                  <p>You must be at least 18 years old and capable of entering a binding contract to use the Service. The Service is intended for use by churches, religious nonprofits, and their authorized staff. By registering, you confirm that you meet these requirements.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>4. Account Registration & Security</h3>
-                  <p>You agree to provide accurate, current, and complete information during registration. Each church organization may create one account. You are responsible for maintaining the confidentiality of your login credentials and for all activity under your account. Notify us immediately at <a href="mailto:churchopshub@gmail.com" style={{ color:B.teal }}>churchopshub@gmail.com</a> if you suspect unauthorized access. We are not liable for losses resulting from unauthorized use of your account.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>5. Subscriptions & Payment</h3>
-                  <p>The Service offers a free base tier and optional paid hubs billed on a monthly subscription basis. Paid subscriptions are processed through Stripe. By subscribing, you authorize us to charge your payment method on a recurring basis. Subscriptions renew automatically unless cancelled before the renewal date. We reserve the right to change pricing with at least 30 days' notice to active subscribers. Refunds are not provided for partial billing periods, but we will work with you in good faith if exceptional circumstances arise. Contact us at <a href="mailto:churchopshub@gmail.com" style={{ color:B.teal }}>churchopshub@gmail.com</a> with billing questions.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>6. Your Data & License</h3>
-                  <p>You retain full ownership of all data, content, and information you submit to the Service ("Your Data"). By using the Service, you grant us a limited, non-exclusive license to store, process, and display Your Data solely to provide the Service to you. We do not claim any other rights to Your Data. We do not sell, rent, or use Your Data for advertising or marketing purposes.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>7. Acceptable Use</h3>
-                  <p>You agree not to: (a) use the Service for any unlawful purpose; (b) attempt to gain unauthorized access to other accounts or systems; (c) upload malicious code, viruses, or harmful content; (d) interfere with the Service's operation or other users' access; (e) reverse engineer, decompile, or attempt to extract source code from the Service; (f) resell or sublicense the Service without written permission. We reserve the right to investigate suspected violations and suspend accounts accordingly.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>8. Intellectual Property</h3>
-                  <p>The Service, including its design, software, brand, and content (excluding Your Data), is owned by or licensed to ChurchOpsHub and protected by applicable intellectual property laws. These Terms do not grant you any rights to our trademarks, logos, or proprietary technology. All rights not expressly granted are reserved.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>9. Third-Party Services</h3>
-                  <p>The Service relies on third-party providers including Google Firebase (data storage and authentication), Stripe (payment processing), Sentry (error monitoring), and EmailJS (email notifications). Your use of the Service is subject to those providers' terms and privacy policies. We are not responsible for the acts or omissions of third-party providers.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>10. Disclaimers</h3>
-                  <p>THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. We do not warrant that the Service will be uninterrupted, error-free, or completely secure. Use of the Service is at your own risk.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>11. Limitation of Liability</h3>
-                  <p>TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, CHURCHOPSHUB AND ITS OPERATORS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING LOSS OF DATA, LOSS OF PROFITS, OR BUSINESS INTERRUPTION, ARISING OUT OF OR RELATED TO YOUR USE OF THE SERVICE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. OUR TOTAL LIABILITY TO YOU SHALL NOT EXCEED THE GREATER OF (A) THE AMOUNTS YOU PAID TO US IN THE 12 MONTHS PRECEDING THE CLAIM OR (B) $100.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>12. Indemnification</h3>
-                  <p>You agree to indemnify, defend, and hold harmless ChurchOpsHub and its operators from and against any claims, damages, losses, or expenses (including reasonable attorneys' fees) arising out of or related to: (a) your use of the Service; (b) Your Data; (c) your violation of these Terms; or (d) your violation of any third party's rights.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>13. Termination</h3>
-                  <p>We may suspend or terminate your account at any time for violation of these Terms, non-payment, or for any other reason with reasonable notice. Upon termination, your right to use the Service ceases immediately. You may cancel your account at any time by contacting us. We will retain Your Data for 30 days after termination to allow for export, then delete it permanently. Provisions that by their nature should survive termination (including Sections 6, 8, 10, 11, 12, and 15) shall survive.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>14. Changes to These Terms</h3>
-                  <p>We may update these Terms from time to time. We will notify active users of material changes via email at least 14 days before the new terms take effect. Continued use of the Service after the effective date constitutes acceptance of the revised Terms. If you do not agree to the changes, you may cancel your account before the effective date.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>15. Governing Law & Disputes</h3>
-                  <p>These Terms are governed by the laws of the Commonwealth of Virginia, without regard to conflict of law principles. Any dispute arising from these Terms or your use of the Service shall first be addressed through good-faith negotiation. If unresolved, disputes shall be submitted to binding arbitration under the rules of the American Arbitration Association, conducted in Fairfax County, Virginia. Notwithstanding the foregoing, either party may seek injunctive or equitable relief in a court of competent jurisdiction. YOU WAIVE ANY RIGHT TO A JURY TRIAL OR CLASS ACTION PROCEEDING.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>16. Contact</h3>
-                  <p>Questions about these Terms? Contact us at <a href="mailto:churchopshub@gmail.com" style={{ color:B.teal }}>churchopshub@gmail.com</a>.</p>
-                </>
-              ) : (
-                <>
-                  <p style={{ color:B.textLight, fontSize:12, marginTop:0 }}>Last updated: March 14, 2026</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy, marginTop:0 }}>1. Who We Are</h3>
-                  <p>ChurchOpsHub ("we," "us," or "our") is a software service for churches and religious organizations. This Privacy Policy explains how we collect, use, and protect information when you use our Service at churchopshub.com. By using the Service, you agree to the practices described here.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>2. Information We Collect</h3>
-                  <p><strong>Information you provide:</strong> Name, email address, and password when you register. Church name and church code when creating an organization. Inventory records, equipment details, supply quantities, reservations, maintenance notes, and other operational data you enter. Profile information you choose to add.</p>
-                  <p><strong>Information collected automatically:</strong> Error reports and crash data (collected via Sentry) when the application encounters a problem. Basic usage information such as which features are used. We do not use analytics services that track you across other websites.</p>
-                  <p><strong>Payment information:</strong> If you subscribe to a paid plan, payment is processed by Stripe. We do not store your credit card number or full payment details — Stripe handles this directly and provides us only with a subscription status and customer identifier.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>3. How We Use Your Information</h3>
-                  <p>We use your information to: provide and operate the Service; authenticate your identity and maintain your session; send transactional emails (account confirmation, password reset, reservation notifications); diagnose errors and improve reliability; communicate with you about your account or changes to the Service; and comply with legal obligations. We do not use your data for advertising, and we do not sell or rent your information to third parties.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>4. Data Ownership & Isolation</h3>
-                  <p>You retain full ownership of all data you enter. Each church's data is strictly isolated in our database — enforced at the security rule level, not just by application logic. Members of one church organization cannot access another church's data. We access your data only as necessary to provide the Service or respond to a support request you initiate.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>5. Third-Party Service Providers</h3>
-                  <p>We use the following sub-processors who may handle your data as part of delivering the Service:</p>
-                  <ul style={{ paddingLeft:20, margin:"8px 0" }}>
-                    <li><strong>Google Firebase</strong> — database (Firestore), authentication, and file storage. Data is stored in US-based Google Cloud regions. <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer" style={{ color:B.teal }}>Firebase Privacy</a></li>
-                    <li><strong>Stripe</strong> — payment processing. Only contacted when you subscribe to a paid plan. <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color:B.teal }}>Stripe Privacy</a></li>
-                    <li><strong>Sentry</strong> — error monitoring. Receives error messages and stack traces when the app crashes. We configure Sentry to avoid including sensitive inventory content in error reports. <a href="https://sentry.io/privacy/" target="_blank" rel="noopener noreferrer" style={{ color:B.teal }}>Sentry Privacy</a></li>
-                    <li><strong>SendGrid (Twilio)</strong> — email notifications for reservation decisions, ticket assignments, job announcements, and task reminders. Only used if your church administrator enables this feature. <a href="https://www.twilio.com/en-us/legal/privacy" target="_blank" rel="noopener noreferrer" style={{ color:B.teal }}>Twilio Privacy</a></li>
-                    <li><strong>Twilio Programmable Messaging</strong> — optional SMS reminders sent to users who have explicitly opted in via Settings. Phone numbers are transmitted to Twilio solely to deliver opted-in messages. Reply STOP to opt out at any time. <a href="https://www.twilio.com/en-us/legal/privacy" target="_blank" rel="noopener noreferrer" style={{ color:B.teal }}>Twilio Privacy</a></li>
-                    <li><strong>Google Fonts</strong> — font files loaded from Google's servers on page load. Google may collect basic request data per their standard CDN policies.</li>
-                  </ul>
-                  <p>We do not share your data with any other third parties except as required by law.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>6. Data Storage & Security</h3>
-                  <p>Your data is stored in Google Firebase's US-based infrastructure. All data is encrypted in transit (TLS) and at rest (AES-256) by Google. We enforce database-level security rules that prevent cross-church data access. Uploaded photos are stored in Firebase Storage with the same access controls. While we take security seriously, no system is perfectly secure — please use a strong, unique password and contact us immediately if you suspect a breach.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>7. Data Retention</h3>
-                  <p>We retain your data for as long as your account is active. If you cancel your account, we retain your data for 30 days to allow for export, after which it is permanently deleted. Error logs are retained for up to 90 days. Stripe retains payment records as required by financial regulations (typically 7 years).</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>8. Your Rights & Choices</h3>
-                  <p>You have the right to: access the personal information we hold about you; correct inaccurate information (editable in-app or by contacting us); request deletion of your account and associated data; export your inventory and organizational data (available via CSV export in the app); and opt out of non-essential communications. To exercise these rights, contact us at <a href="mailto:churchopshub@gmail.com" style={{ color:B.teal }}>churchopshub@gmail.com</a>. We will respond within 30 days.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>9. California Residents (CCPA)</h3>
-                  <p>If you are a California resident, you have additional rights under the California Consumer Privacy Act: the right to know what personal information we collect and how it is used; the right to delete your personal information; the right to opt out of the sale of personal information (we do not sell personal information); and the right to non-discrimination for exercising your privacy rights. To submit a request, contact us at <a href="mailto:churchopshub@gmail.com" style={{ color:B.teal }}>churchopshub@gmail.com</a> with the subject line "CCPA Request."</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>10. Children's Privacy</h3>
-                  <p>The Service is not directed to children under 13. We do not knowingly collect personal information from children under 13. If you believe a child has provided us with personal information, contact us and we will delete it promptly.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>11. Cookies & Local Storage</h3>
-                  <p>We use Firebase Authentication, which stores a session token in your browser's local storage to keep you signed in. We use your browser's localStorage to remember your in-app preferences (such as filter settings). We do not use advertising cookies or third-party tracking cookies. You can clear local storage through your browser settings, which will sign you out.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>12. Changes to This Policy</h3>
-                  <p>We may update this Privacy Policy from time to time. We will notify you of material changes via email or a prominent notice in the app before the change takes effect. The date at the top of this page indicates when the policy was last revised. Continued use of the Service after the effective date constitutes acceptance of the revised policy.</p>
-
-                  <h3 style={{ fontFamily:f1, color:B.navy }}>13. Contact</h3>
-                  <p>Privacy questions or data requests? Contact us at <a href="mailto:churchopshub@gmail.com" style={{ color:B.teal }}>churchopshub@gmail.com</a>. We aim to respond within 30 days.</p>
-                </>
-              )}
+            <div style={{ padding:"20px 24px", overflowY:"auto", color:B.textDark }}>
+              {showLegal === "terms" ? <TermsBody /> : <PrivacyBody />}
             </div>
             <div style={{ padding:"16px 24px", borderTop:"1px solid "+B.sand }}>
               <button onClick={()=>{setAgreedToTerms(true);setShowLegal(null);}} style={{ ...btnP, width:"100%" }}>I Agree</button>
