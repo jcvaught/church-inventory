@@ -11,9 +11,15 @@ export const B = {
   teal: "#2A7D6E", tealLight: "#34957F", tealPale: "#E6F5F1",
   gold: "#D4A843", goldLight: "#F5ECD4",
   cream: "#FAFAF7", warmGray: "#F2F0EB", sand: "#E8E4DC",
-  // textLight darkened #8B93A1 → #6B7280 for WCAG-AA contrast (audit M8): the
-  // old value was ~2.9:1 on white; #6B7280 is ~4.8:1 (passes AA normal text).
-  textDark: "#1B2A4A", textMid: "#5A6477", textLight: "#6B7280",
+  // textLight darkened twice for WCAG-AA contrast:
+  //   1) audit M8 (2026-05-25): #8B93A1 → #6B7280 — fixed the white-bg case
+  //      (was ~2.9:1, became ~4.8:1).
+  //   2) E2E isolation Layer 1 (2026-05-25): #6B7280 → #5F6878 — the prior
+  //      darken still failed on B.warmGray backgrounds (#F2F0EB) at 4.24:1.
+  //      The new value sits at ~4.95:1 on warmGray and ~5.5:1 on cream/white.
+  //      Discovered once the E2E suite moved to a clean tenant — FXCC's data
+  //      noise had been masking the a11y axe scans.
+  textDark: "#1B2A4A", textMid: "#5A6477", textLight: "#5F6878",
   white: "#FFFFFF", red: "#D94F4F", redPale: "#FDF2F2",
 };
 export const f1 = "'Outfit',sans-serif";

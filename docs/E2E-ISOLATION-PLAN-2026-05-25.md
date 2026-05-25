@@ -365,13 +365,27 @@ Phase 2's lowercase + `<strong>`-bolded copy.
   `dismissConfirm` helpers + sweep of 11 native-dialog sites + M10
   regex fix. Closed all 10 dialog-related failures. Suite went
   47/16/4 → 57/6/4.
+- Layer 1: **SHIPPED 2026-05-25** — dedicated `e2e-test-church`
+  tenant via `scripts/setup-e2e-tenant.mjs` (idempotent). Three test
+  users moved into the new tenant; `jcvaught@gmail.com` retired from
+  the suite (Member A is now `e2e-member-a@churchopshub.com`); FXCC
+  no longer participates in E2E. Suite went 57/6/4 → 55/6/6 then
+  closed 5 a11y failures via the contrast fix below; expected final
+  state once Vercel deploys: 60/1/6 (only the public-board cache
+  race remains).
+- **Contrast bug discovered + fixed 2026-05-25:** with FXCC's data
+  noise gone, the a11y axe scans surfaced a real WCAG-AA failure —
+  `B.textLight (#6B7280)` on `B.warmGray (#F2F0EB)` is 4.24:1, just
+  below the 4.5:1 threshold for normal-size text. Audit M8 had
+  darkened textLight from `#8B93A1` → `#6B7280` for the white-bg
+  case, but missed the warmGray combination. Fixed by darkening one
+  more notch to `#5F6878` (now ~4.95:1 on warmGray, ~5.5:1 on
+  cream/white). One-line change in `src/components/brand/tokens.js`.
 - Public-board cache race: **deferred** — `getPublicJobs` 60s cache
   vs. fresh-seed test (see "Findings" above). One-line follow-up.
-- Layer 1: **unblocked** — both open questions resolved (OQ 1: use
-  `e2e-member-a@churchopshub.com`, retire `jcvaught@gmail.com` from
-  the suite; OQ 2: scripted bootstrap via
-  `scripts/setup-e2e-tenant.mjs`). Pending the focused session to
-  execute steps 3–9. Will close the remaining 5 a11y failures.
+- Gold-plated ephemeral-tenant-per-run: still deferred per the
+  earlier section. Layer 1's dedicated tenant + Layer 2's recursive
+  purge cover ~95% of the benefit.
 
 Updates to this plan get tracked here, not in CHANGELOG, until the
 layers actually ship.

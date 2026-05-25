@@ -4,6 +4,73 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-25 — E2E isolation Layer 1: dedicated test tenant + contrast fix
+
+The structural fix. The E2E suite no longer runs against the production
+FXCC church — it has its own dedicated tenant `e2e-test-church` with
+the three test accounts, all hubs unlocked, no real members. Tests
+that depended on FXCC's content (the "Supplies36" tab-name pollution)
+now run against a clean tenant; the only data in the tenant is what
+each spec seeds. Suite went 57/6/4 → 55/6/6 then to **60/1/6** after
+fixing the contrast bug below — the only remaining red is the
+public-board `getPublicJobs` 60s cache race (separate one-line
+follow-up).
+
+Components shipped:
+
+- **`scripts/setup-e2e-tenant.mjs`** (new, idempotent) — mints
+  `e2e-member-a@churchopshub.com` Auth user, creates
+  `churches/e2e-test-church` with config/main (onboardingComplete:
+  true so the new-user modal doesn't intercept clicks), config/main +
+  config/settings + config/subscription (`grandfathered: true` so
+  every hub unlocks without Stripe) + config/notifications. Writes
+  `users/{uid}` for admin/memberA/memberB with `churchId:
+  'e2e-test-church'`, `role` set, and `allowedHubs` deleted (per
+  firestore.rules:34 the field-missing sentinel grants full hub
+  access — `null` doesn't work because the rule uses
+  `!('allowedHubs' in userData())`).
+- **`e2e/admin-helpers.js`** — `CHURCH_ID` swapped from FXCC's id to
+  `'e2e-test-church'` with a startup guard
+  (`throw if !CHURCH_ID.startsWith('e2e-')`) so a future hardcode to a
+  real church gets caught at import time. `uids()` map's memberA email
+  switched to `e2e-member-a@churchopshub.com`.
+- **`e2e/auth.setup.member-a.js`** + **`e2e/client-helpers.js`** —
+  default email/password swapped.
+- **`e2e/authenticated/uat-ui.spec.js`** L9 — skipped with a comment.
+  The owner gate at `src/pages/SettingsPage.jsx:130` is hardcoded to
+  `['jcvaught@gmail.com', 'jvaught@fxcc.org']`. Adding
+  `e2e-member-a@churchopshub.com` to that allowlist would let anyone
+  register that Firebase Auth email and claim owner privileges in
+  real customer churches. Skip is safer than expanding the allowlist;
+  re-enable by either hub-flagging the owner check via a rule-protected
+  Firestore field or moving L9 to manual UAT.
+
+Contrast bug discovered + fixed in the same session:
+
+- **`src/components/brand/tokens.js`** — `B.textLight` darkened one
+  more notch from `#6B7280` → `#5F6878`. Audit M8 had already
+  darkened it once (`#8B93A1` → `#6B7280`) for the white-bg case,
+  but `#6B7280` on `B.warmGray (#F2F0EB)` is 4.24:1, just below the
+  WCAG-AA 4.5:1 threshold for normal text. The new value is
+  `~4.95:1` on warmGray and `~5.5:1` on cream/white. Surfaced
+  immediately once Layer 1 cleared the navigation blocker — FXCC's
+  data noise (the "Supplies36" issue) had been masking the a11y axe
+  scans. Visually nearly identical; technically WCAG-AA compliant.
+
+Plan + sequencing: `docs/E2E-ISOLATION-PLAN-2026-05-25.md`. Memory
+pointer: `~/.claude/memory/project_coh_e2e_isolation.md`.
+
+Side effects on FXCC:
+
+- `users/{e2e-admin-uid}` and `users/{e2e-member-b-uid}` now point at
+  `e2e-test-church` instead of FXCC. From FXCC's perspective those
+  two accounts are gone (already filtered from member lists by
+  `excludeTestAccounts`, so no real-member-facing impact).
+- `jcvaught@gmail.com`'s user doc stays untouched — still a FXCC
+  member. Just retired from the E2E suite.
+
+---
+
 ## 2026-05-25 — E2E isolation Layer 1.5: Phase 2 test follow-up
 
 Closed all 10 dialog-related failures from the post-Phase-7 E2E run.

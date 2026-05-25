@@ -3,8 +3,8 @@ import { test as setup } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
-const EMAIL = process.env.E2E_MEMBER_A_EMAIL || 'jcvaught@gmail.com';
-const PASS  = process.env.E2E_MEMBER_A_PASSWORD || 'testpass123';
+const EMAIL = process.env.E2E_MEMBER_A_EMAIL || 'e2e-member-a@churchopshub.com';
+const PASS  = process.env.E2E_MEMBER_A_PASSWORD || 'E2eTestPass123!';
 const BASE_URL = process.env.E2E_BASE_URL || 'https://churchopshub.com';
 const STATE_DIR = join(process.cwd(), 'e2e', '.auth');
 

@@ -46,7 +46,7 @@ export { collection, doc, addDoc, updateDoc, getDoc };
 // ── Credentials (mirror auth.setup.*.js / CLAUDE.md) ──
 const CREDENTIALS = {
   admin:    { email: 'e2e-admin@churchopshub.com',    password: 'E2eTestPass123!' },
-  'member-a': { email: 'jcvaught@gmail.com',          password: 'testpass123' },
+  'member-a': { email: 'e2e-member-a@churchopshub.com', password: 'E2eTestPass123!' },
   'member-b': { email: 'e2e-member-b@churchopshub.com', password: 'E2eTestPass123!' },
 };
 

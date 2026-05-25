@@ -16,7 +16,13 @@ if (!admin.apps.length) {
   admin.initializeApp({ credential: admin.credential.cert(key) });
 }
 
-const CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
+// Dedicated test tenant — see docs/E2E-ISOLATION-PLAN-2026-05-25.md Layer 1.
+// All E2E data lives here; real customer churches stay untouched.
+// Guard against a future hardcode accidentally pointing at a real church.
+const CHURCH_ID = 'e2e-test-church';
+if (!CHURCH_ID.startsWith('e2e-')) {
+  throw new Error(`E2E suite refuses to run against non-e2e-prefixed churchId: ${CHURCH_ID}`);
+}
 
 export function db() { return admin.firestore(); }
 export function churchId() { return CHURCH_ID; }
@@ -160,7 +166,7 @@ export async function uids() {
   if (_uidCache) return _uidCache;
   const targets = {
     admin:   'e2e-admin@churchopshub.com',
-    memberA: 'jcvaught@gmail.com',
+    memberA: 'e2e-member-a@churchopshub.com',
     memberB: 'e2e-member-b@churchopshub.com',
   };
   const out = {};
