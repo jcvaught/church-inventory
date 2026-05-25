@@ -4,6 +4,79 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-25 — UI audit Phase 3: app shell + responsive
+
+Phase 3 of `docs/UI-AUDIT-2026-05-24-PLAN.md`. Eight items targeting mobile/tablet
+cramming and the focus-trap gap on the account menu — no new behaviour for
+desktop ≥1024px, but every item below 1024px tightens up.
+
+**New shared primitives:**
+- `BREAKPOINTS = { mobile: 480, tablet: 768, desktop: 1024 }` in
+  `src/components/brand/tokens.js`, and `useBreakpoint()` in
+  `src/hooks/useMobile.js` returning `'mobile' | 'tablet' | 'desktop'`.
+  Layouts that benefit from a third state import the hook; boolean
+  decisions keep using the existing `MobileCtx` at 768px.
+- `Modal.Footer` slot in `src/components/primitives/Modal.jsx`. When a
+  Modal child is `<Modal.Footer>...</Modal.Footer>`, the panel becomes a
+  flex column with a scrollable body and a sticky footer. Long
+  forms no longer scroll their Save/Cancel row off-screen.
+
+**Items shipped (numbered to the plan):**
+1. Tablet breakpoint + `useBreakpoint()` hook (above).
+2. App tab bar (`src/App.jsx`): `scrollSnapType: x mandatory` + edge-fade
+   `maskImage` so the row scrolls tab-by-tab at tablet widths with a
+   visible "more off-screen" cue.
+3. Account menu focus trap (`src/App.jsx` AppShell): `role="menu"` +
+   `aria-haspopup`/`aria-expanded` on the trigger, focus moves into the
+   menu on open, Tab cycles inside, Escape closes and restores focus to
+   the trigger. Mirrors the contract Modal already uses.
+4. Dashboard stat grid (`src/pages/Dashboard.jsx`): now 2-col on phone,
+   **3-col on tablet** (new — previously cramped 5-up at ~700px), 5-col
+   on desktop. Uses `useBreakpoint()`.
+5. Settings card sectioning (`src/pages/SettingsPage.jsx`): the My
+   Profile card no longer mixes identity + notifications +
+   delegate-picker. Identity stays in *My Profile*; SMS Job Reminders and
+   Job Hub Report Delegates moved into a new *Notifications* card that
+   only renders if the user has anything to configure. *My Compliance*
+   was already its own card — page now reads Identity / Notifications /
+   Compliance as the plan called for.
+6. Sticky `Modal.Footer` (above). Migrated the **item-detail** modal
+   (`src/pages/ItemsPage.jsx`) and the **ticket-detail** modal
+   (`src/pages/hubs/MaintenancePage.jsx`) — their action rows
+   (`Check Out / Print Label / Duplicate / Retire / Delete` and
+   `Delete / Cancel / Save Changes` respectively) now pin to the bottom
+   of the panel instead of scrolling off when the body grows long
+   (item history, ticket comments).
+7. Settings team-member row actions (`src/pages/SettingsPage.jsx`): on
+   mobile the three buttons (Edit Access / Deactivate-Reactivate /
+   Remove) collapse into a `⋮` button with a `role="menu"` popover —
+   identical destructive-confirm wiring per Phase 2. Desktop still shows
+   the inline button row.
+8. Reservation filter pills (`src/pages/ReservationsPage.jsx:276`):
+   bumped from `7px 16px` padding (~30px tall) to `minHeight:44, padding:
+   10px 18px` to meet WCAG 2.1 SC 2.5.5 / Apple HIG mobile touch-target
+   minimum.
+
+**Files touched:**
+`src/components/brand/tokens.js`, `src/hooks/useMobile.js`,
+`src/components/primitives/Modal.jsx`, `src/App.jsx`,
+`src/pages/Dashboard.jsx`, `src/pages/SettingsPage.jsx`,
+`src/pages/ReservationsPage.jsx`, `src/pages/ItemsPage.jsx`,
+`src/pages/hubs/MaintenancePage.jsx`.
+
+**Acceptance:** `npm run build` clean. `npm run lint` 0 errors / 46
+warnings (baseline + 1 new exhaustive-deps already present; no new
+errors introduced). Dev server boots cleanly. Manual responsive
+sweep (320 → 1920) deferred — items targeted the specific symptoms the
+audit named rather than an exhaustive resize pass.
+
+**Out of scope this phase / deferred:**
+- New devices-viewport Playwright specs (`iPhone 13` / `iPad Pro 11`)
+  per the plan's verification section — left for Phase 4's a11y pass to
+  bundle with axe-core specs.
+
+---
+
 ## 2026-05-25 — UI audit Phase 2: destructive-actions pattern
 
 Phase 2 of `docs/UI-AUDIT-2026-05-24-PLAN.md`. Replaced every `window.confirm(...)`

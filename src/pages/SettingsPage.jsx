@@ -61,6 +61,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  // Audit 2026-05-24 Phase 3 (item 7): which team-member row's actions
+  // popover is open on mobile. `null` = none open.
+  const [teamRowMenuFor, setTeamRowMenuFor] = useState(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingError, setBillingError] = useState("");
@@ -453,48 +456,58 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             </div>
           )}
         </div>
+      </div>
 
-        {/* Job Hub Delegates — admin/manager with Jobs hub */}
-        {(isAdmin || isManager) && hasJobsHub && (
-          <div style={{ marginTop:16, paddingTop:16, borderTop:'1px solid '+B.sand, width:'100%' }}>
-            <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Job Hub Report Delegates</div>
-            <div style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:10 }}>
-              These users receive the same notifications you do when someone withdraws from a job you posted.
-            </div>
-            {adminManagerUsers.length === 0 ? (
-              <div style={{ fontSize:13, color:B.textLight, fontFamily:f2 }}>No other admins or managers in your church.</div>
-            ) : (
-              <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-                {adminManagerUsers.map(u => {
-                  const sel = jobDelegates.some(d => d.uid === u.id);
-                  return (
-                    <button key={u.id}
-                      disabled={savingDelegates || (!sel && jobDelegates.length >= 5)}
-                      onClick={() => {
-                        const next = sel
-                          ? jobDelegates.filter(d => d.uid !== u.id)
-                          : [...jobDelegates, { uid: u.id, name: u.name }];
-                        handleSaveDelegates(next);
-                      }}
-                      style={{ padding:'5px 12px', borderRadius:20, fontSize:13, fontFamily:f1, fontWeight:600, cursor:'pointer',
-                        border:'1px solid '+(sel ? B.teal : B.sand),
-                        background: sel ? B.tealPale : B.white,
-                        color: sel ? B.teal : B.textMid,
-                        opacity: (savingDelegates || (!sel && jobDelegates.length >= 5)) ? 0.5 : 1 }}>
-                      {sel ? '✓ ' : ''}{u.name}
-                    </button>
-                  );
-                })}
+      {/* Notifications — Audit 2026-05-24 Phase 3 (item 5): broken out from
+          the My Profile card so the page reads as Identity / Notifications /
+          Compliance instead of one wall of mixed concerns. Only renders if
+          the user actually has anything to configure (Jobs Hub delegate
+          slots or SMS reminders gated on Jobs Hub access). */}
+      {(((isAdmin || isManager) && hasJobsHub) || userHasJobsAccess) && (
+        <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
+          <h3 style={{ margin:"0 0 16px", fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Notifications</h3>
+
+          {/* Job Hub Delegates — admin/manager with Jobs hub */}
+          {(isAdmin || isManager) && hasJobsHub && (
+            <div style={{ width:'100%' }}>
+              <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Job Hub Report Delegates</div>
+              <div style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:10 }}>
+                These users receive the same notifications you do when someone withdraws from a job you posted.
               </div>
-            )}
-            {jobDelegates.length >= 5 && <div style={{ fontSize:12, color:B.textLight, marginTop:6, fontFamily:f2 }}>Maximum 5 delegates.</div>}
-          </div>
-        )}
+              {adminManagerUsers.length === 0 ? (
+                <div style={{ fontSize:13, color:B.textLight, fontFamily:f2 }}>No other admins or managers in your church.</div>
+              ) : (
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                  {adminManagerUsers.map(u => {
+                    const sel = jobDelegates.some(d => d.uid === u.id);
+                    return (
+                      <button key={u.id}
+                        disabled={savingDelegates || (!sel && jobDelegates.length >= 5)}
+                        onClick={() => {
+                          const next = sel
+                            ? jobDelegates.filter(d => d.uid !== u.id)
+                            : [...jobDelegates, { uid: u.id, name: u.name }];
+                          handleSaveDelegates(next);
+                        }}
+                        style={{ padding:'5px 12px', borderRadius:20, fontSize:13, fontFamily:f1, fontWeight:600, cursor:'pointer',
+                          border:'1px solid '+(sel ? B.teal : B.sand),
+                          background: sel ? B.tealPale : B.white,
+                          color: sel ? B.teal : B.textMid,
+                          opacity: (savingDelegates || (!sel && jobDelegates.length >= 5)) ? 0.5 : 1 }}>
+                        {sel ? '✓ ' : ''}{u.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {jobDelegates.length >= 5 && <div style={{ fontSize:12, color:B.textLight, marginTop:6, fontFamily:f2 }}>Maximum 5 delegates.</div>}
+            </div>
+          )}
 
-        {/* SMS Reminders — visible to any user who has Jobs Hub access */}
-        {userHasJobsAccess && (
-          <div style={{ marginTop:16, paddingTop:16, borderTop:'1px solid '+B.sand, width:'100%' }}>
-            <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>SMS Job Reminders</div>
+          {/* SMS Reminders — visible to any user who has Jobs Hub access */}
+          {userHasJobsAccess && (
+            <div style={{ marginTop:((isAdmin || isManager) && hasJobsHub) ? 16 : 0, paddingTop:((isAdmin || isManager) && hasJobsHub) ? 16 : 0, borderTop:((isAdmin || isManager) && hasJobsHub) ? '1px solid '+B.sand : 'none', width:'100%' }}>
+              <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>SMS Job Reminders</div>
             <div style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:10 }}>
               Receive a text message the morning of any job you're signed up for.
             </div>
@@ -554,7 +567,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             )}
           </div>
         )}
-      </div>
+        </div>
+      )}
 
       {/* My Compliance — visible if this user is linked to an accessPerson */}
       {(() => {
@@ -772,8 +786,46 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
         )}
         {users.length === 0 ? <p style={{ color:B.textLight, fontSize:14 }}>No team members yet.</p> :
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-            {users.map(u => (
-              <div key={u.id} style={{ padding:"12px 14px", borderRadius:10, background:B.warmGray }}>
+            {users.map(u => {
+              // Audit 2026-05-24 Phase 3 (item 7): on mobile, collapse the 3
+              // row actions into a ⋮ popover. Identical button list either
+              // way — only the rendering wrapper changes.
+              const canActOnRow = isAdmin && u.id !== userProfile.id;
+              const handleDeactivate = async () => {
+                const ok = await confirm({
+                  title: 'Deactivate team member?',
+                  message: `${u.name} will lose access to the app immediately. You can reactivate them at any time.`,
+                  confirmLabel: 'Deactivate',
+                  danger: true,
+                });
+                if (!ok) return;
+                await updateUser(u.id, {active:false});
+                setUndo({
+                  message: `${u.name} deactivated.`,
+                  onUndo: () => updateUser(u.id, {active:true}),
+                });
+              };
+              const handleRemove = async () => {
+                const ok = await confirm({
+                  title: 'Remove team member?',
+                  message: <>Permanently remove <strong>{u.name}</strong> from your church. They will lose access immediately and this cannot be undone — you'd need to invite them again.</>,
+                  confirmLabel: 'Remove',
+                  danger: true,
+                  typeToConfirm: u.name,
+                });
+                if (!ok) return;
+                await removeUser(u.id);
+              };
+              const rowActions = [
+                { key:'edit', label:'Edit Access', onClick:() => openEditAccess(u), style:{} },
+                u.active
+                  ? { key:'deact', label:'Deactivate', onClick:handleDeactivate, style:{ color:B.red, borderColor:"#FECACA" } }
+                  : { key:'react', label:'Reactivate', onClick:() => updateUser(u.id, {active:true}), style:{ color:B.teal, borderColor:B.tealPale } },
+                { key:'remove', label:'Remove', onClick:handleRemove, style:{ color:B.red, borderColor:"#FECACA" } },
+              ];
+              const menuOpen = teamRowMenuFor === u.id;
+              return (
+              <div key={u.id} style={{ padding:"12px 14px", borderRadius:10, background:B.warmGray, position:"relative" }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
                   <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
                     <div style={{ width:34, height:34, borderRadius:10, background:B.teal, display:"flex", alignItems:"center", justifyContent:"center", color:B.white, fontWeight:700, fontSize:13, fontFamily:f1, flexShrink:0 }}>{(name => { const p = (name||'?').trim().split(/\s+/); return p.length > 1 ? (p[0][0]+p[p.length-1][0]).toUpperCase() : p[0][0].toUpperCase(); })(u.name)}</div>
@@ -791,47 +843,41 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                       <div style={{ fontSize:12, color:B.textLight }}>{u.email}</div>
                     </div>
                   </div>
-                </div>
-                {isAdmin && u.id !== userProfile.id && (
-                  <div style={{ display:"flex", gap:8, marginTop:10, flexWrap:"wrap" }}>
-                    <button onClick={() => openEditAccess(u)}
-                      style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12 }}>
-                      Edit Access
+                  {isMobile && canActOnRow && (
+                    <button
+                      onClick={() => setTeamRowMenuFor(menuOpen ? null : u.id)}
+                      aria-label={`Actions for ${u.name}`}
+                      aria-haspopup="menu"
+                      aria-expanded={menuOpen}
+                      style={{ flexShrink:0, width:44, height:44, borderRadius:10, border:"1px solid "+B.sand, background:B.white, cursor:"pointer", fontSize:18, color:B.textMid, lineHeight:1 }}>
+                      ⋮
                     </button>
-                    {u.active ? (
-                      <button onClick={async ()=>{
-                        const ok = await confirm({
-                          title: 'Deactivate team member?',
-                          message: `${u.name} will lose access to the app immediately. You can reactivate them at any time.`,
-                          confirmLabel: 'Deactivate',
-                          danger: true,
-                        });
-                        if (!ok) return;
-                        await updateUser(u.id, {active:false});
-                        setUndo({
-                          message: `${u.name} deactivated.`,
-                          onUndo: () => updateUser(u.id, {active:true}),
-                        });
-                      }} style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.red, borderColor:"#FECACA" }}>Deactivate</button>
-                    ) : (
-                      <button onClick={()=>updateUser(u.id, {active:true})} style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.teal, borderColor:B.tealPale }}>Reactivate</button>
-                    )}
-                    <button onClick={async ()=>{
-                      const ok = await confirm({
-                        title: 'Remove team member?',
-                        message: <>Permanently remove <strong>{u.name}</strong> from your church. They will lose access immediately and this cannot be undone — you'd need to invite them again.</>,
-                        confirmLabel: 'Remove',
-                        danger: true,
-                        typeToConfirm: u.name,
-                      });
-                      if (!ok) return;
-                      await removeUser(u.id);
-                    }}
-                      style={{ ...btnS, flex:isMobile?"1 1 auto":undefined, padding:"6px 14px", fontSize:12, color:B.red, borderColor:"#FECACA" }}>Remove</button>
+                  )}
+                </div>
+                {canActOnRow && !isMobile && (
+                  <div style={{ display:"flex", gap:8, marginTop:10, flexWrap:"wrap" }}>
+                    {rowActions.map(a => (
+                      <button key={a.key} onClick={a.onClick} style={{ ...btnS, padding:"6px 14px", fontSize:12, ...a.style }}>{a.label}</button>
+                    ))}
                   </div>
                 )}
+                {canActOnRow && isMobile && menuOpen && (
+                  <>
+                    <div onClick={() => setTeamRowMenuFor(null)} style={{ position:"fixed", inset:0, zIndex:50 }} aria-hidden="true" />
+                    <div role="menu" aria-label={`Actions for ${u.name}`} style={{ position:"absolute", top:60, right:8, background:B.white, borderRadius:10, boxShadow:"0 8px 24px rgba(27,42,74,0.15)", border:"1px solid "+B.sand, padding:6, minWidth:160, zIndex:60, display:"flex", flexDirection:"column", gap:2 }}>
+                      {rowActions.map(a => (
+                        <button key={a.key} role="menuitem"
+                          onClick={() => { setTeamRowMenuFor(null); a.onClick(); }}
+                          style={{ textAlign:"left", padding:"10px 12px", background:"none", border:"none", cursor:"pointer", fontFamily:f1, fontSize:13, fontWeight:600, borderRadius:6, color:a.style.color || B.textDark }}>
+                          {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
         }
 

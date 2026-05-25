@@ -1362,18 +1362,9 @@ export function MaintenancePage({ store, userProfile }) {
                 </div>
               </div>
             </FF>
-            <div style={{ display:'flex', gap:10, justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', marginBottom:20 }}>
-              <div style={{ fontSize:12, color:B.textLight }}>
-                Created by <strong>{showDetail.createdByName || showDetail.reportedByName}</strong> on {showDetail.createdAt?.split('T')[0]}
-                {showDetail.completedAt && <> · Completed {showDetail.completedAt.split('T')[0]}</>}
-              </div>
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                {canOperate && <button onClick={handleDeleteTicket} style={{ ...btnD, fontSize:13, padding:'9px 14px' }}>Delete</button>}
-                <button onClick={closeDetail} style={btnS}>Cancel</button>
-                <button onClick={handleUpdateTicket} disabled={saving || !detailEdits.name?.trim()} style={{ ...btnP, opacity:(saving || !detailEdits.name?.trim()) ? .5 : 1 }}>
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
+            <div style={{ fontSize:12, color:B.textLight, marginBottom:20 }}>
+              Created by <strong>{showDetail.createdByName || showDetail.reportedByName}</strong> on {showDetail.createdAt?.split('T')[0]}
+              {showDetail.completedAt && <> · Completed {showDetail.completedAt.split('T')[0]}</>}
             </div>
 
             {/* Photos */}
@@ -1388,6 +1379,17 @@ export function MaintenancePage({ store, userProfile }) {
               <CommentThread comments={comments} loading={commentsLoading} newComment={newComment} onChange={setNewComment} onPost={handlePostComment} posting={postingComment} userId={userId} canOperate={canOperate} onEdit={handleEditComment} onDelete={handleDeleteComment}/>
             </div>
           </div>
+        )}
+        {showDetail && (
+          <Modal.Footer>
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', flexWrap:'wrap' }}>
+              {canOperate && <button onClick={handleDeleteTicket} style={{ ...btnD, fontSize:13, padding:'9px 14px' }}>Delete</button>}
+              <button onClick={closeDetail} style={btnS}>Cancel</button>
+              <button onClick={handleUpdateTicket} disabled={saving || !detailEdits.name?.trim()} style={{ ...btnP, opacity:(saving || !detailEdits.name?.trim()) ? .5 : 1 }}>
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </Modal.Footer>
         )}
       </Modal>
 

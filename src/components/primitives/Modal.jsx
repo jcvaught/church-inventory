@@ -76,18 +76,51 @@ export function Modal({ open, onClose, title, wide, maxWidth, children }) {
   if (!open) return null;
   const resolvedMaxWidth = maxWidth || (wide ? 720 : 520);
 
+  // Audit 2026-05-24 Phase 3 (item 6): separate <Modal.Footer> children from
+  // the main body. When a Footer is present, the panel becomes a flex
+  // column: title row + scrollable body + sticky footer pinned to the
+  // bottom. Long forms (item detail, ticket detail) no longer scroll their
+  // Cancel/Save row off-screen.
+  let bodyChildren = children;
+  let footerChild = null;
+  const childArr = Array.isArray(children) ? children : [children];
+  const found = childArr.find(c => c && c.type === ModalFooter);
+  if (found) {
+    footerChild = found;
+    bodyChildren = childArr.filter(c => c !== found);
+  }
+  const hasFooter = !!footerChild;
+
   return <div role="dialog" aria-modal="true" aria-labelledby={titleId} style={{ position:"fixed", inset:0, zIndex:1000, display:"flex", alignItems:isMobile?"flex-end":"center", justifyContent:"center" }} onClick={onClose}>
     <div style={{ position:"absolute", inset:0, background:"rgba(27,42,74,0.45)", backdropFilter:"blur(6px)" }}/>
     {/* H-2: maxHeight uses dvh (dynamic viewport) so iOS Safari's
         shrinking toolbar doesn't clip the action row at the bottom of the modal.
         dvh is supported in iOS Safari 15.4+ (early 2022) — well within
         the teen-iPhone target audience. */}
-    <div ref={panelRef} tabIndex={-1} style={{ position:"relative", background:B.cream, borderRadius:isMobile?"18px 18px 0 0":18, padding:isMobile?"22px 18px calc(28px + env(safe-area-inset-bottom, 0px))":"30px 34px", maxWidth:resolvedMaxWidth, width:isMobile?"100%":"92%", maxHeight:isMobile?"92dvh":"88dvh", overflowY:"auto", boxShadow:"0 -8px 40px rgba(27,42,74,0.18)" }} onClick={e=>e.stopPropagation()}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:22 }}>
+    <div ref={panelRef} tabIndex={-1} style={{ position:"relative", background:B.cream, borderRadius:isMobile?"18px 18px 0 0":18, padding:hasFooter?0:(isMobile?"22px 18px calc(28px + env(safe-area-inset-bottom, 0px))":"30px 34px"), maxWidth:resolvedMaxWidth, width:isMobile?"100%":"92%", maxHeight:isMobile?"92dvh":"88dvh", overflowY:hasFooter?"hidden":"auto", display:hasFooter?"flex":undefined, flexDirection:hasFooter?"column":undefined, boxShadow:"0 -8px 40px rgba(27,42,74,0.18)" }} onClick={e=>e.stopPropagation()}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:hasFooter?0:22, padding:hasFooter?(isMobile?"22px 18px 14px":"26px 30px 16px"):0, flexShrink:0 }}>
         <h3 id={titleId} style={{ margin:0, fontSize:isMobile?17:20, fontFamily:f1, fontWeight:700, color:B.navy }}>{title}</h3>
         <button onClick={onClose} aria-label="Close dialog" style={{ background:"none", border:"none", fontSize:24, cursor:"pointer", color:B.textLight, padding:"6px 10px", lineHeight:1 }}>&times;</button>
       </div>
-      {children}
+      {hasFooter ? (
+        <>
+          <div style={{ flex:1, minHeight:0, overflowY:"auto", padding:isMobile?"0 18px 8px":"0 30px 14px" }}>
+            {bodyChildren}
+          </div>
+          <div style={{ flexShrink:0, borderTop:"1px solid "+B.sand, background:B.cream, padding:isMobile?"14px 18px calc(18px + env(safe-area-inset-bottom, 0px))":"16px 30px 20px", borderRadius:isMobile?"0 0 0 0":"0 0 18px 18px" }}>
+            {footerChild.props.children}
+          </div>
+        </>
+      ) : (
+        bodyChildren
+      )}
     </div>
   </div>;
 }
+
+// Sentinel slot — placed inside <Modal> to designate which children should
+// be pinned to the bottom. The Modal owns the actual sticky styling; this
+// component exists only as a marker, so callers stay declarative. Its
+// `children` are read via `element.props.children` in the Modal body.
+export function ModalFooter() { return null; }
+Modal.Footer = ModalFooter;

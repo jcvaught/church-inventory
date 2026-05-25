@@ -3,13 +3,17 @@ import { B, f1, f2 } from '../components/brand/tokens.js';
 import { ITEM_STATUS, RES_STATUS } from '../utils/constants.js';
 import { Badge } from '../components/primitives/Badge.jsx';
 import { Stat } from '../components/primitives/Stat.jsx';
-import { MobileCtx } from '../hooks/useMobile.js';
+import { MobileCtx, useBreakpoint } from '../hooks/useMobile.js';
 import { localDateStr } from '../utils/date.js';
 import { actionLabels, actionIcons } from '../utils/activityLabels.js';
 
 export function Dashboard({ store, userProfile, canSeeJobHub }) {
   const { items, supplies, activityLog, reservations, jobAnnouncements } = store;
   const isMobile = useContext(MobileCtx);
+  // Audit 2026-05-24 Phase 3: stat grid is 2-col on phone, 3-col on tablet
+  // (avoids 5 cramped tiles in ~700px), 5-col on desktop.
+  const bp = useBreakpoint();
+  const statCols = bp === 'mobile' ? '1fr 1fr' : bp === 'tablet' ? 'repeat(3, 1fr)' : 'repeat(5, 1fr)';
   const [myCheckouts, setMyCheckouts] = useState(false);
   const [activityRange, setActivityRange] = useState(30);
   const [activityVisible, setActivityVisible] = useState(20);
@@ -53,7 +57,7 @@ export function Dashboard({ store, userProfile, canSeeJobHub }) {
     <div>
       <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:"0 0 20px" }}>Dashboard</h2>
 
-      <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(5, 1fr)", gap:14, marginBottom:24 }}>
+      <div style={{ display:"grid", gridTemplateColumns:statCols, gap:14, marginBottom:24 }}>
         <Stat label="Total Items" value={counts.total} icon="📦"/>
         <Stat label="Available" value={counts.avail} icon="✅" color={B.teal}/>
         <Stat label="In Use" value={counts.inUse} icon="🔵" color="#1A65C7"/>

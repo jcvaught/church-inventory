@@ -1,3 +1,11 @@
+// Audit 2026-05-24 Phase 3: shared breakpoints so pages don't reinvent the
+// 768px threshold. `useBreakpoint()` in src/hooks/useMobile.js returns the
+// matching key ('mobile' | 'tablet' | 'desktop'). The old single MobileCtx
+// (true/false at 768px) stays in place — it still drives bottom-nav-only
+// changes — but layouts that benefit from a 3-state distinction (Dashboard
+// stat grid, eventually the app tab bar) can call useBreakpoint() instead.
+export const BREAKPOINTS = { mobile: 480, tablet: 768, desktop: 1024 };
+
 export const B = {
   navy: "#1B2A4A", navyLight: "#243556",
   teal: "#2A7D6E", tealLight: "#34957F", tealPale: "#E6F5F1",

@@ -273,11 +273,12 @@ export function ReservationsPage({ store, userProfile }) {
         </div>
       )}
 
-      {/* Filter */}
+      {/* Filter — Audit 2026-05-24 Phase 3 (item 8): bumped to 44px min
+          height to meet WCAG 2.1 SC 2.5.5 / Apple HIG mobile touch target. */}
       <div style={{ display:"flex", gap:6, marginBottom:18, flexWrap:"wrap" }}>
         {["all","Pending","Approved","Denied","Checked Out","Returned","Cancelled"].map(s => (
           <button key={s} onClick={()=>setStatusFilter(s)}
-            style={{ padding:"7px 16px", borderRadius:20, border:"1px solid "+(statusFilter===s?B.teal:B.sand), background:statusFilter===s?"rgba(42,125,110,0.1)":B.white, color:statusFilter===s?B.teal:B.textMid, fontSize:13, fontWeight:600, fontFamily:f1, cursor:"pointer" }}>
+            style={{ minHeight:44, padding:"10px 18px", borderRadius:22, border:"1px solid "+(statusFilter===s?B.teal:B.sand), background:statusFilter===s?"rgba(42,125,110,0.1)":B.white, color:statusFilter===s?B.teal:B.textMid, fontSize:13, fontWeight:600, fontFamily:f1, cursor:"pointer" }}>
             {s === "all" ? "All" : s}
           </button>
         ))}

@@ -850,26 +850,28 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
             );
           })()}
 
-          <div style={{ display:"flex", gap:8, marginTop:20, flexWrap:"wrap" }}>
-            {itemActions(showDetail)}
-            <button onClick={()=>printLabel(showDetail, config?.churchName)} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>🖨 Print Label</button>
-            {canManageItem(userProfile, showDetail) && showDetail.status !== ITEM_STATUS.DISPOSED && (
-              <button aria-label="Duplicate item" onClick={()=>openDuplicate(showDetail)} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>⊕ Duplicate</button>
-            )}
-            {canManageItem(userProfile, showDetail) && showDetail.status !== ITEM_STATUS.DISPOSED && (
-              <button onClick={()=>{setRetireForm({ reason:"Broken", date:today, notes:"", recoveryValue:"" });setActiveModal({ type:'retire', item:showDetail });}} style={{ ...btnD, padding:"6px 14px", fontSize:12 }}>Retire</button>
-            )}
-            {isAdmin && (
-              <button onClick={()=>handleDeleteItem(showDetail)} style={{ ...btnD, padding:"6px 14px", fontSize:12, background:"#7f1d1d", borderColor:"#7f1d1d" }}>Delete</button>
-            )}
-          </div>
           {isAdmin && showDetail?.status !== ITEM_STATUS.DISPOSED && (
-            <div style={{ marginTop:8 }}>
+            <div style={{ marginTop:18 }}>
               <button type="button" onClick={()=>{ setMoveSupplyForm({ supplyId:"", quantity:"0", minQuantity:"5", unit:"each" }); setShowMoveToSupply(showDetail); setActiveModal(null); }} style={{ background:"none", border:"none", color:B.textLight, fontSize:12, cursor:"pointer", fontFamily:f1 }}>
                 Move to Supplies →
               </button>
             </div>
           )}
+          <Modal.Footer>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              {itemActions(showDetail)}
+              <button onClick={()=>printLabel(showDetail, config?.churchName)} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>🖨 Print Label</button>
+              {canManageItem(userProfile, showDetail) && showDetail.status !== ITEM_STATUS.DISPOSED && (
+                <button aria-label="Duplicate item" onClick={()=>openDuplicate(showDetail)} style={{ ...btnS, padding:"6px 14px", fontSize:12 }}>⊕ Duplicate</button>
+              )}
+              {canManageItem(userProfile, showDetail) && showDetail.status !== ITEM_STATUS.DISPOSED && (
+                <button onClick={()=>{setRetireForm({ reason:"Broken", date:today, notes:"", recoveryValue:"" });setActiveModal({ type:'retire', item:showDetail });}} style={{ ...btnD, padding:"6px 14px", fontSize:12 }}>Retire</button>
+              )}
+              {isAdmin && (
+                <button onClick={()=>handleDeleteItem(showDetail)} style={{ ...btnD, padding:"6px 14px", fontSize:12, background:"#7f1d1d", borderColor:"#7f1d1d" }}>Delete</button>
+              )}
+            </div>
+          </Modal.Footer>
         </Modal>
       )}
 

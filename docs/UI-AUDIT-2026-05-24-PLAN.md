@@ -71,7 +71,17 @@ New primitive `src/components/primitives/ConfirmDestructive.jsx`:
 
 ---
 
-## Phase 3 — App shell + responsive (one session, ~3h)
+## Phase 3 — App shell + responsive (one session, ~3h) — **SHIPPED 2026-05-25**
+
+**Outcome:** all 8 items shipped. `BREAKPOINTS` + `useBreakpoint()` primitives live in
+`tokens.js` / `useMobile.js`; the app tab bar gets scroll-snap + edge-fade; the
+account menu now focus-traps with Escape-to-close + focus restore; Dashboard goes
+2-col → 3-col on tablet → 5-col on desktop via `useBreakpoint()`; Settings splits
+Profile/Notifications/Compliance into 3 cards; new `Modal.Footer` slot is wired
+into item-detail + ticket-detail; team-member row collapses to a `⋮` popover on
+mobile; reservation filter pills hit 44px touch target. See `docs/CHANGELOG.md`
+(2026-05-25). Sticky `Modal.Footer` is now available for the broader set of
+modals that have a Save/Cancel row — apply opportunistically in future sessions.
 
 **Goal:** fix mobile/tablet cramming once. Introduce a tablet breakpoint to the brand tokens.
 

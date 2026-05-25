@@ -1,4 +1,4 @@
-import { useState, useEffect, Component } from 'react';
+import { useState, useEffect, useRef, useId, Component } from 'react';
 import * as Sentry from '@sentry/react';
 import { useAuth } from './useAuth.js';
 import { useFirestore } from './useFirestore.js';
@@ -438,7 +438,52 @@ function AppShell({ authHook }) {
   const [hubKey, setHubKey] = useState(() => localStorage.getItem('lastHub') || null);
   useEffect(() => { localStorage.setItem('lastTab', tab); }, [tab]);
   const [menuOpen, setMenuOpen] = useState(false);
+  const accountTriggerRef = useRef(null);
+  const accountMenuRef = useRef(null);
+  const accountMenuId = useId();
   const isMobile = useWindowWidth() < 768;
+
+  // Audit 2026-05-24 Phase 3 (item 3): account menu a11y — focus the first
+  // menu item on open, trap Tab/Shift+Tab inside, close on Escape, and
+  // restore focus to the trigger on close. Mirrors the Modal primitive's
+  // contract so screen-reader users get the same affordance.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const FOCUSABLE_SEL = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const t = setTimeout(() => {
+      const first = accountMenuRef.current?.querySelector(FOCUSABLE_SEL);
+      first?.focus?.();
+    }, 0);
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+        accountTriggerRef.current?.focus?.();
+        return;
+      }
+      if (e.key !== 'Tab' || !accountMenuRef.current) return;
+      const focusable = Array.from(accountMenuRef.current.querySelectorAll(FOCUSABLE_SEL))
+        .filter(el => el.offsetParent !== null);
+      if (focusable.length === 0) { e.preventDefault(); return; }
+      const firstEl = focusable[0];
+      const lastEl = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (!accountMenuRef.current.contains(active)) {
+        e.preventDefault();
+        firstEl.focus();
+      } else if (e.shiftKey && active === firstEl) {
+        e.preventDefault();
+        lastEl.focus();
+      } else if (!e.shiftKey && active === lastEl) {
+        e.preventDefault();
+        firstEl.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      clearTimeout(t);
+    };
+  }, [menuOpen]);
   const [initialItemId] = useState(() => new URLSearchParams(window.location.search).get('item'));
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -536,17 +581,17 @@ function AppShell({ authHook }) {
                 📷 Scan
               </button>
               <div style={{ position:"relative" }}>
-                <button onClick={()=>setMenuOpen(!menuOpen)} style={{ display:"flex", alignItems:"center", gap:8, background:"rgba(255,255,255,0.08)", borderRadius:10, padding:"7px 14px", border:"1px solid rgba(255,255,255,0.1)", cursor:"pointer", color:B.white }}>
+                <button ref={accountTriggerRef} onClick={()=>setMenuOpen(!menuOpen)} aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={accountMenuId} style={{ display:"flex", alignItems:"center", gap:8, background:"rgba(255,255,255,0.08)", borderRadius:10, padding:"7px 14px", border:"1px solid rgba(255,255,255,0.1)", cursor:"pointer", color:B.white }}>
                   <div style={{ width:30, height:30, borderRadius:8, background:B.teal, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:700, fontFamily:f1 }}>{(userProfile.name||"?")[0]}</div>
                   <span style={{ fontSize:13, fontWeight:600, fontFamily:f1 }}>{userProfile.name}</span>
-                  <span style={{ fontSize:10, opacity:.5 }}>▾</span>
+                  <span style={{ fontSize:10, opacity:.5 }} aria-hidden="true">▾</span>
                 </button>
                 {menuOpen && (
-                  <div style={{ position:"absolute", top:"100%", right:0, marginTop:6, background:B.white, borderRadius:12, padding:8, minWidth:180, boxShadow:"0 8px 32px rgba(27,42,74,0.2)", zIndex:100 }}>
+                  <div ref={accountMenuRef} id={accountMenuId} role="menu" aria-label="Account menu" style={{ position:"absolute", top:"100%", right:0, marginTop:6, background:B.white, borderRadius:12, padding:8, minWidth:180, boxShadow:"0 8px 32px rgba(27,42,74,0.2)", zIndex:100 }}>
                     <div style={{ padding:"8px 12px", fontSize:12, color:B.textLight }}>{userProfile.email}</div>
                     <div style={{ padding:"4px 12px", marginBottom:4 }}><span style={{ padding:"2px 8px", borderRadius:12, fontSize:11, fontWeight:600, fontFamily:f1, background:userProfile.role==="admin"?B.goldLight:userProfile.role==="manager"?"#EDF2FF":B.tealPale, color:userProfile.role==="admin"?"#96750E":userProfile.role==="manager"?"#3730A3":B.teal }}>{userProfile.role}</span></div>
                     <div style={{ height:1, background:B.sand, margin:"4px 0" }}/>
-                    <button onClick={()=>{logout();setMenuOpen(false);}} style={{ width:"100%", textAlign:"left", padding:"8px 12px", background:"none", border:"none", cursor:"pointer", color:B.red, fontSize:13, fontWeight:600, fontFamily:f1, borderRadius:6 }}
+                    <button role="menuitem" onClick={()=>{logout();setMenuOpen(false);}} style={{ width:"100%", textAlign:"left", padding:"8px 12px", background:"none", border:"none", cursor:"pointer", color:B.red, fontSize:13, fontWeight:600, fontFamily:f1, borderRadius:6 }}
                       onMouseEnter={e=>e.currentTarget.style.background=B.redPale}
                       onMouseLeave={e=>e.currentTarget.style.background="none"}>
                       Sign Out
@@ -557,8 +602,12 @@ function AppShell({ authHook }) {
             </div>
           </div>
 
-          {/* Tabs — desktop only */}
-          {!isMobile && <div style={{ display:"flex", gap:2, marginTop:16, marginBottom:-14, overflowX:"auto" }}>
+          {/* Tabs — desktop only. Audit 2026-05-24 Phase 3: at tablet widths
+              (768–1100px) the 7 tabs can overflow the 1100px max-width
+              container. `scrollSnapType: x mandatory` makes the row scroll
+              tab-by-tab so users land on a full button, and `maskImage`
+              fades the right edge to hint there's more off-screen. */}
+          {!isMobile && <div style={{ display:"flex", gap:2, marginTop:16, marginBottom:-14, overflowX:"auto", scrollSnapType:"x mandatory", scrollbarWidth:"none", WebkitMaskImage:"linear-gradient(90deg, #000 0, #000 calc(100% - 24px), transparent 100%)", maskImage:"linear-gradient(90deg, #000 0, #000 calc(100% - 24px), transparent 100%)" }}>
             {[
               ["dashboard","Dashboard"],["inventory","All Items"],["supplies","Supplies"],
               ["reservations","Reservations"],["log","Activity Log"],
@@ -569,7 +618,7 @@ function AppShell({ authHook }) {
                 if(k==="hubs"&&tab==="hubs"){openHub(null);}
                 else{setTab(k);}
                 setMenuOpen(false);
-              }} style={tabBtn(k)}>{v}
+              }} style={{ ...tabBtn(k), scrollSnapAlign:"start", flexShrink:0 }}>{v}
                 {k==="supplies"&&lowStock.length>0&&<span style={{ marginLeft:6, background:B.red, color:"#fff", borderRadius:10, padding:"1px 7px", fontSize:10, fontWeight:700 }}>{lowStock.length}</span>}
                 {k==="reservations"&&pendingRes.length>0&&<span style={{ marginLeft:6, background:B.gold, color:"#fff", borderRadius:10, padding:"1px 7px", fontSize:10, fontWeight:700 }}>{pendingRes.length}</span>}
               </button>
