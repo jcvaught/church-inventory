@@ -59,7 +59,11 @@ test.describe('A11y — Phase 4 axe scan', () => {
     await page.goto('/');
     const onboardingClose = page.getByRole('button', { name: /^×$|^close$/i }).first();
     if (await onboardingClose.count() > 0) await onboardingClose.click().catch(() => {});
-    await page.getByRole('button', { name: /^inventory$/i }).first().click();
+    // The tab key is `inventory` but its label is "All Items" (App.jsx:612).
+    // The old `/^inventory$/i` regex used to match a defunct empty-state CTA
+    // that's since been removed; surfaced once the E2E suite moved to a
+    // clean tenant where no inventory exists.
+    await page.getByRole('button', { name: /^all items$/i }).first().click();
     await page.getByPlaceholder(/search by name/i).waitFor({ timeout: 15_000 });
     const result = await scan(page);
     expect(result.violations, JSON.stringify(result.violations, null, 2)).toEqual([]);

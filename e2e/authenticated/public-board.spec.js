@@ -50,6 +50,9 @@ test.describe('§9 Public job board', () => {
   });
 
   test('Public page hides cancelled and completed jobs', async ({ browser }) => {
+    // Override the 60s per-test default — we need to be able to wait up
+    // to 70s for the getPublicJobs in-process cache to refresh.
+    test.setTimeout(120_000);
     const u = await uids();
     const openJob = await createJob({
       title: e2eTitle('Public Visible'),
@@ -74,10 +77,18 @@ test.describe('§9 Public job board', () => {
 
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
-    const shareUrl = `https://churchopshub.com/?jobs=${churchId()}&cn=${encodeURIComponent('Fairfax Church of Christ')}&cc=FXCC`;
+    // Church display name + code are cosmetic in the URL; the actual lookup
+    // uses churchId(). Hardcoding generic values to keep this test tenant-
+    // agnostic.
+    const shareUrl = `https://churchopshub.com/?jobs=${churchId()}&cn=${encodeURIComponent('Test Church')}&cc=TST`;
     await page.goto(shareUrl);
 
-    await page.locator('text=' + openJob.title).first().waitFor({ timeout: 20_000 });
+    // The getPublicJobs Cloud Function has a per-instance 60s in-process
+    // cache (perf M-1, 2026-05-23). When a freshly-created job is the first
+    // request to a warm cache instance, it can wait up to 60s before
+    // appearing on the public board. Bumped the wait to cover that worst
+    // case. See docs/E2E-ISOLATION-PLAN-2026-05-25.md "Findings".
+    await page.locator('text=' + openJob.title).first().waitFor({ timeout: 70_000 });
     await expect(page.locator('text=' + openJob.title).first()).toBeVisible();
     await expect(page.locator('text=' + cancelledJob.title)).toHaveCount(0);
     await expect(page.locator('text=' + completedJob.title)).toHaveCount(0);
