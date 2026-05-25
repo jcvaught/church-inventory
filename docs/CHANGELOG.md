@@ -4,6 +4,32 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-25 — monitorScheduledJobs: self-healing no-heartbeat tolerance
+
+`monitorScheduledJobs` fired a Sentry warning at 2026-05-25 06:00 UTC for
+`scheduledJob:sendTaskDueReminders has never written a heartbeat`. False
+positive: that job runs weekly (`0 8 * * 1` — Mondays at 8 AM Central /
+13:00 UTC), and the heartbeat helper had been deployed yesterday at
+2026-05-24 20:17 UTC. The job's next slot is today at 13:00 UTC — it
+literally had not had a chance to fire yet.
+
+The monitor's existing no-heartbeat branch had an aspirational comment
+about tolerating brand-new deploys but the code fired immediately. Made
+the code match the comment: on first observation of a missing doc, the
+monitor now writes an `awaiting-first-run` placeholder with
+`firstSeenMissing: serverTimestamp()`. The Sentry alert only fires once
+that gap exceeds the cadence's stale window (26h daily, 8d weekly).
+`withScheduledRun` uses `set({...}, { merge: false })` so the first real
+run cleanly overwrites the placeholder. New scheduled jobs added to the
+registry are now silently tolerated until they've had their full first
+cadence window.
+
+The four other registered jobs (`processTrialExpirations`, `closePastJobs`,
+`sendJobReminders`, `generateRecurringTemplateTasks`) had already written
+healthy heartbeats — only the weekly one tripped this.
+
+---
+
 ## 2026-05-24 — UI audit remediation, Phase 1 (trust + critical a11y)
 
 Companion: `docs/UI-AUDIT-2026-05-24-PLAN.md`, audit at

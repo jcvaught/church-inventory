@@ -2343,14 +2343,21 @@ exports.monitorScheduledJobs = onSchedule({ schedule: '0 * * * *', timeZone: 'Am
   for (const job of SCHEDULED_JOB_REGISTRY) {
     try {
       const snap = await db.doc(`scheduledJobRuns/${job.name}`).get();
+      const staleMs = CADENCE_STALE_MS[job.cadence];
       if (!snap.exists) {
-        // Tolerate brand-new deploys: only fire once the job has had time to
-        // fire at least once at its expected cadence. The first hourly tick
-        // after deploy will skip; subsequent ticks past the stale window
-        // will surface it.
-        Sentry.captureMessage(`scheduledJob:${job.name} has never written a heartbeat`, {
-          level: 'warning',
-          tags: { area: 'job-monitor', scheduledJob: job.name, reason: 'no-heartbeat' },
+        // Self-healing tolerance for fresh deploys + newly-registered jobs:
+        // write a placeholder so the next tick can measure how long the doc
+        // has been missing. Only alert once the gap exceeds the cadence's
+        // stale window. withScheduledRun uses `set({...}, { merge: false })`,
+        // so the real first run overwrites this placeholder cleanly.
+        await db.doc(`scheduledJobRuns/${job.name}`).set({
+          jobName: job.name,
+          status: 'awaiting-first-run',
+          firstSeenMissing: FieldValue.serverTimestamp(),
+          startedAt: null,
+          finishedAt: null,
+          durationMs: null,
+          lastError: null,
         });
         continue;
       }
@@ -2358,7 +2365,18 @@ exports.monitorScheduledJobs = onSchedule({ schedule: '0 * * * *', timeZone: 'Am
       const status = data.status || 'unknown';
       const startedAt = data.startedAt?.toMillis?.() ?? null;
       const finishedAt = data.finishedAt?.toMillis?.() ?? null;
-      const staleMs = CADENCE_STALE_MS[job.cadence];
+
+      if (status === 'awaiting-first-run') {
+        const firstSeen = data.firstSeenMissing?.toMillis?.() ?? null;
+        if (firstSeen && (now - firstSeen) > staleMs) {
+          Sentry.captureMessage(`scheduledJob:${job.name} has never written a heartbeat (missing for ${Math.round((now - firstSeen) / 3600000)}h, cadence: ${job.cadence})`, {
+            level: 'warning',
+            tags: { area: 'job-monitor', scheduledJob: job.name, reason: 'no-heartbeat' },
+            extra: { firstSeenMissing: firstSeen, staleThresholdMs: staleMs },
+          });
+        }
+        continue;
+      }
 
       if (status === 'failed') {
         Sentry.captureMessage(`scheduledJob:${job.name} last run failed`, {
