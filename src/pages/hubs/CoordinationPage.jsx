@@ -40,6 +40,12 @@ export function CoordinationPage({ store, userProfile }) {
   const [checkoutBundle, setCheckoutBundle] = useState(null);
   const [coForm, setCoForm] = useState({ person: '', purpose: '', ministry: '', date: today, returnDate: '' });
   const [checkingOut, setCheckingOut] = useState(false);
+  // Snapshot of which bundle items were available when the modal opened so we can
+  // surface a "{X} item(s) became unavailable" banner if state changes mid-flow.
+  // `items` is already a live Firestore subscription, so re-renders happen for free.
+  // Captured imperatively in openCheckout() rather than via effect to avoid the
+  // "setState in effect" cascading-renders warning.
+  const [initialAvail, setInitialAvail] = useState({});
 
   // ── Notification form state ──
   const [notifForm, setNotifForm] = useState(null);
@@ -110,6 +116,12 @@ export function CoordinationPage({ store, userProfile }) {
   function openCheckout(b) {
     setCheckoutBundle(b);
     setCoForm({ person: userName, purpose: '', ministry: '', date: today, returnDate: '' });
+    const map = {};
+    (b.items || []).forEach(bi => {
+      const item = activeItems.find(i => i._docId === bi.docId);
+      map[bi.docId] = !!(item && item.status !== 'Checked Out' && item.status !== 'Under Repair' && item.status !== 'Disposed');
+    });
+    setInitialAvail(map);
   }
 
   async function handleCheckoutBundle() {
@@ -369,7 +381,14 @@ export function CoordinationPage({ store, userProfile }) {
             return { ...bi, item, canCheckout };
           });
           const availCount = checkableItems.filter(i => i.canCheckout).length;
+          // Items that WERE available when this modal opened but no longer are.
+          const lost = checkableItems.filter(bi => initialAvail[bi.docId] && !bi.canCheckout);
           return <>
+            {lost.length > 0 && (
+              <div role="status" style={{ background:'#FEF3E8', border:'1px solid #F59E42', borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:13, color:'#9A5E10', fontFamily:f1 }}>
+                <strong>Heads up:</strong> {lost.length} item{lost.length !== 1 ? 's' : ''} became unavailable while you were here ({lost.map(l => l.itemId || l.description).join(', ')}). The button below reflects the new count.
+              </div>
+            )}
             {/* Item status summary */}
             <div style={{ background: B.warmGray, borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: B.textLight, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: f1, marginBottom: 8 }}>

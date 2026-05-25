@@ -466,7 +466,7 @@ export function JobsPage({ store, userProfile }) {
     addJobAnnouncement, updateJobAnnouncement, deleteJobAnnouncement,
     addTask, updateUser,
     accessPeople, accessRecords,
-    getJobSwapRequests, addJobSwapRequest, deleteJobSwapRequest,
+    getJobSwapRequests, getMyJobSwapRequest, addJobSwapRequest, deleteJobSwapRequest,
     users, notificationConfig, config, settings,
   } = store;
   const isMobile = useContext(MobileCtx);
@@ -512,6 +512,11 @@ export function JobsPage({ store, userProfile }) {
   const [swapSaving, setSwapSaving] = useState(false);
   const [swapRequests, setSwapRequests] = useState([]);
   const [swapRequestsJobId, setSwapRequestsJobId] = useState(null);
+  // The current member's own pending swap request for the visible job, if any.
+  // Members can read their own request docs per the loosened jobSwapRequests rule.
+  const [mySwapRequest, setMySwapRequest] = useState(null);
+  const [mySwapRequestJobId, setMySwapRequestJobId] = useState(null);
+  const [withdrawingSwap, setWithdrawingSwap] = useState(false);
   const [showDelegatesModal, setShowDelegatesModal] = useState(false);
   const [jobDelegates, setJobDelegates] = useState(() => userProfile?.jobPosterDelegates || []);
   const [savingDelegates, setSavingDelegates] = useState(false);
@@ -551,6 +556,17 @@ export function JobsPage({ store, userProfile }) {
     setSwapRequestsJobId(showJobDetail._docId);
     getJobSwapRequests(showJobDetail._docId).then(setSwapRequests).catch(err => { console.error('[ChurchOpsHub] getJobSwapRequests failed', err); });
   }, [showJobDetail, isAdminOrManager, getJobSwapRequests, swapRequestsJobId]);
+
+  // Load this member's own swap request (if any) when they open a job detail —
+  // lets us surface a "Withdraw Request" affordance for the swap initiator.
+  useEffect(() => {
+    if (!showJobDetail || isAdminOrManager || !userId) { setMySwapRequest(null); setMySwapRequestJobId(null); return; }
+    if (showJobDetail._docId === mySwapRequestJobId) return;
+    setMySwapRequestJobId(showJobDetail._docId);
+    getMyJobSwapRequest(showJobDetail._docId, userId)
+      .then(setMySwapRequest)
+      .catch(err => { console.error('[ChurchOpsHub] getMyJobSwapRequest failed', err); setMySwapRequest(null); });
+  }, [showJobDetail, isAdminOrManager, getMyJobSwapRequest, userId, mySwapRequestJobId]);
 
   // Persist showPastJobs toggle
   useEffect(() => {
@@ -1195,14 +1211,31 @@ export function JobsPage({ store, userProfile }) {
     setConvertTaskSaving(false);
   }
 
+  async function handleWithdrawSwapRequest() {
+    if (!mySwapRequest?._docId) return;
+    setWithdrawingSwap(true);
+    try {
+      await deleteJobSwapRequest(mySwapRequest._docId);
+      setMySwapRequest(null);
+      flash('Swap request withdrawn.');
+    } catch {
+      flash('Failed to withdraw swap request.', true);
+    }
+    setWithdrawingSwap(false);
+  }
+
   async function handleSubmitSwapRequest() {
     if (!liveDetail) return;
     setSwapSaving(true);
     Sentry.addBreadcrumb({ category: 'jobs-hub', message: 'swap request submitted', level: 'info', data: { jobNumber: liveDetail.jobNumber } });
     try {
-      await addJobSwapRequest(liveDetail._docId, userId, userName, swapNote.trim());
+      const newId = await addJobSwapRequest(liveDetail._docId, userId, userName, swapNote.trim());
       setShowSwapModal(false);
       setSwapNote('');
+      // Force-load own swap request so the "Withdraw Request" button appears
+      // immediately (the load effect already re-queries when jobDetail changes,
+      // but the user hasn't navigated — we need an explicit refresh here).
+      setMySwapRequest({ _docId: newId, jobDocId: liveDetail._docId, uid: userId, name: userName, note: swapNote.trim(), createdAt: new Date().toISOString() });
       flash('Swap request submitted. An admin will follow up.');
     } catch {
       flash('Failed to submit swap request.', true);
@@ -1887,8 +1920,16 @@ export function JobsPage({ store, userProfile }) {
             ) : <div />}
             <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
             {liveDetail.status === 'open' && isSignedUp(liveDetail) && !isAdminOrManager && (
-              <button onClick={() => { setSwapNote(''); setShowSwapModal(true); }}
-                style={{ ...btnS, fontSize:13, color:'#92400E', borderColor:'#FDE68A' }}>Request Swap</button>
+              mySwapRequest && mySwapRequest.jobDocId === liveDetail._docId ? (
+                <button onClick={handleWithdrawSwapRequest} disabled={withdrawingSwap}
+                  style={{ ...btnS, fontSize:13, color:'#92400E', borderColor:'#FDE68A', opacity:withdrawingSwap ? .5 : 1 }}
+                  title="You have a pending swap request for this job — click to withdraw it">
+                  {withdrawingSwap ? 'Withdrawing…' : 'Withdraw Request'}
+                </button>
+              ) : (
+                <button onClick={() => { setSwapNote(''); setShowSwapModal(true); }}
+                  style={{ ...btnS, fontSize:13, color:'#92400E', borderColor:'#FDE68A' }}>Request Swap</button>
+              )
             )}
             {liveDetail.status === 'open' && (
               isSignedUp(liveDetail) ? (

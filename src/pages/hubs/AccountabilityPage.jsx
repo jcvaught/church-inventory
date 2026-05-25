@@ -46,6 +46,9 @@ export function AccountabilityPage({ store, userProfile }) {
   const [showChain, setShowChain] = useState(false);
   const [chainSearch, setChainSearch] = useState('');
   const [chainItem, setChainItem] = useState(null);
+  // Post-save success modal — holds the audit doc the user just saved so the
+  // "View Audit" action can open the detail modal with the same data.
+  const [auditSuccess, setAuditSuccess] = useState(null);
 
   function showFlash(msg, isError = false) { setFlash({ text: msg, isError }); setTimeout(() => setFlash(null), 5000); }
 
@@ -113,7 +116,7 @@ export function AccountabilityPage({ store, userProfile }) {
       };
     });
     const discrepancies = auditItemsData.filter(i => i.auditResult === 'missing' || i.auditResult === 'issue');
-    await addAudit({
+    const savedAudit = {
       location: auditLocation,
       status: 'Complete',
       startedAt: now,
@@ -122,10 +125,12 @@ export function AccountabilityPage({ store, userProfile }) {
       discrepancyCount: discrepancies.length,
       items: auditItemsData,
       discrepancies,
-    }, userProfile.id, userProfile.name);
+      conductedByName: userProfile.name,
+    };
+    await addAudit(savedAudit, userProfile.id, userProfile.name);
     setSaving(false);
-    showFlash(`Audit complete — ${discrepancies.length} discrepanc${discrepancies.length === 1 ? 'y' : 'ies'} found`);
     resetAudit();
+    setAuditSuccess(savedAudit);
   }
 
   function exportInsuranceCSV() {
@@ -411,6 +416,44 @@ export function AccountabilityPage({ store, userProfile }) {
         )}
       </Modal>
 
+      {/* Post-save success modal */}
+      <Modal open={!!auditSuccess} onClose={() => setAuditSuccess(null)} title="Audit saved">
+        {auditSuccess && (
+          <div>
+            <div style={{ textAlign:'center', padding:'8px 0 18px' }}>
+              <div style={{ fontSize:48, marginBottom:8 }} aria-hidden="true">✅</div>
+              <div style={{ fontFamily:f1, fontWeight:700, fontSize:18, color:B.navy, marginBottom:6 }}>Audit saved</div>
+              <div style={{ color:B.textMid, fontSize:14 }}>
+                <strong>{auditSuccess.location}</strong> — {auditSuccess.itemsChecked} item{auditSuccess.itemsChecked !== 1 ? 's' : ''} checked
+              </div>
+              <div style={{ color: auditSuccess.discrepancyCount > 0 ? B.red : B.teal, fontFamily:f1, fontWeight:600, marginTop:6 }}>
+                {auditSuccess.discrepancyCount > 0
+                  ? `⚠ ${auditSuccess.discrepancyCount} discrepanc${auditSuccess.discrepancyCount === 1 ? 'y' : 'ies'} found`
+                  : '✓ All clear'}
+              </div>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              <button onClick={() => { setViewingAudit(auditSuccess); setAuditSuccess(null); }} style={{ ...btnP, width:'100%' }}>
+                View this audit
+              </button>
+              {canRunAudit && (
+                <button onClick={() => { setAuditSuccess(null); setAuditStep('setup'); }} style={{ ...btnS, width:'100%' }}>
+                  Start another audit
+                </button>
+              )}
+              {isAdmin && (
+                <button onClick={() => { exportInsuranceCSV(); setAuditSuccess(null); }} style={{ ...btnS, width:'100%' }}>
+                  Insurance export
+                </button>
+              )}
+              <button onClick={() => setAuditSuccess(null)} style={{ border:'none', background:'none', color:B.textLight, cursor:'pointer', fontSize:13, padding:'6px 0', marginTop:4 }}>
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Chain of custody modal */}
       <Modal open={showChain} onClose={() => { setShowChain(false); setChainItem(null); setChainSearch(''); }}
         title="Chain of Custody" wide>
@@ -450,7 +493,23 @@ export function AccountabilityPage({ store, userProfile }) {
             </div>
 
             {chainHistory.length === 0 ? (
-              <p style={{ color:B.textLight, fontSize:13, textAlign:'center', padding:'20px 0' }}>No activity recorded for this item.</p>
+              // Zero-activity items still get a timeline row so they don't disappear
+              // silently — surfaces "we own this, but nothing's been recorded about
+              // where it's been" rather than an empty pane.
+              <div style={{ position:'relative' }}>
+                <div style={{ position:'absolute', left: isMobile ? 8 : 15, top:0, bottom:0, width:2, background:B.sand }} />
+                <div style={{ display:'flex', gap: isMobile ? 10 : 16, marginBottom:16, paddingLeft: isMobile ? 4 : 8 }}>
+                  <div style={{ width:16, height:16, borderRadius:'50%', background:B.sand, border:'2px solid '+B.white, flexShrink:0, marginTop:3, position:'relative', zIndex:1 }} />
+                  <div>
+                    <div style={{ fontFamily:f1, fontWeight:600, fontSize:13, color:B.textMid }}>
+                      Unknown Location
+                    </div>
+                    <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>
+                      No activity has been recorded for this item. Its provenance is unknown until the next checkout, audit, or repair.
+                    </div>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div style={{ position:'relative' }}>
                 <div style={{ position:'absolute', left: isMobile ? 8 : 15, top:0, bottom:0, width:2, background:B.sand }} />

@@ -4,6 +4,88 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-25 — UI audit Phase 5: hub-specific high-impact UX
+
+Phase 5 of `docs/UI-AUDIT-2026-05-24-PLAN.md`. Nine targeted hub-specific items
+spread across Tasks, Maintenance, Coordination, Jobs, and Accountability.
+
+**TasksPage**
+- New `depthByDocId` memo walks the `parentTaskId` chain (capped at 5 to
+  contain cycles) and exposes a nesting level for every task.
+- `TaskCard` gains a `depth` prop that adds `marginLeft: depth * 12` so
+  subtasks step in 12px per level in the Kanban column rendering.
+- List view's subtask rendering was extracted into a recursive
+  `renderSubtree(parent, level)` helper so grand-subtasks now appear under
+  their parent instead of being silently filtered out of the top level.
+- The parent reference line on subtask cards renders **"Parent: TSK-###"**
+  (was the bare `↳` glyph).
+- The audit's "wire `isDirtyRef` for overdue badge persistence" item turned
+  out moot in current code — `isDirtyRef` is already wired into the
+  detail-modal conflict-resolution (TasksPage.jsx:1142-1190) and the
+  overdue badge is purely derived from the live Firestore snapshot.
+  No code change needed.
+
+**MaintenancePage**
+- New `isTouchOnly` state listens to `matchMedia('(hover: none)')`. On
+  touch-only devices the checklist drag handle (`⠿`) is replaced with
+  paired ▲/▼ reorder buttons (28×22, aria-labelled, disabled at the
+  list ends). HTML5 drag-and-drop barely works on touch, so the buttons
+  give a reliable mobile path.
+- Vendor phone now renders as `<a href="tel:…">` and email as
+  `<a href="mailto:…">`, both in teal (matches the visited-link cue
+  the rest of the app uses).
+
+**CoordinationPage**
+- The bundle-checkout modal already reads from the live `activeItems`
+  Firestore subscription (so the "Items (X/Y available)" summary and the
+  disabled CTA were already live). What was missing was *acknowledgement*
+  when state changed under the user. Added: `initialAvail` snapshot
+  captured imperatively in `openCheckout(b)` (not via effect — avoids the
+  "setState in effect" lint), then a 🟠 banner inside the modal that lists
+  any items that were available at open but no longer are
+  ("Heads up: 2 items became unavailable while you were here (E-014, E-017).
+  The button below reflects the new count.").
+
+**JobsPage** — swap-request initiator can now withdraw
+- New `getMyJobSwapRequest(jobDocId, uid)` query in `useFirestore.js`
+  (Firestore-rules require an explicit `where('uid', '==', uid)` clause
+  so the rule engine can prove every result is readable).
+- `firestore.rules` `jobSwapRequests` read rule loosened from admin/manager
+  only to `admin/manager OR (member && resource.data.uid == request.auth.uid)`.
+  Members can now read **their own** swap request documents, nothing more.
+- Detail-modal load effect for the current user's own swap request runs
+  alongside the existing admin load effect; on success the swap-request
+  CTA flips from "Request Swap" → "Withdraw Request" with a tooltip and
+  busy-state. Withdrawal deletes the request doc and reverts the button.
+  `handleSubmitSwapRequest` now optimistically caches the new doc so the
+  affordance flips immediately without a re-fetch.
+
+**AccountabilityPage**
+- `completeAudit()` now persists the saved audit doc into a new
+  `auditSuccess` state and opens a `✅ Audit saved` modal (was: a flash).
+  The modal shows location + items-checked + discrepancy count, then three
+  next-actions: **View this audit** (opens the audit detail modal),
+  **Start another audit** (admin/manager only — jumps to setup),
+  **Insurance export** (admin only). Plus a plain Close to dismiss.
+- Chain-of-custody timeline's empty state ("No activity recorded for this
+  item") was replaced with a styled timeline row labelled **Unknown
+  Location** so the visual pattern is consistent with the populated case
+  and the user gets a clear "we own this, but its provenance is unknown"
+  signal instead of an empty pane.
+
+**HubsPage** — already done in a prior phase, no change.
+
+**Files touched:**
+`firestore.rules` · `src/useFirestore.js` ·
+`src/pages/hubs/{TasksPage,MaintenancePage,CoordinationPage,JobsPage,AccountabilityPage}.jsx` ·
+`docs/UI-AUDIT-2026-05-24-PLAN.md`.
+
+**Acceptance:** `npm run build` clean. `npm run lint` 0 errors / 47
+warnings (baseline). Firestore rules deployed
+(`firebase deploy --only firestore:rules`).
+
+---
+
 ## 2026-05-25 — UI audit Phase 4: cross-cutting a11y patterns
 
 Phase 4 of `docs/UI-AUDIT-2026-05-24-PLAN.md`. Two reusable primitives so the

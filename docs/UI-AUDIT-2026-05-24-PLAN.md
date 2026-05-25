@@ -150,7 +150,24 @@ Apply via codemod-style grep: every standalone emoji in JSX gets wrapped.
 
 ---
 
-## Phase 5 — Hub-specific high-impact UX (1–2 sessions, ~4h)
+## Phase 5 — Hub-specific high-impact UX (1–2 sessions, ~4h) — **SHIPPED 2026-05-25**
+
+**Outcome:** all 9 items closed. TasksPage gained a `depthByDocId` memo and TaskCard
+`depth` prop so subtasks indent 12px per level in Kanban + list (list view now
+recurses so grandchildren appear too); the parent reference line reads "Parent: TSK-###".
+Overdue-badge persistence was found to be moot in current code (`isDirtyRef` already
+wired into the detail-modal conflict-resolution at TasksPage.jsx:1142-1190; badges
+themselves are pure-derived from the live snapshot). MaintenancePage checklist now
+swaps the `⠿` drag handle for ↑/↓ buttons on touch-only devices (`matchMedia('(hover: none)')`),
+and vendor phone/email are wrapped in `tel:`/`mailto:` links. CoordinationPage checkout
+captures an `initialAvail` snapshot on open and shows a 🟠 banner naming any items
+that became unavailable mid-flow (the disabled-CTA pathway was already live). JobsPage
+adds a "Withdraw Request" affordance for the swap initiator (new `getMyJobSwapRequest`
+helper + loosened `jobSwapRequests` read rule so members can read their own request docs).
+AccountabilityPage `completeAudit()` now opens a "✅ Audit saved" modal with View / Start
+another / Insurance export next-actions instead of a flash, and the chain-of-custody
+timeline empty state is now a styled "Unknown Location" row rather than bare text.
+HubsPage People Access filter was already in place from a prior phase.
 
 **Goal:** clear the High-severity hub items that don't fit a pattern.
 

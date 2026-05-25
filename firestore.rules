@@ -262,7 +262,11 @@ service cloud.firestore {
     //    impersonation in this admin-read field; userData() reuses the
     //    request's single get), and the free-text note capped at 1000 chars.
     match /churches/{churchId}/jobSwapRequests/{docId} {
-      allow read:   if isChurchAdminOrManager(churchId);
+      // Members can read their own pending requests so the UI can offer a
+      // "Withdraw Request" affordance (UI audit Phase 5). Admins/managers
+      // still see every request for triage.
+      allow read:   if isChurchAdminOrManager(churchId)
+                    || (isMember(churchId) && resource.data.uid == request.auth.uid);
       allow create: if canUseJobsHub(churchId)
         && request.resource.data.keys().hasOnly(['jobDocId', 'uid', 'name', 'note', 'createdAt'])
         && request.resource.data.uid == request.auth.uid

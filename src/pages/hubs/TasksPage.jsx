@@ -152,7 +152,7 @@ function PriorityBadge({ priority }) {
 }
 
 
-const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusChange, isMobile, subtaskCount, subtaskDone, parentName }) {
+const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusChange, isMobile, subtaskCount, subtaskDone, parentName, depth = 0 }) {
   const sc = statusColors[task.status] || statusColors['Backlog'];
   const isOverdue = task.dueDate && task.dueDate < localDateStr(new Date()) && task.status !== 'Complete' && task.status !== 'Cancelled';
   const visIcon = task.visibility === 'private' ? '🔒' : task.visibility === 'shared' ? '👥' : null;
@@ -165,7 +165,7 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
       onClick={() => onClick(task)}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(task); } }}
       aria-label={`${task.taskNumber ? task.taskNumber + ': ' : ''}${task.name}${isOverdue ? ' (overdue)' : ''}`}
-      style={{ background:B.white, borderRadius:12, padding:'14px 16px', border:'1px solid '+B.sand, cursor: !isMobile && onDragStart ? 'grab' : 'pointer', borderLeft:'4px solid '+sc.dot, boxShadow:'0 1px 3px rgba(27,42,74,0.06)', marginBottom:8, transition:'box-shadow 0.15s' }}
+      style={{ background:B.white, borderRadius:12, padding:'14px 16px', border:'1px solid '+B.sand, cursor: !isMobile && onDragStart ? 'grab' : 'pointer', borderLeft:'4px solid '+sc.dot, boxShadow:'0 1px 3px rgba(27,42,74,0.06)', marginBottom:8, marginLeft: depth ? depth * 12 : 0, transition:'box-shadow 0.15s' }}
       onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(27,42,74,0.12)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 3px rgba(27,42,74,0.06)'}
     >
@@ -188,7 +188,7 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
       {task.blockedBy?.length > 0 && task.status !== 'Complete' && task.status !== 'Cancelled' && (
         <div style={{ fontSize:11, fontWeight:700, color:B.red, fontFamily:f1, marginBottom:3 }}>⛔ Blocked by {task.blockedBy.join(', ')}</div>
       )}
-      {parentName && <div style={{ fontSize:11, color:B.textLight, fontFamily:f1, marginBottom:3 }}>↳ {parentName}</div>}
+      {parentName && <div style={{ fontSize:11, color:B.textLight, fontFamily:f1, marginBottom:3 }}>Parent: {parentName}</div>}
       <div style={{ fontWeight:600, fontSize:14, color:B.navy, marginBottom:4, lineHeight:1.3 }}>{task.name}</div>
       {task.description && (
         <div style={{ fontSize:12, color:B.textMid, lineHeight:1.4, marginBottom:6, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', whiteSpace:'pre-wrap' }}>
@@ -716,7 +716,7 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
   );
 }
 
-const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, onDrop, onReorder, onStatusChange, isMobile, tasksByParent, tasksByDocId, onQuickAdd }) {
+const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, onDrop, onReorder, onStatusChange, isMobile, tasksByParent, tasksByDocId, depthByDocId, onQuickAdd }) {
   const sc = statusColors[status] || statusColors['Backlog'];
   const [dragOver, setDragOver] = useState(false);
   const [quickAddName, setQuickAddName] = useState('');
@@ -755,7 +755,7 @@ const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, on
                     }
                   } : undefined}
                 >
-                  <TaskCard task={t} onClick={onTaskClick} onDragStart={onDrop || onReorder || undefined} onStatusChange={onStatusChange} isMobile={isMobile} subtaskCount={subs.length} subtaskDone={subs.filter(s=>s.status==='Complete').length} parentName={parentTask?.taskNumber ? parentTask.taskNumber + ' ' + parentTask.name : parentTask?.name}/>
+                  <TaskCard task={t} onClick={onTaskClick} onDragStart={onDrop || onReorder || undefined} onStatusChange={onStatusChange} isMobile={isMobile} subtaskCount={subs.length} subtaskDone={subs.filter(s=>s.status==='Complete').length} parentName={parentTask?.taskNumber ? parentTask.taskNumber + ' ' + parentTask.name : parentTask?.name} depth={depthByDocId?.[t._docId] || 0}/>
                 </div>
               );
             })
@@ -2095,6 +2095,22 @@ export function TasksPage({ store, userProfile }) {
     return ids;
   }, [sortedTasks, tasksByDocId]);
 
+  // Nesting depth (0 = top level). Walks parentTaskId chain; capped at 5 to
+  // contain cycles or pathological data without an infinite loop.
+  const depthByDocId = useMemo(() => {
+    const cache = {};
+    function depthOf(t, seen) {
+      if (cache[t._docId] != null) return cache[t._docId];
+      if (!t.parentTaskId || !tasksByDocId[t.parentTaskId]) return (cache[t._docId] = 0);
+      if (seen.has(t._docId) || seen.size >= 5) return (cache[t._docId] = seen.size);
+      seen.add(t._docId);
+      const d = depthOf(tasksByDocId[t.parentTaskId], seen) + 1;
+      return (cache[t._docId] = d);
+    }
+    sortedTasks.forEach(t => depthOf(t, new Set()));
+    return cache;
+  }, [sortedTasks, tasksByDocId]);
+
   // Whether current user can edit visibility on the detail task
   const canEditVisibility = showDetail && (showDetail.createdBy === userId || canOperate);
 
@@ -2266,7 +2282,7 @@ export function TasksPage({ store, userProfile }) {
       {viewMode === 'kanban' && visibleTasks.length > 0 && (
         <div style={{ display:'flex', gap:12, overflowX:isMobile ? 'hidden' : 'auto', flexDirection:isMobile ? 'column' : 'row', paddingBottom:8, alignItems:'flex-start' }}>
           {STATUSES.map(status => (
-            <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onReorder={(from, to) => handleReorder(from, to, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile} tasksByParent={tasksByParent} tasksByDocId={tasksByDocId} onQuickAdd={name => handleQuickAddTask(name, status)}/>
+            <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onReorder={(from, to) => handleReorder(from, to, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile} tasksByParent={tasksByParent} tasksByDocId={tasksByDocId} depthByDocId={depthByDocId} onQuickAdd={name => handleQuickAddTask(name, status)}/>
           ))}
         </div>
       )}
@@ -2321,18 +2337,30 @@ export function TasksPage({ store, userProfile }) {
                       : statusTasks.filter(t => !subtaskDocIds.has(t._docId)).map(t => {
                           const subs = tasksByParent[t._docId] || [];
                           const isSelected = selectedTaskIds.has(t._docId);
+                          // Recursively render subtask trees; depth supplies the per-level indent on TaskCard.
+                          const renderSubtree = (parent, level) => {
+                            const children = tasksByParent[parent._docId] || [];
+                            if (children.length === 0) return null;
+                            return (
+                              <div style={{ marginLeft:20, borderLeft:'2px solid '+B.sand, paddingLeft:8, marginBottom:4 }}>
+                                {children.map(sub => {
+                                  const parentLabel = parent.taskNumber ? parent.taskNumber + (parent.name ? ' ' + parent.name : '') : parent.name;
+                                  return (
+                                    <div key={sub._docId}>
+                                      <TaskCard task={sub} onClick={openDetail} subtaskCount={(tasksByParent[sub._docId] || []).length} subtaskDone={(tasksByParent[sub._docId] || []).filter(s=>s.status==='Complete').length} parentName={parentLabel} depth={level}/>
+                                      {renderSubtree(sub, level + 1)}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          };
                           return (
                             <div key={t._docId} style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
                               <input type="checkbox" checked={isSelected} onChange={() => toggleSelectTask(t._docId)} onClick={e => e.stopPropagation()} style={{ marginTop:18, width:15, height:15, cursor:'pointer', flexShrink:0 }} aria-label={`Select task ${t.name}`}/>
                               <div style={{ flex:1, minWidth:0 }}>
                                 <TaskCard task={t} onClick={openDetail} subtaskCount={subs.length} subtaskDone={subs.filter(s=>s.status==='Complete').length}/>
-                                {subs.length > 0 && (
-                                  <div style={{ marginLeft:20, borderLeft:'2px solid '+B.sand, paddingLeft:8, marginBottom:4 }}>
-                                    {subs.map(sub => (
-                                      <TaskCard key={sub._docId} task={sub} onClick={openDetail} parentName={t.taskNumber ? t.taskNumber : t.name}/>
-                                    ))}
-                                  </div>
-                                )}
+                                {renderSubtree(t, 1)}
                               </div>
                             </div>
                           );

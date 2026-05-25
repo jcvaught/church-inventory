@@ -1193,6 +1193,21 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); return []; }
   }, [churchId]);
 
+  // Read-only fetch of the current member's pending swap request for a job
+  // (returns the first match or null). Used by the "Withdraw Request" affordance
+  // — Firestore rules let members read their own jobSwapRequest documents.
+  const getMyJobSwapRequest = useCallback(async (jobDocId, uid) => {
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'churches', churchId, 'jobSwapRequests'),
+        where('jobDocId', '==', jobDocId),
+        where('uid', '==', uid)
+      ));
+      const docs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+      return docs[0] || null;
+    } catch (err) { handleErr(err); return null; }
+  }, [churchId]);
+
   const addJobSwapRequest = useCallback(async (jobDocId, uid, name, note) => {
     try {
       // Audit L4: cap the free-text note (the firestore.rules create rule
@@ -1289,7 +1304,7 @@ export function useFirestore(churchId) {
     addJobListing, addJobListingSeries, updateJobListing, deleteJobListing, updateJobListingSeries, deleteJobListingSeries, deleteJobListingSeriesFrom,
     signUpForJob, withdrawFromJob, updateJobSignupAttendance,
     addJobAnnouncement, updateJobAnnouncement, deleteJobAnnouncement,
-    getJobSwapRequests, addJobSwapRequest, deleteJobSwapRequest,
+    getJobSwapRequests, getMyJobSwapRequest, addJobSwapRequest, deleteJobSwapRequest,
     clearError
   };
 }

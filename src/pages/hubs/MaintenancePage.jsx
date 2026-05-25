@@ -524,6 +524,26 @@ export function MaintenancePage({ store, userProfile }) {
   const checklistInputRef = useRef();
   const dragChecklistIdx = useRef(null);
 
+  // HTML5 drag-and-drop is broken on touch-only devices; reorder via ↑/↓ buttons instead.
+  // Distinct from `isMobile` (viewport width) — a wide tablet in landscape is hover-less but
+  // not "mobile" by the 768px breakpoint.
+  const [isTouchOnly, setIsTouchOnly] = useState(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(hover: none)').matches
+      : false
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(hover: none)');
+    const handler = e => setIsTouchOnly(e.matches);
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else mq.addListener(handler);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', handler);
+      else mq.removeListener(handler);
+    };
+  }, []);
+
   // Comments
   const [comments, setComments] = useState([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
@@ -1029,8 +1049,8 @@ export function MaintenancePage({ store, userProfile }) {
                       </div>}
                     </div>
                     {v.specialty && <div style={{ fontSize:12, color:B.teal, fontFamily:f1, marginBottom:4 }}>{v.specialty}</div>}
-                    {v.phone && <div style={{ fontSize:12, color:B.textMid }}>📞 {v.phone}</div>}
-                    {v.email && <div style={{ fontSize:12, color:B.textMid }}>✉️ {v.email}</div>}
+                    {v.phone && <div style={{ fontSize:12, color:B.textMid }}>📞 <a href={`tel:${v.phone.replace(/[^0-9+]/g, '')}`} style={{ color:B.teal, textDecoration:'none' }}>{v.phone}</a></div>}
+                    {v.email && <div style={{ fontSize:12, color:B.textMid }}>✉️ <a href={`mailto:${v.email}`} style={{ color:B.teal, textDecoration:'none' }}>{v.email}</a></div>}
                     {v.notes && <div style={{ fontSize:11, color:B.textLight, marginTop:4 }}>{v.notes}</div>}
                   </div>
                 ))}
@@ -1299,13 +1319,22 @@ export function MaintenancePage({ store, userProfile }) {
                 {(detailEdits.checklist || []).length === 0 && (
                   <div style={{ fontSize:13, color:B.textLight, marginBottom:8, fontFamily:f2 }}>No checklist items yet.</div>
                 )}
-                {(detailEdits.checklist || []).map((item, idx) => (
+                {(detailEdits.checklist || []).map((item, idx, arr) => {
+                  const moveItem = (from, to) => {
+                    if (to < 0 || to >= arr.length) return;
+                    const cl = [...(detailEdits.checklist || [])];
+                    const [moved] = cl.splice(from, 1);
+                    cl.splice(to, 0, moved);
+                    setDetailEdits(d => ({ ...d, checklist: cl }));
+                    handleChecklistUpdate(cl);
+                  };
+                  return (
                   <div
                     key={item.id}
-                    draggable
-                    onDragStart={() => { dragChecklistIdx.current = idx; }}
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={() => {
+                    draggable={!isTouchOnly}
+                    onDragStart={isTouchOnly ? undefined : () => { dragChecklistIdx.current = idx; }}
+                    onDragOver={isTouchOnly ? undefined : e => e.preventDefault()}
+                    onDrop={isTouchOnly ? undefined : () => {
                       const from = dragChecklistIdx.current;
                       if (from === null || from === idx) return;
                       const cl = [...(detailEdits.checklist || [])];
@@ -1315,9 +1344,16 @@ export function MaintenancePage({ store, userProfile }) {
                       setDetailEdits(d => ({ ...d, checklist: cl }));
                       handleChecklistUpdate(cl);
                     }}
-                    style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderBottom:'1px solid '+B.sand, cursor:'grab' }}
+                    style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderBottom:'1px solid '+B.sand, cursor:isTouchOnly ? 'default' : 'grab' }}
                   >
-                    <span style={{ color:B.textLight, fontSize:14, flexShrink:0, cursor:'grab' }}>⠿</span>
+                    {isTouchOnly ? (
+                      <div style={{ display:'flex', flexDirection:'column', gap:2, flexShrink:0 }}>
+                        <button type="button" aria-label={`Move "${item.text}" up`} disabled={idx === 0} onClick={() => moveItem(idx, idx - 1)} style={{ border:'1px solid '+B.sand, background:B.white, borderRadius:6, width:28, height:22, padding:0, cursor:idx === 0 ? 'not-allowed' : 'pointer', opacity:idx === 0 ? .4 : 1, color:B.textMid, fontSize:12, lineHeight:1 }}>▲</button>
+                        <button type="button" aria-label={`Move "${item.text}" down`} disabled={idx === arr.length - 1} onClick={() => moveItem(idx, idx + 1)} style={{ border:'1px solid '+B.sand, background:B.white, borderRadius:6, width:28, height:22, padding:0, cursor:idx === arr.length - 1 ? 'not-allowed' : 'pointer', opacity:idx === arr.length - 1 ? .4 : 1, color:B.textMid, fontSize:12, lineHeight:1 }}>▼</button>
+                      </div>
+                    ) : (
+                      <span style={{ color:B.textLight, fontSize:14, flexShrink:0, cursor:'grab' }} aria-hidden="true">⠿</span>
+                    )}
                     <input type="checkbox" checked={item.done} style={{ flexShrink:0, width:16, height:16, cursor:'pointer' }} onChange={() => {
                       const cl = [...(detailEdits.checklist || [])];
                       cl[idx] = { ...cl[idx], done: !cl[idx].done };
@@ -1332,7 +1368,8 @@ export function MaintenancePage({ store, userProfile }) {
                       handleChecklistUpdate(cl);
                     }} style={{ border:'none', background:'none', color:B.textLight, cursor:'pointer', fontSize:18, lineHeight:1, padding:'0 2px' }}>×</button>
                   </div>
-                ))}
+                  );
+                })}
                 <div style={{ display:'flex', gap:6, marginTop:8 }}>
                   <input
                     ref={checklistInputRef}
