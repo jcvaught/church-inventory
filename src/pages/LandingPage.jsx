@@ -401,6 +401,26 @@ export function LandingPage({ onGetStarted }) {
         </div>
       </section>
 
+      {/* ── FROM THE BLOG (featured post) ── */}
+      <section style={{ background: B.cream, padding: mob ? '56px 24px' : '72px 40px' }}>
+        <div style={{ maxWidth: 760, margin: '0 auto', textAlign: 'center' }}>
+          <div style={{ fontFamily: f1, fontSize: 13, fontWeight: 600, color: B.textMid, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>
+            From the blog
+          </div>
+          <a href="/blog/volunteer-coordinator-role-guide" style={{ textDecoration: 'none' }}>
+            <h3 style={{ fontFamily: f1, fontSize: mob ? 22 : 26, fontWeight: 700, color: B.navy, margin: '0 0 14px', lineHeight: 1.3 }}>
+              Volunteer Coordinator Role Guide: What the Job Actually Looks Like
+            </h3>
+            <p style={{ fontSize: 15, color: B.textMid, lineHeight: 1.65, margin: '0 0 18px' }}>
+              The seven core responsibilities, what the role is and isn't, realistic time commitment, and the tools that keep a coordinator from burning out. Read this before you appoint your next one.
+            </p>
+            <span style={{ fontFamily: f1, fontSize: 14, fontWeight: 600, color: B.teal }}>
+              Read the guide →
+            </span>
+          </a>
+        </div>
+      </section>
+
       {/* ── CTA BANNER ── */}
       <section style={{
         background: `linear-gradient(135deg, ${B.teal} 0%, ${B.tealLight} 100%)`,

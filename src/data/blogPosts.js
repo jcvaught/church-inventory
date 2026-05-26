@@ -5,12 +5,13 @@ export const BLOG_POSTS = [
     description: "Inventory in one sheet. Volunteers in another. Maintenance tickets in a Google Doc. Background checks in a folder. Most churches don't have an operations problem — they have a spreadsheet sprawl problem. Here's what it actually costs.",
     date: '2026-05-15',
     keywords: 'church operations management, church spreadsheet alternatives, church admin software, church operations cost, replace church spreadsheets, church volunteer tracking, church compliance management',
+    related: ['volunteer-coordinator-role-guide', 'church-volunteer-scheduling-system-that-lasts', 'moving-beyond-spreadsheets'],
     content: `
 ## The Spreadsheet Sprawl Problem
 
 Walk into most church offices and ask, "Where do you keep your operations data?" You won't get one answer. You'll get six.
 
-The inventory is in a Google Sheet that the AV director maintains. The volunteer roster is in a different Google Sheet that the children's ministry director maintains. Maintenance requests come in by text and get logged in a Google Doc that the facilities manager keeps. Background checks live in a folder in Dropbox, organized by year, with the actual certificates as PDFs. Key assignments are tracked in an Excel file on the office manager's desktop computer, occasionally emailed around. Job board posts go in the bulletin and get tracked in nobody's head.
+The inventory is in a Google Sheet that the AV director maintains. The volunteer roster is in a different Google Sheet that the children's ministry director maintains — and the [volunteer coordinator role](/blog/volunteer-coordinator-role-guide), if it's defined at all, lives mostly in that one person's head. Maintenance requests come in by text and get logged in a Google Doc that the facilities manager keeps. Background checks live in a folder in Dropbox, organized by year, with the actual certificates as PDFs. Key assignments are tracked in an Excel file on the office manager's desktop computer, occasionally emailed around. Job board posts go in the bulletin and get tracked in nobody's head.
 
 This is the natural state of church operations. It's not laziness. It's not bad management. It's what happens when ten different operational functions each find the path of least resistance independently — and Google Sheets is almost always that path. It's free, everyone has access, and it solves the immediate problem.
 
@@ -136,6 +137,7 @@ If you want to see what that looks like in practice, that's exactly what ChurchO
     description: "Most churches treat the volunteer coordinator role as a vague 'helps with stuff' position — which is why coordinators burn out and quit. Here's a concrete responsibility breakdown, realistic time commitment, and a clear list of what the role is and isn't.",
     date: '2026-05-14',
     keywords: 'volunteer coordinator role, church volunteer coordinator job description, volunteer coordinator responsibilities, church volunteer manager, volunteer coordination church, what does a volunteer coordinator do',
+    related: ['church-volunteer-scheduling-system-that-lasts', 'church-volunteer-equipment-accountability', 'hidden-cost-of-spreadsheet-church-operations'],
     content: `
 ## The Volunteer Coordinator Role Is Almost Always Underdefined
 
@@ -303,6 +305,7 @@ The role is real. The role is meaningful. The role is survivable if you define i
     description: 'Most church volunteer schedules die within six months — not because volunteers stop showing up, but because the system falls apart. Here are the principles that make a volunteer scheduling system survive past the honeymoon.',
     date: '2026-05-12',
     keywords: 'church volunteer scheduling, volunteer scheduling for churches, church volunteer management, church scheduling software, volunteer coordinator church, church volunteer rotation, small church volunteer scheduling',
+    related: ['volunteer-coordinator-role-guide', 'church-volunteer-equipment-accountability', 'what-planning-center-cant-do'],
     content: `
 ## Most Volunteer Schedules Die Within Six Months
 
@@ -318,7 +321,7 @@ Before talking about what works, it's worth being honest about why most attempts
 
 You build a system where everything routes through one person. That person responds to texts, updates the schedule, finds substitutes, sends reminders. For three months it works because they're motivated and the load is light. By month six, they're answering Sunday school cancellations during their own family dinner and resenting it. By month nine, they quit the role. Whoever takes over either doesn't replicate the work — and the system collapses — or replicates it and burns out themselves on the same timeline.
 
-Systems centered on one person die when that person burns out. Which they always do.
+Systems centered on one person die when that person burns out — which they always do, especially when the [volunteer coordinator role](/blog/volunteer-coordinator-role-guide) was never defined explicitly in the first place.
 
 **2. Nobody knows the system exists.**
 
@@ -1095,6 +1098,7 @@ Start with your inventory. Add your highest-value and most-borrowed items first.
     description: "Volunteers borrow equipment with the best intentions — and return it inconsistently. Here's how to build accountability that protects your assets without treating your volunteers like suspects.",
     date: '2026-04-09',
     keywords: 'church volunteer accountability, church equipment checkout, church volunteer equipment policy, church inventory accountability',
+    related: ['volunteer-coordinator-role-guide', 'church-volunteer-scheduling-system-that-lasts', 'why-churches-need-inventory-management'],
     content: `
 ## The Volunteer Accountability Gap
 
@@ -1164,7 +1168,7 @@ You don't need a perfect system before you start. Pick the five to ten items tha
 
 Label them. Create their records. Assign home locations. Set up a simple checkout process. Run it for a few months and see what breaks down in practice. Most accountability gaps are predictable once you're running the process: the checkout step that gets skipped, the return deadline that no one remembers, the condition check that's too cumbersome for the time available.
 
-Adjust based on what you see, and expand to lower-stakes equipment as the habits solidify. A volunteer accountability culture isn't built in a single policy announcement — it's built through consistent practice and a system that makes doing the right thing easier than not doing it.
+Adjust based on what you see, and expand to lower-stakes equipment as the habits solidify. A volunteer accountability culture isn't built in a single policy announcement — it's built through consistent practice, a clearly [defined coordinator role](/blog/volunteer-coordinator-role-guide), and a system that makes doing the right thing easier than not doing it.
     `.trim(),
   },
 
@@ -1174,6 +1178,7 @@ Adjust based on what you see, and expand to lower-stakes equipment as the habits
     description: "Planning Center is excellent for people and events. But it has no inventory features. Here's how to fill that gap without adding complexity.",
     date: '2026-03-15',
     keywords: "Planning Center inventory, church inventory management, church supply management, church asset tracking software",
+    related: ['volunteer-coordinator-role-guide', 'church-facilities-management-guide', 'moving-beyond-spreadsheets'],
     content: `
 ## Planning Center Is Excellent at What It Does
 
@@ -1219,7 +1224,7 @@ A tool built specifically for church inventory management handles the things Pla
 
 The good news: you don't have to choose. Planning Center and a dedicated inventory system are complementary, not competing.
 
-Planning Center manages your people, events, and schedules. Your inventory system manages your physical assets. The connection point is your team: the worship leader uses PCO Services to schedule the Sunday set and uses ChurchOpsHub to check out the instruments they need for it. The events coordinator uses PCO Registrations for the community dinner and uses inventory management to reserve the tables, chairs, and PA system.
+Planning Center manages your people, events, and schedules. Your inventory system manages your physical assets. The connection point is your team: the worship leader uses PCO Services to schedule the Sunday set and uses ChurchOpsHub to check out the instruments they need for it. The [volunteer coordinator](/blog/volunteer-coordinator-role-guide) and events coordinator use PCO Registrations for the community dinner and use inventory management to reserve the tables, chairs, and PA system.
 
 Both systems serve your team. Neither replaces the other. And your team doesn't have to choose between them — the workflows are different enough that there's no meaningful overlap.
 
@@ -1491,6 +1496,7 @@ Your congregation's tithes paid for your building and everything in it. Both sid
     description: "A Kanban board turns your church's scattered repair list into a visible, managed workflow. Here's how it works and why it's the right tool for church maintenance teams.",
     date: '2026-04-21',
     keywords: 'church maintenance management, church maintenance tracking, church facilities kanban, church repair ticket system, church maintenance software',
+    related: ['church-facilities-management-guide', 'church-equipment-maintenance', 'volunteer-coordinator-role-guide'],
     content: `
 ## Why Maintenance Requests Slip Through the Cracks
 
@@ -1558,7 +1564,7 @@ The cumulative effect over months and years is a maintenance history that docume
 
 ## Getting Your Team to Actually Use It
 
-The most common failure mode for new maintenance systems isn't bad software — it's incomplete adoption. The board is only useful if the whole team uses it, which means making submission as frictionless as possible.
+The most common failure mode for new maintenance systems isn't bad software — it's incomplete adoption, often traceable to ambiguous ownership of who is actually running the board (the same dynamic that breaks the [volunteer coordinator role](/blog/volunteer-coordinator-role-guide) when nobody writes it down). The board is only useful if the whole team uses it, which means making submission as frictionless as possible.
 
 **Lower the barrier to reporting.** If submitting a ticket requires logging into a system, navigating to the right form, and filling out six fields, people will send a text instead. The goal is to make "submit a ticket" easier than any informal alternative. QR codes on equipment and shared shortcut links on phones help. One-tap reporting from a mobile browser is the standard to aim for.
 
@@ -2073,6 +2079,7 @@ The thing every veteran VBS coordinator says: the week itself is fun. The planni
     description: "Most church workdays end with half the list undone, two-thirds of the volunteers gone by 11am, and a tool no one can find. Here is a planning system that gets the work finished without burning anyone out.",
     date: '2026-05-05',
     keywords: 'church workday, church cleanup day, church work day planning, church volunteer workday, church facility maintenance day',
+    related: ['volunteer-coordinator-role-guide', 'vbs-supply-planning-checklist', 'church-facilities-management-guide'],
     content: `
 ## What Goes Wrong on a Typical Church Workday
 
@@ -2124,7 +2131,7 @@ A *project lead* is responsible for one project category — outdoor, kitchen, s
 
 The project lead does not need to be the most skilled person in their category. They need to be organized and willing to delegate. A retired teacher with no construction experience can be a great outdoor project lead if they're willing to read a checklist and keep people on task.
 
-This system also solves the "the pastor is doing everything" problem. If the pastor is the only one with authority to assign work, the workday will collapse the moment the pastor steps away to handle a phone call. With project leads, every category keeps moving regardless of where the pastor is.
+This system also solves the "the pastor is doing everything" problem. If the pastor is the only one with authority to assign work, the workday will collapse the moment the pastor steps away to handle a phone call. With project leads — the workday version of a clearly [defined volunteer coordinator role](/blog/volunteer-coordinator-role-guide) — every category keeps moving regardless of where the pastor is.
 
 ## The Tool and Supply Pre-Stage
 

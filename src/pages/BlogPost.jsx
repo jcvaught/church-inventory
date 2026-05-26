@@ -194,13 +194,19 @@ export function BlogPost({ slug, onGetStarted }) {
           </button>
         </div>
 
-        {/* Related posts — 3 most recent */}
+        {/* Related posts — curated `related` slugs if present, else date-desc fallback */}
         {(() => {
-          const relatedPosts = BLOG_POSTS
-            .filter(p => p.slug !== post.slug)
-            .slice()
-            .sort((a, b) => b.date.localeCompare(a.date))
-            .slice(0, 3);
+          const relatedPosts = post.related?.length
+            ? post.related
+                .map(slug => BLOG_POSTS.find(p => p.slug === slug))
+                .filter(Boolean)
+                .slice(0, 3)
+            : BLOG_POSTS
+                .filter(p => p.slug !== post.slug)
+                .filter(p => p.slug !== 'best-church-management-software-small-churches')
+                .slice()
+                .sort((a, b) => b.date.localeCompare(a.date))
+                .slice(0, 3);
           return relatedPosts.length > 0 && (
           <div style={{ marginTop: 56 }}>
             <h3 style={{ fontFamily: f1, fontSize: 18, fontWeight: 700, color: B.navy, marginBottom: 20 }}>
