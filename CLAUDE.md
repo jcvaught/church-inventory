@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/BUSINESS_MODEL.md` — Hub pricing, subscription doc, grandfathering, per-user hub access
 - `docs/CHANGELOG.md` — All phase history and dated fixes
 - `docs/SENTRY-ALERTS.md` — Sentry alert rules to configure for Jobs Hub launch
+- `docs/SEO-REFOCUS-2026-05-26.md` — internal-link rewire plan for volunteer-coordinator post; verify script for 2026-06-23 re-check
 
 ## Commands
 

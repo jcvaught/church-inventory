@@ -4,6 +4,21 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-26 — SEO refocus: rewire internal links toward GSC sleeper hits
+
+GSC 28-day pull (via `~/apps/seo-tools/gsc.py`) found `/blog/volunteer-coordinator-role-guide` ranking at **avg pos 22.8 with 198 impressions** but **zero inbound internal links** — `BlogPost.jsx` "Keep Reading" was sorting by date desc, so newer posts captured all cross-link juice. Meanwhile `/blog/best-church-management-software-small-churches` had 399 impressions at avg pos 55–94 (Planning Center / Tithe.ly own that SERP) — its impressions were being inflated by the same date-desc rotation.
+
+Changes:
+- `BlogPost.jsx:197-209` — related-posts selector now reads optional `related: [slugs]` per post, with date-desc fallback that excludes the wrong-SERP loser.
+- `blogPosts.js` — added `related` arrays to 7 posts (volunteer-coordinator + 6 semantic neighbors: scheduling-system-that-lasts, equipment-accountability, hidden-cost-of-spreadsheets, what-planning-center-cant-do, kanban-maintenance, workday-planning). Net inbound to the target post: 0 → 6.
+- `blogPosts.js` — one inline contextual link added per source post pointing to volunteer-coordinator-role-guide.
+- `LandingPage.jsx` — new "From the blog" featured section between How It Works and CTA banner, linking the target post from the property's highest-authority URL (homepage, avg pos 14.3).
+- `docs/SEO-REFOCUS-2026-05-26.md` — rationale, change set, and a verify script for the 2026-06-23 re-check (success = volunteer-coordinator below pos 18).
+
+Build verified: 21 blog posts prerendered, new links present in static HTML for Googlebot. See `docs/SEO-REFOCUS-2026-05-26.md` for the full plan.
+
+---
+
 ## 2026-05-25 — Session summary: E2E isolation + contrast pass
 
 End-of-session arrival: **60 passed / 0 failed / 7 skipped in 2.5 min**.
