@@ -55,6 +55,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [inviteHubs, setInviteHubs] = useState(() => []);
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
   const [requestLinkCopied, setRequestLinkCopied] = useState(false);
+  const [teamHubFilter, setTeamHubFilter] = useState('all');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [undo, setUndo] = useState(null);
   const { confirm, ConfirmHost } = useConfirm();
@@ -769,12 +770,36 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
       )}
 
       {/* Team Members — admin only */}
-      {isAdmin && <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+      {isAdmin && (() => {
+        const userHasHubAccess = (u, hub) => {
+          if (u.role === 'admin') return true;
+          if (u.allowedHubs == null) return true;
+          return u.allowedHubs.includes(hub);
+        };
+        const filteredUsers = teamHubFilter === 'all' ? users : users.filter(u => userHasHubAccess(u, teamHubFilter));
+        return (
+        <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, gap:12, flexWrap:"wrap" }}>
           <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Team Members</h3>
-          <span style={{ fontSize:13, fontWeight:600, color: maxUsers && users.length >= maxUsers ? B.red : B.textLight }}>
-            {users.length}{maxUsers ? ` / ${maxUsers}` : ''} member{users.length !== 1 ? 's' : ''}
-          </span>
+          <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+            {churchHubs.length > 0 && (
+              <select
+                value={teamHubFilter}
+                onChange={e => setTeamHubFilter(e.target.value)}
+                aria-label="Filter team members by hub access"
+                style={{ ...inp, padding:"6px 10px", fontSize:13, cursor:"pointer", width:"auto" }}>
+                <option value="all">All hubs</option>
+                {churchHubs.map(hub => (
+                  <option key={hub} value={hub}>{HUB_LABELS[hub] || hub}</option>
+                ))}
+              </select>
+            )}
+            <span style={{ fontSize:13, fontWeight:600, color: maxUsers && users.length >= maxUsers ? B.red : B.textLight }}>
+              {teamHubFilter === 'all'
+                ? `${users.length}${maxUsers ? ` / ${maxUsers}` : ''} member${users.length !== 1 ? 's' : ''}`
+                : `${filteredUsers.length} of ${users.length} member${users.length !== 1 ? 's' : ''}`}
+            </span>
+          </div>
         </div>
         {isAdmin && !canAdd && (
           <div style={{ background:B.goldLight, border:"1px solid "+B.gold, borderRadius:10, padding:"12px 16px", marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
@@ -786,8 +811,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           </div>
         )}
         {users.length === 0 ? <p style={{ color:B.textLight, fontSize:14 }}>No team members yet.</p> :
+         filteredUsers.length === 0 ? <p style={{ color:B.textLight, fontSize:14 }}>No team members have access to {HUB_LABELS[teamHubFilter] || teamHubFilter}.</p> :
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-            {users.map(u => {
+            {filteredUsers.map(u => {
               // Audit 2026-05-24 Phase 3 (item 7): on mobile, collapse the 3
               // row actions into a ⋮ popover. Identical button list either
               // way — only the rendering wrapper changes.
@@ -919,7 +945,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             </div>
           </div>
         )}
-      </div>}
+      </div>
+      );})()}
 
       {/* Edit Access Modal */}
       <Modal open={!!editAccessUser} onClose={() => setEditAccessUser(null)} title={`Edit Access — ${editAccessUser?.name}`}>
