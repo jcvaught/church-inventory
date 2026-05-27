@@ -1,5 +1,123 @@
 export const BLOG_POSTS = [
   {
+    slug: 'first-30-days-church-facilities-manager',
+    title: "The First 30 Days as a Church Facilities Manager",
+    description: "Most new church facilities managers spend their first month reactively — answering the phone, chasing tickets, and meeting whoever shows up. Here's a week-by-week framework for using your first 30 days to set up the systems that make the next two years possible.",
+    date: '2026-05-26',
+    keywords: 'church facilities manager, first 30 days facilities, new facilities manager, church facilities role, church facilities onboarding, church building manager, church property manager, facilities manager job',
+    related: ['church-facilities-management-guide', 'how-to-do-a-church-physical-audit', 'church-facilities-manager-tracking'],
+    content: `
+## The First Month Is the Only Time You Have Permission to Just Observe
+
+If you're a new church facilities manager — whether you were hired, promoted, or guilted into the role as a long-time volunteer — your first month is the most important one of the job. It's also the one new facilities managers waste most consistently.
+
+The waste happens because the role's pressure starts on day one. The HVAC was making a weird sound last Sunday. Three different people stop you in the hallway to mention "by the way." The pastor wants to know when the parking lot is going to be resealed. The kitchen sink has been leaking for "a while now." Someone hands you a key ring and says "I think one of these works on the storage shed."
+
+Most new facilities managers respond by trying to answer every question, fix every problem, and meet every expectation in the order they arrive. By day 30 they're exhausted, no further along than they started, and behind on three things they didn't know existed.
+
+The first 30 days are the only window you have where everyone — staff, congregation, leadership — accepts that you're learning. Spend that window observing, documenting, and setting up systems. The fixes come later. There will be no shortage of fixes.
+
+## What This Post Is
+
+A week-by-week framework for the first 30 days as a church facilities manager. Each week has a single focus, a small set of deliverables, and a list of what to push back on if it tries to claim your attention.
+
+This is written for the person who is the *primary* facilities manager — whether full-time paid, part-time paid, or volunteer. If you're a deacon helping out, you can do a scaled-down version. If you're managing a multi-campus church, double the timeline. Either way, the order matters.
+
+## Before Day One: Three Conversations
+
+If you have any window before your first official day — even a few hours — spend it on these three conversations.
+
+**1. The exiting facilities manager (if there is one).** If you're replacing someone, ask for two hours of their time before they leave. Not for a knowledge transfer document — for stories. Ask them: what surprised you most about this job? What did you wish you'd known on day one? Who do I need to know? What's broken that nobody's told me yet? Take notes on names and patterns, not procedures. The procedures you can figure out. The political map you cannot.
+
+**2. The pastor or executive pastor.** Twenty minutes, in person. The single question: "What does success in this role look like to you at six months?" Listen to what they say first. If the answer is vague ("just keep things running"), push gently for one concrete thing they wish were better than it is today. Their answer becomes the lens for the next 180 days. If they don't have an answer, that itself is information.
+
+**3. Whoever holds the building's institutional memory.** Every church has at least one person — usually a deacon, a retired trustee, or a long-tenured volunteer — who has been showing up for 20+ years and knows where the keys are, why the heater in the east wing has always been weird, and which doors don't quite latch unless you lift the handle. Find them. Take them to coffee. Bring a notebook.
+
+## Week 1: Walk the Building
+
+The job of week one is one thing: build a mental map of every space in the building and the systems that serve it.
+
+**Walk every room.** Every single one. Sanctuary, classrooms, offices, fellowship hall, kitchen, storage closets, utility rooms, mechanical rooms, attics, basements, and the outside of the building. Bring a notebook (paper, not a phone — the phone becomes a distraction). For each space write down: what it's used for, how often, what's in it, what looks neglected, what looks new, anything that's obviously broken, and any questions to ask later.
+
+**Find the mechanicals.** Locate and photograph every major system: HVAC units (with model and serial numbers), water heaters, water shutoffs, electrical panels, the gas main, the fire alarm panel, sprinkler shutoffs, sump pumps, septic risers if applicable, and any outbuildings. If you can't find a shutoff, that's a finding — write it down. You'll need it before winter.
+
+**Meet the regulars.** Walk through during a weekday morning when staff is in. Walk through on a Sunday between services. Walk through on whatever weeknight has the most ministry activity (usually Wednesday). The people you meet on each of those walk-throughs will tell you more about how the building is actually used than any document will. Their problems become your roadmap.
+
+**Push back on:** any non-emergency repair request. The pat answer for week one is "thank you for telling me — I'm taking notes on everything this week, and I'll triage next week." Emergencies — water actively running, electrical sparking, locked-out staff — get handled immediately. Everything else waits five days.
+
+## Week 2: Document What You Found
+
+Week two converts the chaos of week one into something you can actually act on.
+
+**Build a master inventory.** Every fixed asset in the building goes on a list: HVAC units, water heaters, the boiler, kitchen equipment over $500, AV equipment, lawn equipment, vehicles. For each: location, make/model/serial, approximate age, condition (good / fair / poor / unknown), last serviced (if known), and any service contract attached. Don't try to be perfect. Get the list down. You'll fill in gaps for the next year. The [physical audit framework](/blog/how-to-do-a-church-physical-audit) is the right scaffold for this — it forces you to walk room-by-room with a checklist instead of trying to remember what you saw.
+
+**Build a risk register.** Separate from the inventory. This is a one-page list of things that could go wrong and are not currently mitigated. Examples: roof flashing visibly lifted on the south side; sprinkler inspection 14 months overdue; one of three exit doors in the children's wing does not have a working panic bar; nobody knows the password to the alarm system. Each item gets a date you noticed it. The risk register is the document that, six months from now, proves you saw the warning sign before the incident.
+
+**Build the key list.** Every key on every ring in the building. What it opens, who has copies, and what is missing. Most churches have somewhere between two and four times more keys in circulation than they think they do, and at least one key whose lock nobody can identify. This is the single most under-managed system in most church buildings, and it's also the most legally significant if something goes wrong. Get a baseline now.
+
+**Push back on:** any system change. Don't switch maintenance vendors. Don't cancel a service contract. Don't reorganize the storage room. Document what's there. Changes start in week three at the earliest.
+
+## Week 3: Triage
+
+You now have an inventory and a risk register. Week three is when you turn that into a prioritized action list.
+
+**Sort the risk register by urgency × consequence.** Urgent + high consequence (sprinkler inspection overdue, exit door inoperable) is week three's work. Urgent + low consequence (the squeaky bathroom door) can wait. Non-urgent + high consequence (the 22-year-old water heater) becomes your budgeting roadmap for the year. Non-urgent + low consequence stays on the list but never makes it to the top.
+
+**Identify the top three things that need to happen in the next 60 days.** Not the top thirty. The top three. Write them down. Bring them to whoever you report to. Get explicit sign-off on doing them and explicit sign-off on what's being deprioritized to make room. The mistake is trying to fix everything; the mature move is to name what you're not going to fix yet, in writing, and have leadership agree.
+
+**Establish service-contract baselines.** For HVAC, fire alarm, sprinkler, elevator (if you have one), and pest control, you need contracted preventive maintenance. If you have contracts, find the documents, file them, and put the next service date on a calendar. If you don't have contracts, getting them is one of your top three. The cost of [reactive maintenance vs. preventive maintenance](/blog/church-equipment-maintenance) is brutal, and "reactive because we didn't think about it" is the worst version of reactive.
+
+**Push back on:** scope creep. Now that people see you're competent, more work will arrive. Each request gets evaluated against the prioritized list — does it bump something off, or does it wait? Saying "yes, but" with a tradeoff is honest. Saying "yes" to everything is how facilities managers burn out in eighteen months.
+
+## Week 4: Set Up the Systems That Will Run the Job
+
+By week four, you have enough context to install the systems you'll use going forward.
+
+**Pick one place to track maintenance tickets.** Not three places. One. Whether it's a [Kanban board](/blog/kanban-church-maintenance), a shared spreadsheet, a piece of software, or a clipboard outside your office, the rule is that every reported problem goes there and nothing else. The number of times "I told someone about that two months ago" turns out to mean "I mentioned it once to someone who wasn't writing it down" is the single biggest source of facilities-manager frustration. Solve it on day 22.
+
+**Establish one communication channel for non-emergencies.** Direct your church staff and key volunteers to one inbox, one form, one chat channel — your choice. Tell them: emergencies still get a phone call; everything else goes through the channel; what doesn't go through the channel doesn't get tracked. This will fail at first. Hold the line for two months and it will stick.
+
+**Set up a recurring calendar.** Quarterly: walk the building looking for new issues. Semi-annually: review the risk register and update it. Annually: physical audit, service-contract review, budget proposal. Monthly: a 30-minute check on each major system. Put it on the calendar now. The work that doesn't get scheduled doesn't get done.
+
+**Identify your three to five repeat helpers.** Most facilities work in churches gets done by a small group of skilled volunteers — a retired electrician, a plumber who's a member, a deacon who's good with HVAC. Find them. Take them to coffee. Tell them: I'm going to bring you specific problems, and I'd love to know when you're available to help. Having a [bench of people you can call](/blog/church-facilities-manager-tracking) is what separates a facilities manager who survives from one who drowns.
+
+**Push back on:** the urge to skip the systems work because there are still fires. Build the systems. The fires will keep coming whether you build the systems or not.
+
+## What Day 30 Should Look Like
+
+By the end of your first 30 days, you should be able to hand someone the following:
+
+1. A one-page inventory of every major fixed asset, with location and condition.
+2. A risk register with everything you've found that needs attention, prioritized.
+3. A list of the top three things you're tackling in the next 60 days, with leadership sign-off.
+4. A maintenance ticket system that everyone in the church knows to use.
+5. A calendar of recurring maintenance and review tasks for the year.
+6. A short list of trusted volunteers and outside vendors you've met.
+
+That's it. Six artifacts. None of them are the actual repairs or improvements — those happen across the next six to twelve months. Day 30 is about having the infrastructure that lets you make repairs intelligently instead of reactively for the next two years.
+
+## Common Mistakes in the First 30 Days
+
+**Trying to fix things in week one.** You don't know enough yet. The fix you make on day three is the fix you regret on day 23 when you find out it conflicts with something nobody told you about. Observe first.
+
+**Starting with the visible problems.** The peeling paint in the hallway and the burnt-out bulbs in the parking lot are the things everyone mentions, because everyone sees them. The things that matter — the overdue sprinkler inspection, the panel that trips weekly, the access door that doesn't lock — are the things nobody mentions because nobody notices. The visible problems are last on the list, not first.
+
+**Inheriting the previous person's grudges.** Every exiting facilities manager has a list of people who were "the problem" — the demanding ministry leader, the chronically complaining congregant, the unhelpful vendor. Don't take those on as your starting position. Form your own opinions. The "problem" people often have legitimate problems that the previous person stopped listening to.
+
+**Skipping the conversations.** It is faster to walk the building alone than to walk it with three different people on three different days. It is also worse. The institutional knowledge in those conversations is not in the building.
+
+**Not writing down the risk register.** This is the most common mistake and the most dangerous one. The day something serious happens — a flood, a fire, an injury, a code violation — the question that gets asked is "did we know about this?" A risk register dated week two of your tenure is the difference between a manageable incident and a career-ending one.
+
+## What the Job Becomes After Day 30
+
+Once the first 30 days are done, the job shifts. You start fixing things. You start budgeting. You start having harder conversations with leadership about deferred maintenance, capital improvements, and the difference between what the building costs to *run* and what it actually costs to *own*. The strategic work covered in our [complete facilities management guide](/blog/church-facilities-management-guide) becomes your day-to-day rather than something you'll get to "once things settle down."
+
+The reason the first 30 days matter so much is that they decide whether you'll ever get to "once things settle down." Facilities managers who spend month one reactively are still reacting in year three. Facilities managers who spend month one building systems are running a maintained building by year two.
+
+The pressure to skip the systems work and just start fixing things will be intense. Resist it. The first month is the only chance you'll get.
+`,
+  },
+  {
     slug: 'hidden-cost-of-spreadsheet-church-operations',
     title: "The Hidden Cost of Running Church Operations on Spreadsheets",
     description: "Inventory in one sheet. Volunteers in another. Maintenance tickets in a Google Doc. Background checks in a folder. Most churches don't have an operations problem — they have a spreadsheet sprawl problem. Here's what it actually costs.",
