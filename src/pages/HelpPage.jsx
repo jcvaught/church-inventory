@@ -804,7 +804,7 @@ export function HelpPage({ onBack }) {
               <P>Click <strong>+ Post Job</strong> to create a job listing. Fields include:</P>
               <UL items={[
                 'Title and description',
-                'Date and time',
+                'Date, start time, and optional end time (leave end time blank for open-ended jobs — they display as just the start)',
                 'Location',
                 'Spots available — limits how many people can sign up',
                 'Pay per person (optional)',
