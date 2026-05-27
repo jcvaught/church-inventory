@@ -4,6 +4,20 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-27 — Signup name previews on Job Board + Schedule
+
+Follow-up to the volunteer shell: as a volunteer testing in FXCC, "I don't see who's signed up" — `JobCard` and `DesktopScheduleRow` only rendered `signupCount/spotsTotal`, never actual names, even when the viewer was allowed to see the roster. The `showRoster` prop was being passed but ignored.
+
+- `JobsPage.jsx` now maintains `cardSignupsByJob` (Map<jobId, string[]>) — fetched on demand for every visible job where `canSeeRoster(job)` is true. Refires when `jobListings` changes, since the parent `signupCount` updates as a Cloud Function side effect of every signup/withdraw (no per-job snapshot listeners; reads stay bounded). Skips jobs with `signupCount==0`.
+- New `SignupChips` primitive renders 2 teal pills (`Hazel B.`, `John V.`) + `+N more` collapse on JobCard. Schedule row shows comma-separated `First L.` names with a 3-name cap.
+- Names formatted as `First L.` via `shortDisplayName()` — keeps cards compact and avoids exposing full last names church-wide when `jobsRosterVisibility='all'`.
+- **FXCC `jobsRosterVisibility` flipped from `'signups'` → `'all'`** so every FXCC member sees signups in detail modals + on cards. Revertable from Settings → Jobs Hub.
+- New test account `e2e-volunteer@churchopshub.com` (uid `7uIesfkVLGUvAZoc2n84TUoBwU43`, password `E2eTestPass123!`) provisioned via `scripts/setup-e2e-tenant.mjs` for manual volunteer-shell verification. Currently pointed at FXCC (move back to `e2e-test-church` via `node -e` admin SDK call when no longer needed). The setup script supports a per-account `allowedHubs` override now — set it on the ACCOUNTS entry to bypass the FIELD_DELETE default.
+
+`→ Task` / Edit / Delete / Notify Signups / Print Roster are all gated behind `isAdminOrManager` in the job detail modal (`JobsPage.jsx:1976`), so volunteers never see them.
+
+---
+
 ## 2026-05-27 — Volunteer-aware app shell
 
 Hazel — a teen volunteer Jill invited via `?hubs=jobs` — landed in the app on her phone and saw the **Activity Log** as her first screen with raw admin-side noise (`Removed Uid: jgHRMpU4xR…`) and 7 tabs of operational features she had no permission to touch. The shell was admin-shaped end-to-end; volunteers had no purpose-built entry point.
