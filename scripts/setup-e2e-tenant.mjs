@@ -27,9 +27,15 @@ const CHURCH_NAME = 'E2E Test Church';
 const CHURCH_CODE = 'E2ETST';
 
 const ACCOUNTS = [
-  { key: 'admin',   email: 'e2e-admin@churchopshub.com',    password: 'E2eTestPass123!', role: 'admin', firstName: 'E2E', lastName: 'Admin' },
-  { key: 'memberA', email: 'e2e-member-a@churchopshub.com', password: 'E2eTestPass123!', role: 'user',  firstName: 'E2E', lastName: 'MemberA' },
-  { key: 'memberB', email: 'e2e-member-b@churchopshub.com', password: 'E2eTestPass123!', role: 'user',  firstName: 'E2E', lastName: 'MemberB' },
+  { key: 'admin',     email: 'e2e-admin@churchopshub.com',     password: 'E2eTestPass123!', role: 'admin', firstName: 'E2E', lastName: 'Admin' },
+  { key: 'memberA',   email: 'e2e-member-a@churchopshub.com',  password: 'E2eTestPass123!', role: 'user',  firstName: 'E2E', lastName: 'MemberA' },
+  { key: 'memberB',   email: 'e2e-member-b@churchopshub.com',  password: 'E2eTestPass123!', role: 'user',  firstName: 'E2E', lastName: 'MemberB' },
+  // Volunteer-shell account (2026-05-27): explicit allowedHubs:['jobs'] flips
+  // isVolunteerOnly(userProfile) → true so the 4-tab jobs-first shell + the
+  // VolunteerHome landing render. Don't add this user to e2e/admin-helpers.js
+  // uids() unless you also adapt the suite — Member A/B remain the default
+  // non-admin actors for the existing specs.
+  { key: 'volunteer', email: 'e2e-volunteer@churchopshub.com', password: 'E2eTestPass123!', role: 'user',  firstName: 'E2E', lastName: 'Volunteer', allowedHubs: ['jobs'] },
 ];
 
 function init() {
@@ -133,6 +139,10 @@ async function main() {
   // explicitly here to cover the case where a prior setup run wrote it.
   const FIELD_DELETE = admin.firestore.FieldValue.delete();
   for (const acc of ACCOUNTS) {
+    // If the account has an explicit allowedHubs array (e.g. the volunteer
+    // account), write it through. Otherwise delete the field so the rule
+    // treats the user as "legacy full access".
+    const allowedHubsValue = Array.isArray(acc.allowedHubs) ? acc.allowedHubs : FIELD_DELETE;
     await db.doc(`users/${uids[acc.key]}`).set({
       name: `${acc.firstName} ${acc.lastName}`,
       firstName: acc.firstName,
@@ -141,18 +151,20 @@ async function main() {
       role: acc.role,
       churchId: CHURCH_ID,
       active: true,
-      allowedHubs: FIELD_DELETE,
+      allowedHubs: allowedHubsValue,
       createdAt: now,
       lastLogin: now,
     }, { merge: true });
-    console.log(`  ✓ users/${uids[acc.key]}  ←  ${acc.email}  (${acc.role})`);
+    const allowedNote = Array.isArray(acc.allowedHubs) ? ` allowedHubs:[${acc.allowedHubs.join(',')}]` : '';
+    console.log(`  ✓ users/${uids[acc.key]}  ←  ${acc.email}  (${acc.role})${allowedNote}`);
   }
 
   console.log('\n✓ E2E tenant ready.');
-  console.log(`  churchId:    ${CHURCH_ID}`);
-  console.log(`  admin uid:   ${uids.admin}`);
-  console.log(`  memberA uid: ${uids.memberA}`);
-  console.log(`  memberB uid: ${uids.memberB}`);
+  console.log(`  churchId:      ${CHURCH_ID}`);
+  console.log(`  admin uid:     ${uids.admin}`);
+  console.log(`  memberA uid:   ${uids.memberA}`);
+  console.log(`  memberB uid:   ${uids.memberB}`);
+  console.log(`  volunteer uid: ${uids.volunteer}`);
   console.log('\nNext: update e2e/admin-helpers.js CHURCH_ID + uids() map, regen auth-state.');
 
   process.exit(0);
