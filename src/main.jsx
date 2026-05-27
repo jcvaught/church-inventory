@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import * as Sentry from '@sentry/react';
 import { HelmetProvider } from 'react-helmet-async';
+import { importWithRetry } from './utils/lazyWithRetry.js';
 
 Sentry.init({
   dsn: "https://92a9eb2a55b9544dd9e673291f57eff8@o4511040580091904.ingest.us.sentry.io/4511040584089600",
@@ -83,8 +84,8 @@ const publicJobsChurchId = params.get('jobs');
 
 if (publicJobsChurchId) {
   Promise.all([
-    import('./firebasePublic.js'),
-    import('./pages/PublicJobsPage.jsx'),
+    importWithRetry(() => import('./firebasePublic.js'), 'firebasePublic'),
+    importWithRetry(() => import('./pages/PublicJobsPage.jsx'), 'PublicJobsPage'),
   ]).then(([, mod]) => {
     const PublicJobsPage = mod.PublicJobsPage;
     const churchName = params.get('cn') ? decodeURIComponent(params.get('cn')) : '';
@@ -106,7 +107,7 @@ if (publicJobsChurchId) {
     );
   });
 } else {
-  import('./App.jsx').then(({ default: App }) => {
+  importWithRetry(() => import('./App.jsx'), 'App').then(({ default: App }) => {
     root.render(
       <React.StrictMode>
         <HelmetProvider>
