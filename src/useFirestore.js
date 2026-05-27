@@ -46,17 +46,38 @@ export function useFirestore(churchId) {
     // post-success audit-log failures don't surface a confusing toast over a
     // user action that actually succeeded.
     console.error('[ChurchOpsHub]', err);
+    // Missing-index detection (2026-05-27): `firebase deploy` silently skips
+    // COLLECTION-scope composite indexes declared in firestore.indexes.json,
+    // so a query path can ship to prod without its index. Surface these
+    // distinctly so they alert in Sentry instead of getting lost in the
+    // generic firestore-write noise. The console URL Firestore embeds in the
+    // message lets engineering one-click create the index.
+    const isMissingIndex = err?.code === 'failed-precondition'
+      && typeof err?.message === 'string'
+      && err.message.includes('requires an index');
+    const indexUrlMatch = isMissingIndex
+      ? err.message.match(/https:\/\/console\.firebase\.google\.com\/[^\s)]+/)
+      : null;
     try {
       Sentry.captureException(err, {
+        level: isMissingIndex ? 'fatal' : undefined,
         tags: {
           area: 'firestore-write',
           op: ctx.op || 'unknown',
           ...(ctx.hub && { hub: ctx.hub }),
           ...(err?.code && { errorCode: err.code }),
+          ...(isMissingIndex && { missingIndex: 'true' }),
+        },
+        extra: {
+          ...(indexUrlMatch && { firestoreIndexUrl: indexUrlMatch[0] }),
         },
       });
     } catch { /* never let Sentry break the app */ }
-    if (!ctx.silent) setError(err.message);
+    if (!ctx.silent) {
+      setError(isMissingIndex
+        ? 'This feature is temporarily unavailable while a database index finishes building. Engineering has been alerted — please try again in a few minutes.'
+        : err.message);
+    }
   }
 
   // Subscribe to all collections

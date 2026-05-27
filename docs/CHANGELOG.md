@@ -4,6 +4,21 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-27 — Jobs Hub: missing COLLECTION-scope index broke series "this + all future" edit
+
+Jill reported the recurring-job edit modal throwing a red index error at the top of the page when she picked **"This + all future jobs"**. `updateJobListingSeries` (`src/useFirestore.js:1032-1036`) runs a compound query `where('recurrenceGroupId', '==', g) + where('scheduledDate', '>=', d)` against `jobListings`, which needs a COLLECTION-scope composite index on `(recurrenceGroupId ASC, scheduledDate ASC)`. The index has been declared in `firestore.indexes.json:20-26` since the feature shipped in commit `cf24e63` (2026-04-24), but `firebase deploy --only firestore:indexes` silently skipped it — `gcloud firestore indexes composite list` confirmed only the `(status, scheduledDate)` indexes were in prod.
+
+Same compound query is also used by `deleteJobListingSeriesFrom` (`src/useFirestore.js:1105-1109`), so "delete this and all future" was broken with the identical symptom (just no one had tried it yet).
+
+Fix:
+- Created the composite index directly via `gcloud firestore indexes composite create --collection-group=jobListings --query-scope=COLLECTION --field-config=field-path=recurrenceGroupId,order=ascending --field-config=field-path=scheduledDate,order=ascending`. Index built in seconds and is now `READY`.
+- `src/useFirestore.js:38-71` — hardened `handleErr` so future missing-index regressions surface as `level: 'fatal'` in Sentry with `missingIndex:true` tag + the parsed Firestore Console URL (clickable for one-click index creation). User-facing message now says *"This feature is temporarily unavailable while a database index finishes building"* instead of the raw Firestore error.
+- Verified all other composite indexes + field overrides in `firestore.indexes.json` are present in prod (the four jobListings composite indexes plus signups.uid / waitlist.uid / config.status / tasks.dueDate / jobAnnouncements.repeatWeekly / taskTemplates.autoGenerate field overrides all show `state: READY`).
+
+This is the same `firebase deploy` skip pattern documented under Known Pitfalls + memory `feedback_firebase_collection_index.md`. Long-term fix (deferred): a post-deploy verifier script that probes each declared index against the live DB.
+
+---
+
 ## 2026-05-26 — SEO refocus: rewire internal links toward GSC sleeper hits
 
 GSC 28-day pull (via `~/apps/seo-tools/gsc.py`) found `/blog/volunteer-coordinator-role-guide` ranking at **avg pos 22.8 with 198 impressions** but **zero inbound internal links** — `BlogPost.jsx` "Keep Reading" was sorting by date desc, so newer posts captured all cross-link juice. Meanwhile `/blog/best-church-management-software-small-churches` had 399 impressions at avg pos 55–94 (Planning Center / Tithe.ly own that SERP) — its impressions were being inflated by the same date-desc rotation.

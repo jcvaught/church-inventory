@@ -323,11 +323,20 @@ The SW is an optional PWA layer (network-first, no stale data) with **zero user-
 ### 🟡 Sentry "Connection to Indexed Database server lost" is benign Firebase Auth noise
 `UnknownError: Connection to Indexed Database server lost. Refresh the page to try again` comes from **Firebase Auth's** IndexedDB token-store persistence when the browser drops the IDB connection (Safari/iOS eviction, backgrounded/killed tab, cleared site data, private mode). It is transient, environmental, and self-heals on the refresh the SDK's own message prompts. Firestore offline persistence is **not** enabled (no `initializeFirestore`/`persistentLocalCache`/`enableIndexedDbPersistence` in `src/`), so it is never a data-cache corruption. Dropped in `src/main.jsx` `beforeSend` (`msg.includes('Connection to Indexed Database server lost') → null`, added 2026-05-19, sibling to the `@firebase/firestore` snapshot-listener filter). If you see it in Sentry it's a stale pre-fix event — **do not** "fix the IndexedDB connection" (impossible from app code) or remove the `beforeSend` rule.
 
-### 🟡 `firebase deploy --only firestore:indexes` silently skips collection-group field-override indexes
+### 🟡 `firebase deploy --only firestore:indexes` silently skips two index kinds
 
-A `fieldOverrides` entry in `firestore.indexes.json` with a `COLLECTION_GROUP`-scoped index (e.g. `signups.uid`, `waitlist.uid` for the Jobs Hub roster) is **not created** by `firebase deploy`. The deploy prints `✔ Deploy complete!` with no error and no per-index detail — but `gcloud firestore indexes fields list --collection-group=<cg>` shows `Listed 0 items`, and any `collectionGroup(...).where('uid','==',x)` query fails at runtime with `FAILED_PRECONDITION: The query requires a COLLECTION_GROUP_ASC index`.
+`firebase deploy --only firestore:indexes` exits 0 with `✔ Deploy complete!` for two index shapes it never actually creates. The affected query then throws `FAILED_PRECONDITION: The query requires an index` at runtime, with no deploy-time signal that anything was wrong.
 
-`gcloud firestore indexes fields update` cannot fix it either — its `--index` flag only accepts `order`/`array-config`, no query-scope key. Create the index directly via the Firestore Admin REST API:
+**Case A — COLLECTION-scope composite indexes.** A `COLLECTION`-scope composite (e.g. `jobListings` on `(recurrenceGroupId, scheduledDate)`) declared in `firestore.indexes.json` may be silently no-op'd when an existing `COLLECTION_GROUP` index has the same field list — the CLI thinks it's covered, but a single-collection query (`collection(...).where(...)`) needs an index whose `queryScope` is exactly `COLLECTION`. Bit us 2026-05-06 (Jobs Hub audit) and again 2026-05-27 (Jill's "this + all future" series edit — index had been missing in prod for 5 weeks). Fix with `gcloud`:
+
+```bash
+gcloud firestore indexes composite create \
+  --project=church-inventory-9615c --collection-group=jobListings --query-scope=COLLECTION \
+  --field-config=field-path=recurrenceGroupId,order=ascending \
+  --field-config=field-path=scheduledDate,order=ascending
+```
+
+**Case B — COLLECTION_GROUP field-override indexes.** A `fieldOverrides` entry with a `COLLECTION_GROUP` index (e.g. `signups.uid`, `waitlist.uid` for the Jobs Hub roster) is not created by `firebase deploy`. `gcloud firestore indexes fields list --collection-group=<cg>` shows `Listed 0 items`, and `collectionGroup(...).where('uid','==',x)` fails. `gcloud firestore indexes fields update` can't fix it (its `--index` flag has no query-scope key) — create directly via the Firestore Admin REST API:
 
 ```bash
 TOKEN=$(gcloud auth print-access-token)
@@ -337,7 +346,7 @@ curl -X PATCH \
   -d '{"indexConfig":{"indexes":[{"queryScope":"COLLECTION","fields":[{"fieldPath":"uid","order":"ASCENDING"}]},{"queryScope":"COLLECTION_GROUP","fields":[{"fieldPath":"uid","order":"ASCENDING"}]}]}}'
 ```
 
-The build is near-instant when the collection has no documents. **Always probe a new collection-group query against prod after a deploy** rather than trusting `Deploy complete!`.
+The build is near-instant on an empty collection. **Always probe new index-dependent queries against prod after a deploy** rather than trusting `Deploy complete!`. As a safety net, `useFirestore.js:handleErr` (2026-05-27) tags Firestore `failed-precondition / requires an index` errors with `missingIndex:true` at Sentry `level: 'fatal'` and extracts the Firebase Console URL — set up a Sentry alert on that tag to catch the next regression at the first occurrence.
 
 ### 🟡 CSP in `vercel.json` MUST keep two allowances or Google sign-in breaks
 
