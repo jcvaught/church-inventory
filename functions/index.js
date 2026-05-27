@@ -30,6 +30,16 @@ function formatTimeForDisplay(value) {
   return `${h12}:${m[2]} ${ampm}`;
 }
 
+// Format start/end time pair for email/SMS output. Mirrors src/utils/time.js.
+function formatTimeRange(start, end) {
+  const s = formatTimeForDisplay(start);
+  const e = formatTimeForDisplay(end);
+  if (s && e) return `${s} – ${e}`;
+  if (s) return s;
+  if (e) return `(until ${e})`;
+  return '';
+}
+
 // ─── Email suppression (F-38) ──────────────────────────────────────────────
 // Inbound bounce/spam/unsubscribe events from SendGrid land in
 // emailSuppressions/{normalizedEmail}. sendEmailSafe wraps sgMail.send and
@@ -388,6 +398,7 @@ exports.getPublicJobs = onCall(
         description: cap(x.description, 280),
         scheduledDate: x.scheduledDate || null,
         scheduledTime: x.scheduledTime || null,
+        scheduledEndTime: x.scheduledEndTime || null,
         location: cap(x.location, 160),
         pay: Number.isFinite(payNum) ? payNum : null,
         spotsTotal: x.spotsTotal || 1,
@@ -1189,7 +1200,7 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
   const safeTitle = escapeHtml(job.title || 'Job');
   const safeChurch = escapeHtml(churchName);
   const dateStr = job.scheduledDate || '';
-  const timeStr = job.scheduledTime ? ` at ${formatTimeForDisplay(job.scheduledTime)}` : '';
+  const timeStr = job.scheduledTime ? ` at ${formatTimeRange(job.scheduledTime, job.scheduledEndTime)}` : '';
   const signupSubject = `Job Cancelled: ${job.title || 'Job'}`;
   const waitlistSubject = `Job You Were Waitlisted For Was Cancelled: ${job.title || 'Job'}`;
 
@@ -1557,6 +1568,7 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
       remindersByUid[signup.uid].push({
         title: job.title || 'Job',
         scheduledTime: job.scheduledTime || '',
+        scheduledEndTime: job.scheduledEndTime || '',
         location: job.location || '',
         pay: job.pay != null ? `$${Number(job.pay).toFixed(2)} per person` : null,
         churchId,
@@ -1590,7 +1602,7 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     const safeName = escapeHtml(user.name || 'there');
 
     const jobRows = jobs.map(j => {
-      const timeStr = j.scheduledTime ? ` at ${escapeHtml(formatTimeForDisplay(j.scheduledTime))}` : '';
+      const timeStr = j.scheduledTime ? ` at ${escapeHtml(formatTimeRange(j.scheduledTime, j.scheduledEndTime))}` : '';
       const locStr = j.location ? `<br><span style="font-size:13px;color:#666">📍 ${escapeHtml(j.location)}</span>` : '';
       const payStr = j.pay ? `<br><span style="font-size:13px;color:#16A34A">💵 ${escapeHtml(j.pay)}</span>` : '';
       return `<li style="margin-bottom:8px"><strong>${escapeHtml(j.title)}</strong>${timeStr}${locStr}${payStr}</li>`;
@@ -1605,7 +1617,7 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
 <ul style="padding-left:20px;margin:12px 0">${jobRows}</ul>
 <p><a href="https://churchopshub.com">Open ChurchOpsHub</a> to view details or withdraw.</p>`;
 
-    const text = `Hi ${user.name || 'there'},\n\nReminder — you're signed up for the following job${jobs.length !== 1 ? 's' : ''} today:\n\n${jobs.map(j => `• ${j.title}${j.scheduledTime ? ' at ' + formatTimeForDisplay(j.scheduledTime) : ''}${j.location ? ' — ' + j.location : ''}`).join('\n')}\n\nLog in at churchopshub.com to view details.\n`;
+    const text = `Hi ${user.name || 'there'},\n\nReminder — you're signed up for the following job${jobs.length !== 1 ? 's' : ''} today:\n\n${jobs.map(j => `• ${j.title}${j.scheduledTime ? ' at ' + formatTimeRange(j.scheduledTime, j.scheduledEndTime) : ''}${j.location ? ' — ' + j.location : ''}`).join('\n')}\n\nLog in at churchopshub.com to view details.\n`;
 
     emailTasks.push(sendEmailSafe({ to: user.email, from: FROM, subject, html, text }));
     // Each user's jobs come from multiple job refs — record all their refs for this send
@@ -1641,9 +1653,9 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
       const jobs = (remindersByUid[userSnap.id] || [])
         .filter(j => j.churchId === user.churchId && !smsDoneRefs.has(j._ref));
       if (jobs.length === 0) continue;
-      const jobLines = jobs.map(j => `- ${j.title}${j.scheduledTime ? ' at ' + formatTimeForDisplay(j.scheduledTime) : ''}${j.location ? ' - ' + j.location : ''}`).join('\n');
+      const jobLines = jobs.map(j => `- ${j.title}${j.scheduledTime ? ' at ' + formatTimeRange(j.scheduledTime, j.scheduledEndTime) : ''}${j.location ? ' - ' + j.location : ''}`).join('\n');
       const body = jobs.length === 1
-        ? `ChurchOpsHub: Reminder - you're signed up for "${jobs[0].title}" today${jobs[0].scheduledTime ? ' at ' + formatTimeForDisplay(jobs[0].scheduledTime) : ''}${jobs[0].location ? ' @ ' + jobs[0].location : ''}. Reply STOP to opt out.`
+        ? `ChurchOpsHub: Reminder - you're signed up for "${jobs[0].title}" today${jobs[0].scheduledTime ? ' at ' + formatTimeRange(jobs[0].scheduledTime, jobs[0].scheduledEndTime) : ''}${jobs[0].location ? ' @ ' + jobs[0].location : ''}. Reply STOP to opt out.`
         : `ChurchOpsHub: Reminder - you have ${jobs.length} jobs today:\n${jobLines}\n\nReply STOP to opt out.`;
       const jobRefs = jobs.map(j => j._ref);
       smsTasks.push(
@@ -1764,7 +1776,7 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
   const safeActor = escapeHtml(actorName || 'Someone');
   const safeRemoved = escapeHtml(removedName || 'Someone');
   const dateStr = job.scheduledDate ? escapeHtml(job.scheduledDate) : '';
-  const timeStr = job.scheduledTime ? ` at ${escapeHtml(formatTimeForDisplay(job.scheduledTime))}` : '';
+  const timeStr = job.scheduledTime ? ` at ${escapeHtml(formatTimeRange(job.scheduledTime, job.scheduledEndTime))}` : '';
   const filled = job.signupCount || 0;
   const total = job.spotsTotal || 1;
 
@@ -1910,7 +1922,7 @@ async function sendWaitlistPromotionEmail(db, churchId, jobData, promotedUid) {
   const safeName = escapeHtml(user.name || 'there');
   const safeChurch = escapeHtml(churchName);
   const dateStr = jobData?.scheduledDate || '';
-  const timeStr = jobData?.scheduledTime ? ` at ${jobData.scheduledTime}` : '';
+  const timeStr = jobData?.scheduledTime ? ` at ${formatTimeRange(jobData.scheduledTime, jobData.scheduledEndTime)}` : '';
   const subject = `You're off the waitlist: ${jobData?.title || 'Job'}`;
   const html = `<p>Hi ${safeName},</p>
 <p>Great news! A spot has opened up and you've been moved off the waitlist for:</p>

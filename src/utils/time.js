@@ -54,3 +54,19 @@ export function formatTimeForDisplay(value) {
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
   return `${h12}:${min} ${ampm}`;
 }
+
+/**
+ * Format a start/end time pair for display.
+ * - Both present: "2:00 PM – 4:00 PM"
+ * - Only start:   "2:00 PM"
+ * - Only end:     "(until 4:00 PM)"  (defensive — unlikely)
+ * - Neither:      "" (empty)
+ */
+export function formatTimeRange(start, end) {
+  const s = formatTimeForDisplay(start);
+  const e = formatTimeForDisplay(end);
+  if (s && e) return `${s} – ${e}`;
+  if (s) return s;
+  if (e) return `(until ${e})`;
+  return '';
+}

@@ -5,6 +5,7 @@ import { B, f1, f2, btnP, btnS } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { localDateStr } from '../utils/date.js';
 import { exportJobsICS } from '../utils/ical.js';
+import { formatTimeRange } from '../utils/time.js';
 
 // VolunteerHome — landing for role:user with allowedHubs=['jobs'] (Hazel et al).
 // Sections: next shift · upcoming · open this week · CTAs.
@@ -140,7 +141,7 @@ function NextShiftCard({ job, churchName, isMobile, onOpenDetail }) {
         {job.title}
       </div>
       <div style={{ fontSize: 13, opacity: 0.92, marginBottom: 4 }}>
-        {formatDate(job.scheduledDate)}{job.scheduledTime ? ` · ${job.scheduledTime}` : ''}
+        {formatDate(job.scheduledDate)}{job.scheduledTime ? ` · ${formatTimeRange(job.scheduledTime, job.scheduledEndTime)}` : ''}
       </div>
       {job.location && (
         <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 16 }}>
@@ -226,7 +227,7 @@ function ShiftRow({ job, onClick, accent, showSpots }) {
           {job.title}
         </div>
         <div style={{ fontSize: 12, color: B.textLight }}>
-          {formatDate(job.scheduledDate)}{job.scheduledTime ? ` · ${job.scheduledTime}` : ''}
+          {formatDate(job.scheduledDate)}{job.scheduledTime ? ` · ${formatTimeRange(job.scheduledTime, job.scheduledEndTime)}` : ''}
           {job.location ? ` · ${job.location}` : ''}
         </div>
       </div>

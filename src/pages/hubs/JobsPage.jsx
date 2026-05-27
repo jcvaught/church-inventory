@@ -12,7 +12,7 @@ import { isVolunteerOnly } from '../../utils/roleHelpers.js';
 import { localDateStr, generateRecurrenceDates } from '../../utils/date.js';
 import { printJobRoster } from '../../utils/print.js';
 import { exportJobsICS } from '../../utils/ical.js';
-import { formatTimeForDisplay } from '../../utils/time.js';
+import { formatTimeRange } from '../../utils/time.js';
 import { EmojiIcon } from '../../components/primitives/EmojiIcon.jsx';
 
 function formatJobDate(dateStr) {
@@ -29,7 +29,7 @@ const JOB_STATUS_COLORS = {
   cancelled: { bg: '#F3F4F6', tx: '#6B7280', dot: '#9CA3AF' },
 };
 
-const emptyJob = () => ({ title: '', description: '', scheduledDate: '', scheduledTime: '', location: '', spotsTotal: 1, pay: '', status: 'open', jobLead: null, requiresWaiver: false, waiverText: '', requiredAccessTypes: [] });
+const emptyJob = () => ({ title: '', description: '', scheduledDate: '', scheduledTime: '', scheduledEndTime: '', location: '', spotsTotal: 1, pay: '', status: 'open', jobLead: null, requiresWaiver: false, waiverText: '', requiredAccessTypes: [] });
 
 const ACCESS_TYPE_LABELS = { background_check: 'Background Check', key_assignment: 'Key Assignment', certification: 'Certification', custom: 'Custom' };
 
@@ -153,7 +153,7 @@ function JobCalendar({ jobs, onJobClick, isMobile, todayStr: todayStrProp }) {
                   <span style={{ width:8, height:8, borderRadius:'50%', background:sc.dot, flexShrink:0 }}/>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:14, fontWeight:600, color:B.navy, fontFamily:f1 }}>{j.title}</div>
-                    <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>{j.scheduledDate}{j.scheduledTime ? ' · '+formatTimeForDisplay(j.scheduledTime) : ''}</div>
+                    <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>{j.scheduledDate}{j.scheduledTime ? ' · '+formatTimeRange(j.scheduledTime, j.scheduledEndTime) : ''}</div>
                   </div>
                   <span style={{ fontSize:12, color:sc.tx, fontFamily:f1 }}>{(j.signupCount||0)}/{j.spotsTotal||1}</span>
                 </div>
@@ -318,7 +318,7 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJ
       </div>
       <div style={{ fontWeight: 700, fontSize: 15, fontFamily: f1, color: B.navy, marginBottom: 6 }}>{job.title}</div>
       <div style={{ fontSize: isMobile ? 13 : 12, color: B.textMid, fontFamily: f2, marginBottom: 2 }}>
-        <EmojiIcon emoji="📅" decorative /> {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' at ' + formatTimeForDisplay(job.scheduledTime) : ''}
+        <EmojiIcon emoji="📅" decorative /> {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' at ' + formatTimeRange(job.scheduledTime, job.scheduledEndTime) : ''}
       </div>
       {job.location && (
         <div style={{ fontSize: isMobile ? 13 : 12, color: B.textMid, fontFamily: f2, marginBottom: 8 }}><EmojiIcon emoji="📍" decorative /> {job.location}</div>
@@ -405,7 +405,7 @@ const MobileScheduleRow = memo(function MobileScheduleRow({ job, onDetail }) {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
         <div>
           <div style={{ fontSize:14, fontWeight:700, color:B.navy, fontFamily:f1 }}>{job.title}</div>
-          <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}><EmojiIcon emoji="📅" decorative /> {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' · '+formatTimeForDisplay(job.scheduledTime) : ''}</div>
+          <div style={{ fontSize:12, color:B.textMid, fontFamily:f2 }}><EmojiIcon emoji="📅" decorative /> {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' · '+formatTimeRange(job.scheduledTime, job.scheduledEndTime) : ''}</div>
         </div>
         <span style={{ fontSize:11, fontWeight:700, color:sc.tx, background:sc.bg, padding:'2px 8px', borderRadius:12 }}>{job.status}</span>
       </div>
@@ -429,7 +429,7 @@ const DesktopScheduleRow = memo(function DesktopScheduleRow({ job, todayStr, isA
       onMouseEnter={e => e.currentTarget.style.background=B.warmGray}
       onMouseLeave={e => e.currentTarget.style.background=''}>
       <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textDark, whiteSpace:'nowrap' }}>
-        {formatJobDate(job.scheduledDate)}{job.scheduledTime ? <div style={{ fontSize:11, color:B.textLight }}>{formatTimeForDisplay(job.scheduledTime)}</div> : null}
+        {formatJobDate(job.scheduledDate)}{job.scheduledTime ? <div style={{ fontSize:11, color:B.textLight }}>{formatTimeRange(job.scheduledTime, job.scheduledEndTime)}</div> : null}
       </td>
       <td style={{ padding:'10px 14px', fontFamily:f2, color:B.navy, fontWeight:600 }}>
         <button onClick={e => { e.stopPropagation(); onDetail(job); }}
@@ -889,6 +889,7 @@ export function JobsPage({ store, userProfile, initialView }) {
       description: job.description || '',
       scheduledDate: job.scheduledDate || '',
       scheduledTime: job.scheduledTime || '',
+      scheduledEndTime: job.scheduledEndTime || '',
       location: job.location || '',
       spotsTotal: job.spotsTotal || 1,
       pay: job.pay != null ? String(job.pay) : '',
@@ -1674,8 +1675,13 @@ export function JobsPage({ store, userProfile, initialView }) {
               </FF>
             </div>
             <div style={{ flex: '1 1 120px' }}>
-              <FF label="Time">
+              <FF label="Start Time">
                 <input type="time" style={inp} value={jobForm.scheduledTime} onChange={e => setJobForm(f => ({ ...f, scheduledTime: e.target.value }))} />
+              </FF>
+            </div>
+            <div style={{ flex: '1 1 120px' }}>
+              <FF label="End Time">
+                <input type="time" style={inp} value={jobForm.scheduledEndTime} onChange={e => setJobForm(f => ({ ...f, scheduledEndTime: e.target.value }))} />
               </FF>
             </div>
           </div>
@@ -1835,7 +1841,7 @@ export function JobsPage({ store, userProfile, initialView }) {
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, color: B.textLight, textTransform: 'uppercase', letterSpacing: .8, fontFamily: f1, marginBottom: 2 }}>Date</div>
               <div style={{ fontSize: 14, color: B.textDark, fontFamily: f2 }}>
-                {formatJobDate(liveDetail.scheduledDate)}{liveDetail.scheduledTime ? ' at ' + formatTimeForDisplay(liveDetail.scheduledTime) : ''}
+                {formatJobDate(liveDetail.scheduledDate)}{liveDetail.scheduledTime ? ' at ' + formatTimeRange(liveDetail.scheduledTime, liveDetail.scheduledEndTime) : ''}
               </div>
             </div>
             {liveDetail.location && (

@@ -5,7 +5,7 @@ import { B, f1, f2, btnP, btnS } from '../components/brand/tokens.js';
 import { FullLogo } from '../components/brand/Logo.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
 import { SEO } from '../components/SEO.jsx';
-import { formatTimeForDisplay } from '../utils/time.js';
+import { formatTimeRange } from '../utils/time.js';
 
 function formatJobDate(dateStr) {
   if (!dateStr) return '—';
@@ -106,7 +106,7 @@ export function PublicJobsPage({ churchId, churchName, churchCode, onGetStarted 
                       <div style={{ fontSize: 13, color: B.textMid, fontFamily: f2, marginBottom: 8, lineHeight: 1.5 }}>{job.description}</div>
                     )}
                     <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 2 }}>
-                      📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' at ' + formatTimeForDisplay(job.scheduledTime) : ''}
+                      📅 {formatJobDate(job.scheduledDate)}{job.scheduledTime ? ' at ' + formatTimeRange(job.scheduledTime, job.scheduledEndTime) : ''}
                     </div>
                     {job.location && (
                       <div style={{ fontSize: 12, color: B.textMid, fontFamily: f2, marginBottom: 8 }}>📍 {job.location}</div>

@@ -71,15 +71,21 @@ export function exportJobsICS(jobs, churchName, { calendarLabel = 'Jobs', filena
   const events = [];
   (jobs || []).filter(j => j.scheduledDate).forEach(job => {
     const dtTime = timeToICS(job.scheduledDate, job.scheduledTime);
+    const dtEnd = timeToICS(job.scheduledDate, job.scheduledEndTime);
     const dateOnly = dateToICS(job.scheduledDate);
     events.push('BEGIN:VEVENT');
     if (dtTime) {
       events.push(`DTSTART:${dtTime}`);
-      const h = parseInt(dtTime.slice(9, 11));
-      const endH = h + 1;
-      let endDate = dtTime.slice(0, 8);
-      if (endH >= 24) endDate = addOneDay(endDate);
-      events.push(`DTEND:${endDate}T${String(endH % 24).padStart(2, '0')}${dtTime.slice(11)}`);
+      if (dtEnd && dtEnd > dtTime) {
+        events.push(`DTEND:${dtEnd}`);
+      } else {
+        // Fallback: no end time provided, or end <= start → default to +1 hour.
+        const h = parseInt(dtTime.slice(9, 11));
+        const endH = h + 1;
+        let endDate = dtTime.slice(0, 8);
+        if (endH >= 24) endDate = addOneDay(endDate);
+        events.push(`DTEND:${endDate}T${String(endH % 24).padStart(2, '0')}${dtTime.slice(11)}`);
+      }
     } else {
       events.push(`DTSTART;VALUE=DATE:${dateOnly}`);
       events.push(`DTEND;VALUE=DATE:${addOneDay(dateOnly)}`);
