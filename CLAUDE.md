@@ -93,12 +93,13 @@ src/
 │   ├── BlogIndex.jsx          ← Blog listing page at /blog; nav, post cards, CTA, footer
 │   ├── BlogPost.jsx           ← Single blog post at /blog/:slug; related articles, post-level JSON-LD, CTA
 │   ├── Dashboard.jsx
+│   ├── VolunteerHome.jsx      ← Volunteer landing — replaces Dashboard for `isVolunteerOnly(userProfile)` (role:user + allowedHubs=['jobs']). Sections: greeting · Next Shift gradient card with Add-to-Calendar (.ics) · upcoming shifts · open-this-week · "View all jobs" + "Open calendar" CTAs. Subscribes to `collectionGroup('signups').where('uid','==',userId)` directly.
 │   ├── ItemsPage.jsx
 │   ├── SuppliesPage.jsx
 │   ├── ReservationsPage.jsx
 │   ├── ActivityLogPage.jsx
 │   ├── SettingsPage.jsx       ← Includes Subscription & Billing card for admins; My Compliance card (shows linked accessPerson records for current user); Team Members compliance badges (🔴/🟡 when linked users have expiring records)
-│   ├── HubsPage.jsx           ← Hub picker + sub-navigation container; renders hub cards and routes into active hub with breadcrumb
+│   ├── HubsPage.jsx           ← Hub picker + sub-navigation container; renders hub cards and routes into active hub with breadcrumb. **Single-hub users** (`allowedHubs.length === 1`) skip the picker entirely — `useEffect` auto-calls `onOpenHub(allowedHubs[0])` and the picker renders `null` in the interim so the upgrade grid never flashes. Volunteers only see their own hub card if they ever do reach the picker, and the All-In Bundle callout is admin/manager-only.
 │   └── hubs/
 │       ├── MaintenancePage.jsx     ← Maintenance Hub (Phase 3)
 │       ├── InsightsPage.jsx        ← Insights Hub (Phase 4): utilization, ministry, seasonal, financial, supply analytics (Recharts)
@@ -165,7 +166,8 @@ Full collection schemas and Firestore rules summary: `docs/DATA_MODEL.md`. Quick
 - **Deep linking:** `?item=ITEM_ID` URL param auto-opens item detail. URL cleaned with `history.replaceState` after read.
 - **QR codes:** Generated locally via the `qrcode` npm package (`QRCode.toDataURL()`). Links back to the app with `?item=` param. In the item detail modal, the QR data URL is stored in `detailQrUrl` state (generated in a `useEffect` when `showDetail` changes). `printLabel` is async (awaits `QRCode.toDataURL()` before opening the print window).
 - **Firebase Storage** (Blaze plan): item photos stored under `churches/{churchId}/items/`. Images are client-side resized to max 1200px / 82% JPEG quality before upload via Canvas API (`resizeImageForUpload`).
-- **Role enforcement:** Three roles — `admin`, `manager`, `user`. Enforced at both UI level and Firestore rules level. Shared helpers in `src/utils/roleHelpers.js` (`canManageMinistry`, `canManageItem`, `canManageSupply`).
+- **Volunteer-only mode (2026-05-27):** When `isVolunteerOnly(userProfile)` (`src/utils/roleHelpers.js`) is true — role `'user'` with `allowedHubs === ['jobs']` exactly — the app swaps to a jobs-first shell: 4-tab mobile nav (Home/Jobs/Activity/Settings, "Hubs" key relabeled "Jobs"), `VolunteerHome` replaces `Dashboard`, JobsPage defaults to Calendar on mobile, ActivityLogPage filters to `performedBy === userId`, and HubsPage hides every card except `jobs`. The predicate is deliberately narrow — `allowedHubs:null` (full access) and `['jobs','tasks']` both fall back to the standard admin-shaped shell. To extend to other single-hub volunteer modes (e.g. Tasks-only) generalize the predicate, not the branches.
+- **Role enforcement:** Three roles — `admin`, `manager`, `user`. Enforced at both UI level and Firestore rules level. Shared helpers in `src/utils/roleHelpers.js` (`canManageMinistry`, `canManageItem`, `canManageSupply`, `isVolunteerOnly`).
   - **admin**: full access — team management, church code, billing, invite links, EmailJS config, plus all manager capabilities.
   - **manager**: full operational access — edit dropdown lists (Locations/Ministries/Tags); add/edit/retire items + supplies scoped to `managedMinistries[]`; approve/deny/checkout reservations for their ministries; create/manage maintenance tickets and vendors; run audits; create/edit/delete bundles. Cannot manage team members, billing, or EmailJS config.
   - **user**: day-to-day use — checkout/return items, request reservations (cancel own), log supply usage/restock, view all accessible hubs. Cannot add/edit items or supplies, approve reservations, or start audits. Cannot see People Access Hub at all (hidden from picker and blocked on access).

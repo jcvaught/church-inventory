@@ -12,6 +12,8 @@ import { HubsPage } from './pages/HubsPage.jsx';
 import { LandingPage } from './pages/LandingPage.jsx';
 import { PublicRequestPage } from './pages/PublicRequestPage.jsx';
 import { Dashboard } from './pages/Dashboard.jsx';
+import { VolunteerHome } from './pages/VolunteerHome.jsx';
+import { isVolunteerOnly } from './utils/roleHelpers.js';
 import { ItemsPage } from './pages/ItemsPage.jsx';
 import { SuppliesPage } from './pages/SuppliesPage.jsx';
 import { ReservationsPage } from './pages/ReservationsPage.jsx';
@@ -433,9 +435,14 @@ function AppShell({ authHook }) {
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false);
   const [tab, setTab] = useState(() => {
     if (new URLSearchParams(window.location.search).get('item')) return 'inventory';
-    return localStorage.getItem('lastTab') || 'dashboard';
+    const stored = localStorage.getItem('lastTab');
+    if (stored) return stored;
+    // Volunteers (role:user with allowedHubs=['jobs']) land on Hubs, which
+    // auto-routes into Jobs Hub via HubsPage. Everyone else gets Dashboard.
+    return isVolunteerOnly(userProfile) ? 'hubs' : 'dashboard';
   });
   const [hubKey, setHubKey] = useState(() => localStorage.getItem('lastHub') || null);
+  const [jobsInitialView, setJobsInitialView] = useState(null);
   useEffect(() => { localStorage.setItem('lastTab', tab); }, [tab]);
   const [menuOpen, setMenuOpen] = useState(false);
   const accountTriggerRef = useRef(null);
@@ -564,6 +571,17 @@ function AppShell({ authHook }) {
     setHubKey(key);
   }
 
+  // Mobile bottom nav + desktop tabs. Volunteers (role:user, allowedHubs=['jobs'])
+  // get a 4-tab jobs-first shell; everyone else gets the standard 7-tab admin shell.
+  // The "Hubs" key stays the same — for volunteers it just auto-routes into Jobs.
+  const volunteerMode = isVolunteerOnly(userProfile);
+  const mobileTabs = volunteerMode
+    ? [["dashboard","Home","🏠"], ["hubs","Jobs","💼"], ["log","Activity","📋"], ["settings","Settings","⚙️"]]
+    : [["dashboard","Home","🏠"], ["inventory","Items","📦"], ["supplies","Stock","🧴"], ["reservations","Reserve","📅"], ["log","Log","📋"], ["hubs","Hubs","🔌"], ["settings","Settings","⚙️"]];
+  const desktopTabs = volunteerMode
+    ? [["dashboard","Home"], ["hubs","Jobs"], ["log","Activity"], ["settings","Settings"]]
+    : [["dashboard","Dashboard"], ["inventory","All Items"], ["supplies","Supplies"], ["reservations","Reservations"], ["log","Activity Log"], ["hubs","Hubs"], ["settings","Settings"]];
+
   const canAdd = canAddUser((store.users || []).length);
 
   return (
@@ -609,12 +627,7 @@ function AppShell({ authHook }) {
               tab-by-tab so users land on a full button, and `maskImage`
               fades the right edge to hint there's more off-screen. */}
           {!isMobile && <div style={{ display:"flex", gap:2, marginTop:16, marginBottom:-14, overflowX:"auto", scrollSnapType:"x mandatory", scrollbarWidth:"none", WebkitMaskImage:"linear-gradient(90deg, #000 0, #000 calc(100% - 24px), transparent 100%)", maskImage:"linear-gradient(90deg, #000 0, #000 calc(100% - 24px), transparent 100%)" }}>
-            {[
-              ["dashboard","Dashboard"],["inventory","All Items"],["supplies","Supplies"],
-              ["reservations","Reservations"],["log","Activity Log"],
-              ["hubs","Hubs"],
-              ["settings","Settings"],
-            ].map(([k,v]) =>
+            {desktopTabs.map(([k,v]) =>
               <button key={k} onClick={()=>{
                 if(k==="hubs"&&tab==="hubs"){openHub(null);}
                 else{setTab(k);}
@@ -675,12 +688,14 @@ function AppShell({ authHook }) {
       {/* Page content */}
       <PageErrorBoundary key={tab}>
       <div style={{ maxWidth:1100, margin:"0 auto", padding:isMobile?"16px 14px 96px":"28px 28px 60px" }} onClick={()=>menuOpen&&setMenuOpen(false)}>
-        {tab === "dashboard" && <Dashboard store={store} userProfile={userProfile} canSeeJobHub={userCanSeeHub('jobs')} />}
+        {tab === "dashboard" && (isVolunteerOnly(userProfile)
+          ? <VolunteerHome store={store} userProfile={userProfile} onOpenJobs={(view) => { setJobsInitialView(view || null); openHub('jobs'); setTab('hubs'); }} />
+          : <Dashboard store={store} userProfile={userProfile} canSeeJobHub={userCanSeeHub('jobs')} />)}
         {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} subscription={subscription} user={user} canAdd={canAdd} deleteAccount={deleteAccount} />}
         {tab === "inventory" && <ItemsPage store={store} userProfile={userProfile} initialItemId={initialItemId} scannedItemId={scannedItemId} onScannedItemConsumed={() => setScannedItemId(null)} />}
         {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
         {tab === "reservations" && <ReservationsPage store={store} userProfile={userProfile} />}
-        {tab === "log" && <ActivityLogPage store={store} />}
+        {tab === "log" && <ActivityLogPage store={store} userProfile={userProfile} />}
         {tab === "hubs" && (
           <HubsPage
             store={store}
@@ -691,6 +706,7 @@ function AppShell({ authHook }) {
             subscriptionLoading={subscriptionLoading}
             userCanSeeHub={userCanSeeHub}
             onGoToSettings={() => setTab('settings')}
+            jobsInitialView={jobsInitialView}
           />
         )}
       </div>
@@ -729,15 +745,7 @@ function AppShell({ authHook }) {
           evenly and the row always fits the viewport. */}
       {isMobile && (
         <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:200, background:B.white, borderTop:"1px solid "+B.sand, display:"flex", paddingBottom:"env(safe-area-inset-bottom, 0px)" }}>
-          {[
-            ["dashboard","Home","🏠"],
-            ["inventory","Items","📦"],
-            ["supplies","Stock","🧴"],
-            ["reservations","Reserve","📅"],
-            ["log","Log","📋"],
-            ["hubs","Hubs","🔌"],
-            ["settings","Settings","⚙️"],
-          ].map(([k,label,icon]) => (
+          {mobileTabs.map(([k,label,icon]) => (
             <button key={k} onClick={()=>{
               if(k==="hubs"&&tab==="hubs"){openHub(null);}
               else{setTab(k);}

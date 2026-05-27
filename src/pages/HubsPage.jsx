@@ -1,4 +1,4 @@
-import { useContext, Suspense } from 'react';
+import { useContext, useEffect, Suspense } from 'react';
 import { B, f1, f2, btnP } from '../components/brand/tokens.js';
 import { UpgradeGate } from '../components/primitives/UpgradeGate.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
@@ -6,6 +6,7 @@ import { MobileCtx } from '../hooks/useMobile.js';
 import { lazyWithRetry } from '../utils/lazyWithRetry.js';
 import { ChunkErrorBoundary } from '../components/primitives/ChunkErrorBoundary.jsx';
 import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
+import { isVolunteerOnly } from '../utils/roleHelpers.js';
 
 // Audit overnight 2026-05-12 / Perf #7: hub pages were all eagerly imported,
 // loading recharts + the full Tasks/Insights/People-Access surface even for
@@ -108,7 +109,7 @@ const UPGRADE_PREVIEWS = {
   jobs: '/upgrade-previews/jobs.jpg',
 };
 
-function HubContent({ hubKey, store, userProfile }) {
+function HubContent({ hubKey, store, userProfile, jobsInitialView }) {
   let page = null;
   if (hubKey === 'insights') page = <InsightsPage store={store} userProfile={userProfile} />;
   else if (hubKey === 'maintenance') page = <MaintenancePage store={store} userProfile={userProfile} />;
@@ -116,7 +117,7 @@ function HubContent({ hubKey, store, userProfile }) {
   else if (hubKey === 'accountability') page = <AccountabilityPage store={store} userProfile={userProfile} />;
   else if (hubKey === 'people_access') page = <PeopleAccessPage store={store} userProfile={userProfile} />;
   else if (hubKey === 'tasks') page = <TasksPage store={store} userProfile={userProfile} />;
-  else if (hubKey === 'jobs') page = <JobsPage store={store} userProfile={userProfile} />;
+  else if (hubKey === 'jobs') page = <JobsPage store={store} userProfile={userProfile} initialView={jobsInitialView} />;
   if (!page) return null;
   // key={hubKey} gives each hub a fresh boundary, so an error on one hub
   // doesn't stick when the user navigates to another.
@@ -127,9 +128,26 @@ function HubContent({ hubKey, store, userProfile }) {
   );
 }
 
-export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscriptionLoading, userCanSeeHub, onGoToSettings }) {
+export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscriptionLoading, userCanSeeHub, onGoToSettings, jobsInitialView }) {
   const isMobile = useContext(MobileCtx);
   const def = HUB_DEFS.find(h => h.key === hubKey);
+  const volunteerMode = isVolunteerOnly(userProfile);
+
+  // Single-hub users (volunteers + anyone whose admin scoped them to exactly
+  // one hub they have access to) skip the picker grid — auto-route them into
+  // that hub. Admins/managers and multi-hub users still see the picker.
+  const allowedHubs = userProfile?.allowedHubs;
+  const autoRouteKey = (!hubKey
+    && !subscriptionLoading
+    && Array.isArray(allowedHubs)
+    && allowedHubs.length === 1
+    && hasHub(allowedHubs[0])
+    && userCanSeeHub?.(allowedHubs[0]))
+    ? allowedHubs[0]
+    : null;
+  useEffect(() => {
+    if (autoRouteKey) onOpenHub(autoRouteKey);
+  }, [autoRouteKey, onOpenHub]);
 
   // ── Active hub view ──
   if (hubKey && def) {
@@ -154,7 +172,7 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
           previewAlt={hubLabel + ' preview'}
         >
           {userCanSeeHub(hubKey)
-            ? <HubContent hubKey={hubKey} store={store} userProfile={userProfile} />
+            ? <HubContent hubKey={hubKey} store={store} userProfile={userProfile} jobsInitialView={jobsInitialView} />
             : (
               <div style={{ textAlign: 'center', padding: '60px 20px', color: B.textLight, fontFamily: f2 }}>
                 You don't have access to this hub. Contact your admin.
@@ -167,6 +185,9 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
   }
 
   // ── Hub picker ──
+  // If auto-routing, suppress the picker render so the user never sees the
+  // full upgrade grid flash before useEffect lands them in their hub.
+  if (autoRouteKey) return null;
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
@@ -176,7 +197,13 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
         </p>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, opacity: subscriptionLoading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
-        {HUB_DEFS.filter(hub => !(hub.key === 'people_access' && userProfile?.role === 'user')).map(hub => {
+        {HUB_DEFS.filter(hub => {
+          if (hub.key === 'people_access' && userProfile?.role === 'user') return false;
+          // Volunteers (jobs-only) shouldn't be confronted with 6 upgrade cards
+          // for hubs they have no access to — show only their hub.
+          if (volunteerMode && hub.key !== 'jobs') return false;
+          return true;
+        }).map(hub => {
           const active = hasHub(hub.key);
           const canSee = active && userCanSeeHub(hub.key);
           return (
@@ -221,8 +248,8 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
         })}
       </div>
 
-      {/* All-In Bundle callout */}
-      <div style={{ marginTop: 28, padding: 20, background: `linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 100%)`, borderRadius: 16, color: B.white }}>
+      {/* All-In Bundle callout — admin/manager only; volunteers don't choose plans */}
+      {!volunteerMode && <div style={{ marginTop: 28, padding: 20, background: `linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 100%)`, borderRadius: 16, color: B.white }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, fontFamily: f1, marginBottom: 4 }}>✨ All-In Bundle</div>
@@ -235,7 +262,7 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
             View Plans
           </button>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

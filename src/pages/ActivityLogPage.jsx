@@ -17,9 +17,17 @@ const ACTION_HUB = {
   add_ticket: "Maintenance", update_ticket: "Maintenance",
 };
 
-export function ActivityLogPage({ store }) {
+// Detail keys we never render as human-facing rows — raw UIDs are debug-only,
+// not useful to volunteers or admins. Engineering reads them via Firestore /
+// Sentry. Stops leaks like "Removed Uid: jgHRMpU4xR…" appearing under a
+// withdraw row when an admin removes a volunteer.
+const HIDDEN_DETAIL_KEYS = new Set(['removedUid', 'addedUid', 'mentionedUid', 'uid', 'actorUid', 'targetUid']);
+
+export function ActivityLogPage({ store, userProfile }) {
   const { activityLog, loadOlderActivityLog } = store;
   const isMobile = useContext(MobileCtx);
+  const isAdminOrManager = userProfile?.role === 'admin' || userProfile?.role === 'manager';
+  const userId = userProfile?.id || userProfile?.uid;
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [hubFilter, setHubFilter] = useState("all");
@@ -57,6 +65,9 @@ export function ActivityLogPage({ store }) {
   const uniqueActions = useMemo(() => [...new Set(allEntries.map(l => l.action))].sort(), [allEntries]);
 
   const filtered = useMemo(() => allEntries.filter(l => {
+    // Non-admin/manager only see their own activity — keeps volunteers from
+    // scrolling an admin-shaped feed full of items/supplies/maintenance.
+    if (!isAdminOrManager && l.performedBy !== userId) return false;
     if (search) {
       const s = search.toLowerCase();
       if (!(l.itemId||"").toLowerCase().includes(s) &&
@@ -69,7 +80,7 @@ export function ActivityLogPage({ store }) {
     if (dateFrom && (l.timestamp||"").split("T")[0] < dateFrom) return false;
     if (dateTo && (l.timestamp||"").split("T")[0] > dateTo) return false;
     return true;
-  }), [allEntries, search, actionFilter, hubFilter, dateFrom, dateTo]);
+  }), [allEntries, search, actionFilter, hubFilter, dateFrom, dateTo, isAdminOrManager, userId]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const safePage = Math.min(page, totalPages - 1);
@@ -90,7 +101,9 @@ export function ActivityLogPage({ store }) {
 
   function detailRows(details) {
     if (!details || Object.keys(details).length === 0) return null;
-    return Object.entries(details).filter(([,v]) => v !== undefined && v !== null && v !== "").map(([k,v]) => (
+    return Object.entries(details)
+      .filter(([k,v]) => v !== undefined && v !== null && v !== "" && !HIDDEN_DETAIL_KEYS.has(k))
+      .map(([k,v]) => (
       <div key={k} style={{ display:"flex", gap:8, fontSize:13, padding:"3px 0" }}>
         <span style={{ color:B.textLight, fontWeight:600, minWidth:120, textTransform:"capitalize" }}>{k.replace(/([A-Z])/g, " $1")}:</span>
         <span style={{ color:B.textDark }}>{String(v)}</span>

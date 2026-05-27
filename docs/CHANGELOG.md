@@ -4,6 +4,27 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-27 — Volunteer-aware app shell
+
+Hazel — a teen volunteer Jill invited via `?hubs=jobs` — landed in the app on her phone and saw the **Activity Log** as her first screen with raw admin-side noise (`Removed Uid: jgHRMpU4xR…`) and 7 tabs of operational features she had no permission to touch. The shell was admin-shaped end-to-end; volunteers had no purpose-built entry point.
+
+Now: when `isVolunteerOnly(userProfile)` is true (role `'user'` with `allowedHubs === ['jobs']`), the app shows a jobs-first shell:
+
+- **New `isVolunteerOnly` predicate** at `src/utils/roleHelpers.js` — single source of truth for every branch below.
+- **4-tab mobile nav** (Home / Jobs / Activity / Settings) instead of 7 (`src/App.jsx`). Desktop tab row swapped to the same four. "Hubs" tab key stays the same but is labeled "Jobs" with a 💼 icon since for volunteers there's effectively only one hub.
+- **New `VolunteerHome`** landing (`src/pages/VolunteerHome.jsx`) replaces the generic `Dashboard` for volunteers — greeting, "Next Shift" gradient card with Add-to-Calendar (.ics via `exportJobsICS`), upcoming shifts list, open-this-week list, "View all jobs" + "Open calendar" CTAs.
+- **Auto-route single-hub users** in `src/pages/HubsPage.jsx` — anyone with `allowedHubs.length === 1` skips the upgrade-card grid and lands straight in their hub via a `useEffect`. The grid renders `null` in the interim so they never see a 6-card upgrade flash.
+- **Volunteers see only their hub card** if they back out to the picker; the All-In Bundle callout is admin/manager-only.
+- **JobsPage accepts `initialView` prop** so VolunteerHome's "Open calendar" CTA lands on the Calendar sub-view. On mobile, volunteers default to Calendar (date-first mental model); admins keep the Job Board default.
+- **Activity Log filtered to self** for non-admin/manager (`src/pages/ActivityLogPage.jsx:67-68`). Volunteers see only their own sign-ups, withdrawals, and waivers — a useful "did my signup save?" surface, no admin noise.
+- **UID detail keys scrubbed** from log detail rows for everyone (`HIDDEN_DETAIL_KEYS` set blocks `removedUid`, `addedUid`, `mentionedUid`, `uid`, `actorUid`, `targetUid`). Raw UIDs are debug-only; engineering still has them via Firestore + Sentry.
+
+Admin/manager experience is byte-identical to before — every branch is `if (isVolunteerOnly(userProfile))` gated.
+
+Out of scope (future): push notifications for shift reminders, swap-request UX redesign, a `role:user` non-volunteer landing (e.g. for someone with only Tasks Hub access — same `isVolunteerOnly` pattern would generalize).
+
+---
+
 ## 2026-05-27 — Jobs Hub: missing COLLECTION-scope index broke series "this + all future" edit
 
 Jill reported the recurring-job edit modal throwing a red index error at the top of the page when she picked **"This + all future jobs"**. `updateJobListingSeries` (`src/useFirestore.js:1032-1036`) runs a compound query `where('recurrenceGroupId', '==', g) + where('scheduledDate', '>=', d)` against `jobListings`, which needs a COLLECTION-scope composite index on `(recurrenceGroupId ASC, scheduledDate ASC)`. The index has been declared in `firestore.indexes.json:20-26` since the feature shipped in commit `cf24e63` (2026-04-24), but `firebase deploy --only firestore:indexes` silently skipped it — `gcloud firestore indexes composite list` confirmed only the `(status, scheduledDate)` indexes were in prod.

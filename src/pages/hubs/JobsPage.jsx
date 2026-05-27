@@ -8,6 +8,7 @@ import { Modal } from '../../components/primitives/Modal.jsx';
 import { FF } from '../../components/primitives/FF.jsx';
 import { useConfirm } from '../../components/primitives/ConfirmDialog.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
+import { isVolunteerOnly } from '../../utils/roleHelpers.js';
 import { localDateStr, generateRecurrenceDates } from '../../utils/date.js';
 import { printJobRoster } from '../../utils/print.js';
 import { exportJobsICS } from '../../utils/ical.js';
@@ -466,7 +467,7 @@ const AnnouncementCard = memo(function AnnouncementCard({ ann, isAdminOrManager,
   );
 });
 
-export function JobsPage({ store, userProfile }) {
+export function JobsPage({ store, userProfile, initialView }) {
   const {
     jobListings, jobAnnouncements,
     addJobListing, addJobListingSeries, updateJobListing, deleteJobListing, updateJobListingSeries, deleteJobListingSeries, deleteJobListingSeriesFrom,
@@ -486,7 +487,13 @@ export function JobsPage({ store, userProfile }) {
   const todayStr = useMemo(() => localDateStr(new Date()), []);
 
   // ── All state before any useEffect ──
-  const [view, setView] = useState('jobs');
+  // Volunteers on mobile default to Calendar (date-first mental model);
+  // an explicit initialView from VolunteerHome ('jobs'|'calendar') overrides.
+  const [view, setView] = useState(() => {
+    if (initialView) return initialView;
+    if (isVolunteerOnly(userProfile) && isMobile) return 'calendar';
+    return 'jobs';
+  });
   const [statusFilter, setStatusFilter] = useState('open');
   const [showNewJob, setShowNewJob] = useState(false);
   const [jobForm, setJobForm] = useState(emptyJob());
