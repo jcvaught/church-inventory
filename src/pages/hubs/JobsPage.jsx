@@ -259,7 +259,37 @@ function SpotsBar({ job }) {
   );
 }
 
-const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJobId, signed, full, onWaitlist, onDetail, onWithdraw, onSignUp }) {
+// Format "First Last" → "First L." Keeps cards compact + avoids exposing
+// a full last name to other volunteers when the church's roster visibility
+// is set to 'all'. Falls back to just the first token if no last name.
+function shortDisplayName(name) {
+  if (!name) return '';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+}
+
+function SignupChips({ names, max = 2 }) {
+  if (!names || names.length === 0) return null;
+  const shown = names.slice(0, max);
+  const extra = names.length - shown.length;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginTop: 8, marginBottom: 4 }}>
+      {shown.map((n, i) => (
+        <span key={i} style={{ fontSize: 11, fontFamily: f1, fontWeight: 600, color: B.teal, background: B.tealPale, borderRadius: 10, padding: '2px 8px', whiteSpace: 'nowrap' }}>
+          {shortDisplayName(n)}
+        </span>
+      ))}
+      {extra > 0 && (
+        <span style={{ fontSize: 11, fontFamily: f1, fontWeight: 600, color: B.textLight }}>
+          +{extra} more
+        </span>
+      )}
+    </div>
+  );
+}
+
+const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJobId, signed, full, onWaitlist, onDetail, onWithdraw, onSignUp, signupNames }) {
   // M-3 from the 2026-05-12 audit: skip hover affordances on mobile.
   // Otherwise a tap triggers onMouseEnter and the card stays in "hover"
   // state ("stuck hover") until the user taps elsewhere.
@@ -310,6 +340,7 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJ
         </div>
       )}
       <div style={{ marginBottom: 10 }}><SpotsBar job={job} /></div>
+      <SignupChips names={signupNames} max={2} />
       {!isAdminOrManager && signed && (
         <div style={{ fontSize: 12, fontWeight: 700, color: B.teal, fontFamily: f1, marginBottom: 10 }}>✓ You're signed up</div>
       )}
@@ -383,7 +414,7 @@ const MobileScheduleRow = memo(function MobileScheduleRow({ job, onDetail }) {
   );
 });
 
-const DesktopScheduleRow = memo(function DesktopScheduleRow({ job, todayStr, isAdminOrManager, rosterVisibility, showRoster, onDetail, onEdit }) {
+const DesktopScheduleRow = memo(function DesktopScheduleRow({ job, todayStr, isAdminOrManager, rosterVisibility, showRoster, signupNames, onDetail, onEdit }) {
   const filled = job.signupCount || 0;
   const pct = Math.min(100, (filled / (job.spotsTotal||1)) * 100);
   const isPast = job.scheduledDate && job.scheduledDate < todayStr;
@@ -419,9 +450,11 @@ const DesktopScheduleRow = memo(function DesktopScheduleRow({ job, todayStr, isA
         <JobStatusBadge status={job.status} />
       </td>
       {(isAdminOrManager || rosterVisibility !== 'admin') && (
-        <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textMid, maxWidth:220 }}>
+        <td style={{ padding:'10px 14px', fontFamily:f2, color:B.textMid, maxWidth:240 }}>
           {showRoster
-            ? <span style={{ fontSize:12 }}>{filled} signed up</span>
+            ? (signupNames && signupNames.length > 0
+                ? <span style={{ fontSize:12 }}>{signupNames.slice(0, 3).map(shortDisplayName).join(', ')}{signupNames.length > 3 ? ` +${signupNames.length - 3} more` : ''}</span>
+                : <span style={{ color:B.textLight, fontSize:12 }}>{filled} signed up</span>)
             : <span style={{ color:B.textLight, fontSize:12 }}>—</span>
           }
         </td>
@@ -546,6 +579,10 @@ export function JobsPage({ store, userProfile, initialView }) {
   const [detailWaitlist, setDetailWaitlist] = useState([]);
   const [detailRosterLoading, setDetailRosterLoading] = useState(false);
   const [detailRosterError, setDetailRosterError] = useState(false);
+  // Card-level signup names — fetched per visible job whenever canSeeRoster
+  // allows it, so the Job Board / Schedule cards can show "Hazel B. + 2 more"
+  // without the user having to tap in. Keyed by job _docId → array of names.
+  const [cardSignupsByJob, setCardSignupsByJob] = useState(new Map());
   const [reportsSignups, setReportsSignups] = useState([]); // [{ ...signup, jobId }]
   const [reportsExtraJobs, setReportsExtraJobs] = useState([]); // older jobs beyond the 500-cap, fetched on demand for 'all'-scope reports
 
@@ -753,6 +790,38 @@ export function JobsPage({ store, userProfile, initialView }) {
     });
     return () => { cancelled = true; };
   }, [liveDetail?._docId, liveDetail?.signupCount, liveDetail?.waitlistCount, churchId, rosterAllowed]);
+
+  // Card-level roster preview (2026-05-27): fetch signup names for every
+  // visible job the user is allowed to see. Refires whenever `jobListings`
+  // changes — since signupCount on the parent updates as a CF side effect
+  // of jobSignUp/Withdraw, that's a free "someone signed up" signal. Skips
+  // jobs with signupCount==0 to avoid empty subcollection reads. Cancels
+  // in-flight fetches via a cancel flag to keep stale results from racing
+  // a refire.
+  useEffect(() => {
+    if (!churchId || !jobListings) return undefined;
+    const fetchable = jobListings.filter(j =>
+      (j.signupCount || 0) > 0 && canSeeRoster(j),
+    );
+    if (fetchable.length === 0) {
+      setCardSignupsByJob(prev => (prev.size === 0 ? prev : new Map()));
+      return undefined;
+    }
+    let cancelled = false;
+    Promise.all(fetchable.map(async (j) => {
+      try {
+        const snap = await getDocs(collection(db, 'churches', churchId, 'jobListings', j._docId, 'signups'));
+        return [j._docId, snap.docs.map(d => d.data().name).filter(Boolean)];
+      } catch {
+        return [j._docId, null]; // rule denial / network — skip silently
+      }
+    })).then(entries => {
+      if (cancelled) return;
+      setCardSignupsByJob(new Map(entries.filter(([, v]) => v !== null)));
+    });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- canSeeRoster closes over rosterVisibility + mySignupJobIds; both are dep-tracked via jobListings refires
+  }, [jobListings, churchId, rosterVisibility, isAdminOrManager, mySignupJobIds]);
 
   // Reports leaderboard needs every job's signups — fetch on demand when the
   // Reports tab is opened (admin/manager only). When the live `jobListings`
@@ -1413,7 +1482,8 @@ export function JobsPage({ store, userProfile, initialView }) {
                 <JobCard key={job._docId} job={job}
                   todayStr={todayStr} isAdminOrManager={isAdminOrManager} savingJobId={savingJobId}
                   signed={isSignedUp(job)} full={isFull(job)} onWaitlist={isOnWaitlist(job)}
-                  onDetail={setShowJobDetail} onWithdraw={handleWithdraw} onSignUp={handleSignUp} />
+                  onDetail={setShowJobDetail} onWithdraw={handleWithdraw} onSignUp={handleSignUp}
+                  signupNames={cardSignupsByJob.get(job._docId)} />
               ))}
             </div>
           )}
@@ -1488,6 +1558,7 @@ export function JobsPage({ store, userProfile, initialView }) {
                     <DesktopScheduleRow key={job._docId} job={job}
                       todayStr={todayStr} isAdminOrManager={isAdminOrManager}
                       rosterVisibility={rosterVisibility} showRoster={canSeeRoster(job)}
+                      signupNames={cardSignupsByJob.get(job._docId)}
                       onDetail={setShowJobDetail} onEdit={openEditJob} />
                   ))}
                 </tbody>
