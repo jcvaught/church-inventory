@@ -4,6 +4,24 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-27 — Optional end time on job listings
+
+User-requested: "some jobs have a starting time and an ending time, not just a starting time." Now jobs carry an optional `scheduledEndTime` (HH:MM, same shape as `scheduledTime`).
+
+- Job form (`JobsPage.jsx:1670+`) — "Time" relabeled "Start Time" with a new "End Time" input beside it; both flow through `addJobListing` / `updateJobListing` / `addJobListingSeries` via the existing `...jobForm` spread (no rules change needed — the update rule is a denylist, and `scheduledEndTime` isn't on it).
+- New `formatTimeRange(start, end)` helper in `src/utils/time.js` and mirrored in `functions/index.js` — renders "2:00 PM – 4:00 PM" when both are present, falls back to "2:00 PM" alone, or "(until 4:00 PM)" if only end is set.
+- Display surfaces all switched to `formatTimeRange`: JobsPage board, schedule row, calendar cell, detail modal · PublicJobsPage card · VolunteerHome next-shift + shift rows · `printJobRoster` · `exportJobsICS` (uses the real end time as `DTEND` when present and end > start; still falls back to +1hr otherwise).
+- Outbound notifications updated: `sendJobReminders` email HTML + plain-text + SMS (single-job and multi-job bodies), `sendJobCancelledEmails`, `sendJobPosterNotification`, `promoteFromWaitlist` waitlist-promotion email.
+- `getPublicJobs` public payload now includes `scheduledEndTime` so anonymous viewers on the share-board URL see the range too.
+
+Bonus fixes uncovered along the way:
+- `VolunteerHome` was rendering raw `job.scheduledTime` ("14:00") instead of the formatter — now formatted.
+- `promoteFromWaitlist` email was likewise rendering raw `jobData.scheduledTime` — now formatted.
+
+Legacy jobs without an end time keep working unchanged (start-time-only fallback). No migration needed.
+
+---
+
 ## 2026-05-27 — Signup name previews on Job Board + Schedule
 
 Follow-up to the volunteer shell: as a volunteer testing in FXCC, "I don't see who's signed up" — `JobCard` and `DesktopScheduleRow` only rendered `signupCount/spotsTotal`, never actual names, even when the viewer was allowed to see the roster. The `showRoster` prop was being passed but ignored.
