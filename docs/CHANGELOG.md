@@ -4,6 +4,17 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-27 — Self-heal stale-chunk MIME errors on entry-point imports (commit bab7b6a)
+
+Sentry issue `63a627a0`: `TypeError: 'text/html' is not a valid JavaScript MIME type` on `/?invite=FXCC&hubs=jobs`. Root cause: the `vercel.json` `/(.*) → /app.html` catch-all turns a 404 for a missing asset chunk into a 200 + HTML; with `X-Content-Type-Options: nosniff`, the browser refuses to execute it as JS. After every deploy, anyone with a cached `index.html` requesting the old `App-<hash>.js` hit this. Same root cause as the documented "Failed to fetch dynamically imported module" pitfall — but the MIME variant slipped past coverage because the failing import was a **raw** `import('./App.jsx')` in `main.jsx`, not a `lazyWithRetry`-wrapped hub chunk.
+
+- `src/utils/lazyWithRetry.js` — extracted an `importWithRetry(factory, name)` primitive; `lazyWithRetry` now wraps it. The generic `catch` already handles both the "Failed to fetch" and "not a valid JavaScript MIME type" variants. Retry once → reload once (sessionStorage-guarded) → if still broken, throw.
+- `src/main.jsx` — wrapped all three entry-path dynamic imports (`App.jsx`, `firebasePublic.js`, `PublicJobsPage.jsx`) with `importWithRetry`. These run before any React tree mounts, so a stale chunk here is fatal with no error boundary to catch it. Third-party background loads (posthog) left raw — post-mount, non-fatal.
+
+## 2026-05-27 — Hub filter on Settings → Team Members (commit 96dd954)
+
+Admins can narrow the Team Members list to users with access to a specific hub (e.g. "who has Job Hub access?"). Dropdown next to the member count, defaults to "All hubs". `SettingsPage.jsx` — admins always count as having every hub; non-admins match when `allowedHubs` is null (full access) or includes the selected hub. Count line flips to "X of Y members" while filtered; empty-state hint when nobody has the selected hub.
+
 ## 2026-05-27 — Optional end time on job listings
 
 User-requested: "some jobs have a starting time and an ending time, not just a starting time." Now jobs carry an optional `scheduledEndTime` (HH:MM, same shape as `scheduledTime`).
