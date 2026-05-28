@@ -4,6 +4,14 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-28 — Error-handling audit Phase 5: wrap last 3 unguarded onCall functions (commit cec4e05)
+
+Final phase of the cross-app error-handling remediation (`~/apps/ERROR-HANDLING-FIX-PLAN.md`). `identifyItem`, `getChurchStats`, and `createCheckoutSession` were the last Cloud Functions where an unexpected (non-`HttpsError`) throw returned a generic error to the client with nothing reaching Sentry.
+
+- Added a `wrapCall(name, handler)` HOF just below `Sentry.init` (mirrors the MasteryHelp pattern): captures non-`HttpsError` throws with `tags:{fn:name}`, rethrows as a generic `'internal'` HttpsError, and passes `HttpsError` (expected auth/permission/validation rejections) through untouched so they don't become Sentry noise. Applied at the 3 definition sites (chose the HOF over inline try/catch to avoid re-indenting bodies).
+- `node -c` clean; deployed scoped: `firebase deploy --only functions:identifyItem,getChurchStats,createCheckoutSession --project church-inventory-9615c`.
+- **⚠️ Invoker strip on `createCheckoutSession`:** post-deploy probe returned 403 (`text/html` GFE rejection) — the Gen-2 redeploy stripped its `allUsers/run.invoker`, so Stripe checkout was down for admins. Re-granted via `gcloud run services add-iam-policy-binding createcheckoutsession … --member=allUsers --role=roles/run.invoker`; re-probe → 401 (reachable). **New lesson now in CLAUDE.md: the invoker-strip gotcha is not limited to onRequest webhooks — onCall callables can lose invoker on redeploy too, and an unauthed curl returns 401 (reached) vs 403 (stripped).**
+
 ## 2026-05-28 — Fix app-wide Google sign-in: two `vercel.json` header fixes (commits 43b2c34 + 03083fb)
 
 Diagnosed while troubleshooting the Lisa Bosley case: Google sign-in/signup (`signInWithPopup`) was failing **app-wide** — popup completed, returned to the page, hung on "Signing in…" (reproduced with a personal gmail account → not FXCC-Workspace-specific; that's why every recent signup was email/password). Ruled out: OAuth consent screen (In production / External, correct), CSP `frame-src`/`script-src apis.google.com` (correct since the May fix), `authDomain` + `/__/auth` proxy (present), FXCC Workspace. **Two header root causes, both in the `/(.*)` block:**
