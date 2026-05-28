@@ -13,6 +13,22 @@ Sentry.init({
   environment: process.env.FUNCTIONS_EMULATOR ? 'development' : 'production',
 });
 
+// wrapCall(name, handler): wraps an onCall handler so unexpected errors are
+// captured to Sentry (tagged with the fn name) and surfaced as a generic
+// 'internal' HttpsError. Expected HttpsError throws (auth/permission/validation)
+// pass through unchanged — those are normal client rejections, not incidents.
+function wrapCall(name, handler) {
+  return async (req) => {
+    try {
+      return await handler(req);
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      Sentry.captureException(err, { tags: { fn: name } });
+      throw new HttpsError('internal', 'Something went wrong. Please try again.');
+    }
+  };
+}
+
 let sgMail;
 try { sgMail = require('@sendgrid/mail'); } catch { sgMail = null; }
 
@@ -206,7 +222,7 @@ function getPriceConfig(priceId) {
 // Returns { description } — a concise inventory-ready item description.
 exports.identifyItem = onCall(
   { secrets: [ANTHROPIC_API_KEY], cors: true },
-  async (req) => {
+  wrapCall('identifyItem', async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
 
     // Task 1: validate caller has a church profile to prevent unauthorized API credit usage
@@ -242,7 +258,7 @@ exports.identifyItem = onCall(
 
     const description = message.content[0]?.text?.trim() || '';
     return { description };
-  }
+  })
 );
 
 // ── getChurchStats ────────────────────────────────────────────────────────
@@ -253,7 +269,7 @@ const OWNER_EMAILS = ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
 
 exports.getChurchStats = onCall(
   { cors: true },
-  async (req) => {
+  wrapCall('getChurchStats', async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
 
     const userRecord = await getAuth().getUser(req.auth.uid);
@@ -282,7 +298,7 @@ exports.getChurchStats = onCall(
     }));
 
     return { churches };
-  }
+  })
 );
 
 // ── setEmailSuppressionActive ─────────────────────────────────────────────
@@ -422,7 +438,7 @@ exports.getPublicJobs = onCall(
 // Returns { url } — redirect the browser to this URL.
 exports.createCheckoutSession = onCall(
   { secrets: [STRIPE_SECRET_KEY], cors: true },
-  async (req) => {
+  wrapCall('createCheckoutSession', async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
 
     const { item, successUrl, cancelUrl } = req.data;
@@ -460,7 +476,7 @@ exports.createCheckoutSession = onCall(
 
     const session = await stripe.checkout.sessions.create(sessionParams);
     return { url: session.url };
-  }
+  })
 );
 
 // ── createPortalSession ───────────────────────────────────────────────────
