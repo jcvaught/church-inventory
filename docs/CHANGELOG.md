@@ -4,6 +4,21 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-28 — Fix invite/Google signup stranding (commit e895375)
+
+Surfaced by a real support case (Lisa Bosley, FXCC): she got an invite link, the Google sign-in "just sat" on the create-account page, the Continue button stayed disabled, and a retry "gave a new screen." Investigation (live Auth + Firestore via Firebase MCP):
+
+- She *does* have an account now — created via **email/password** at 13:36; her auth has **only a password provider** (no Google identity ever persisted). `fxcc.org` is Google Workspace (MX = google), so the email is a valid Google account; the popup just never completed an identity. **None of the recent COH signups used Google** (even gmail users), which suggests Google sign-in is failing/avoided app-wide and people fall back to email/password. The COH Google config is correct (CSP allows `apis.google.com` + `frame-src 'self'`, `authDomain: churchopshub.com` + `/__/auth` proxy rewrite present) — so the old 2026-03 CSP breakage is **not** recurring. Most likely cause for a Workspace account: FXCC's Workspace admin blocking the third-party app, or a device popup/redirect failure. Exact code is in Sentry under tag `flow:google-signin`.
+
+Three fixes shipped (frontend-only):
+- **Persist the invite code in sessionStorage.** It was URL-only and stripped on load (`history.replaceState`), so any refresh or redirect-based Google sign-in blanked `form.churchCode` → Continue button stuck disabled. Now stashed on first load, restored as a fallback, cleared on successful registration.
+- **`ProfileMissingScreen` self-recovery.** It was a dead end (email-support only). Now offers a church-code completion form that calls `registerWithGoogle` (works for any authed user, Google or email/password); `registerWithGoogle` now also clears `profileMissing` so the recovered user lands in the app instead of being held on the screen.
+- **Register-screen hint** that Workspace accounts may block Google sign-in → use the email/password form.
+
+Build clean (0 jsxDEV), lint 0 errors. No rules/functions deploy (frontend only). **Open follow-up:** confirm the exact Google failure via Sentry `flow:google-signin`; if FXCC wants Google sign-in, their Workspace admin must approve the churchopshub OAuth app.
+
+---
+
 ## 2026-05-27 — Self-heal stale-chunk MIME errors on entry-point imports (commit bab7b6a)
 
 Sentry issue `63a627a0`: `TypeError: 'text/html' is not a valid JavaScript MIME type` on `/?invite=FXCC&hubs=jobs`. Root cause: the `vercel.json` `/(.*) → /app.html` catch-all turns a 404 for a missing asset chunk into a 200 + HTML; with `X-Content-Type-Options: nosniff`, the browser refuses to execute it as JS. After every deploy, anyone with a cached `index.html` requesting the old `App-<hash>.js` hit this. Same root cause as the documented "Failed to fetch dynamically imported module" pitfall — but the MIME variant slipped past coverage because the failing import was a **raw** `import('./App.jsx')` in `main.jsx`, not a `lazyWithRetry`-wrapped hub chunk.
