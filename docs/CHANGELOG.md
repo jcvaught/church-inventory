@@ -4,6 +4,12 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-28 — Fix app-wide Google sign-in: X-Frame-Options DENY → SAMEORIGIN (commit 43b2c34)
+
+Diagnosed while troubleshooting the Lisa Bosley case: Google sign-in (`signInWithPopup`) was failing **app-wide** — the popup completed, returned to the page, and hung with the button stuck on "Signing in…" (reproduced with a personal gmail account, so not FXCC-Workspace-specific). Ruled out: OAuth consent screen (In production / External, correct), CSP `frame-src`/`script-src apis.google.com` (correct since the May fix), `authDomain` + `/__/auth` proxy (present). **Root cause:** `vercel.json` set `X-Frame-Options: DENY` on `/(.*)`, which covers the `/__/auth/iframe` relay. `DENY` blocks framing by *any* origin including same-origin, so the app couldn't embed its own Firebase auth relay iframe — the popup's credential never made it back. Email/password was unaffected (no iframe). This is the piece the May 2026 CSP fix missed (it corrected `frame-src` but left `X-Frame-Options`). **Fix:** `DENY` → `SAMEORIGIN` (allows the app's own same-origin auth iframe; cross-origin clickjacking protection preserved). Header changes require a fresh load / hard refresh to take effect. Note: a separate "CSP blocks eval" Issues-panel item exists on page load (a startup library) — unrelated to auth, not addressed here; revisit only if a sign-in attempt's Console shows an eval error after this fix.
+
+---
+
 ## 2026-05-28 — Fix invite/Google signup stranding (commit e895375)
 
 Surfaced by a real support case (Lisa Bosley, FXCC): she got an invite link, the Google sign-in "just sat" on the create-account page, the Continue button stayed disabled, and a retry "gave a new screen." Investigation (live Auth + Firestore via Firebase MCP):
