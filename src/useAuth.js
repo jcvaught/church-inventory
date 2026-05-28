@@ -425,6 +425,11 @@ export function useAuth() {
       };
       await setDoc(doc(db, 'users', auth.currentUser.uid), profile);
       setUserProfile({ id: auth.currentUser.uid, uid: auth.currentUser.uid, ...profile });
+      // Clear the stuck-signup flag so a user recovering from ProfileMissingScreen
+      // (or finishing the normal googleRegister flow) lands in the app instead of
+      // being held on the recovery screen — profileMissing is otherwise only
+      // re-evaluated on the next auth-state change.
+      setProfileMissing(false);
       return { success: true };
     } catch (err) {
       setError(err.message);

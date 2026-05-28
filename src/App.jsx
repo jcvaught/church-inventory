@@ -61,10 +61,23 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
   const [inviteData] = useState(() => {
     const p = new URLSearchParams(window.location.search);
     const code = p.get('invite');
-    if (!code) return null;
-    const hubs = p.get('hubs');
-    window.history.replaceState({}, '', window.location.pathname);
-    return { code: code.toUpperCase(), hubs: hubs != null ? hubs.split(',').filter(Boolean) : null };
+    if (code) {
+      const hubs = p.get('hubs');
+      const data = { code: code.toUpperCase(), hubs: hubs != null ? hubs.split(',').filter(Boolean) : null };
+      // The invite param is stripped from the URL just below, and inviteData
+      // lives only in component state — so a refresh or a redirect-based Google
+      // sign-in would lose it (Continue button then stuck disabled on an empty
+      // church code). Stash it in sessionStorage so it survives the round-trip.
+      try { sessionStorage.setItem('coh_invite', JSON.stringify(data)); } catch { /* sessionStorage unavailable */ }
+      window.history.replaceState({}, '', window.location.pathname);
+      return data;
+    }
+    // No invite in the URL — fall back to one captured earlier this tab session.
+    try {
+      const saved = sessionStorage.getItem('coh_invite');
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return null;
   });
   const [mode, setMode] = useState(inviteData ? "register" : initialMode);
   const [form, setForm] = useState({ firstName:"", lastName:"", email:"", password:"", churchCode: inviteData?.code || "", churchName:"" });
@@ -113,12 +126,14 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
     e?.preventDefault();
     if (honeypot) return; // S-12: bot trap — silently reject
     setBusy(true);
-    await register({ firstName:form.firstName, lastName:form.lastName, email:form.email, password:form.password, churchCode:form.churchCode, allowedHubs: inviteData?.hubs ?? null });
+    const res = await register({ firstName:form.firstName, lastName:form.lastName, email:form.email, password:form.password, churchCode:form.churchCode, allowedHubs: inviteData?.hubs ?? null });
+    if (res?.success) { try { sessionStorage.removeItem('coh_invite'); } catch { /* ignore */ } }
     setBusy(false);
   }
   async function handleGoogleRegister(e) {
     e?.preventDefault(); setBusy(true);
-    await registerWithGoogle({ churchCode:form.churchCode, allowedHubs: inviteData?.hubs ?? null });
+    const res = await registerWithGoogle({ churchCode:form.churchCode, allowedHubs: inviteData?.hubs ?? null });
+    if (res?.success) { try { sessionStorage.removeItem('coh_invite'); } catch { /* ignore */ } }
     setBusy(false);
   }
   async function handleCreateChurch(e) {
@@ -225,6 +240,9 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
             <svg width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 0 0 1 12c0 1.77.42 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
             Join with Google
           </button>
+          <p style={{ fontSize:12, color:B.textLight, textAlign:"center", margin:"-12px 0 16px", lineHeight:1.5 }}>
+            Trouble with Google? Some work or school (Google Workspace) accounts block third-party sign-in — just use the email &amp; password form below.
+          </p>
 
           <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
             <div style={{ flex:1, height:1, background:B.sand }}/><span style={{ fontSize:12, color:B.textLight, fontFamily:f1 }}>OR</span><div style={{ flex:1, height:1, background:B.sand }}/>
@@ -394,7 +412,26 @@ export default function App() {
 }
 
 function ProfileMissingScreen({ authHook }) {
-  const { user, logout } = authHook;
+  const { user, logout, registerWithGoogle, error, setError } = authHook;
+  const [recoverCode, setRecoverCode] = useState('');
+  const [recovering, setRecovering] = useState(false);
+  // Hubs from an invite captured earlier this tab session, if any (so a
+  // recovered account keeps its intended hub access; null = inherit all).
+  const savedHubs = (() => {
+    try { const s = sessionStorage.getItem('coh_invite'); return s ? (JSON.parse(s).hubs ?? null) : null; }
+    catch { return null; }
+  })();
+  const handleComplete = async () => {
+    setError(null);
+    setRecovering(true);
+    // registerWithGoogle writes a profile for the CURRENT authed user (any
+    // provider) — it's the same "attach church code → create profile" step the
+    // normal flow uses, and it clears profileMissing on success so the app
+    // proceeds. On a bad code it signs the user out (existing S-11 behavior).
+    const res = await registerWithGoogle({ churchCode: recoverCode, allowedHubs: savedHubs });
+    if (res?.success) { try { sessionStorage.removeItem('coh_invite'); } catch { /* ignore */ } }
+    setRecovering(false);
+  };
   const supportSubject = encodeURIComponent('ChurchOpsHub: account incomplete after signup');
   const supportBody = encodeURIComponent(
     `Hi — I'm having trouble signing into ChurchOpsHub. The app says my account is incomplete.\n\n` +
@@ -417,8 +454,24 @@ function ProfileMissingScreen({ authHook }) {
           <div style={{ fontWeight:600, color:B.navy, fontFamily:f1, marginBottom:4 }}>Signed in as</div>
           <div style={{ wordBreak:'break-all' }}>{user?.email || '(no email)'}</div>
         </div>
+        <p style={{ fontSize:13, color:B.textMid, lineHeight:1.6, marginBottom:12 }}>
+          Finish setting up your account — enter your church code below:
+        </p>
+        <FF label="Church Code">
+          <input
+            style={{ ...inp, fontFamily:'monospace', letterSpacing:2, textTransform:'uppercase' }}
+            value={recoverCode}
+            onChange={e=>{ setRecoverCode(e.target.value); setError(null); }}
+            onKeyDown={e=>e.key==='Enter'&&recoverCode&&!recovering&&handleComplete()}
+            placeholder="e.g. FXCC"
+          />
+        </FF>
+        {error && <p style={{ color:B.red, fontSize:13, fontWeight:600, margin:'0 0 12px' }}>{error}</p>}
+        <button onClick={handleComplete} disabled={recovering||!recoverCode} style={{ ...btnP, width:'100%', marginBottom:16, opacity:(recovering||!recoverCode)?.5:1 }}>
+          {recovering ? 'Completing…' : 'Complete registration'}
+        </button>
         <p style={{ fontSize:13, color:B.textMid, lineHeight:1.6, marginBottom:20 }}>
-          Email us at <a href={`mailto:churchopshub@gmail.com?subject=${supportSubject}&body=${supportBody}`} style={{ color:B.teal, fontWeight:600 }}>churchopshub@gmail.com</a> and we'll restore your account, usually within a few hours.
+          Still stuck? Email <a href={`mailto:churchopshub@gmail.com?subject=${supportSubject}&body=${supportBody}`} style={{ color:B.teal, fontWeight:600 }}>churchopshub@gmail.com</a> and we'll restore your account, usually within a few hours.
         </p>
         <button onClick={logout} style={{ ...btnS, width:'100%' }}>Sign out</button>
       </div>
