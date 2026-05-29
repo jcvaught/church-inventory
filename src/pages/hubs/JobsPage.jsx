@@ -1,4 +1,4 @@
-import { useState, useMemo, useContext, useEffect, useRef, memo } from 'react';
+import { useState, useMemo, useContext, useEffect, useLayoutEffect, useRef, memo } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, collectionGroup, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
 import * as Sentry from '@sentry/react';
@@ -269,20 +269,63 @@ function shortDisplayName(name) {
   return `${parts[0]} ${parts[parts.length - 1][0]}.`;
 }
 
-function SignupChips({ names, max = 2 }) {
+// Show as many signup-name chips as fit within `maxRows` wrapped rows, then a
+// "+N more" pill — so a card uses the real estate it has (wide desktop cards fit
+// more than narrow mobile ones) instead of a hardcoded count. Measures the
+// actual wrap positions and re-fits on resize; reserves one slot on the last row
+// for the "+N more" chip so it never itself overflows.
+function SignupChips({ names, maxRows = 3 }) {
+  const containerRef = useRef(null);
+  const [hiddenCount, setHiddenCount] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el || !names || names.length === 0) { setHiddenCount(0); return; }
+    const measure = () => {
+      const chips = Array.from(el.querySelectorAll('[data-signup-chip]'));
+      if (chips.length === 0) { setHiddenCount(0); return; }
+      chips.forEach(c => { c.style.display = ''; }); // reset before measuring
+      const firstTop = chips[0].offsetTop;
+      let rows = 1, lastTop = firstTop, fit = 0;
+      for (const c of chips) {
+        if (c.offsetTop > lastTop + 2) { rows++; lastTop = c.offsetTop; }
+        if (rows > maxRows) break;
+        fit++;
+      }
+      // Leave room on the last row for the "+N more" pill when truncating.
+      if (fit < chips.length && fit > 0) fit -= 1;
+      chips.forEach((c, i) => { c.style.display = i < fit ? '' : 'none'; });
+      setHiddenCount(chips.length - fit);
+    };
+    let lastWidth = el.clientWidth;
+    measure();
+    let ro;
+    if (typeof ResizeObserver !== 'undefined') {
+      // Re-fit only on WIDTH change. Hiding chips changes the container's height,
+      // not its (parent-driven) width — gating on width prevents a
+      // measure → hide → resize → measure feedback loop.
+      ro = new ResizeObserver(() => {
+        const w = el.clientWidth;
+        if (w === lastWidth) return;
+        lastWidth = w;
+        measure();
+      });
+      ro.observe(el);
+    }
+    return () => { if (ro) ro.disconnect(); };
+  }, [names, maxRows]);
+
   if (!names || names.length === 0) return null;
-  const shown = names.slice(0, max);
-  const extra = names.length - shown.length;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginTop: 8, marginBottom: 4 }}>
-      {shown.map((n, i) => (
-        <span key={i} style={{ fontSize: 11, fontFamily: f1, fontWeight: 600, color: B.teal, background: B.tealPale, borderRadius: 10, padding: '2px 8px', whiteSpace: 'nowrap' }}>
+    <div ref={containerRef} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginTop: 8, marginBottom: 4 }}>
+      {names.map((n, i) => (
+        <span key={i} data-signup-chip="" style={{ fontSize: 11, fontFamily: f1, fontWeight: 600, color: B.teal, background: B.tealPale, borderRadius: 10, padding: '2px 8px', whiteSpace: 'nowrap' }}>
           {shortDisplayName(n)}
         </span>
       ))}
-      {extra > 0 && (
+      {hiddenCount > 0 && (
         <span style={{ fontSize: 11, fontFamily: f1, fontWeight: 600, color: B.textLight }}>
-          +{extra} more
+          +{hiddenCount} more
         </span>
       )}
     </div>
@@ -340,7 +383,7 @@ const JobCard = memo(function JobCard({ job, todayStr, isAdminOrManager, savingJ
         </div>
       )}
       <div style={{ marginBottom: 10 }}><SpotsBar job={job} /></div>
-      <SignupChips names={signupNames} max={2} />
+      <SignupChips names={signupNames} maxRows={3} />
       {!isAdminOrManager && signed && (
         <div style={{ fontSize: 12, fontWeight: 700, color: B.teal, fontFamily: f1, marginBottom: 10 }}>✓ You're signed up</div>
       )}
