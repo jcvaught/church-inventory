@@ -1923,24 +1923,30 @@ async function promoteWaitlistForJob(db, churchId, jobDocId) {
   return promoted;
 }
 
-// Send the transactional "you're off the waitlist" email to a promoted user.
-async function sendWaitlistPromotionEmail(db, churchId, jobData, promotedUid) {
-  if (!initSendGrid()) return;
+// Notify a promoted user they're off the waitlist — transactional EMAIL plus an
+// SMS to opted-in users. Email and SMS are independent channels (mirrors
+// sendJobReminders): a user with only one of {email, phone+smsRemindersEnabled}
+// still gets that one. Getting bumped into a spot is time-sensitive, so the text
+// matters — but it's gated by the same consent + A2P plumbing as the reminders.
+async function sendWaitlistPromotionNotifications(db, churchId, jobData, promotedUid) {
   const [churchSnap, userSnap] = await Promise.all([
     db.doc(`churches/${churchId}/config/main`).get(),
     db.doc(`users/${promotedUid}`).get(),
   ]);
   const user = userSnap.data();
-  if (!user?.email || user.active === false || user.churchId !== churchId) return;
+  if (!user || user.active === false || user.churchId !== churchId) return;
   if (!effectiveHasHub(user, 'jobs')) return;
   const churchName = churchSnap.data()?.churchName || 'Your Church';
-  const safeTitle = escapeHtml(jobData?.title || 'Job');
-  const safeName = escapeHtml(user.name || 'there');
-  const safeChurch = escapeHtml(churchName);
   const dateStr = jobData?.scheduledDate || '';
   const timeStr = jobData?.scheduledTime ? ` at ${formatTimeRange(jobData.scheduledTime, jobData.scheduledEndTime)}` : '';
-  const subject = `You're off the waitlist: ${jobData?.title || 'Job'}`;
-  const html = `<p>Hi ${safeName},</p>
+
+  // ── Email channel ──
+  if (user.email && initSendGrid()) {
+    const safeTitle = escapeHtml(jobData?.title || 'Job');
+    const safeName = escapeHtml(user.name || 'there');
+    const safeChurch = escapeHtml(churchName);
+    const subject = `You're off the waitlist: ${jobData?.title || 'Job'}`;
+    const html = `<p>Hi ${safeName},</p>
 <p>Great news! A spot has opened up and you've been moved off the waitlist for:</p>
 <table style="border-collapse:collapse;margin:12px 0">
   <tr><td style="padding:4px 12px 4px 0;color:#666;font-size:14px">Job</td><td style="font-size:14px"><strong>${safeTitle}</strong></td></tr>
@@ -1948,12 +1954,29 @@ async function sendWaitlistPromotionEmail(db, churchId, jobData, promotedUid) {
 </table>
 <p>You're now officially signed up! <a href="https://churchopshub.com">Open ChurchOpsHub</a> to view the details.</p>
 <p style="font-size:13px;color:#666">— ${safeChurch} via ChurchOpsHub</p>`;
-  const text = `Hi ${user.name || 'there'},\n\nGreat news! A spot opened up for:\n\n${jobData?.title || 'Job'}${dateStr ? '\nDate: ' + dateStr + timeStr : ''}\n\nYou're now signed up.\n\n— ${churchName}`;
-  try {
-    await sendEmailSafe({ to: user.email, from: FROM, subject, html, text });
-  } catch (err) {
-    console.error('sendWaitlistPromotionEmail: failed', err?.message);
-    Sentry.captureException(err);
+    const text = `Hi ${user.name || 'there'},\n\nGreat news! A spot opened up for:\n\n${jobData?.title || 'Job'}${dateStr ? '\nDate: ' + dateStr + timeStr : ''}\n\nYou're now signed up.\n\n— ${churchName}`;
+    try {
+      await sendEmailSafe({ to: user.email, from: FROM, subject, html, text });
+    } catch (err) {
+      console.error('sendWaitlistPromotionNotifications: email failed', err?.message);
+      Sentry.captureException(err);
+    }
+  }
+
+  // ── SMS channel (opted-in only; A2P 10DLC via the registered Messaging
+  //    Service; same consent gate + STOP footer as sendJobReminders) ──
+  if (user.phone && user.smsRemindersEnabled) {
+    const tw = getTwilioClient();
+    if (tw && (TWILIO_MSID || TWILIO_FROM)) {
+      const sender = TWILIO_MSID ? { messagingServiceSid: TWILIO_MSID } : { from: TWILIO_FROM };
+      const body = `ChurchOpsHub: A spot opened up — you're off the waitlist and now signed up for "${jobData?.title || 'Job'}"${dateStr ? ' on ' + dateStr + timeStr : ''}. Reply STOP to opt out.`;
+      try {
+        await tw.messages.create({ to: user.phone, ...sender, body });
+      } catch (err) {
+        console.error('sendWaitlistPromotionNotifications: SMS failed', { uid: promotedUid, err: err?.message });
+        Sentry.captureException(err);
+      }
+    }
   }
 }
 
@@ -2091,7 +2114,7 @@ exports.jobWithdraw = onCall({ cors: true }, async (req) => {
       const promoted = await promoteWaitlistForJob(db, churchId, jobDocId);
       if (promoted) {
         const jobSnap = await jobRef.get();
-        await sendWaitlistPromotionEmail(db, churchId, jobSnap.exists ? jobSnap.data() : {}, promoted.uid);
+        await sendWaitlistPromotionNotifications(db, churchId, jobSnap.exists ? jobSnap.data() : {}, promoted.uid);
       }
     } catch (err) {
       console.error('jobWithdraw: waitlist promotion failed', err?.message);
@@ -2155,7 +2178,7 @@ exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
   const promoted = await promoteWaitlistForJob(db, churchId, jobDocId);
   if (!promoted) return { promoted: false };
   const jobSnap = await db.doc(`churches/${churchId}/jobListings/${jobDocId}`).get();
-  await sendWaitlistPromotionEmail(db, churchId, jobSnap.exists ? jobSnap.data() : {}, promoted.uid);
+  await sendWaitlistPromotionNotifications(db, churchId, jobSnap.exists ? jobSnap.data() : {}, promoted.uid);
   return { promoted: true, promotedName: promoted.name };
 });
 

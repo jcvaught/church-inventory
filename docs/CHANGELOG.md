@@ -4,6 +4,14 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-05-30 — Jobs Hub: SMS notification when a waitlister is promoted to a spot (code only — DEPLOY PENDING)
+
+Gap found while reviewing the waitlist flow: a member promoted off the waitlist into an open spot got an **email only** — no text — even though the daily `sendJobReminders` does send SMS to opted-in users. Getting bumped into a spot is time-sensitive, so a text is warranted.
+
+- Renamed `sendWaitlistPromotionEmail` → `sendWaitlistPromotionNotifications` (`functions/index.js`) and made it send **email and SMS as independent channels** (mirrors `sendJobReminders`): a user with only one of {email, phone+smsRemindersEnabled} still gets that one. SMS reuses the exact A2P plumbing — `getTwilioClient()`, the registered Messaging Service (`TWILIO_MESSAGING_SERVICE_SID`) with bare-from fallback, the `phone && smsRemindersEnabled` consent gate, and the "Reply STOP to opt out." footer. Same job-SMS consent + use case as the reminders, so no A2P re-registration needed. Both call sites updated (`jobWithdraw` inline promotion + the standalone `promoteFromWaitlist` callable).
+- `node --check` clean; 0 stale references.
+- **NOT YET DEPLOYED** — the production Cloud Functions deploy (`firebase deploy --only functions:jobWithdraw,functions:promoteFromWaitlist --project church-inventory-9615c`) is awaiting explicit authorization. **Post-deploy: probe both callables for the Gen-2 invoker-strip** (`curl -X POST <url> -H 'Content-Type: application/json' -d '{"data":{}}'` → expect 401 JSON, not 403 html) and re-grant `allUsers/run.invoker` if stripped.
+
 ## 2026-05-28 — Error-handling audit Phase 5: wrap last 3 unguarded onCall functions (commit cec4e05)
 
 Final phase of the cross-app error-handling remediation (`~/apps/ERROR-HANDLING-FIX-PLAN.md`). `identifyItem`, `getChurchStats`, and `createCheckoutSession` were the last Cloud Functions where an unexpected (non-`HttpsError`) throw returned a generic error to the client with nothing reaching Sentry.
