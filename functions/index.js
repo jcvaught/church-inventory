@@ -866,6 +866,80 @@ exports.sendWelcomeEmail = onDocumentCreated('churches/{churchId}', async (event
   }
 });
 
+// ── notifyAdminsOfNewMember ───────────────────────────────────────────────
+// Firestore onCreate trigger: fires when a new user profile is created. Emails
+// the church's admins so they know someone joined and can review/adjust that
+// member's hub access (Settings → Team Members). Skips church creators (role
+// admin) so a brand-new church doesn't self-notify.
+// NOTE: the sentinel is only written on a *successful* send, so a join during
+// an email outage isn't permanently marked "notified" — it'll deliver once
+// email is restored (vs. sendWelcomeEmail's set-before-send dual-send guard;
+// a rare duplicate admin notice is harmless, a missed one isn't).
+const NEW_MEMBER_HUB_LABEL = {
+  maintenance: 'Maintenance', insights: 'Insights', coordination: 'Coordination',
+  accountability: 'Accountability', people_access: 'People Access', tasks: 'Tasks', jobs: 'Job',
+};
+
+exports.notifyAdminsOfNewMember = onDocumentCreated('users/{uid}', async (event) => {
+  const db = getFirestore();
+  const u = event.data?.data();
+  if (!u) return;
+  const userRef = event.data.ref;
+
+  // Only notify for joining members; a church creator (admin) shouldn't self-notify.
+  if (u.role === 'admin') return;
+  if (!u.churchId) return;
+  // Idempotency: skip if already notified for this user.
+  if (u.newMemberNotifiedAt) return;
+
+  if (!initSendGrid()) { console.warn('notifyAdminsOfNewMember: SendGrid not configured, skipping.'); return; }
+
+  // Find this church's active admins (filter role in code → no composite index needed).
+  let admins = [];
+  try {
+    const snap = await db.collection('users').where('churchId', '==', u.churchId).get();
+    admins = snap.docs.map(d => d.data())
+      .filter(a => a.role === 'admin' && a.active !== false && a.email && a.email !== u.email);
+  } catch (err) {
+    console.error('notifyAdminsOfNewMember: admin lookup failed', err?.message);
+    Sentry.captureException(err);
+    return;
+  }
+  if (admins.length === 0) return; // e.g. brand-new church (creator is the only user)
+
+  // Church name for context.
+  let churchName = 'your church';
+  try {
+    const c = await db.doc(`churches/${u.churchId}`).get();
+    if (c.exists) churchName = c.data().churchName || churchName;
+  } catch { /* non-fatal */ }
+
+  const memberName = escapeHtml(u.name || 'A new member');
+  const memberEmail = escapeHtml(u.email || '');
+  const hubs = Array.isArray(u.allowedHubs) ? u.allowedHubs.map(h => NEW_MEMBER_HUB_LABEL[h] || h) : null;
+  const access = hubs == null ? 'all hubs' : (hubs.length ? `Inventory + ${hubs.join(', ')}` : 'Inventory only');
+  const safeChurch = escapeHtml(churchName);
+
+  const subject = `[ChurchOpsHub] ${memberName} just joined ${safeChurch}`;
+  const html = `<p>A new member joined <strong>${safeChurch}</strong>:</p>
+<table style="font-size:14px;border-collapse:collapse;margin:12px 0">
+  <tr><td style="padding:6px 12px;background:#f5f5f5;font-weight:600">Name</td><td style="padding:6px 12px">${memberName}</td></tr>
+  <tr><td style="padding:6px 12px;background:#f5f5f5;font-weight:600">Email</td><td style="padding:6px 12px">${memberEmail}</td></tr>
+  <tr><td style="padding:6px 12px;background:#f5f5f5;font-weight:600">Access</td><td style="padding:6px 12px">${escapeHtml(access)}</td></tr>
+</table>
+<p>Review or change their hub access in <a href="https://churchopshub.com/" style="color:#0D9488;font-weight:600">Settings → Team Members</a>.</p>
+<p style="font-size:13px;color:#666">You're getting this because you're an admin of ${safeChurch}.</p>`;
+  const text = `A new member joined ${churchName}:\n\nName: ${u.name || ''}\nEmail: ${u.email || ''}\nAccess: ${access}\n\nReview their access in Settings → Team Members: https://churchopshub.com/`;
+
+  try {
+    await sendEmailSafe({ to: admins.map(a => a.email), from: FROM, replyTo: 'jcvaught@gmail.com', subject, html, text });
+    await userRef.update({ newMemberNotifiedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error('notifyAdminsOfNewMember: send failed', err?.response?.body || err);
+    Sentry.captureException(err);
+  }
+});
+
 // ── processTrialExpirations ───────────────────────────────────────────────
 // Runs daily at 2:00 AM Central time.
 // Finds churches whose trial just expired, auto-selects their 2 most-used hubs

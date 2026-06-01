@@ -20,6 +20,14 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import * as Sentry from '@sentry/react';
 import { auth, googleProvider, db } from './firebase.js';
 
+// Default hubs granted to a member who signs up with just the church code (no
+// hub-scoped invite). Previously this was "all hubs" (allowedHubs omitted),
+// which silently leaked new members into every hub's assignee/picker until an
+// admin restricted them. Now they start scoped: Job + Maintenance (Inventory is
+// the always-free base hub, available regardless of allowedHubs). Admins still
+// see everything (role override); hub-scoped invites still set their own hubs.
+const DEFAULT_MEMBER_HUBS = ['jobs', 'maintenance'];
+
 const DEFAULT_LOCATIONS = [
   "Sanctuary", "Sound Booth", "Media Room", "Church Office",
   "Children's Wing", "Youth Room", "Security Office",
@@ -272,7 +280,9 @@ export function useAuth() {
 
         // S-13: single shared timestamp.
         const now = new Date().toISOString();
-        // Create user profile — allowedHubs null means "inherit all church hubs" (default for non-invite signups)
+        // Create user profile. A hub-scoped invite passes its own allowedHubs;
+        // a plain church-code signup defaults to DEFAULT_MEMBER_HUBS (scoped),
+        // NOT all-hubs, so new members don't leak into every hub.
         const profile = {
           name: userName,
           firstName,
@@ -281,7 +291,7 @@ export function useAuth() {
           role: 'user',
           churchId: foundChurchId,
           active: true,
-          ...(allowedHubs != null ? { allowedHubs } : {}),
+          allowedHubs: allowedHubs != null ? allowedHubs : DEFAULT_MEMBER_HUBS,
           createdAt: now,
           lastLogin: now,
         };
@@ -410,7 +420,8 @@ export function useAuth() {
       const now = new Date().toISOString();
       // S-14: normalize email casing/whitespace so search-by-email is reliable.
       const normalizedEmail = (auth.currentUser.email || '').trim().toLowerCase();
-      // allowedHubs null means "inherit all church hubs" (default for non-invite signups)
+      // Plain church-code signup defaults to DEFAULT_MEMBER_HUBS (scoped), not
+      // all-hubs; hub-scoped invites still pass their own allowedHubs.
       const profile = {
         name: displayName || normalizedEmail,
         firstName,
@@ -419,7 +430,7 @@ export function useAuth() {
         role: 'user',
         churchId: foundChurchId,
         active: true,
-        ...(allowedHubs != null ? { allowedHubs } : {}),
+        allowedHubs: allowedHubs != null ? allowedHubs : DEFAULT_MEMBER_HUBS,
         createdAt: now,
         lastLogin: now,
       };
