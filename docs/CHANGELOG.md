@@ -4,6 +4,15 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-01 — Email migrated SendGrid → Brevo (code; deploy pending domain auth)
+
+SendGrid ended its perpetual free tier — post-trial the "Free" plan is **0 emails/month**, so the shared SendGrid account (used by all four apps) can't send at all (`/v3/user/credits` → `total:0`; sends fail "Maximum credits exceeded"). Decision: migrate everything to **Brevo** (free 300/day, shared account). Cross-app effort tracked in `~/apps/echo-scripture/docs/backlog.md`; Echo + RepCrew + Court Climber already swapped.
+
+- **`functions/index.js`:** new `sendViaBrevo(msg)` helper (Brevo transactional REST API, Node 22 global `fetch`, no SDK) that maps the existing SendGrid-shaped `{to,from,replyTo,subject,html,text}` message to Brevo's payload. `sendEmailSafe` now wraps `sendViaBrevo` instead of `sgMail.send` — so **every email function is migrated by this one swap** (welcome, job reminders/announcements/cancellations, task reminders/mentions, waitlist promotion, trial expirations, the new `notifyAdminsOfNewMember`, etc.). `initSendGrid()` → `emailConfigured()` (checks `BREVO_API_KEY`) at all ~13 guard sites. Dropped `@sendgrid/mail`. The suppression list (`emailSuppressions` + `isEmailSuppressed`) is unchanged and still applies; only the *feed* into it changes.
+- **⚠️ Follow-up:** `sendgridEventWebhook` (the SendGrid Event Webhook that recorded bounce/spam/unsubscribe events into `emailSuppressions`) is now **inert** — Brevo won't call it. Wiring a Brevo event webhook to repopulate `emailSuppressions` is a follow-up; until then new bounces won't auto-suppress (Brevo's own internal suppression still protects hard-bounces; existing/manual `emailSuppressions` entries still apply). Left the function deployed (harmless).
+- `node --check` clean; `npm run lint` 0 errors (47 pre-existing src warnings).
+- **Owed to deploy:** authenticate `churchopshub.com` in Brevo (Vercel DNS integration) + add the shared `BREVO_API_KEY` to `functions/.env`, then deploy the email functions. `FROM` stays `noreply@churchopshub.com`.
+
 ## 2026-06-01 — New-member onboarding: scoped default hubs + admin notification
 
 Triggered by a real report: Jobs-Hub volunteers (Reid Gulick, Liam Gough) were showing up in the **Tasks Hub assignee picker**. Root cause (verified against live data + code): they had **no `allowedHubs` field**, which the system treats as "all hubs" (full access) — the default for anyone who signs up with just the church code (a non-invite signup). `useAuth.register`/`registerWithGoogle` omitted `allowedHubs` when none was passed (`"null means inherit all church hubs"`), so new members silently appeared in **every** hub's picker until an admin restricted them. Two fixes:

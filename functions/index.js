@@ -29,8 +29,28 @@ function wrapCall(name, handler) {
   };
 }
 
-let sgMail;
-try { sgMail = require('@sendgrid/mail'); } catch { sgMail = null; }
+// Email via Brevo (transactional REST API; Node 22 global fetch, no SDK).
+// Migrated off SendGrid 2026-06-01 (its free tier dropped to 0/month post-trial).
+// sendViaBrevo maps the existing SendGrid-shaped msg ({to,from,replyTo,subject,
+// html,text}) to Brevo's payload, so every sendEmailSafe caller is untouched.
+async function sendViaBrevo(msg) {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) throw new Error('BREVO_API_KEY not set');
+  const to = (Array.isArray(msg.to) ? msg.to : [msg.to]).map((e) =>
+    typeof e === 'string' ? { email: e } : (e && e.email ? { email: e.email, name: e.name } : e));
+  const sender = typeof msg.from === 'string' ? { email: msg.from } : msg.from;
+  const body = { sender, to, subject: msg.subject, htmlContent: msg.html, textContent: msg.text };
+  if (msg.replyTo) body.replyTo = typeof msg.replyTo === 'string' ? { email: msg.replyTo } : msg.replyTo;
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': apiKey, 'Content-Type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Brevo send failed: ${res.status} ${detail}`);
+  }
+}
 
 // Format job scheduledTime for human-readable email/SMS output.
 // Mirrors src/utils/time.js — accepts canonical HH:MM (new format) and
@@ -57,9 +77,11 @@ function formatTimeRange(start, end) {
 }
 
 // ─── Email suppression (F-38) ──────────────────────────────────────────────
-// Inbound bounce/spam/unsubscribe events from SendGrid land in
-// emailSuppressions/{normalizedEmail}. sendEmailSafe wraps sgMail.send and
-// skips any suppressed recipient — caller sees `{ skipped: 'suppressed' }`
+// Inbound bounce/spam/unsubscribe events land in emailSuppressions/{normalizedEmail}.
+// sendEmailSafe wraps sendViaBrevo and skips any suppressed recipient — caller
+// sees `{ skipped: 'suppressed' }`. (Post-Brevo migration the feed into this
+// collection — sendgridEventWebhook — is inert; wiring a Brevo event webhook to
+// repopulate it is a follow-up. Existing/manual suppressions still apply.)
 // instead of a delivery.
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -88,7 +110,7 @@ async function isEmailSuppressed(email) {
 }
 
 async function sendEmailSafe(msg) {
-  if (!sgMail) return { skipped: 'no-sgmail' };
+  if (!process.env.BREVO_API_KEY) return { skipped: 'no-email-key' };
   const recipients = Array.isArray(msg.to) ? msg.to : [msg.to];
   const filtered = [];
   const suppressed = [];
@@ -102,7 +124,7 @@ async function sendEmailSafe(msg) {
   }
   if (!filtered.length) return { skipped: 'suppressed', suppressed };
   const finalMsg = filtered.length === recipients.length ? msg : { ...msg, to: filtered };
-  await sgMail.send(finalMsg);
+  await sendViaBrevo(finalMsg);
   return { sent: filtered.length, suppressed };
 }
 
@@ -648,11 +670,8 @@ function escapeHtml(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function initSendGrid() {
-  const apiKey = process.env.SENDGRID_API_KEY;
-  if (!apiKey || !sgMail) return false;
-  sgMail.setApiKey(apiKey);
-  return true;
+function emailConfigured() {
+  return !!process.env.BREVO_API_KEY;
 }
 
 function getTwilioClient() {
@@ -813,7 +832,7 @@ exports.sendWelcomeEmail = onDocumentCreated('churches/{churchId}', async (event
   }
   if (!adminEmail) return;
 
-  if (!initSendGrid()) { console.warn('sendWelcomeEmail: SendGrid not configured, skipping.'); return; }
+  if (!emailConfigured()) { console.warn('sendWelcomeEmail: Brevo not configured, skipping.'); return; }
 
   const churchName = escapeHtml(churchData.churchName || 'Your Church');
   const churchCode = escapeHtml(churchData.churchCode || '');
@@ -892,7 +911,7 @@ exports.notifyAdminsOfNewMember = onDocumentCreated('users/{uid}', async (event)
   // Idempotency: skip if already notified for this user.
   if (u.newMemberNotifiedAt) return;
 
-  if (!initSendGrid()) { console.warn('notifyAdminsOfNewMember: SendGrid not configured, skipping.'); return; }
+  if (!emailConfigured()) { console.warn('notifyAdminsOfNewMember: Brevo not configured, skipping.'); return; }
 
   // Find this church's active admins (filter role in code → no composite index needed).
   let admins = [];
@@ -1029,7 +1048,7 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
     }
 
     // Find admin user to email
-    if (!initSendGrid()) continue;
+    if (!emailConfigured()) continue;
     let adminEmail, adminName;
     try {
       const churchDoc = await db.doc(`churches/${churchId}`).get();
@@ -1091,7 +1110,7 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
     if (trialEndDay !== sevenDaysStr) continue; // not the right church
 
     const churchId = subDoc.ref.parent.parent.id;
-    if (!initSendGrid()) continue;
+    if (!emailConfigured()) continue;
 
     let adminEmail, adminName;
     try {
@@ -1131,7 +1150,7 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
 // data: { toEmail, toName, churchName, eventName, resourceDesc, eventDate, actionBy, status }
 exports.sendReservationEmail = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
-  if (!initSendGrid()) return { sent: false };
+  if (!emailConfigured()) return { sent: false };
 
   const { toEmail, toName, churchName, eventName, resourceDesc, eventDate, actionBy, status } = req.data;
   if (!toEmail) return { sent: false };
@@ -1168,7 +1187,7 @@ exports.sendReservationEmail = onCall({ cors: true }, async (req) => {
 // data: { toEmail, toName, churchName, ticketNumber, ticketName, assignedBy }
 exports.sendTicketAssignedEmail = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
-  if (!initSendGrid()) return { sent: false };
+  if (!emailConfigured()) return { sent: false };
 
   // F-39 from the 2026-05-12 audit: this CF is reused by Tasks Hub for task
   // assignments but the subject/body always said "Maintenance Ticket". Accept
@@ -1208,7 +1227,7 @@ exports.sendTicketAssignedEmail = onCall({ cors: true }, async (req) => {
 // Fetches all active users with job hub access server-side and emails them.
 exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
-  if (!initSendGrid()) { console.warn('sendJobAnnouncementEmails: SendGrid not configured, skipping.'); return { sent: 0 }; }
+  if (!emailConfigured()) { console.warn('sendJobAnnouncementEmails: Brevo not configured, skipping.'); return { sent: 0 }; }
 
   const { churchId, title, body } = req.data;
   if (!churchId || !title) return { sent: 0 };
@@ -1242,7 +1261,7 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
 // data: { churchId, jobDocId }
 exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
-  if (!initSendGrid()) { console.warn('sendJobCancelledEmails: SendGrid not configured, skipping.'); return { sent: 0 }; }
+  if (!emailConfigured()) { console.warn('sendJobCancelledEmails: Brevo not configured, skipping.'); return { sent: 0 }; }
 
   const { churchId, jobDocId } = req.data;
   if (!churchId || !jobDocId) return { sent: 0 };
@@ -1385,7 +1404,7 @@ exports.clearCancellationStampOnReopen = onDocumentUpdated('churches/{churchId}/
 // preserving the "don't let tasks slip" UX. Overdue + this-week's tasks
 // roll into one email per assignee.
 exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * 1', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendTaskDueReminders', async () => {
-  if (!initSendGrid()) { console.warn('sendTaskDueReminders: SendGrid not configured, skipping.'); return; }
+  if (!emailConfigured()) { console.warn('sendTaskDueReminders: Brevo not configured, skipping.'); return; }
 
   const db = getFirestore();
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
@@ -1581,7 +1600,7 @@ exports.closePastJobs = onSchedule({ schedule: '0 2 * * *', timeZone: 'America/C
 // Runs every morning at 8:00 AM Central time.
 // Finds all jobs scheduled for today across all churches and emails each signup.
 exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendJobReminders', async () => {
-  if (!initSendGrid()) { console.warn('sendJobReminders: SendGrid not configured, skipping.'); return; }
+  if (!emailConfigured()) { console.warn('sendJobReminders: Brevo not configured, skipping.'); return; }
 
   const db = getFirestore();
   const today = (() => {
@@ -1770,7 +1789,7 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
 // data: { churchId, jobDocId, event: 'withdrawal'|'admin_removal'|'cancellation', actorUid, actorName, removedName? }
 exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
-  if (!initSendGrid()) return { sent: 0 };
+  if (!emailConfigured()) return { sent: 0 };
 
   const { churchId, jobDocId, event, actorUid, actorName, removedName } = req.data;
   if (!churchId || !jobDocId || !event) return { sent: 0 };
@@ -2015,7 +2034,7 @@ async function sendWaitlistPromotionNotifications(db, churchId, jobData, promote
   const timeStr = jobData?.scheduledTime ? ` at ${formatTimeRange(jobData.scheduledTime, jobData.scheduledEndTime)}` : '';
 
   // ── Email channel ──
-  if (user.email && initSendGrid()) {
+  if (user.email && emailConfigured()) {
     const safeTitle = escapeHtml(jobData?.title || 'Job');
     const safeName = escapeHtml(user.name || 'there');
     const safeChurch = escapeHtml(churchName);
@@ -2262,7 +2281,7 @@ exports.sendTaskMentionEmail = onCall({ cors: true }, async (req) => {
   const { churchId, taskNumber, taskName, commentText, mentionedUids, commentAuthorName } = req.data;
   const uid = req.auth?.uid;
   if (!uid || !churchId) throw new HttpsError('invalid-argument', 'Auth and churchId required');
-  if (!initSendGrid()) return { sent: 0 };
+  if (!emailConfigured()) return { sent: 0 };
 
   const db = getFirestore();
   // C-03 from overnight audit: verify caller is actually a member of the
