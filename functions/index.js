@@ -79,9 +79,8 @@ function formatTimeRange(start, end) {
 // ─── Email suppression (F-38) ──────────────────────────────────────────────
 // Inbound bounce/spam/unsubscribe events land in emailSuppressions/{normalizedEmail}.
 // sendEmailSafe wraps sendViaBrevo and skips any suppressed recipient — caller
-// sees `{ skipped: 'suppressed' }`. (Post-Brevo migration the feed into this
-// collection — sendgridEventWebhook — is inert; wiring a Brevo event webhook to
-// repopulate it is a follow-up. Existing/manual suppressions still apply.)
+// sees `{ skipped: 'suppressed' }`. The feed into this collection is the
+// `emailEventWebhook` (Brevo) below — point Brevo's transactional webhook at it.
 // instead of a delivery.
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -543,7 +542,7 @@ exports.createPortalSession = onCall(
 //          customer.subscription.deleted
 exports.stripeWebhook = onRequest(
   // invoker:'public' pins the allUsers run.invoker IAM so a Gen-2 redeploy
-  // can't silently strip it (audit L2 / CLAUDE.md gotcha) — same as sendgridEventWebhook.
+  // can't silently strip it (audit L2 / CLAUDE.md gotcha) — same as emailEventWebhook.
   { secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET], invoker: 'public' },
   async (req, res) => {
     const stripe = require('stripe')(STRIPE_SECRET_KEY.value());
@@ -693,33 +692,32 @@ const TWILIO_MSID = process.env.TWILIO_MESSAGING_SERVICE_SID || '';
 // left active in SendGrid as an emergency fallback for ~24h after this deploy.
 const FROM = { email: 'noreply@churchopshub.com', name: 'ChurchOpsHub' };
 
-// ─── SendGrid Event Webhook (F-38) ─────────────────────────────────────────
-// Receives bounce / dropped / spamreport / unsubscribe events from SendGrid
-// and updates emailSuppressions/{normalizedEmail} so subsequent sends skip
-// the address via sendEmailSafe. Configure SendGrid → Settings → Mail Settings →
-// Event Webhook with the URL below and SENDGRID_WEBHOOK_SECRET as a path token:
-//   https://us-central1-church-inventory-9615c.cloudfunctions.net/sendgridEventWebhook?token=<SECRET>
-// Enable at minimum: Bounced, Dropped, Spam Reports, Unsubscribed. The other
-// engagement events (delivered/open/click) are also accepted but only logged.
-const SUPPRESSING_EVENTS = new Set(['bounce', 'dropped', 'spamreport', 'unsubscribe', 'group_unsubscribe']);
-exports.sendgridEventWebhook = onRequest({ cors: false, invoker: 'public' }, async (req, res) => {
+// ─── Email Event Webhook (F-38; Brevo) ─────────────────────────────────────
+// Receives transactional events from Brevo and updates
+// emailSuppressions/{normalizedEmail} so subsequent sends skip the address via
+// sendEmailSafe. Configure in Brevo → Transactional → Settings → Webhook: add
+// the URL below (with ?token=<BREVO_WEBHOOK_SECRET>) and enable at minimum
+// "Hard bounce", "Spam", "Unsubscribed", "Invalid email", "Blocked":
+//   https://us-central1-church-inventory-9615c.cloudfunctions.net/emailEventWebhook?token=<SECRET>
+// Brevo posts one event per request (a JSON object); arrays are also accepted.
+// (Replaced the SendGrid event webhook on the 2026-06-01 Brevo migration.)
+const SUPPRESSING_EVENTS = new Set(['hard_bounce', 'spam', 'unsubscribed', 'invalid_email', 'blocked']);
+exports.emailEventWebhook = onRequest({ cors: false, invoker: 'public' }, async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method not allowed');
     return;
   }
-  // Shared-secret guard. SendGrid's signed-event-webhook ECDSA verification is
-  // also supported by the platform, but a token in the URL is sufficient for
-  // our scale and simpler to operate. Set SENDGRID_WEBHOOK_SECRET in
-  // functions/.env.
-  const expected = process.env.SENDGRID_WEBHOOK_SECRET;
+  // Shared-secret guard — Brevo lets you set the full webhook URL, so the token
+  // travels in the query string. Set BREVO_WEBHOOK_SECRET in functions/.env.
+  const expected = process.env.BREVO_WEBHOOK_SECRET;
   if (!expected) {
-    console.error('[sendgridEventWebhook] SENDGRID_WEBHOOK_SECRET not configured — rejecting.');
+    console.error('[emailEventWebhook] BREVO_WEBHOOK_SECRET not configured — rejecting.');
     res.status(503).send('Webhook secret not configured');
     return;
   }
   const provided = (req.query?.token || req.headers['x-webhook-token'] || '').toString();
   if (provided !== expected) {
-    console.warn('[sendgridEventWebhook] token mismatch from', req.ip);
+    console.warn('[emailEventWebhook] token mismatch from', req.ip);
     res.status(401).send('Unauthorized');
     return;
   }
@@ -738,19 +736,22 @@ exports.sendgridEventWebhook = onRequest({ cors: false, invoker: 'public' }, asy
   for (const evt of events) {
     if (!evt || typeof evt !== 'object') continue;
     const email = normalizeEmail(evt.email);
-    const eventType = String(evt.event || '').toLowerCase();
-    const eventId = String(evt.sg_event_id || `${email}-${evt.timestamp || Date.now()}-${eventType}`);
+    // Brevo event names are snake_case (e.g. "hard_bounce"); normalize spaces.
+    const eventType = String(evt.event || '').toLowerCase().replace(/\s+/g, '_');
     if (!email || !eventType) continue;
+    const ts = typeof evt.ts === 'number' ? evt.ts
+      : (typeof evt.ts_event === 'number' ? evt.ts_event : Math.floor(Date.now() / 1000));
+    const messageId = evt['message-id'] || evt.id || null;
+    const eventId = String(messageId ? `${messageId}-${eventType}` : `${email}-${ts}-${eventType}`);
 
     try {
-      // Audit log every event (capped TTL not enforced — table is small)
+      // Audit log every event (table is small; no TTL enforced).
       await db.doc(`emailEvents/${encodeURIComponent(eventId)}`).set({
         email,
         event: eventType,
-        reason: evt.reason || evt.type || null,
-        bounceClassification: evt.bounce_classification || null,
-        timestamp: typeof evt.timestamp === 'number' ? evt.timestamp : Math.floor(Date.now() / 1000),
-        sg_message_id: evt.sg_message_id || null,
+        reason: evt.reason || null,
+        timestamp: ts,
+        messageId,
         receivedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
 
@@ -759,7 +760,7 @@ exports.sendgridEventWebhook = onRequest({ cors: false, invoker: 'public' }, asy
           email,
           active: true,
           lastEvent: eventType,
-          lastReason: evt.reason || evt.type || null,
+          lastReason: evt.reason || null,
           lastEventAt: FieldValue.serverTimestamp(),
           eventCount: FieldValue.increment(1),
         }, { merge: true });
@@ -769,11 +770,11 @@ exports.sendgridEventWebhook = onRequest({ cors: false, invoker: 'public' }, asy
       }
     } catch (err) {
       errors += 1;
-      console.error('[sendgridEventWebhook] failed to process event', eventId, err.message);
+      console.error('[emailEventWebhook] failed to process event', eventId, err.message);
     }
   }
 
-  console.log(`[sendgridEventWebhook] processed ${events.length} events: ${suppressed} suppress, ${other} other, ${errors} errors`);
+  console.log(`[emailEventWebhook] processed ${events.length} events: ${suppressed} suppress, ${other} other, ${errors} errors`);
   res.status(200).send(`OK (${events.length})`);
 });
 
