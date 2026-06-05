@@ -997,7 +997,7 @@ export function useFirestore(churchId) {
         createdBy: _cb, createdByName: _cbn, jobNumber: _jn,
         signups: _s, waitlist: _w, signupCount: _sc, waitlistCount: _wc,
         cancellationEmailSentAt: _ce, lastReminderSentDate: _lr, lastPosterNotifiedByActors: _lp,
-        recurrenceGroupId: _rg, recurrenceFreq: _rf, seriesEndDate: _se,
+        recurrenceGroupId: _rg, recurrenceFreq: _rf, seriesEndDate: _se, newJobsDigestSent: _nd,
         ...safeUpdates
       } = updates;
 
@@ -1046,7 +1046,7 @@ export function useFirestore(churchId) {
         createdBy: _cb, createdByName: _cbn, jobNumber: _jn,
         signups: _s, waitlist: _w, signupCount: _sc, waitlistCount: _wc, scheduledDate: _sd,
         cancellationEmailSentAt: _ce, lastReminderSentDate: _lr, lastPosterNotifiedByActors: _lp,
-        recurrenceGroupId: _rg, recurrenceFreq: _rf, seriesEndDate: _se,
+        recurrenceGroupId: _rg, recurrenceFreq: _rf, seriesEndDate: _se, newJobsDigestSent: _nd,
         ...safeUpdates
       } = updates;
       // Fetch refs first (outside transaction — query can't run inside a transaction)

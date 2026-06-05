@@ -1785,6 +1785,116 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
   ]);
 }));
 
+// ── sendNewJobsDigest ──────────────────────────────────────────────────────
+// Scheduled NOON Central: text volunteers who separately opted in
+// (smsNewJobsEnabled) a once-daily digest of newly-posted, still-open, upcoming
+// shifts at THEIR church so they can sign up. Distinct opt-in + consent category
+// from shift reminders (smsRemindersEnabled) — see /sms-program. A2P: the
+// registered campaign (CYO5934, Low Volume Mixed) forbids embedded links AND
+// phone numbers, so the body carries neither.
+//
+// Idempotency / no-backlog-blast: each announced job is stamped
+// `newJobsDigestSent`, so subsequent runs only announce genuinely-new postings.
+// On the FIRST run, existing upcoming jobs are stamped too — but with zero
+// opted-in users yet, nothing sends, so the backlog is "consumed" silently and
+// the first opt-in only ever receives jobs posted after they opted in.
+exports.sendNewJobsDigest = onSchedule({ schedule: '0 12 * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendNewJobsDigest', async () => {
+  const tw = getTwilioClient();
+  if (!tw || !(TWILIO_MSID || TWILIO_FROM)) { console.warn('sendNewJobsDigest: Twilio not configured, skipping.'); return; }
+
+  const db = getFirestore();
+  const todayStr = (() => {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  })();
+
+  // Upcoming, still-open jobs across all churches — reuses the existing
+  // (status, scheduledDate) collection-group index. .limit(5000) caps the
+  // cross-tenant blast radius (matches sendJobReminders, audit perf H-4).
+  const snap = await db.collectionGroup('jobListings')
+    .where('status', '==', 'open')
+    .where('scheduledDate', '>=', todayStr)
+    .limit(5000)
+    .get();
+  if (snap.empty) return;
+
+  // Keep only not-yet-announced jobs, grouped by church.
+  const newByChurch = {}; // churchId -> [{ ref }]
+  for (const d of snap.docs) {
+    if (d.data().newJobsDigestSent) continue;
+    const churchId = d.ref.parent.parent.id;
+    (newByChurch[churchId] = newByChurch[churchId] || []).push({ ref: d.ref });
+  }
+  if (Object.keys(newByChurch).length === 0) return;
+
+  // Per-church gating caches (clone of sendJobReminders).
+  const subCache = {};
+  const notifCache = {};
+  const nameCache = {};
+  async function churchHasJobsHub(churchId) {
+    if (subCache[churchId] !== undefined) return subCache[churchId];
+    try { const s = await db.doc(`churches/${churchId}/config/subscription`).get(); subCache[churchId] = subHasHub(s.data() || {}, 'jobs'); }
+    catch { subCache[churchId] = false; }
+    return subCache[churchId];
+  }
+  async function jobNotifEnabled(churchId) {
+    if (notifCache[churchId] !== undefined) return notifCache[churchId];
+    // F-14: default-on. Treat missing doc as enabled; only explicit false disables.
+    try { const s = await db.doc(`churches/${churchId}/config/notifications`).get(); notifCache[churchId] = !s.exists || s.data()?.enabled !== false; }
+    catch { notifCache[churchId] = true; }
+    return notifCache[churchId];
+  }
+  async function churchDisplayName(churchId) {
+    if (nameCache[churchId] !== undefined) return nameCache[churchId];
+    try { const s = await db.doc(`churches/${churchId}`).get(); nameCache[churchId] = (s.data()?.churchName || '').trim() || 'your church'; }
+    catch { nameCache[churchId] = 'your church'; }
+    return nameCache[churchId];
+  }
+
+  const sender = TWILIO_MSID ? { messagingServiceSid: TWILIO_MSID } : { from: TWILIO_FROM };
+  const stampedRefs = new Set();
+
+  for (const [churchId, jobs] of Object.entries(newByChurch)) {
+    // Skip (WITHOUT stamping) churches that can't currently send — they may
+    // re-qualify later; the jobs simply age out as they pass or close.
+    if (!(await churchHasJobsHub(churchId))) continue;
+    if (!(await jobNotifEnabled(churchId))) continue;
+
+    // Recipients: this church's members who opted IN to new-jobs SMS, with a
+    // phone, active, and Jobs Hub access. Two equality filters are served by
+    // single-field indexes (zigzag merge) — no composite index needed.
+    let recipients = [];
+    try {
+      const usersSnap = await db.collection('users')
+        .where('churchId', '==', churchId)
+        .where('smsNewJobsEnabled', '==', true)
+        .get();
+      recipients = usersSnap.docs.map(u => u.data())
+        .filter(u => u.phone && u.active !== false && effectiveHasHub(u, 'jobs'));
+    } catch (err) { console.error('sendNewJobsDigest: recipient query failed', { churchId, err: err?.message }); Sentry.captureException(err); continue; }
+
+    // No opted-in recipients → mark these jobs announced anyway so a later
+    // opt-in only ever gets genuinely-new postings (no backlog blast).
+    if (recipients.length === 0) { jobs.forEach(j => stampedRefs.add(j.ref)); continue; }
+
+    const name = await churchDisplayName(churchId);
+    const n = jobs.length;
+    const body = `ChurchOpsHub: ${n} new volunteer ${n === 1 ? 'shift is' : 'shifts are'} open at ${name}. Open the app to view and claim a spot. Reply STOP to opt out.`;
+
+    let anySuccess = false;
+    await Promise.allSettled(recipients.map(u =>
+      tw.messages.create({ to: u.phone, ...sender, body })
+        .then(() => { anySuccess = true; })
+        .catch(err => { console.error('sendNewJobsDigest: SMS failed', { churchId, err: err?.message }); Sentry.captureException(err); })
+    ));
+    // Stamp only when ≥1 text got through, so a total Twilio outage retries on
+    // the next run instead of silently dropping a church's digest.
+    if (anySuccess) jobs.forEach(j => stampedRefs.add(j.ref));
+  }
+
+  await Promise.allSettled([...stampedRefs].map(ref => ref.update({ newJobsDigestSent: true })));
+}));
+
 // ── sendJobPosterNotification ─────────────────────────────────────────────
 // Called on member withdrawal, admin removal, or co-admin cancellation. Emails the job poster + delegates.
 // data: { churchId, jobDocId, event: 'withdrawal'|'admin_removal'|'cancellation', actorUid, actorName, removedName? }

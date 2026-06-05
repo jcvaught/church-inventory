@@ -899,14 +899,14 @@ export function HelpPage({ onBack }) {
               <P>When cancelling a job with signups, you'll be asked to confirm. If notifications are on, the cancellation email goes to signups automatically. Use the <strong>Notify Signups</strong> button to re-send on an already-cancelled job.</P>
             </Accordion>
 
-            <Accordion title="SMS reminders (text messages)">
-              <P>Job Hub can also text you a reminder the morning of any job you're signed up for — useful when email isn't where you live. To opt in:</P>
+            <Accordion title="SMS job texts (reminders & new-shift alerts)">
+              <P>Job Hub can text you in two ways — useful when email isn't where you live. You pick either or both: a <strong>shift reminder</strong> the morning of any job you're signed up for, and <strong>new-shift alerts</strong> (a once-daily summary of newly posted shifts at your church). To opt in:</P>
               <UL items={[
                 'Verify your email first (Settings shows a banner up top if you haven’t)',
-                'In Settings → SMS Job Reminders, enter your US/Canada mobile number',
-                'Tick Enable SMS reminders → Save',
+                'In Settings → SMS Job Texts, enter your US/Canada mobile number',
+                'Tick "Shift reminders," "New-shift alerts," or both → Save',
               ]} />
-              <P>Texts come from the same Twilio number that handles STOP/HELP. Frequency is typically 1–5 per week.</P>
+              <P>Texts come from the same Twilio number that handles STOP/HELP. Frequency is typically 1–7 per week.</P>
               <Note><strong>To unsubscribe:</strong> reply <strong>STOP</strong> to any reminder text. To turn it back on later, reply <strong>START</strong> from the same number.</Note>
               <Tip><strong>START</strong> only re-enables reminders for numbers that previously opted in here. If you've never opted in on this phone — or you got a recycled number from your carrier — START won't silently turn anything on. You have to opt in via Settings first. That's deliberate: a teen receiving a new phone number shouldn't start getting reminders meant for whoever had it before.</Tip>
             </Accordion>

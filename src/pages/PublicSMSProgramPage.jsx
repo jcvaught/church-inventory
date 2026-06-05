@@ -21,24 +21,28 @@ function OptInFormScreenshot() {
   return (
     <figure style={{ margin: '8px 0 18px' }}>
       <div style={{ background: B.white, border: `1px solid ${B.sand}`, borderRadius: 14, padding: '22px 24px', boxShadow: '0 1px 3px rgba(27,42,74,0.06)', maxWidth: 560 }}>
-        <div style={{ fontSize: 12, color: B.textLight, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: f1, marginBottom: 4 }}>SMS Job Reminders</div>
+        <div style={{ fontSize: 12, color: B.textLight, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: f1, marginBottom: 4 }}>SMS Job Texts</div>
         <div style={{ fontSize: 13, color: B.textMid, fontFamily: f2, marginBottom: 10 }}>
-          Receive a text message the morning of any job you&rsquo;re signed up for.
+          Get a text reminder the morning of shifts you&rsquo;re signed up for, and/or a once-daily summary of newly posted shifts at your church. Choose which below.
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ width: 160, padding: '11px 14px', borderRadius: 10, border: `1px solid ${B.sand}`, fontSize: 14, fontFamily: f2, background: B.white, color: B.textLight, boxSizing: 'border-box' }}>(555) 555-5555</div>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontFamily: f2, color: B.textMid }}>
             <span style={{ width: 15, height: 15, borderRadius: 3, border: `1px solid ${B.sand}`, background: B.white, display: 'inline-block' }} />
-            Enable SMS reminders
+            Shift reminders
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontFamily: f2, color: B.textMid }}>
+            <span style={{ width: 15, height: 15, borderRadius: 3, border: `1px solid ${B.sand}`, background: B.white, display: 'inline-block' }} />
+            New-shift alerts
           </span>
           <span style={{ ...btnP, padding: '7px 18px', fontSize: 13, cursor: 'default' }}>Save</span>
         </div>
         <div style={{ fontSize: 11, color: B.textLight, marginTop: 8, fontFamily: f2, maxWidth: 480, lineHeight: 1.5 }}>
-          By providing your phone number and enabling SMS reminders, you consent to receive automated text messages from ChurchOpsHub for job-shift reminders. US and Canada numbers only. Message and data rates may apply. Message frequency varies (typically 1-5 messages per week). Reply STOP to unsubscribe or HELP for help.
+          By providing your phone number and enabling either option, you consent to receive automated text messages from ChurchOpsHub for the options you check: shift reminders (the morning of shifts you signed up for) and/or new-shift alerts (a once-daily summary of newly posted shifts at your church). US and Canada numbers only. Message and data rates may apply. Message frequency varies (typically 1-7 messages per week). Reply STOP to unsubscribe or HELP for help.
         </div>
       </div>
       <figcaption style={{ fontFamily: f2, fontSize: 13, color: B.textLight, marginTop: 8, fontStyle: 'italic' }}>
-        Screenshot: the exact opt-in consent form shown to every user in ChurchOpsHub at Settings &rarr; My Profile &rarr; &ldquo;SMS Job Reminders.&rdquo; The &ldquo;Enable SMS reminders&rdquo; checkbox is unchecked by default and the disclosure above is displayed before consent is given.
+        Screenshot: the exact opt-in consent form shown to every user in ChurchOpsHub at Settings &rarr; My Profile &rarr; &ldquo;SMS Job Texts.&rdquo; Both checkboxes are unchecked by default and the disclosure above is displayed before consent is given.
       </figcaption>
     </figure>
   );
@@ -66,10 +70,10 @@ export function PublicSMSProgramPage() {
       {/* Content */}
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px 80px' }}>
         <h1 style={{ fontFamily: f1, fontSize: 32, fontWeight: 800, color: B.navy, margin: '0 0 6px' }}>SMS Program</h1>
-        <p style={{ fontFamily: f2, fontSize: 14, color: B.textLight, margin: '0 0 36px' }}>Last updated: May 12, 2026</p>
+        <p style={{ fontFamily: f2, fontSize: 14, color: B.textLight, margin: '0 0 36px' }}>Last updated: June 5, 2026</p>
 
         <H2>What is the ChurchOpsHub SMS program?</H2>
-        <P>ChurchOpsHub is a cloud-based platform that helps churches manage volunteer job shifts. The ChurchOpsHub SMS program sends each volunteer a reminder text message on the morning of any volunteer shift they have signed up for through the app. The goal is simple: reduce no-shows by giving volunteers a same-day heads-up about their commitment.</P>
+        <P>ChurchOpsHub is a cloud-based platform that helps churches manage volunteer job shifts. The ChurchOpsHub SMS program sends volunteers two kinds of opt-in text message: (1) a reminder on the morning of any shift they have personally signed up for, and (2) an optional once-daily summary of newly posted shifts at their own church. Each is a separate, unchecked-by-default opt-in. The goal is simple: reduce no-shows and help volunteers find shifts that fit.</P>
 
         <H2>Program name &amp; sending number</H2>
         <P><strong>Program name:</strong> ChurchOpsHub Job Reminders<br/>
@@ -77,7 +81,12 @@ export function PublicSMSProgramPage() {
         <strong>Operator:</strong> ChurchOpsHub (operated by Fairfax Church of Christ, jcvaught@gmail.com)</P>
 
         <H2>What messages will I receive?</H2>
-        <P>You will only receive reminder messages for the volunteer shifts you have personally signed up for. You will not receive marketing messages, promotional content, or messages for shifts you did not opt into. Example messages we send:</P>
+        <P>You choose which texts you receive through two separate, unchecked-by-default options in your account settings:</P>
+        <ul style={{ fontFamily: f2, fontSize: 15, color: B.textMid, lineHeight: 1.7, paddingLeft: 24, margin: '0 0 14px' }}>
+          <li><strong>Shift reminders</strong> — a reminder the morning of any shift you have personally signed up for.</li>
+          <li><strong>New-shift alerts</strong> — a once-daily summary of newly posted shifts at your church, so you can sign up for ones that fit.</li>
+        </ul>
+        <P>You will not receive marketing or promotional messages of any kind. Example messages we send:</P>
 
         <SampleBox>{`ChurchOpsHub: Reminder — you're signed up for "Sunday Service Setup" today at 7:30 AM @ Main Sanctuary. Reply STOP to opt out.`}</SampleBox>
 
@@ -87,43 +96,45 @@ export function PublicSMSProgramPage() {
 
 Reply STOP to opt out.`}</SampleBox>
 
+        <SampleBox>{`ChurchOpsHub: 3 new volunteer shifts are open at Fairfax Church of Christ. Open the app to view and claim a spot. Reply STOP to opt out.`}</SampleBox>
+
         <H2>How often will I be messaged?</H2>
-        <P>Message frequency depends entirely on the number of job shifts you sign up for. A typical volunteer receives <strong>1–5 messages per week</strong>. Volunteers who are not signed up for any shifts in a given week receive no messages that week.</P>
+        <P>Frequency depends on which options you enable and your church's activity. Shift reminders arrive only for shifts you sign up for; new-shift alerts are sent at most once per day, and only on days new shifts were posted. A typical volunteer receives <strong>1–7 messages per week</strong>. With neither option enabled, you receive no messages.</P>
 
         <H2>Are there charges?</H2>
-        <P>ChurchOpsHub does not charge you to receive SMS reminders. Standard <strong>message and data rates may apply</strong> from your mobile carrier. Contact your carrier for details.</P>
+        <P>ChurchOpsHub does not charge you to receive these texts. Standard <strong>message and data rates may apply</strong> from your mobile carrier. Contact your carrier for details.</P>
 
         <H2>How do I opt in?</H2>
-        <P>The only way to opt in to ChurchOpsHub SMS reminders is to:</P>
+        <P>The only way to opt in to ChurchOpsHub SMS is to:</P>
         <ol style={{ fontFamily: f2, fontSize: 15, color: B.textMid, lineHeight: 1.7, paddingLeft: 24, margin: '0 0 14px' }}>
           <li>Create or sign in to your ChurchOpsHub account at <a href="https://churchopshub.com" style={{ color: B.teal }}>churchopshub.com</a>.</li>
-          <li>Navigate to <strong>Settings → My Profile → SMS Reminders</strong>.</li>
+          <li>Navigate to <strong>Settings → My Profile → SMS Job Texts</strong>.</li>
           <li>Enter your mobile phone number.</li>
-          <li>Read the consent disclosure shown beside the checkbox (full text below).</li>
-          <li>Check the box labeled <strong>"Enable SMS reminders."</strong></li>
+          <li>Read the consent disclosure shown beside the checkboxes (full text below).</li>
+          <li>Check <strong>"Shift reminders," "New-shift alerts,"</strong> or both.</li>
           <li>Click <strong>Save</strong>.</li>
         </ol>
 
-        <P>This is exactly what the opt-in consent form looks like inside ChurchOpsHub. No message is ever sent to a phone number until the user has personally entered it here and checked &ldquo;Enable SMS reminders&rdquo;:</P>
+        <P>This is exactly what the opt-in consent form looks like inside ChurchOpsHub. No message is ever sent to a phone number until the user has personally entered it here and checked at least one option:</P>
         <OptInFormScreenshot />
 
-        <P>Messages are not sent to any phone number that has not completed this in-app consent flow. You can also revoke consent at any time by clearing your phone number in Settings, unchecking "Enable SMS reminders," or replying <strong>STOP</strong> to any message.</P>
+        <P>Messages are not sent to any phone number that has not completed this in-app consent flow. You can also revoke consent at any time by clearing your phone number in Settings, unchecking the options, or replying <strong>STOP</strong> to any message.</P>
 
         <H2>Consent disclosure (exact text shown in the app)</H2>
-        <P>Before the "Enable SMS reminders" checkbox can be enabled in Settings, the following disclosure is displayed:</P>
-        <SampleBox>{`By providing your phone number and enabling SMS reminders, you consent to receive automated text messages from ChurchOpsHub for job-shift reminders. US and Canada numbers only. Message and data rates may apply. Message frequency varies (typically 1-5 messages per week). Reply STOP to unsubscribe or HELP for help.`}</SampleBox>
+        <P>Before either checkbox can be enabled in Settings, the following disclosure is displayed:</P>
+        <SampleBox>{`By providing your phone number and enabling either option, you consent to receive automated text messages from ChurchOpsHub for the options you check: shift reminders (the morning of shifts you signed up for) and/or new-shift alerts (a once-daily summary of newly posted shifts at your church). US and Canada numbers only. Message and data rates may apply. Message frequency varies (typically 1-7 messages per week). Reply STOP to unsubscribe or HELP for help.`}</SampleBox>
 
         <H2>How do I get help?</H2>
         <P>Reply <strong>HELP</strong> to any message and you will receive a reply with our support contact. You can also email <a href="mailto:churchopshub@gmail.com" style={{ color: B.teal }}>churchopshub@gmail.com</a> at any time.</P>
 
         <H2>How do I stop receiving messages?</H2>
-        <P>You can stop receiving SMS reminders at any time by any of the following methods, all of which take effect immediately:</P>
+        <P>You can stop receiving ChurchOpsHub SMS at any time by any of the following methods, all of which take effect immediately:</P>
         <ul style={{ fontFamily: f2, fontSize: 15, color: B.textMid, lineHeight: 1.7, paddingLeft: 24, margin: '0 0 14px' }}>
-          <li>Reply <strong>STOP</strong>, <strong>STOPALL</strong>, <strong>UNSUBSCRIBE</strong>, <strong>CANCEL</strong>, <strong>END</strong>, or <strong>QUIT</strong> to any ChurchOpsHub SMS.</li>
-          <li>In the app, go to <strong>Settings → My Profile</strong> and uncheck "Enable SMS reminders."</li>
+          <li>Reply <strong>STOP</strong>, <strong>STOPALL</strong>, <strong>UNSUBSCRIBE</strong>, <strong>CANCEL</strong>, <strong>END</strong>, or <strong>QUIT</strong> to any ChurchOpsHub SMS. (This stops all ChurchOpsHub texts.)</li>
+          <li>In the app, go to <strong>Settings → My Profile</strong> and uncheck either or both options.</li>
           <li>In the app, clear your phone number entirely.</li>
         </ul>
-        <P>To re-subscribe after a STOP, reply <strong>START</strong> to the same number, or re-enable SMS reminders in Settings.</P>
+        <P>To re-subscribe after a STOP, reply <strong>START</strong> to the same number, or re-enable an option in Settings.</P>
 
         <H2>Privacy and terms</H2>
         <P>We do not share or sell your phone number with third parties. We do not use your phone number for marketing or advertising. The phone number is used solely for the SMS reminder program described on this page. For full details, see our <a href="/privacy" style={{ color: B.teal }}>Privacy Policy</a> and <a href="/terms" style={{ color: B.teal }}>Terms of Service</a> (Section 7 in both documents covers SMS).</P>

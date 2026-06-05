@@ -78,17 +78,21 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [savingDelegates, setSavingDelegates] = useState(false);
   const [phoneInput, setPhoneInput] = useState(() => formatPhoneDisplay(userProfile?.phone));
   const [smsEnabled, setSmsEnabled] = useState(() => !!userProfile?.smsRemindersEnabled);
+  const [newJobsEnabled, setNewJobsEnabled] = useState(() => !!userProfile?.smsNewJobsEnabled);
   const [savingPhone, setSavingPhone] = useState(false);
   const [phoneSaved, setPhoneSaved] = useState(false);
   const [phoneError, setPhoneError] = useState('');
   const [prevSyncedPhone, setPrevSyncedPhone] = useState(userProfile?.phone);
   const [prevSyncedSms, setPrevSyncedSms] = useState(userProfile?.smsRemindersEnabled);
+  const [prevSyncedNewJobs, setPrevSyncedNewJobs] = useState(userProfile?.smsNewJobsEnabled);
 
-  if (prevSyncedPhone !== userProfile?.phone || prevSyncedSms !== userProfile?.smsRemindersEnabled) {
+  if (prevSyncedPhone !== userProfile?.phone || prevSyncedSms !== userProfile?.smsRemindersEnabled || prevSyncedNewJobs !== userProfile?.smsNewJobsEnabled) {
     setPrevSyncedPhone(userProfile?.phone);
     setPrevSyncedSms(userProfile?.smsRemindersEnabled);
+    setPrevSyncedNewJobs(userProfile?.smsNewJobsEnabled);
     setPhoneInput(formatPhoneDisplay(userProfile?.phone));
     setSmsEnabled(!!userProfile?.smsRemindersEnabled);
+    setNewJobsEnabled(!!userProfile?.smsNewJobsEnabled);
   }
 
   const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub', people_access: 'People Access Hub', tasks: 'Tasks Hub', jobs: 'Job Hub' };
@@ -298,8 +302,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     if (!trimmed) {
       setSavingPhone(true);
       try {
-        await updateUser(userProfile.uid, { phone: '', smsRemindersEnabled: false });
+        await updateUser(userProfile.uid, { phone: '', smsRemindersEnabled: false, smsNewJobsEnabled: false });
         setSmsEnabled(false);
+        setNewJobsEnabled(false);
         setPhoneSaved(true);
         setTimeout(() => setPhoneSaved(false), 2000);
       } catch { setPhoneError('Failed to save. Try again.'); }
@@ -316,6 +321,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
       await updateUser(userProfile.uid, {
         phone: normalized,
         smsRemindersEnabled: smsEnabled,
+        smsNewJobsEnabled: newJobsEnabled,
       });
       setPhoneInput(formatPhoneDisplay(normalized));
       setPhoneSaved(true);
@@ -328,9 +334,10 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     setPhoneError('');
     setSavingPhone(true);
     try {
-      await updateUser(userProfile.uid, { phone: '', smsRemindersEnabled: false });
+      await updateUser(userProfile.uid, { phone: '', smsRemindersEnabled: false, smsNewJobsEnabled: false });
       setPhoneInput('');
       setSmsEnabled(false);
+      setNewJobsEnabled(false);
       setPhoneSaved(true);
       setTimeout(() => setPhoneSaved(false), 2000);
     } catch { setPhoneError('Failed to remove. Try again.'); }
@@ -509,15 +516,15 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           {/* SMS Reminders — visible to any user who has Jobs Hub access */}
           {userHasJobsAccess && (
             <div style={{ marginTop:((isAdmin || isManager) && hasJobsHub) ? 16 : 0, paddingTop:((isAdmin || isManager) && hasJobsHub) ? 16 : 0, borderTop:((isAdmin || isManager) && hasJobsHub) ? '1px solid '+B.sand : 'none', width:'100%' }}>
-              <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>SMS Job Reminders</div>
+              <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>SMS Job Texts</div>
             <div style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:10 }}>
-              Receive a text message the morning of any job you're signed up for.
+              Get a text reminder the morning of shifts you're signed up for, and/or a once-daily summary of newly posted shifts at your church. Choose which below.
             </div>
             {/* S-6: gate SMS opt-in on a verified email so TCPA consent is
                 tied to an identity we know the user controls. */}
             {!user?.emailVerified ? (
               <div style={{ fontSize:13, color:B.textMid, background:B.warmGray, borderRadius:10, padding:'12px 14px', fontFamily:f2, lineHeight:1.5 }}>
-                Verify your email first to enable SMS reminders. Check your inbox for a verification link, or use the resend button in the banner at the top of the page.
+                Verify your email first to enable SMS texts. Check your inbox for a verification link, or use the resend button in the banner at the top of the page.
               </div>
             ) : (
               <>
@@ -527,7 +534,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                     placeholder="(555) 555-5555"
                     value={phoneInput}
                     onChange={e => { setPhoneInput(e.target.value); if (phoneError) setPhoneError(''); }}
-                    aria-label="Phone number for SMS reminders"
+                    aria-label="Phone number for SMS job texts"
                     aria-invalid={!!phoneError}
                     aria-describedby={phoneError ? 'sms-phone-error' : undefined}
                     style={{ ...inp, width:160, fontSize:14, borderColor: phoneError ? B.red : undefined }}
@@ -540,7 +547,17 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                       onChange={e => setSmsEnabled(e.target.checked)}
                       style={{ accentColor:B.teal, width:15, height:15 }}
                     />
-                    Enable SMS reminders
+                    Shift reminders
+                  </label>
+                  <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, fontFamily:f2, color:B.textMid, cursor:'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={newJobsEnabled}
+                      disabled={!phoneInput.trim()}
+                      onChange={e => setNewJobsEnabled(e.target.checked)}
+                      style={{ accentColor:B.teal, width:15, height:15 }}
+                    />
+                    New-shift alerts
                   </label>
                   <button
                     onClick={handleSavePhone}
@@ -563,7 +580,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                   <div id="sms-phone-error" role="alert" style={{ fontSize:12, color:B.red, marginTop:6, fontFamily:f2 }}>{phoneError}</div>
                 )}
                 <div style={{ fontSize:11, color:B.textLight, marginTop:8, fontFamily:f2, maxWidth:480 }}>
-                  By providing your phone number and enabling SMS reminders, you consent to receive automated text messages from ChurchOpsHub for job-shift reminders. US and Canada numbers only. Message and data rates may apply. Message frequency varies (typically 1-5 messages per week). Reply STOP to unsubscribe or HELP for help.
+                  By providing your phone number and enabling either option, you consent to receive automated text messages from ChurchOpsHub for the options you check: shift reminders (the morning of shifts you signed up for) and/or new-shift alerts (a once-daily summary of newly posted shifts at your church). US and Canada numbers only. Message and data rates may apply. Message frequency varies (typically 1-7 messages per week). Reply STOP to unsubscribe or HELP for help.
                 </div>
               </>
             )}
