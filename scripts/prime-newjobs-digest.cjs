@@ -31,19 +31,28 @@ function todayCentral() {
 
   console.log(`Found ${snap.size} open, upcoming job(s) (scheduledDate >= ${today}).`);
 
-  let stamped = 0, already = 0;
+  // A job posted TODAY (church-local / Central) counts as genuinely new and
+  // should still be announced at the noon run — only the PRE-today backlog gets
+  // stamped. `createdAt` is a UTC ISO string; compare its Central calendar date.
+  const centralDateOf = iso => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(iso));
+
+  let stamped = 0, already = 0, skippedToday = 0;
   // Batch in chunks of 400 (Firestore batch cap is 500).
   let batch = db.batch();
   let inBatch = 0;
   for (const doc of snap.docs) {
-    if (doc.data().newJobsDigestSent) { already++; continue; }
+    const j = doc.data();
+    if (j.newJobsDigestSent) { already++; continue; }
+    if (j.createdAt && centralDateOf(j.createdAt) >= today) { skippedToday++; continue; } // posted today → leave as new
     batch.update(doc.ref, { newJobsDigestSent: true });
     stamped++; inBatch++;
     if (inBatch >= 400) { await batch.commit(); batch = db.batch(); inBatch = 0; }
   }
   if (inBatch > 0) await batch.commit();
 
-  console.log(`Stamped ${stamped} job(s) as already-announced; ${already} were already stamped.`);
-  console.log('Priming complete. The digest will now only announce jobs posted from here forward.');
+  console.log(`Stamped ${stamped} backlog job(s); ${already} already stamped; left ${skippedToday} posted-today job(s) as new.`);
+  console.log('Priming complete. Jobs posted today and onward will still announce at the noon run.');
   process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });
