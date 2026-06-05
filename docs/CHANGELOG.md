@@ -4,6 +4,10 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-05 — E2E test emails no longer hit Brevo (budget + reputation)
+
+The E2E suite signs in as `e2e-admin@churchopshub.com` / `e2e-member-a@…` / `e2e-member-b@…` — addresses with no real mailbox. Any flow that emails them (welcome, member-join notify, reminders, etc.) soft-bounces, burning the shared free Brevo budget (300/day across all 4 apps) and dinging sender reputation. `sendEmailSafe` now drops recipients matching `^e2e…@churchopshub.com` *before* the Brevo call (a new `isTestRecipient`, bucketed alongside the existing suppression list), so an all-test send is a clean no-op that never touches Brevo. Domain-scoped → a real church member with an "e2e…" address on their own provider is unaffected (verified: fxcc.org / gmail / icloud all pass through). Deployed all 30 functions; post-deploy probed the 3 webhooks (stripeWebhook 400, emailEventWebhook 401, twilioInbound 403-with-`invalid signature`-log) — all reached, invoker IAM intact. Part of a cross-app sweep (CourtClimber + RepCrew got equivalent guards; MasteryHelp needs none — it has no Brevo sender).
+
 ## 2026-06-05 — Per-church timezones for scheduled reminders/digests
 
 Scheduled user-facing sends were all hard-coded to `America/Chicago`, so an Eastern church saw the morning reminders at 9am, the new-jobs digest at 1pm, and the Monday task digest at 9am (everything an hour late). Made the send hour respect each church's own timezone.

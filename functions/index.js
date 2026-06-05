@@ -169,23 +169,37 @@ async function isEmailSuppressed(email) {
   }
 }
 
+// E2E test accounts (e2e-admin@churchopshub.com, e2e-member-a@…, etc.) have no
+// real mailbox, so sending to them just burns the shared Brevo budget (free
+// 300/day across all apps) and racks up soft bounces that ding sender reputation.
+// Domain-scoped to churchopshub.com so a real church member with an "e2e…"
+// address on their own provider is never affected.
+function isTestRecipient(addr) {
+  return /^e2e[\w.+-]*@churchopshub\.com$/i.test(String(addr || '').trim());
+}
+
 async function sendEmailSafe(msg) {
   if (!process.env.BREVO_API_KEY) return { skipped: 'no-email-key' };
   const recipients = Array.isArray(msg.to) ? msg.to : [msg.to];
   const filtered = [];
   const suppressed = [];
+  const testSkipped = [];
   for (const r of recipients) {
     const addr = typeof r === 'string' ? r : (r?.email || '');
-    if (await isEmailSuppressed(addr)) suppressed.push(addr);
+    if (isTestRecipient(addr)) testSkipped.push(addr);
+    else if (await isEmailSuppressed(addr)) suppressed.push(addr);
     else filtered.push(r);
+  }
+  if (testSkipped.length) {
+    console.log('[sendEmailSafe] skipped E2E test recipients', testSkipped.join(', '));
   }
   if (suppressed.length) {
     console.log('[sendEmailSafe] skipped suppressed', suppressed.join(', '));
   }
-  if (!filtered.length) return { skipped: 'suppressed', suppressed };
+  if (!filtered.length) return { skipped: 'suppressed', suppressed, testSkipped };
   const finalMsg = filtered.length === recipients.length ? msg : { ...msg, to: filtered };
   await sendViaBrevo(finalMsg);
-  return { sent: filtered.length, suppressed };
+  return { sent: filtered.length, suppressed, testSkipped };
 }
 
 let twilioClient;
