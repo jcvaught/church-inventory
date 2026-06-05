@@ -4,6 +4,17 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-05 — Per-church timezones for scheduled reminders/digests
+
+Scheduled user-facing sends were all hard-coded to `America/Chicago`, so an Eastern church saw the morning reminders at 9am, the new-jobs digest at 1pm, and the Monday task digest at 9am (everything an hour late). Made the send hour respect each church's own timezone.
+
+- **New church setting `config/settings.timeZone`** (IANA string, default `America/Chicago`). Set in **Settings → Church Settings** (admin only; new `<select>` with the 7 US zones, writes via `updateSettings`). Existing `config/settings` rules already allow admin/manager writes — no rules change.
+- **`functions/index.js`** — `sendJobReminders` (8am), `sendNewJobsDigest` (noon), and `sendTaskDueReminders` (Mon 8am) changed from once-daily crons to **`schedule: '0 * * * *'` (hourly)**. Each now resolves the owning church's timezone (`getChurchTimeZone`, cached per run) and **only acts on a church when its local hour — and weekday, for the weekly digest — matches the target** (`localPartsFor`). "Today" / the week window / idempotency stamps are computed **per church** in-loop, not once at the top. Collection-group queries widened to a ±1-day (reminders/digest) or [−91,+7]-day (task digest) **UTC** window (`utcYmdOffset` / `ymdAddDays`) so they cover "today" in every US zone; the exact church-local date match happens in the loop. Reuses existing `(status, scheduledDate)` + `tasks.dueDate` indexes — no new indexes.
+- **Idempotency preserved:** reminder stamps (`lastReminderSentDate` / `lastSmsReminderSentDate`) and the digest's `newJobsDigestSent` now key off the church-local date; an hourly run is a no-op for every hour except the church's target.
+- **`SCHEDULED_JOB_REGISTRY`** — those three moved to `cadence: 'hourly'` (new `CADENCE_STALE_MS.hourly = 3h`); `sendNewJobsDigest` added to the monitor (was previously unmonitored). `closePastJobs` / `processTrialExpirations` / `generateRecurringTemplateTasks` stay daily Central (not timezone-sensitive).
+- **Data:** Fairfax Church of Christ (`6cksNI9Uv8h0jXptdTESnXTXFgF3-church`) set to `America/New_York`.
+- `node --check` + `npm run build` clean; eslint 0 errors (baseline warnings only).
+
 ## 2026-06-05 — "Update available — Reload" prompt (stop manual refreshes after deploys)
 
 Users (and volunteers) were having to manually hard-refresh to pick up new deploys — a tab left open keeps running the old bundle. Added a proactive update prompt. **Why polling, not the service worker:** `public/sw.js` is byte-stable across deploys, so the browser never sees a "new" SW and `updatefound` never fires — a polled build id is the only reliable signal.

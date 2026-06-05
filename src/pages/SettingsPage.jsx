@@ -636,6 +636,33 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
         );
       })()}
 
+      {/* Church Settings — admin only. Timezone drives when scheduled
+          reminders/digests go out (job reminders, new-jobs digest, weekly task
+          digest all fire at their target hour in THIS timezone). */}
+      {isAdmin && (
+        <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
+          <h3 style={{ margin:"0 0 16px", fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Church Settings</h3>
+          <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Timezone</div>
+          <div style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:10 }}>
+            Scheduled emails and texts (shift reminders at 8am, the new-jobs digest at noon, the weekly task digest Monday at 8am) go out at these times in your church's timezone.
+          </div>
+          <select
+            value={settings?.timeZone ?? 'America/Chicago'}
+            onChange={(e) => updateSettings({ timeZone: e.target.value })}
+            style={{ ...inp, maxWidth:340 }}>
+            {[
+              { v:'America/New_York',    label:'Eastern (New York)' },
+              { v:'America/Chicago',     label:'Central (Chicago)' },
+              { v:'America/Denver',      label:'Mountain (Denver)' },
+              { v:'America/Phoenix',     label:'Arizona — no DST (Phoenix)' },
+              { v:'America/Los_Angeles', label:'Pacific (Los Angeles)' },
+              { v:'America/Anchorage',   label:'Alaska (Anchorage)' },
+              { v:'Pacific/Honolulu',    label:'Hawaii (Honolulu)' },
+            ].map(tz => <option key={tz.v} value={tz.v}>{tz.label}</option>)}
+          </select>
+        </div>
+      )}
+
       {/* Job Hub Settings — admin only, gated on jobs hub */}
       {isAdmin && hasJobsHub && (
         <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>

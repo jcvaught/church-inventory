@@ -76,6 +76,67 @@ function formatTimeRange(start, end) {
   return '';
 }
 
+// ─── Per-church scheduling timezones ────────────────────────────────────────
+// User-facing scheduled sends (job reminders, new-jobs digest, weekly task
+// digest) fire at a wall-clock hour in EACH church's own timezone. Those
+// functions run hourly (`0 * * * *`) and only process a church when its local
+// time matches the target hour. Churches without a configured timezone fall
+// back to Central, preserving the original single-`America/Chicago`-cron
+// behavior. Set per church at config/settings.timeZone (Settings → General);
+// IANA names only (e.g. 'America/New_York').
+const DEFAULT_CHURCH_TZ = 'America/Chicago';
+
+// Local wall-clock parts for an IANA timezone, using the toLocaleString idiom
+// used throughout this file. Returns { hour: 0-23, weekday: 0=Sun..6=Sat, ymd }.
+// Falls back to Central if the timezone string is malformed (toLocaleString
+// throws RangeError on an invalid IANA name).
+function localPartsFor(timeZone) {
+  let d;
+  try {
+    d = new Date(new Date().toLocaleString('en-US', { timeZone: timeZone || DEFAULT_CHURCH_TZ }));
+  } catch {
+    d = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_CHURCH_TZ }));
+  }
+  const pad = n => String(n).padStart(2, '0');
+  return {
+    hour: d.getHours(),
+    weekday: d.getDay(),
+    ymd: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+  };
+}
+
+// Cached per-church timezone reader (config/settings.timeZone). Pass a fresh
+// cache object per function invocation. Returns an IANA string (default Central).
+async function getChurchTimeZone(db, churchId, cache) {
+  if (cache[churchId] !== undefined) return cache[churchId];
+  let tz = DEFAULT_CHURCH_TZ;
+  try {
+    const s = await db.doc(`churches/${churchId}/config/settings`).get();
+    const v = s.exists ? s.data()?.timeZone : null;
+    if (v && typeof v === 'string') tz = v;
+  } catch { /* keep default */ }
+  cache[churchId] = tz;
+  return tz;
+}
+
+// Returns a UTC-anchored YYYY-MM-DD offset by `deltaDays`. Used to build a
+// date-range floor/ceiling wide enough to cover "today" in every US timezone
+// when the precise per-church date check happens later (US zones span <1 day).
+function utcYmdOffset(deltaDays) {
+  const d = new Date(Date.now() + deltaDays * 86400000);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
+// Adds `deltaDays` to a YYYY-MM-DD string and returns YYYY-MM-DD (UTC-anchored
+// so DST never shifts the result). Used to build per-church week windows.
+function ymdAddDays(ymdStr, deltaDays) {
+  const d = new Date(ymdStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
 // ─── Email suppression (F-38) ──────────────────────────────────────────────
 // Inbound bounce/spam/unsubscribe events land in emailSuppressions/{normalizedEmail}.
 // sendEmailSafe wraps sendViaBrevo and skips any suppressed recipient — caller
@@ -1404,42 +1465,33 @@ exports.clearCancellationStampOnReopen = onDocumentUpdated('churches/{churchId}/
 // covering the full upcoming week reduces send count by ~5–7× while
 // preserving the "don't let tasks slip" UX. Overdue + this-week's tasks
 // roll into one email per assignee.
-exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * 1', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendTaskDueReminders', async () => {
+exports.sendTaskDueReminders = onSchedule({ schedule: '0 * * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendTaskDueReminders', async () => {
   if (!emailConfigured()) { console.warn('sendTaskDueReminders: Brevo not configured, skipping.'); return; }
 
   const db = getFirestore();
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-  const pad = n => String(n).padStart(2, '0');
-  const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  const todayStr = ymd(now);
-  const endOfWeek = new Date(now); endOfWeek.setDate(now.getDate() + 6);
-  const endOfWeekStr = ymd(endOfWeek);
-  // Lower bound: ignore tasks overdue by more than 90 days — they are stale,
-  // not actionable reminders, and an unbounded floor lets the cross-tenant
-  // scan grow forever (audit M12). A .limit() caps it as a second safety net.
-  const floor = new Date(now); floor.setDate(now.getDate() - 90);
-  const floorStr = ymd(floor);
-
-  // Query tasks with a dueDate within [90 days ago … end of this week]
-  // (captures recent-overdue + due any day Mon–Sun). Status check below
-  // excludes Complete/Cancelled.
+  // Per-church timezone (2026-06-05): runs hourly; a church's weekly digest
+  // fires only when its LOCAL time is Monday 8am. The week window + "today"
+  // (overdue/today labels, idempotency stamp) are computed per church below.
+  // The query pulls a generous UTC window [today−91 … today+7] so it covers
+  // every church's [today−90 … +6] regardless of zone; precise per-church
+  // bounds are applied in the send loop.
   const snap = await db.collectionGroup('tasks')
-    .where('dueDate', '>=', floorStr)
-    .where('dueDate', '<=', endOfWeekStr)
+    .where('dueDate', '>=', utcYmdOffset(-91))
+    .where('dueDate', '<=', utcYmdOffset(7))
     .limit(5000)
     .get();
 
   if (snap.empty) return;
 
-  // Filter to active tasks with assignees; group by assignee uid → [taskInfo + taskRef]
-  const tasksByAssignee = {}; // uid → [{ taskNumber, name, dueDate, priority, status, churchId, _ref }]
+  // Filter to active tasks with assignees; group by assignee uid → [taskInfo + taskRef].
+  // (Idempotency is applied per church in the send loop, against each church's
+  // local today, since this hourly job spans churches in different timezones.)
+  const tasksByAssignee = {}; // uid → [{ taskNumber, name, dueDate, priority, status, churchId, lastReminderSentDate, _ref }]
   for (const taskDoc of snap.docs) {
     const task = taskDoc.data();
     if (!task.dueDate) continue;
     if (task.status === 'Complete' || task.status === 'Cancelled') continue;
     if (!task.assignees || task.assignees.length === 0) continue;
-    // Idempotency: skip if reminder already sent today
-    if (task.lastReminderSentDate === todayStr) continue;
     const churchId = taskDoc.ref.parent.parent.id;
     for (const assignee of task.assignees) {
       if (!assignee.uid) continue;
@@ -1451,6 +1503,7 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * 1', timeZone: 'Am
         priority: task.priority || 'Medium',
         status: task.status || 'Backlog',
         churchId,
+        lastReminderSentDate: task.lastReminderSentDate || '',
         _ref: taskDoc.ref,
       });
     }
@@ -1483,8 +1536,27 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * 1', timeZone: 'Am
     return subCache2[churchId];
   }
 
+  // Per-church scheduling state (2026-06-05). A church is "active" this hourly
+  // run only when its local time is Monday 8am. todayStr/floorStr/endOfWeekStr
+  // are that church's local week window for labeling + idempotency + stamping.
+  const tzCache = {};
+  const churchWeek = {}; // churchId -> { active, todayStr, floorStr, endOfWeekStr }
+  async function resolveChurchWeek(churchId) {
+    if (churchWeek[churchId] !== undefined) return churchWeek[churchId];
+    const parts = localPartsFor(await getChurchTimeZone(db, churchId, tzCache));
+    const active = parts.weekday === 1 && parts.hour === 8;
+    churchWeek[churchId] = {
+      active,
+      todayStr: parts.ymd,
+      floorStr: ymdAddDays(parts.ymd, -90),     // audit M12: ignore >90d-overdue
+      endOfWeekStr: ymdAddDays(parts.ymd, 6),   // through end of this week
+    };
+    return churchWeek[churchId];
+  }
+
   const emailTasks = [];
   const emailTaskRefs = []; // parallel to emailTasks: task refs included in each send
+  const stampDateByRef = new Map(); // task ref -> church-local todayStr to stamp on success
   for (const userSnap of userSnaps) {
     if (!userSnap.exists) continue;
     const user = userSnap.data();
@@ -1492,8 +1564,17 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * 1', timeZone: 'Am
     // Respect per-user hub access; F-21 helper treats admin/missing-array as access.
     if (!effectiveHasHub(user, 'tasks')) continue;
 
-    // Only send tasks belonging to the user's own church
-    const tasks = (tasksByAssignee[userSnap.id] || []).filter(t => t.churchId === user.churchId);
+    // Only process when this user's church is at its local Monday 8am.
+    const week = await resolveChurchWeek(user.churchId);
+    if (!week.active) continue;
+    const { todayStr, floorStr, endOfWeekStr } = week;
+
+    // Only send tasks belonging to the user's own church, within this church's
+    // local week window, not already reminded today (per-church idempotency).
+    const tasks = (tasksByAssignee[userSnap.id] || []).filter(t =>
+      t.churchId === user.churchId
+      && t.dueDate >= floorStr && t.dueDate <= endOfWeekStr
+      && t.lastReminderSentDate !== todayStr);
     if (tasks.length === 0) continue;
     if (!(await churchHasTasksHub(user.churchId))) continue;
     if (!(await notifEnabled(user.churchId))) continue;
@@ -1537,6 +1618,7 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * 1', timeZone: 'Am
 
     emailTasks.push(sendEmailSafe({ to: user.email, from: FROM, subject, html, text }));
     emailTaskRefs.push(tasks.map(t => t._ref));
+    tasks.forEach(t => stampDateByRef.set(t._ref, todayStr));
   }
 
   const results = await Promise.allSettled(emailTasks);
@@ -1551,7 +1633,7 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 8 * * 1', timeZone: 'Am
   });
   if (refsToStamp.size > 0) {
     const markBatch = db.batch();
-    refsToStamp.forEach(ref => markBatch.update(ref, { lastReminderSentDate: todayStr }));
+    refsToStamp.forEach(ref => markBatch.update(ref, { lastReminderSentDate: stampDateByRef.get(ref) }));
     await markBatch.commit();
   }
 }));
@@ -1600,22 +1682,21 @@ exports.closePastJobs = onSchedule({ schedule: '0 2 * * *', timeZone: 'America/C
 // ── sendJobReminders ──────────────────────────────────────────────────────
 // Runs every morning at 8:00 AM Central time.
 // Finds all jobs scheduled for today across all churches and emails each signup.
-exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendJobReminders', async () => {
+exports.sendJobReminders = onSchedule({ schedule: '0 * * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendJobReminders', async () => {
   if (!emailConfigured()) { console.warn('sendJobReminders: Brevo not configured, skipping.'); return; }
 
   const db = getFirestore();
-  const today = (() => {
-    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  })();
-
-  // Collection group query across all churches (requires composite index in firestore.indexes.json).
-  // .limit(5000) caps cross-tenant blast radius (audit 2026-05-23 perf H-4),
-  // matching the sendTaskDueReminders pattern. Idempotency stamps
-  // (lastReminderSentDate / lastSmsReminderSentDate) protect re-runs.
+  // Per-church timezone (2026-06-05): runs hourly; a church's morning reminders
+  // fire only when its LOCAL hour is 8am, so "today" is computed per church
+  // (churchToday) rather than once in Central. The query pulls a ±1-day UTC
+  // window so it covers "today" in every US zone; the exact church-local date
+  // match happens in the loop below. Uses the (status, scheduledDate) index.
+  // .limit(5000) caps cross-tenant blast radius (audit 2026-05-23 perf H-4).
+  // Idempotency stamps (lastReminderSentDate / lastSmsReminderSentDate) protect re-runs.
   const snap = await db.collectionGroup('jobListings')
-    .where('scheduledDate', '==', today)
     .where('status', '==', 'open')
+    .where('scheduledDate', '>=', utcYmdOffset(-1))
+    .where('scheduledDate', '<=', utcYmdOffset(1))
     .limit(5000)
     .get();
 
@@ -1643,8 +1724,23 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     return notifCache2[churchId];
   }
 
-  // Gather all unique user UIDs that need reminders, skipping churches without the Jobs hub
-  // and skipping jobs where a reminder was already sent today (idempotency)
+  // Per-church scheduling state (2026-06-05). A church is "active" this hourly
+  // run only when its local hour is 8am AND it has the hub + notifications on.
+  // churchToday holds that church's local YYYY-MM-DD for date match + stamping.
+  const tzCache = {};
+  const churchActive = {}; // churchId -> bool
+  const churchToday = {};  // churchId -> YYYY-MM-DD (church-local)
+  async function resolveChurch(churchId) {
+    if (churchActive[churchId] !== undefined) return;
+    const parts = localPartsFor(await getChurchTimeZone(db, churchId, tzCache));
+    churchToday[churchId] = parts.ymd;
+    churchActive[churchId] = parts.hour === 8
+      && (await churchHasJobsHub(churchId))   // hub active
+      && (await jobNotifEnabled(churchId));   // F-04: notifications not disabled
+  }
+
+  // Gather all unique user UIDs that need reminders, skipping churches not at
+  // their local 8am and jobs not scheduled for that church's today / already sent.
   const remindersByUid = {}; // uid → [{ title, scheduledTime, location, pay, churchId, _ref }]
   // Audit M2: email and SMS are made idempotent on SEPARATE stamps
   // (lastReminderSentDate / lastSmsReminderSentDate) so a crash mid-channel
@@ -1656,10 +1752,13 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
     const job = jobDoc.data();
     const churchId = jobDoc.ref.parent.parent.id;
 
-    // Skip if this church doesn't have the Jobs hub active
-    if (!(await churchHasJobsHub(churchId))) continue;
-    // F-04: skip if church has disabled notifications
-    if (!(await jobNotifEnabled(churchId))) continue;
+    // Skip churches not at their local 8am (or without hub / notifications).
+    await resolveChurch(churchId);
+    if (!churchActive[churchId]) continue;
+    const today = churchToday[churchId];
+    // Only jobs scheduled for this church's local today (the ±1-day query
+    // window pulled neighbors; this is the exact match).
+    if (job.scheduledDate !== today) continue;
 
     // Idempotency: skip the job only if BOTH channels already fired today
     // (guards against cron retry / redeploy).
@@ -1778,10 +1877,12 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
   }
 
   // Stamp each channel on its OWN field, only for jobs where that channel had
-  // ≥1 successful send (F-07 for email; audit M2 keeps SMS independent).
+  // ≥1 successful send (F-07 for email; audit M2 keeps SMS independent). The
+  // stamp uses that job's church-local today (resolveChurch ran for every ref
+  // gathered above, so churchToday is populated).
   await Promise.allSettled([
-    ...[...jobsWithSuccesses].map(ref => ref.update({ lastReminderSentDate: today })),
-    ...[...smsJobSuccesses].map(ref => ref.update({ lastSmsReminderSentDate: today })),
+    ...[...jobsWithSuccesses].map(ref => ref.update({ lastReminderSentDate: churchToday[ref.parent.parent.id] })),
+    ...[...smsJobSuccesses].map(ref => ref.update({ lastSmsReminderSentDate: churchToday[ref.parent.parent.id] })),
   ]);
 }));
 
@@ -1798,32 +1899,31 @@ exports.sendJobReminders = onSchedule({ schedule: '0 8 * * *', timeZone: 'Americ
 // On the FIRST run, existing upcoming jobs are stamped too — but with zero
 // opted-in users yet, nothing sends, so the backlog is "consumed" silently and
 // the first opt-in only ever receives jobs posted after they opted in.
-exports.sendNewJobsDigest = onSchedule({ schedule: '0 12 * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendNewJobsDigest', async () => {
+exports.sendNewJobsDigest = onSchedule({ schedule: '0 * * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendNewJobsDigest', async () => {
   const tw = getTwilioClient();
   if (!tw || !(TWILIO_MSID || TWILIO_FROM)) { console.warn('sendNewJobsDigest: Twilio not configured, skipping.'); return; }
 
   const db = getFirestore();
-  const todayStr = (() => {
-    const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  })();
-
-  // Upcoming, still-open jobs across all churches — reuses the existing
-  // (status, scheduledDate) collection-group index. .limit(5000) caps the
-  // cross-tenant blast radius (matches sendJobReminders, audit perf H-4).
+  // Per-church timezone (2026-06-05): runs hourly; a church's digest goes out
+  // only when its LOCAL hour is noon. "Upcoming" is judged against each church's
+  // own today (churchToday) in the loop. The query floor is a generous −1-day
+  // UTC offset so no church's still-upcoming job is excluded near a date boundary.
+  // Reuses the (status, scheduledDate) collection-group index. .limit(5000) caps
+  // the cross-tenant blast radius (matches sendJobReminders, audit perf H-4).
   const snap = await db.collectionGroup('jobListings')
     .where('status', '==', 'open')
-    .where('scheduledDate', '>=', todayStr)
+    .where('scheduledDate', '>=', utcYmdOffset(-1))
     .limit(5000)
     .get();
   if (snap.empty) return;
 
-  // Keep only not-yet-announced jobs, grouped by church.
-  const newByChurch = {}; // churchId -> [{ ref }]
+  // Keep only not-yet-announced jobs, grouped by church (carry scheduledDate so
+  // the per-church "upcoming for this church's today" filter can run below).
+  const newByChurch = {}; // churchId -> [{ ref, scheduledDate }]
   for (const d of snap.docs) {
     if (d.data().newJobsDigestSent) continue;
     const churchId = d.ref.parent.parent.id;
-    (newByChurch[churchId] = newByChurch[churchId] || []).push({ ref: d.ref });
+    (newByChurch[churchId] = newByChurch[churchId] || []).push({ ref: d.ref, scheduledDate: d.data().scheduledDate || '' });
   }
   if (Object.keys(newByChurch).length === 0) return;
 
@@ -1853,8 +1953,18 @@ exports.sendNewJobsDigest = onSchedule({ schedule: '0 12 * * *', timeZone: 'Amer
 
   const sender = TWILIO_MSID ? { messagingServiceSid: TWILIO_MSID } : { from: TWILIO_FROM };
   const stampedRefs = new Set();
+  const tzCache = {};
 
-  for (const [churchId, jobs] of Object.entries(newByChurch)) {
+  for (const [churchId, allJobs] of Object.entries(newByChurch)) {
+    // Skip (WITHOUT stamping) churches not at their local noon — they get their
+    // digest when their own clock reaches 12 on a later hourly run.
+    if (localPartsFor(await getChurchTimeZone(db, churchId, tzCache)).hour !== 12) continue;
+    const churchToday = localPartsFor(await getChurchTimeZone(db, churchId, tzCache)).ymd;
+    // Only jobs still upcoming for THIS church (the −1-day query floor may have
+    // pulled in a job that is already past in this church's timezone).
+    const jobs = allJobs.filter(j => j.scheduledDate >= churchToday);
+    if (jobs.length === 0) continue;
+
     // Skip (WITHOUT stamping) churches that can't currently send — they may
     // re-qualify later; the jobs simply age out as they pass or close.
     if (!(await churchHasJobsHub(churchId))) continue;
@@ -2584,13 +2694,18 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
 // groups them and a single Sentry alert rule can page on any of them.
 const SCHEDULED_JOB_REGISTRY = [
   { name: 'processTrialExpirations',       cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },
-  { name: 'sendTaskDueReminders',          cadence: 'weekly', maxRunMs:  10 * 60 * 1000 },
+  // 2026-06-05: the three user-facing senders now run hourly and gate on each
+  // church's local target hour (per-church timezone), so they write a heartbeat
+  // every hour — monitored on the tighter 'hourly' window.
+  { name: 'sendTaskDueReminders',          cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
+  { name: 'sendJobReminders',              cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
+  { name: 'sendNewJobsDigest',             cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'closePastJobs',                 cadence: 'daily',  maxRunMs:   5 * 60 * 1000 },
-  { name: 'sendJobReminders',              cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },
   { name: 'generateRecurringTemplateTasks', cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },
 ];
-// Daily gets a 2h grace beyond 24h; weekly gets a 24h grace beyond 7d.
-const CADENCE_STALE_MS = { daily: 26 * 3600 * 1000, weekly: (7 * 24 + 24) * 3600 * 1000 };
+// Hourly gets a 2h grace beyond 1h; daily gets a 2h grace beyond 24h; weekly
+// gets a 24h grace beyond 7d (weekly retained for any future weekly job).
+const CADENCE_STALE_MS = { hourly: 3 * 3600 * 1000, daily: 26 * 3600 * 1000, weekly: (7 * 24 + 24) * 3600 * 1000 };
 
 exports.monitorScheduledJobs = onSchedule({ schedule: '0 * * * *', timeZone: 'America/Chicago' }, async () => {
   const db = getFirestore();
