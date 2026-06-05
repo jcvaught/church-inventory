@@ -66,7 +66,8 @@ src/
 ├── main.jsx                   ← React entry point; initializes Sentry (@sentry/react v10) with browserTracing + captureConsole({levels:['error']}) — defaults also catch window.onerror, unhandled rejections, and breadcrumbs. Routes `?jobs=` URLs to a minimal tree (firebasePublic + PublicJobsPage) BEFORE importing App.jsx — cut anonymous bundle from ~2 MB to ~480 KB raw
 ├── hooks/
 │   ├── useMobile.js           ← MobileCtx + useWindowWidth (breakpoint 768px)
-│   └── useSubscription.js     ← Subscription state hook: hasHub(), canAddUser(), isTrialing()
+│   ├── useSubscription.js     ← Subscription state hook: hasHub(), canAddUser(), isTrialing()
+│   └── useVersionCheck.js     ← Polls /version.json vs the bundle's `__BUILD_ID__` (vite define); flags a new deploy. Powers UpdateBanner. Polling, not SW — sw.js is byte-stable across deploys so `updatefound` never fires
 ├── components/
 │   ├── brand/
 │   │   ├── tokens.js          ← B, f1, f2, inp, btnP, btnS, btnD
@@ -81,7 +82,8 @@ src/
 │   │   ├── StatusDot.jsx      ← Colored dot + accessible label (visible or sr-only) for status indicators; default role="img" + aria-label. Stops color-only conveyance (audit 2026-05-24 Phase 4)
 │   │   ├── EmojiIcon.jsx      ← Wraps an emoji in either decorative (aria-hidden) or semantic (role="img" + aria-label) mode. Use whenever an emoji appears in JSX (audit 2026-05-24 Phase 4)
 │   │   └── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive. Optional `previewSrc`/`previewAlt` renders a hub screenshot above the card with a `mask-image` bottom fade (audit 2026-05-24 Phase 6). Subscribe + Contact buttons fire `window.posthog?.capture('upgrade_gate_click', { hubName, action })` — telemetry is try/catch'd so it never blocks Stripe checkout. JPEG previews live in `public/upgrade-previews/<hub>.jpg`.
-│   └── SEO.jsx                ← Reusable SEO component (react-helmet-async); sets title, description, canonical, OG tags, Twitter card, JSON-LD
+│   ├── SEO.jsx                ← Reusable SEO component (react-helmet-async); sets title, description, canonical, OG tags, Twitter card, JSON-LD
+│   └── UpdateBanner.jsx       ← "Update available — Reload / Later" card (bottom corner, clears mobile nav); shows when useVersionCheck detects a newer deploy. Mounted once in main.jsx (out of the anonymous ?jobs= path)
 ├── pages/
 │   ├── LandingPage.jsx        ← Marketing landing page; includes SoftwareApplication JSON-LD schema and pain points copy
 │   ├── HelpPage.jsx           ← User-facing help center (no auth required); shown when ?help param present; 12 sections, accordion UI, responsive sidebar
