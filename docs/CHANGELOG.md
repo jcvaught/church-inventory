@@ -4,6 +4,18 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-05 — "Update available — Reload" prompt (stop manual refreshes after deploys)
+
+Users (and volunteers) were having to manually hard-refresh to pick up new deploys — a tab left open keeps running the old bundle. Added a proactive update prompt. **Why polling, not the service worker:** `public/sw.js` is byte-stable across deploys, so the browser never sees a "new" SW and `updatefound` never fires — a polled build id is the only reliable signal.
+
+- **`vite.config.js`** — a stable per-deploy `BUILD_ID` (`VERCEL_GIT_COMMIT_SHA` on Vercel, timestamp locally), baked into the bundle via `define: { __BUILD_ID__ }` AND emitted to `dist/version.json` via a tiny `emit-version-json` Rollup plugin (`this.emitFile`). Same value both places.
+- **`src/version.js`** — exports `BUILD_ID` (the id this tab was built with; `'dev'` fallback).
+- **`src/hooks/useVersionCheck.js`** — polls `/version.json` (`cache:'no-store'`, `?ts=` cache-bust) every 5 min + on focus/visibilitychange; flags `updateAvailable` when the live id differs. No-ops in dev / on fetch failure. `reload()` nudges `serviceWorker.update()` then `location.reload()` (belt-and-suspenders; the SW is already network-first). Dismiss hides until an *even newer* build ships.
+- **`src/components/UpdateBanner.jsx`** — non-blocking fixed bottom-corner card ("Update available — Reload / Later"); mobile position clears the bottom nav. Mounted once in `main.jsx`'s main-app branch (overlays every state; kept out of the anonymous `?jobs=` render path).
+- Complements the existing stale-chunk auto-heal (`importWithRetry` + `ChunkErrorBoundary`): that catches the *breakage* case (old tab loads a missing chunk); this is the *proactive* nudge for a working old tab.
+- Note: this deploy's own users won't see a banner for *this* release (they lack the polling code until they load it) — it takes effect from the next deploy onward.
+- `npm run build` clean (`dist/version.json` emitted, build id baked into the bundle); eslint 0 errors.
+
 ## 2026-06-05 — Jobs Hub: new-shift SMS digest (separate opt-in)
 
 New feature: a once-daily **noon Central** SMS digest telling volunteers when new shifts are posted at their church, so they can sign up. Built on a **separate** opt-in from the existing morning shift-reminder SMS (distinct consent category — required before sending, since the originally-registered consent covers reminders only).

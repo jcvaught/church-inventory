@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import * as Sentry from '@sentry/react';
 import { HelmetProvider } from 'react-helmet-async';
 import { importWithRetry } from './utils/lazyWithRetry.js';
+import UpdateBanner from './components/UpdateBanner.jsx';
 
 Sentry.init({
   dsn: "https://92a9eb2a55b9544dd9e673291f57eff8@o4511040580091904.ingest.us.sentry.io/4511040584089600",
@@ -112,6 +113,7 @@ if (publicJobsChurchId) {
       <React.StrictMode>
         <HelmetProvider>
           <App />
+          <UpdateBanner />
         </HelmetProvider>
       </React.StrictMode>
     );
