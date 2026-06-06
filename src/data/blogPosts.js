@@ -1,5 +1,72 @@
 export const BLOG_POSTS = [
   {
+    slug: 'volunteer-coordinator-burnout-warning-signs',
+    title: "Volunteer Coordinator Burnout: 5 Warning Signs",
+    description: "Volunteer coordinator burnout rarely announces itself. It looks like dedication right up until the coordinator quits. Here are five early warning signs — and the systems that actually relieve the pressure instead of just admiring it.",
+    date: '2026-06-09',
+    keywords: 'volunteer coordinator burnout, church volunteer coordinator, volunteer coordinator stress, signs of burnout, church volunteer management, volunteer coordinator overwhelmed, church staff burnout, volunteer ministry burnout',
+    related: ['volunteer-coordinator-role-guide', 'church-volunteer-scheduling-system-that-lasts', 'church-workday-planning'],
+    content: `
+## The Quietest Resignation in the Church
+
+Volunteer coordinator burnout almost never looks like burnout while it's happening. It looks like dedication. The coordinator is the first to arrive, the last to leave, the one answering texts at 9 PM, the one who "just handled it" when two greeters didn't show. From the outside, that's a model volunteer. From the inside, it's a countdown.
+
+The danger is that the warning signs of coordinator burnout are camouflaged as virtues. By the time it's obvious — when the coordinator sends the email that starts with "I've been praying about this and I think it's time for me to step back" — the church has usually lost not just a person, but the entire informal system that lived in that person's head. The sign-up sheets nobody else understands. The mental list of who's reliable. The relationships that made people say yes.
+
+This post is about catching it earlier. Here are five warning signs that a volunteer coordinator is heading toward burnout, what each one actually signals, and what relieves the pressure — because telling an overwhelmed coordinator to "practice self-care" is not a system, and systems are what's missing.
+
+If you're new to this role or trying to understand its true scope, start with our [complete guide to the church volunteer coordinator role](/blog/volunteer-coordinator-role-guide). This post assumes the role is already filled — and at risk.
+
+## Warning Sign #1: They've Become the Single Point of Failure
+
+**What it looks like:** Nobody else knows the schedule. When the coordinator is sick, on vacation, or simply unreachable, ministries scramble. The nursery doesn't know who's covering. The information lives in one person's phone, one person's notebook, one person's memory.
+
+**What it actually signals:** The role has fused with the person. This feels like indispensability — and indispensability feels good for a while — but it's the single most reliable predictor of burnout. A coordinator who cannot take a Sunday off without the system collapsing is not empowered; they're trapped. They can't get sick. They can't rest. Every absence creates a crisis they'll have to clean up when they return, so they stop being absent, which accelerates the exhaustion.
+
+**What relieves it:** Get the schedule out of the coordinator's head and into a shared system any leader can read. The test is simple: *if the coordinator vanished for two weeks, could someone else see who's serving when?* If the answer is no, that's the first thing to fix — not because the coordinator is leaving, but so that they safely can. A durable, visible [volunteer scheduling system](/blog/church-volunteer-scheduling-system-that-lasts) is the structural antidote to single-point-of-failure burnout.
+
+## Warning Sign #2: They're Doing the Work Instead of Coordinating It
+
+**What it looks like:** The coordinator is supposed to organize volunteers. Instead, they're *being* the volunteer — running the check-in desk themselves because it's "easier than finding someone," setting up chairs because the team is short, covering the shift nobody filled. The coordination role has quietly collapsed into a doing role.
+
+**What it actually signals:** The recruiting and scheduling pipeline isn't producing enough reliable people, so the coordinator is absorbing the gap with their own body. This is the most common burnout pattern in small churches, and it's a death spiral: the more they personally cover, the less time they have to build the pipeline that would stop them from having to cover. They're too busy bailing to fix the leak.
+
+**What relieves it:** Protect the coordinator's actual job. When a shift goes unfilled, the answer can't default to "the coordinator does it." Sometimes the right move is to let a gap be visible — an empty slot that leadership sees — rather than have it silently swallowed. A coordinator who personally backstops every hole teaches the whole church that volunteering is optional because someone will always cover. Make the gaps visible, and the recruiting conversation becomes everyone's, not just the coordinator's.
+
+## Warning Sign #3: Every "No" Lands on Them Personally
+
+**What it looks like:** The coordinator takes cancellations and no-shows as personal failures. A volunteer backs out and the coordinator's mood drops for the day. They start over-functioning to compensate — sending more reminders, more thank-yous, more individual check-ins — and the emotional labor balloons.
+
+**What it actually signals:** The coordinator has internalized responsibility for other people's reliability. This is emotionally unsustainable, because they're carrying outcomes they don't control. Each no-show feels like proof they're not doing enough, when in reality, no-shows are a normal feature of volunteer ministry that a system absorbs — not a verdict on the coordinator's worth.
+
+**What relieves it:** Separate the person from the process. Cancellations and no-shows should be handled by routine — a clear backup list, an automatic reminder the coordinator didn't have to send by hand, an understood norm that volunteers find their own replacement when they can't make it. When the system handles the friction, the coordinator stops absorbing it as personal rejection. The goal is to make reliability a property of the structure, not a referendum on the coordinator's relationships.
+
+## Warning Sign #4: They've Stopped Asking for Help
+
+**What it looks like:** Early on, the coordinator asked questions, floated ideas, requested support. Now they've gone quiet. They've stopped bringing problems to leadership. When you ask how it's going, you get "fine" or "busy, but we're managing." The requests for help have dried up — not because the need went away, but because they've concluded help isn't coming.
+
+**What it actually signals:** This is the most dangerous sign on the list, because it looks like everything is fine. Silence reads as stability. In reality, a coordinator who has stopped asking for help has usually stopped believing help is available. They've moved from "stretched but supported" to "alone with it." The next step after this one is frequently the resignation email.
+
+**What relieves it:** Leadership has to initiate. Don't wait for the overwhelmed coordinator to raise their hand — they've already stopped. Schedule a regular, low-stakes check-in that isn't tied to a crisis. Ask specific questions: *What took the most time this month? What would you hand off if you could? What's one thing that would make next month easier?* And then actually act on one answer. A check-in that produces no change teaches the coordinator, again, that help isn't coming.
+
+## Warning Sign #5: The Joy Is Gone
+
+**What it looks like:** Volunteer coordination is, at its best, a relational and even joyful ministry — it's matching people to meaningful service and watching them flourish. A burning-out coordinator has lost that. The role has become pure logistics, pure grind. They talk about volunteers as slots to fill, not people to develop. The warmth that made them good at the job has been crowded out by the administrative load.
+
+**What it actually signals:** Administrative overload has consumed the relational core of the role. The coordinator went into this to connect people with purpose; now they spend their hours on spreadsheets, reminders, and gap-filling, with no margin left for the actual ministry. When the meaningful part is gone and only the mechanical part remains, burnout is no longer approaching — it's arrived.
+
+**What relieves it:** Take the mechanical load off so the relational work can return. Every hour the coordinator spends manually tracking who signed up, sending one-by-one reminders, and reconstructing the schedule from texts is an hour stolen from the part of the role that gives life. This is precisely where the right tools earn their place — not to make the coordinator more "productive," but to give them back the margin to do the human part of the job they actually came for.
+
+## Burnout Is a Systems Problem, Not a Willpower Problem
+
+The reflex when a coordinator is struggling is to address it personally: encourage them, thank them more, tell them to rest. Those things matter, but they don't fix the cause. Every warning sign above traces back to the same root — **the coordinator is personally absorbing work that a system should carry.** The schedule lives in their head. The gaps get filled with their body. The reliability rides on their relationships. The administrative load eats their margin.
+
+You cannot encourage your way out of a structural problem. The way you keep a great volunteer coordinator is by building the systems that let them be a coordinator instead of a single point of failure — a visible shared schedule, a recruiting pipeline that isn't them, automatic reminders they don't send by hand, and a leadership rhythm that checks in before the crisis.
+
+A coordinator surrounded by good systems can do this role for years and love it. A coordinator carrying the whole thing alone will burn out — and it won't look like burnout until the day they're gone. Watch for the five signs. Then fix the structure, not the person.
+`,
+  },
+  {
     slug: 'first-30-days-church-facilities-manager',
     title: "The First 30 Days as a Church Facilities Manager",
     description: "Most new church facilities managers spend their first month reactively — answering the phone, chasing tickets, and meeting whoever shows up. Here's a week-by-week framework for using your first 30 days to set up the systems that make the next two years possible.",
