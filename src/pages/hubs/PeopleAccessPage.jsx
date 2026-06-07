@@ -31,7 +31,7 @@ const BUILT_IN_TYPES = [
 
 export function PeopleAccessPage({ store, userProfile }) {
   const {
-    accessPeople, accessRecords, settings, users,
+    accessPeople, accessRecords, settings, users, jobListings,
     addAccessPerson, updateAccessPerson, archiveAccessPerson,
     linkAccessPerson, unlinkAccessPerson,
     addAccessRecord, updateAccessRecord, deleteAccessRecord,
@@ -129,6 +129,64 @@ export function PeopleAccessPage({ store, userProfile }) {
     if (statuses.some(s => s === 'warning')) return 'warning';
     return null;
   }
+
+  // ── Serving-readiness derivations (Readiness view) ──
+  // One row per tracked requirement: the three built-ins plus each custom
+  // requirement (matched by requirementId). Per (person, requirement) we reduce
+  // their records to a single status — mirrors the server's isAccessEligible:
+  // a non-expired record means eligible; 'ok' is clear, warning/critical is
+  // valid-but-renewing, expired means all records lapsed, none means no record.
+  const readinessRows = [
+    { key: 'background_check', label: 'Background Check', icon: '🔍', match: r => r.type === 'background_check' },
+    { key: 'key_assignment',  label: 'Key / Fob',        icon: '🔑', match: r => r.type === 'key_assignment' },
+    { key: 'certification',   label: 'Certification',    icon: '🎓', match: r => r.type === 'certification' },
+    ...customRequirements.map(req => ({
+      key: 'custom:' + req.id, label: req.name, icon: '✅',
+      match: r => r.type === 'custom' && r.requirementId === req.id,
+    })),
+  ];
+  const activePeople = allPeople.filter(p => p.active);
+  function requirementStatusForPerson(personId, row) {
+    const recs = allRecords.filter(r => r.personId === personId && row.match(r));
+    if (recs.length === 0) return 'none';
+    const statuses = recs.map(r => r.expiryDate ? getExpiryStatus(r.expiryDate) : 'ok');
+    if (statuses.includes('ok')) return 'ok';
+    if (statuses.includes('warning')) return 'warning';
+    if (statuses.includes('critical')) return 'critical';
+    return 'expired'; // every record of this type is expired
+  }
+  // Which requirement types are gating upcoming shifts (badge them).
+  const todayStr = localDateStr(today);
+  const requiredByJobs = new Set();
+  (jobListings || [])
+    .filter(j => (j.scheduledDate || '') >= todayStr && j.status !== 'cancelled')
+    .forEach(j => (j.requiredAccessTypes || []).forEach(t => requiredByJobs.add(t)));
+  // Readiness tallies per requirement row.
+  const readinessTallies = readinessRows.map(row => {
+    const t = { ok: 0, renewing: 0, expired: 0, none: 0 };
+    activePeople.forEach(p => {
+      const s = requirementStatusForPerson(p._docId, row);
+      if (s === 'ok') t.ok++;
+      else if (s === 'warning' || s === 'critical') t.renewing++;
+      else if (s === 'expired') t.expired++;
+      else t.none++;
+    });
+    return { ...row, ...t, requiredForShifts: requiredByJobs.has(row.key) };
+  });
+  // Expiry timeline: everything expiring within 90 days (or already expired).
+  const in90 = new Date(today); in90.setDate(in90.getDate() + 90);
+  function withinTimeline(expiryDate) {
+    if (!expiryDate) return false;
+    const [y, m, d] = expiryDate.split('-').map(Number);
+    return new Date(y, m - 1, d) <= in90;
+  }
+  const timelineRecords = allRecords
+    .filter(r => withinTimeline(r.expiryDate))
+    .sort((a, b) => (a.expiryDate || '').localeCompare(b.expiryDate || ''));
+  const peopleNeedingAttention = activePeople.filter(p => {
+    const s = getPersonExpiryStatus(p._docId);
+    return s === 'critical' || s === 'warning';
+  }).length;
 
   // ── Handlers ──
   function openAddPerson() {
@@ -447,7 +505,7 @@ export function PeopleAccessPage({ store, userProfile }) {
 
       {/* ── View Toggle ── */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: B.sand, borderRadius: 12, padding: 4, width: 'fit-content' }}>
-        {[['people', '👥 People'], ['requirements', '📋 Requirements'], ['timesheet', '⏱️ Timesheet']].map(([k, label]) => (
+        {[['people', '👥 People'], ['readiness', '✅ Readiness'], ['requirements', '📋 Requirements'], ['timesheet', '⏱️ Timesheet']].map(([k, label]) => (
           <button key={k} onClick={() => setView(k)} style={{
             padding: '7px 18px', borderRadius: 9, border: 'none', cursor: 'pointer',
             fontSize: 13, fontWeight: 600, fontFamily: f1,
@@ -457,6 +515,97 @@ export function PeopleAccessPage({ store, userProfile }) {
           }}>{label}</button>
         ))}
       </div>
+
+      {/* ═══════════════════════════════════════ READINESS VIEW ════════════ */}
+      {view === 'readiness' && (
+        <div>
+          {activePeople.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: B.textLight, fontFamily: f2 }}>
+              Add people and compliance records to see serving readiness here.
+            </div>
+          ) : (
+            <>
+              {/* Summary stats */}
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+                {[
+                  { label: 'Active People', value: activePeople.length, color: B.navy },
+                  { label: 'Need Attention', value: peopleNeedingAttention, color: peopleNeedingAttention > 0 ? B.red : B.teal },
+                  { label: 'Expiring / Expired (90d)', value: timelineRecords.length, color: timelineRecords.length > 0 ? B.gold : B.teal },
+                ].map(s => (
+                  <div key={s.label} style={{ flex: '1 1 160px', background: B.white, borderRadius: 12, padding: '14px 18px', border: '1px solid ' + B.sand }}>
+                    <div style={{ fontSize: 24, fontWeight: 700, fontFamily: f1, color: s.color }}>{s.value}</div>
+                    <div style={{ fontSize: 12, color: B.textLight, fontFamily: f1, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6 }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* By-requirement cross-tab */}
+              <div style={{ background: B.white, borderRadius: 14, padding: '18px 20px', border: '1px solid ' + B.sand, marginBottom: 20 }}>
+                <h3 style={{ margin: '0 0 4px', fontFamily: f1, fontSize: 15, fontWeight: 700, color: B.navy }}>Readiness by Requirement</h3>
+                <p style={{ margin: '0 0 14px', fontSize: 12, color: B.textLight, fontFamily: f2 }}>
+                  Across {activePeople.length} active {activePeople.length === 1 ? 'person' : 'people'}. “Renewing” means still valid but expiring within 30 days.
+                </p>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: B.warmGray }}>
+                        {['Requirement', 'Clear', 'Renewing', 'Expired', 'No record'].map((h, i) => (
+                          <th key={h} style={{ padding: '8px 12px', textAlign: i === 0 ? 'left' : 'center', fontFamily: f1, fontSize: 11, fontWeight: 600, color: B.textLight, textTransform: 'uppercase', letterSpacing: 0.8, whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {readinessTallies.map((row, i) => (
+                        <tr key={row.key} style={{ borderTop: '1px solid ' + B.sand, background: i % 2 === 0 ? B.white : B.cream }}>
+                          <td style={{ padding: '9px 12px', color: B.textDark }}>
+                            <EmojiIcon emoji={row.icon} decorative /> {row.label}
+                            {row.requiredForShifts && (
+                              <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: B.teal, background: B.tealPale || '#E6F4F1', borderRadius: 10, padding: '2px 8px', textTransform: 'uppercase', letterSpacing: 0.5 }}>Required for shifts</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '9px 12px', textAlign: 'center', color: B.teal, fontWeight: 600 }}>{row.ok || '—'}</td>
+                          <td style={{ padding: '9px 12px', textAlign: 'center', color: row.renewing > 0 ? B.gold : B.textLight, fontWeight: 600 }}>{row.renewing || '—'}</td>
+                          <td style={{ padding: '9px 12px', textAlign: 'center', color: row.expired > 0 ? B.red : B.textLight, fontWeight: 600 }}>{row.expired || '—'}</td>
+                          <td style={{ padding: '9px 12px', textAlign: 'center', color: B.textMid }}>{row.none || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Expiry timeline */}
+              <div style={{ background: B.white, borderRadius: 14, padding: '18px 20px', border: '1px solid ' + B.sand }}>
+                <h3 style={{ margin: '0 0 14px', fontFamily: f1, fontSize: 15, fontWeight: 700, color: B.navy }}>Expiry Timeline — next 90 days</h3>
+                {timelineRecords.length === 0 ? (
+                  <p style={{ fontSize: 13, color: B.textLight, fontFamily: f2, margin: 0 }}>Nothing expiring in the next 90 days. 🎉</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {timelineRecords.map(r => {
+                      const status = getExpiryStatus(r.expiryDate);
+                      const label = status === 'expired' ? 'Expired' : status === 'critical' ? '≤7 days' : status === 'warning' ? '≤30 days' : 'Upcoming';
+                      const color = expiryColor(status);
+                      return (
+                        <div key={r._docId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px', borderRadius: 8, background: B.cream, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                            <EmojiIcon emoji={TYPE_ICONS[r.type] || '✅'} decorative />
+                            <span style={{ fontWeight: 600, color: B.textDark }}>{r.personName || 'Unknown'}</span>
+                            <span style={{ fontSize: 12, color: B.textLight }}>· {TYPE_LABELS[r.type] || 'Record'}{r.type === 'certification' && r.certType ? ` (${r.certType})` : ''}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: 12, color: B.textMid }}>{r.expiryDate}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color, background: B.white, border: '1px solid ' + color, borderRadius: 10, padding: '2px 8px', whiteSpace: 'nowrap' }}>{label}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════ TIMESHEET VIEW ════════════ */}
       {view === 'timesheet' && <Timesheet store={store} userProfile={userProfile} canEdit={canEdit} />}
