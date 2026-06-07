@@ -174,10 +174,10 @@ One "Work" area, several views (a church only sees the slices it uses — no con
 | Tier | What | Price |
 |---|---|---|
 | **Free** | Inventory (items, supplies, reservations) — the "stuff is free" promise, forever | **$0** |
-| **ChurchOpsHub** (paid) | *Everything else*: Work (tasks + maintenance + contractor + shifts), People Access, Insights, Accountability — unlimited or generous users | **~$19/mo flat** (recommend; was $29 all-in) — or **$190/yr** |
+| **ChurchOpsHub** (paid) | *Everything else*: Work (tasks + maintenance + contractor + shifts), People Access, Insights, Accountability — unlimited or generous users | **$15/mo flat** (LOCKED 2026-06-06) — or **$150/yr** |
 
 - **Kills:** per-hub à-la-carte, the Team seat tiers (just include generous/unlimited users), and the Coordination Hub as a SKU (fold bundles into Inventory, move the email toggle into the notification-preferences surface).
-- **Why $19:** a clean "we simplified *and* dropped the price" story, psychologically under $20, still ~80% under eSPACE's cheapest single module ($99/mo). $15 is the more aggressive adoption play; $29→$19 is the more conservative one. **Owner's call** — see open decisions.
+- **$15 LOCKED (2026-06-06).** Down from the $29 all-in — a clean "we simplified *and* dropped the price" story, under $20, still ~85% under eSPACE's cheapest single module ($99/mo). Adoption-first while the product matures.
 - This is framed as **launch-phase pricing to grow the base** while the unified product and premier features mature; revisit once they land.
 
 ### 7.3 Billing schema & access-control change
@@ -218,6 +218,32 @@ Flatten `config/subscription` to `plan`, collapse `hasHub`→`isPro`, decouple `
 
 ---
 
+## 8.5 Production cutover safety — Tasks AND Jobs are in ACTIVE daily use
+
+⚠️ **Hard constraint (owner, 2026-06-06):** multiple staff (incl. John) use Tasks daily, and the Jobs Hub has live shifts with real volunteers signed up. The migration **cannot lose or corrupt in-progress work, and cannot interrupt a volunteer's upcoming shift / its reminders.** The data-migrating phases (P2, P3) run in a **scheduled maintenance window — Thursday evening** — never ad-hoc.
+
+### The cutover pattern (per migrating phase: backfill → verify → flip)
+
+1. **Backfill while the old collection still serves the app.** Run the idempotent Admin SDK migration to copy `tasks`/`jobListings` → `workItems`. The app keeps reading the *old* collections — users see no change. Verify counts + spot-check records.
+2. **Maintenance window (Thursday evening).** Flip the app into **read-only/maintenance mode** (see the meantime work — this banner/toggle gets built first, as safe prep). A short, friendly banner: *"ChurchOpsHub is updating — back in ~20 minutes. Finish your current edit and we'll be right back."*
+3. **Re-run the idempotent migration** to capture any writes that landed between backfill and the window (catches the last-minute task edit).
+4. **Verify** (counts match, numbering counters carried over, signups/waitlist subcollections intact, no orphans).
+5. **Flip the UI read path** to `workItems` in one deploy. Lift maintenance mode.
+6. **Old collections kept read-only for one full release** as a rollback escape hatch. Delete only after a clean week.
+
+### Rules specific to this app
+
+- **Do Tasks and Jobs on SEPARATE Thursdays.** Tasks first — it's internal/lower-stakes. Jobs second, once Tasks has run clean for a week — it's external (volunteers) and higher-stakes.
+- **Pick the Jobs window with the reminder crons in mind.** `sendJobReminders` (church-local 8am), `sendNewJobsDigest` (local noon), and `closePastJobs` (2am Central) run on schedules; the window must **not** be near a shift date and **not** overlap those fire times. A Thursday evening is clear of all three. Confirm no shift is scheduled for the migration evening / next morning before flipping.
+- **Numbering counters (`maxTaskNumber`, `maxJobNumber`, etc.) must migrate** so post-cutover items don't collide with existing `TSK-`/`JOB-` numbers.
+- **Signups/waitlist subcollections and `acknowledgedWaiverAt` must carry over verbatim** — a volunteer who already signed up and accepted the waiver must stay signed up, with their reminder still queued.
+- **E2E green before the window and again after the flip.** The suite already covers Tasks/Maintenance/Jobs heavily — extend it to assert the migrated shape, don't rewrite.
+- **Index gotcha:** every new `workItems` query needs its composite/collection-group indexes built *before* the flip (the `missingIndex:true` Sentry tag is the backstop). Build + prod-probe them during backfill, not in the window.
+
+### What is SAFE to ship outside a window (no data migration)
+
+Everything in the "meantime" list (§13) is **purely additive** — new collections (`timeEntries`), new read-only surfaces (search, notifications, calendar feed), or isolated fixes (Insights ceiling). None of it restructures `tasks`/`jobListings`, so it ships on the normal cadence with no maintenance window. Only P2/P3/P5 need the Thursday-evening treatment.
+
 ## 9. What this lets us delete
 
 - One of the two ~80%-duplicate board engines (Maintenance/Tasks).
@@ -239,14 +265,14 @@ Flatten `config/subscription` to `plan`, collapse `hasHub`→`isPro`, decouple `
 
 ---
 
-## 11. Open decisions (need owner sign-off)
+## 11. Open decisions
 
-1. **Flat price:** $19/mo (recommended, conservative) vs. $15/mo (aggressive adoption) vs. other. Annual discount? (lean: ~2 months free → $190/yr)
-2. **Does Inventory stay free, or does the free tier shrink/grow?** (Recommend: stays free, generous user cap — it's the wedge + the SEO winner.)
-3. **Shift numbering:** keep `JOB-###` for continuity, or re-prefix to `SHF-###`? (Recommend: keep `JOB-` to avoid breaking references; just relabel "Jobs" → "Shifts/Volunteer" in UI.)
-4. **Keep SMS?** Big A2P compliance burden. Recommend **keep** *only because* shifts/volunteer reminders are now a core, broadly-used surface (not just a teen board) — the burden is finally justified. Confirm.
-5. **Subtasks:** keep or cut? (Depends on whether FXCC actually uses them.)
-6. **Contractor self-logging:** can a linked contractor log their own hours (admin approves), or admin-only entry? (Recommend: support both; default admin-entry.)
+1. ~~**Flat price**~~ — **RESOLVED 2026-06-06: $15/mo flat (or $150/yr).**
+2. **Does Inventory stay free, or does the free tier shrink/grow?** (Recommend: stays free, generous user cap — it's the wedge + the SEO winner.) — still open, lean stays free.
+3. **Shift numbering:** keep `JOB-###` for continuity, or re-prefix to `SHF-###`? (Recommend: keep `JOB-` to avoid breaking references; just relabel "Jobs" → "Shifts/Volunteer" in UI.) — still open.
+4. ~~**Keep SMS?**~~ — **RESOLVED 2026-06-06: KEEP.** Shifts/volunteer reminders are now a core, broadly-used surface, so the A2P burden is justified.
+5. **Subtasks:** keep or cut? (Depends on whether FXCC actually uses them.) — still open.
+6. **Contractor self-logging:** can a linked contractor log their own hours (admin approves), or admin-only entry? (Recommend: support both; default admin-entry.) — still open.
 
 ---
 
@@ -261,3 +287,27 @@ This plan is the **foundation** — it consolidates the sprawling middle of the 
 - **AI "what needs attention this week"** (reuse MasteryHelp's Claude pattern) — overdue work, expiring certs, low stock, unfilled shifts, contractor hours vs. budget.
 
 The unified Work model makes every one of those *cheaper* to build, because there's one work surface to search, notify on, sync, gate, and summarize — instead of three.
+
+---
+
+## 13. "Meantime" work — safe to ship NOW, no maintenance window
+
+While the risky unification (P2/P3) waits for its Thursday-evening windows, all of the following are **purely additive** and touch live Tasks/Jobs data only by reading it — so they ship on the normal cadence. Ordered by value × safety.
+
+### Tier A — start now
+1. **Maintenance-mode / read-only banner toggle** *(do this first — it's the safety net the cutover depends on).* A church-level (or global, owner-only) flag that shows a friendly "updating, back soon" banner and blocks writes. Small, additive, useful forever, and it's what makes the eventual Thursday cutover safe. Build it before anything else.
+2. **Contractor hours / Timesheet (Phase 1 of this plan).** John's real, present need. Entirely new surface: `trackedPeople.personType`+`hourlyRate`, new `timeEntries` collection, "Log time" button, Timesheet view, approval + cost rollup + CSV. Logs against *today's* tasks/tickets (read-only reference) — no migration. Ships value immediately and the data survives unification untouched.
+3. **Global search / command palette.** Read-only across items, people, tasks, jobs, tickets. Big UX lift, zero migration risk.
+4. **Notification center + push (FCM) + PWA install prompt.** Reuse Court Climber's FCM. New in-app inbox + a single notification-preferences page (the future home of the Coordination email toggle). Additive; reads existing events. High "feels premier" payoff.
+
+### Tier B — strong, slightly more scoped
+5. **Fix the Insights 100-entry activityLog ceiling.** Paid-feature correctness bug (analytics silently lose history past 100 actions). Touches only Insights.
+6. **Google Calendar subscribe (live ICS feed).** Read-only feed URL for reservations/jobs/maintenance so they appear in the church's calendar automatically. First, safe step of the integration story.
+7. **Compliance: serving-readiness dashboard + proactive expiry digests.** Additive to People Access; deepens the stickiest wedge.
+
+### Tier C — decoupled / can wait
+8. **Pricing flatten to $15** is *technically* independent of the Work migration (it touches `config/subscription` + billing gates, not Tasks/Jobs data) and could ship on its own with grandfathering — but it reads cleaner *paired* with unification ("one product, one price"). Recommend doing it in P5 unless there's a reason to drop the price sooner.
+9. **AI "what needs attention this week."** Bigger; has a natural home inside the notification/digest surface (#4), so sequence it after that.
+10. **Planning Center People sync.** Larger integration; defer until after the calendar feed proves the integration appetite.
+
+**Recommended immediate order:** #1 (maintenance banner) → #2 (contractor hours) → #3 (search) → #4 (notifications/push). That delivers John's contractor need, builds the cutover safety net, and lands two premier-feel features — all before the first migration window.
