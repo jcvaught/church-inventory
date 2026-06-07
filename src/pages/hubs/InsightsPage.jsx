@@ -1,4 +1,4 @@
-import { useState, useMemo, useContext } from 'react';
+import { useState, useMemo, useContext, useEffect } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -634,9 +634,27 @@ const SECTIONS = [
 ];
 
 export function InsightsPage({ store, userProfile: _userProfile }) {
-  const { items, supplies, activityLog, config, settings } = store;
+  const { items, supplies, activityLog, config, settings, loadActivityLogSince } = store;
   const isMobile = useContext(MobileCtx);
   const [section, setSection] = useState(() => localStorage.getItem('insights_section') || 'utilization');
+
+  // The live `activityLog` subscription is capped at 100 entries to bound read
+  // cost (useFirestore.js), which silently truncated analytics on older
+  // churches. Pull the trailing 12-month window once for the analytics math —
+  // it covers seasonal (12mo) and supply burn (90d) alike. Falls back to the
+  // capped live array until the one-shot fetch resolves.
+  const [windowLog, setWindowLog] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    const since = new Date();
+    since.setMonth(since.getMonth() - 12);
+    since.setDate(since.getDate() - 1); // small cushion past the 12-month edge
+    loadActivityLogSince(since.toISOString()).then((rows) => {
+      if (!cancelled) setWindowLog(rows);
+    });
+    return () => { cancelled = true; };
+  }, [loadActivityLogSince]);
+  const analyticsLog = windowLog ?? activityLog;
 
   function setActiveSection(k) {
     setSection(k);
@@ -648,9 +666,9 @@ export function InsightsPage({ store, userProfile: _userProfile }) {
   /* data for print report */
   const utilizationForPrint = useMemo(() => {
     const map = {};
-    activityLog.filter(l => l.action === 'check_out').forEach(l => { map[l.itemId] = (map[l.itemId] || 0) + 1; });
-    const returns = activityLog.filter(l => l.action === 'return').sort((a, b) => a.timestamp?.localeCompare(b.timestamp));
-    const checkouts = activityLog.filter(l => l.action === 'check_out').sort((a, b) => a.timestamp?.localeCompare(b.timestamp));
+    analyticsLog.filter(l => l.action === 'check_out').forEach(l => { map[l.itemId] = (map[l.itemId] || 0) + 1; });
+    const returns = analyticsLog.filter(l => l.action === 'return').sort((a, b) => a.timestamp?.localeCompare(b.timestamp));
+    const checkouts = analyticsLog.filter(l => l.action === 'check_out').sort((a, b) => a.timestamp?.localeCompare(b.timestamp));
     const durations = {};
     returns.forEach(ret => {
       const prior = [...checkouts].reverse().find(c => c.itemId === ret.itemId && c.timestamp < ret.timestamp);
@@ -664,16 +682,16 @@ export function InsightsPage({ store, userProfile: _userProfile }) {
       checkouts: map[i.itemId] || 0,
       avgDays: durations[i.itemId] ? Math.round(durations[i.itemId].reduce((s,v)=>s+v,0) / durations[i.itemId].length * 10) / 10 : null,
     })).sort((a, b) => b.checkouts - a.checkouts);
-  }, [activeItems, activityLog]);
+  }, [activeItems, analyticsLog]);
 
   const ministryForPrint = useMemo(() => {
     const map = {};
-    activityLog.filter(l => l.action === 'check_out' && l.details?.ministry).forEach(l => {
+    analyticsLog.filter(l => l.action === 'check_out' && l.details?.ministry).forEach(l => {
       const m = l.details.ministry;
       map[m] = (map[m] || 0) + 1;
     });
     return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
-  }, [activityLog]);
+  }, [analyticsLog]);
 
   const financialForPrint = useMemo(() =>
     activeItems
@@ -714,19 +732,24 @@ export function InsightsPage({ store, userProfile: _userProfile }) {
       </div>
 
       {/* Active section */}
+      {['utilization', 'ministry', 'seasonal', 'supplies'].includes(section) && (
+        <p style={{ fontSize: 11, color: B.textLight, fontFamily: f1, margin: '-8px 0 14px' }}>
+          Usage analytics computed from the last 12 months of activity.
+        </p>
+      )}
       {section === 'utilization' && (
         <SectionCard title="Item Utilization" icon="📊">
-          <UtilizationSection items={activeItems} activityLog={activityLog} isMobile={isMobile} />
+          <UtilizationSection items={activeItems} activityLog={analyticsLog} isMobile={isMobile} />
         </SectionCard>
       )}
       {section === 'ministry' && (
         <SectionCard title="Ministry Breakdown" icon="⛪">
-          <MinistrySection activityLog={activityLog} isMobile={isMobile} />
+          <MinistrySection activityLog={analyticsLog} isMobile={isMobile} />
         </SectionCard>
       )}
       {section === 'seasonal' && (
         <SectionCard title="Seasonal Trends" icon="📅">
-          <SeasonalSection activityLog={activityLog} isMobile={isMobile} />
+          <SeasonalSection activityLog={analyticsLog} isMobile={isMobile} />
         </SectionCard>
       )}
       {section === 'financial' && (
@@ -736,7 +759,7 @@ export function InsightsPage({ store, userProfile: _userProfile }) {
       )}
       {section === 'supplies' && (
         <SectionCard title="Supply Burn Rate" icon="🧴">
-          <SuppliesSection supplies={supplies} activityLog={activityLog} isMobile={isMobile} />
+          <SuppliesSection supplies={supplies} activityLog={analyticsLog} isMobile={isMobile} />
         </SectionCard>
       )}
       {section === 'location' && (

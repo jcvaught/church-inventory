@@ -1330,11 +1330,41 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); return []; }
   }, [churchId]);
 
+  // One-shot, date-bounded fetch of every activityLog entry at-or-after
+  // `sinceTimestamp` (an ISO string). The live `activityLog` subscription is
+  // capped at 100 to protect read cost, which silently truncated analytics on
+  // older churches — Insights uses this instead to compute over a real window
+  // (e.g. trailing 12 months). Pages with startAfter so a busy church doesn't
+  // pull one giant snapshot; a hard `maxEntries` ceiling backstops runaway
+  // reads. Returns oldest→newest.
+  const loadActivityLogSince = useCallback(async (sinceTimestamp, { batchSize = 500, maxEntries = 5000 } = {}) => {
+    if (!churchId || !sinceTimestamp) return [];
+    try {
+      const out = [];
+      let cursor = null;
+      for (;;) {
+        const clauses = [
+          collection(db, 'churches', churchId, 'activityLog'),
+          where('timestamp', '>=', sinceTimestamp),
+          orderBy('timestamp', 'asc'),
+          limit(batchSize),
+        ];
+        if (cursor) clauses.splice(3, 0, startAfter(cursor));
+        const snap = await getDocs(query(...clauses));
+        if (snap.empty) break;
+        out.push(...snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
+        if (snap.size < batchSize || out.length >= maxEntries) break;
+        cursor = snap.docs[snap.docs.length - 1].data().timestamp;
+      }
+      return out;
+    } catch (err) { handleErr(err); return []; }
+  }, [churchId]);
+
   return {
     config, settings, items, supplies, activityLog, reservations, users,
     maintenanceTickets, vendors, bundles, notificationConfig, audits, tasks,
     loading, error,
-    loadOlderActivityLog,
+    loadOlderActivityLog, loadActivityLogSince,
     updateSettings, updateConfig,
     addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem,
     addSupply, updateSupply, useSupply, restockSupply, deleteSupply,
