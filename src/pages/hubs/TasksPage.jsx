@@ -17,24 +17,7 @@ import { resizeImageForUpload } from '../../utils/imageResize.js';
 import { exportTasksCSV } from '../../utils/csv.js';
 import { exportTasksICS } from '../../utils/ical.js';
 import { localDateStr, calculateNextDue } from '../../utils/date.js';
-
-const STATUSES = ['Backlog', 'Planning', 'In Progress', 'On Hold', 'Complete', 'Cancelled'];
-
-function initials(name) {
-  const parts = (name || '?').trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return '?';
-  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-}
-const ASSIGNEE_COLORS = ['#2A7D6E','#5B6ABF','#C0592B','#7B2D8E','#2E86AB','#D4A843','#C44569','#3D7A4A'];
-function assigneeColor(uid) {
-  let h = 0;
-  for (let i = 0; i < (uid||'').length; i++) h = ((h << 5) - h + uid.charCodeAt(i)) | 0;
-  return ASSIGNEE_COLORS[Math.abs(h) % ASSIGNEE_COLORS.length];
-}
-const PRIORITIES = ['High', 'Medium', 'Low'];
-const RECURRENCE_OPTIONS = [['', 'None'], ['weekly', 'Weekly'], ['biweekly', 'Every 2 weeks'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['annually', 'Annually']];
-const RECURRENCE_LABELS = { weekly:'Weekly', biweekly:'Every 2 wks', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' };
+import { STATUSES, PRIORITIES, RECURRENCE_OPTIONS, RECURRENCE_LABELS, priorityColors, statusColors, initials, assigneeColor, PriorityBadge } from '../../components/board/boardUI.jsx';
 
 // ── Bulk paste-import parsing ──
 // Per-import cap. Above this, hint that the user split into batches.
@@ -126,31 +109,6 @@ function parsePasteText(text, taskHubUsers) {
     mode: 'lines',
     rows: lines.map(l => ({ name: l.trim(), warnings: [] })).filter(r => r.name),
   };
-}
-
-
-const priorityColors = {
-  High:   { bg: '#FEE8E8', tx: B.red,      dot: '#E87171' },
-  Medium: { bg: B.goldLight, tx: '#96750E', dot: B.gold },
-  Low:    { bg: B.warmGray,  tx: B.textMid, dot: B.textLight },
-};
-
-const statusColors = {
-  'Backlog':     { bg: B.warmGray,  tx: B.textMid,  dot: B.textLight },
-  'Planning':    { bg: B.goldLight, tx: '#96750E',   dot: B.gold },
-  'In Progress': { bg: '#E8F0FE',   tx: '#1A65C7',   dot: '#3B82F6' },
-  'On Hold':     { bg: '#FEF3E8',   tx: '#9A5E10',   dot: '#F59E42' },
-  'Complete':    { bg: B.tealPale,  tx: B.teal,      dot: B.tealLight },
-  'Cancelled':   { bg: B.warmGray,  tx: B.textMid,   dot: B.textLight },
-};
-
-function PriorityBadge({ priority }) {
-  const s = priorityColors[priority] || priorityColors.Medium;
-  return (
-    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:20, background:s.bg, color:s.tx, fontSize:11, fontWeight:700, fontFamily:f1 }}>
-      <span style={{ width:6, height:6, borderRadius:'50%', background:s.dot }}/>{priority}
-    </span>
-  );
 }
 
 
