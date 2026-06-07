@@ -286,6 +286,12 @@ This plan is the **foundation** — it consolidates the sprawling middle of the 
 - **Deepen the compliance wedge** (background-check integration; serving-readiness dashboard) — now reinforced because compliance gates *all* work, not just Jobs.
 - **AI "what needs attention this week"** (reuse MasteryHelp's Claude pattern) — overdue work, expiring certs, low stock, unfilled shifts, contractor hours vs. budget.
 
+**Reuse from the portfolio (don't build from scratch):**
+- Court Climber's **FCM push + 3-channel (in-app/push/email) announcements** → the notification center (#4).
+- Court Climber's **"Game Day" single-screen ops console** → an optional **event-day ops view** in Work: one screen showing every shift, setup task, and assignment for a given Sunday/event, with live status — a natural extension of the unified Work model and a strong differentiator.
+- MasteryHelp's **Claude API integration pattern** → the AI "what needs attention" digest.
+- The shared **Stripe customer-portal** pattern (already in COH via `createPortalSession`).
+
 The unified Work model makes every one of those *cheaper* to build, because there's one work surface to search, notify on, sync, gate, and summarize — instead of three.
 
 ---
@@ -301,7 +307,7 @@ While the risky unification (P2/P3) waits for its Thursday-evening windows, all 
 4. **Notification center + push (FCM) + PWA install prompt.** Reuse Court Climber's FCM. New in-app inbox + a single notification-preferences page (the future home of the Coordination email toggle). Additive; reads existing events. High "feels premier" payoff.
 
 ### Tier B — strong, slightly more scoped
-5. **Fix the Insights 100-entry activityLog ceiling.** Paid-feature correctness bug (analytics silently lose history past 100 actions). Touches only Insights.
+5. **Fix the Insights 100-entry activityLog ceiling** + **emailed weekly Insights digest.** First the correctness bug (analytics silently lose history past 100 actions; touches only Insights). Then ship a weekly emailed digest (low-stock, warranty-expiring, utilization) — the data is already computed in-app, it just never leaves; pairs naturally with the notification surface (#4).
 6. **Google Calendar subscribe (live ICS feed).** Read-only feed URL for reservations/jobs/maintenance so they appear in the church's calendar automatically. First, safe step of the integration story.
 7. **Compliance: serving-readiness dashboard + proactive expiry digests.** Additive to People Access; deepens the stickiest wedge.
 
