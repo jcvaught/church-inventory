@@ -3,6 +3,7 @@ import { collection, onSnapshot, query as fsQuery, orderBy } from 'firebase/fire
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db, storage } from '../../firebase.js';
+import { notify } from '../../utils/notify.js';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
@@ -732,6 +733,10 @@ export function MaintenancePage({ store, userProfile }) {
           if (!assigneeUser?.email) continue;
           fn({ toEmail: assigneeUser.email, toName: assignee.name, churchName: config?.churchName || '', ticketNumber: showDetail.ticketNumber, ticketName: detailEdits.name, assignedBy: userName }).catch(() => {});
         }
+      }
+      // In-app + push for newly added assignees (independent of the email toggle)
+      if (newlyAdded.length > 0) {
+        notify({ churchId, recipientUids: newlyAdded.map(a => a.uid), type: 'ticket_assigned', title: 'Maintenance ticket assigned to you', body: `${showDetail.ticketNumber}: ${detailEdits.name || ''} — by ${userName}`, link: { kind: 'hub', hub: 'maintenance' } });
       }
 
       // Auto-create next recurring ticket on completion (guard against double-fire if drag+save race)

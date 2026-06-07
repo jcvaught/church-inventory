@@ -8,7 +8,8 @@ import { useConfirm } from '../components/primitives/ConfirmDialog.jsx';
 import { UndoToast } from '../components/primitives/UndoToast.jsx';
 import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { collection, getDocs, doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { enablePush, pushSupported } from '../utils/push.js';
 import { app, db } from '../firebase.js';
 
 function formatPhoneDisplay(e164) {
@@ -22,6 +23,14 @@ function formatPhoneDisplay(e164) {
   }
   return String(e164);
 }
+
+const NOTIF_EVENTS = [
+  ['ticket_assigned', 'Maintenance ticket assigned to me'],
+  ['task_assigned', 'Task assigned to me'],
+  ['task_mention', "I'm @mentioned on a task"],
+  ['reservation_decided', 'My reservation approved or denied'],
+  ['shift_waitlist_promoted', "I'm promoted off a shift waitlist"],
+];
 
 export function SettingsPage({ store, userProfile, subscription, user, canAdd, deleteAccount }) {
   const { settings, config, users, accessPeople, accessRecords, rooms, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, addRoom, updateRoom, deleteRoom } = store;
@@ -53,6 +62,27 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [bannerMessage, setBannerMessage] = useState('');
   const [bannerSaving, setBannerSaving] = useState(false);
   const [bannerSaved, setBannerSaved] = useState(false);
+  // Notification preferences (current user)
+  const [notifPrefs, setNotifPrefs] = useState(() => userProfile?.notificationPrefs || {});
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMsg, setPushMsg] = useState('');
+  const [pushSupp, setPushSupp] = useState(false);
+  useEffect(() => { pushSupported().then(setPushSupp); }, []);
+  const prefOn = (type, ch) => (notifPrefs?.[type]?.[ch] !== false);
+  async function toggleNotifPref(type, ch) {
+    const next = { ...notifPrefs, [type]: { ...(notifPrefs[type] || {}), [ch]: !prefOn(type, ch) } };
+    setNotifPrefs(next);
+    try { await updateDoc(doc(db, 'users', userProfile.uid), { notificationPrefs: next }); } catch { /* non-fatal */ }
+  }
+  async function handleEnablePush() {
+    setPushBusy(true); setPushMsg('');
+    const res = await enablePush(userProfile.uid);
+    setPushMsg(res.ok ? 'Push enabled on this device ✓'
+      : res.reason === 'denied' ? 'Blocked — allow notifications in your browser settings.'
+      : res.reason === 'unsupported' ? "This browser/device doesn't support web push."
+      : 'Could not enable push. Try again.');
+    setPushBusy(false);
+  }
   const [editAccessUser, setEditAccessUser] = useState(null);
   const [editRole, setEditRole] = useState('user');
   const [editHubs, setEditHubs] = useState([]);
@@ -1292,6 +1322,37 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           )}
         </div>
       )}
+
+      {/* Notifications */}
+      <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginTop:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
+        <h3 style={{ margin:"0 0 6px", fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Notifications</h3>
+        <p style={{ margin:"0 0 16px", fontSize:13, color:B.textLight }}>Choose how you're notified. In-app shows in the 🔔 bell; push reaches your device even when the app is closed.</p>
+        <div style={{ marginBottom:16 }}>
+          <button onClick={handleEnablePush} disabled={pushBusy || !pushSupp} style={{ ...btnS, opacity:(pushBusy||!pushSupp)?0.6:1 }}>
+            {pushBusy ? 'Enabling…' : 'Enable push on this device'}
+          </button>
+          {!pushSupp && <span style={{ marginLeft:10, fontSize:12, color:B.textLight }}>Web push isn't supported in this browser.</span>}
+          {pushMsg && <div style={{ marginTop:8, fontSize:13, color:B.teal, fontFamily:f1 }}>{pushMsg}</div>}
+        </div>
+        <div style={{ display:"flex", flexDirection:"column" }}>
+          <div style={{ display:"flex", alignItems:"center", padding:"6px 0", borderBottom:"1px solid "+B.cream }}>
+            <span style={{ flex:1 }} />
+            <span style={{ width:64, textAlign:"center", fontSize:11, color:B.textLight, fontFamily:f1, fontWeight:600 }}>In-app</span>
+            <span style={{ width:64, textAlign:"center", fontSize:11, color:B.textLight, fontFamily:f1, fontWeight:600 }}>Push</span>
+          </div>
+          {NOTIF_EVENTS.map(([type, label]) => (
+            <div key={type} style={{ display:"flex", alignItems:"center", padding:"8px 0", borderBottom:"1px solid "+B.cream }}>
+              <span style={{ flex:1, fontSize:14, color:B.textDark }}>{label}</span>
+              <span style={{ width:64, textAlign:"center" }}>
+                <input type="checkbox" checked={prefOn(type,'inApp')} onChange={()=>toggleNotifPref(type,'inApp')} aria-label={`${label} — in-app`} style={{ width:16, height:16, accentColor:B.teal, cursor:"pointer" }} />
+              </span>
+              <span style={{ width:64, textAlign:"center" }}>
+                <input type="checkbox" checked={prefOn(type,'push')} onChange={()=>toggleNotifPref(type,'push')} aria-label={`${label} — push`} style={{ width:16, height:16, accentColor:B.teal, cursor:"pointer" }} />
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Suggestions */}
       <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginTop:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>

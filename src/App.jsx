@@ -32,6 +32,8 @@ import { RES_STATUS } from './utils/constants.js';
 import { useGlobalBanner } from './hooks/useGlobalBanner.js';
 import { GlobalBanner } from './components/GlobalBanner.jsx';
 import { GlobalSearch } from './components/GlobalSearch.jsx';
+import { NotificationBell } from './components/NotificationBell.jsx';
+import { InstallPrompt } from './components/InstallPrompt.jsx';
 
 
 class PageErrorBoundary extends Component {
@@ -681,6 +683,7 @@ function AppShell({ authHook }) {
               <button onClick={() => setShowScanner(true)} aria-label="Scan barcode or QR code" style={{ display:"flex", alignItems:"center", gap:6, background:"rgba(255,255,255,0.08)", borderRadius:10, padding:"7px 12px", border:"1px solid rgba(255,255,255,0.1)", cursor:"pointer", color:B.white, fontFamily:f1, fontSize:13, fontWeight:600 }}>
                 📷{!isMobile && " Scan"}
               </button>
+              <NotificationBell churchId={userProfile.churchId} uid={userProfile.uid} onNavigate={handleSearchNav} />
               <div style={{ position:"relative" }}>
                 <button ref={accountTriggerRef} onClick={()=>setMenuOpen(!menuOpen)} aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={accountMenuId} style={{ display:"flex", alignItems:"center", gap:8, background:"rgba(255,255,255,0.08)", borderRadius:10, padding:"7px 14px", border:"1px solid rgba(255,255,255,0.1)", cursor:"pointer", color:B.white }}>
                   <div style={{ width:30, height:30, borderRadius:8, background:B.teal, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:700, fontFamily:f1 }}>{(userProfile.name||"?")[0]}</div>
@@ -848,6 +851,7 @@ function AppShell({ authHook }) {
       {/* Onboarding modal — new admins, no items yet */}
       {showScanner && <BarcodeScanner onScan={handleScan} onClose={() => setShowScanner(false)} />}
       {showSearch && <GlobalSearch store={store} canSeeHub={userCanSeeHub} onNavigate={handleSearchNav} onClose={() => setShowSearch(false)} />}
+      <InstallPrompt />
 
       {showOnboarding && (() => {
         const steps = [

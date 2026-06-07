@@ -5,6 +5,7 @@ const { defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
+const { getMessaging } = require('firebase-admin/messaging');
 const Sentry = require('@sentry/node');
 
 Sentry.init({
@@ -206,6 +207,66 @@ let twilioClient;
 try { twilioClient = require('twilio'); } catch { twilioClient = null; }
 
 initializeApp();
+
+// ── deliverNotification (in-app inbox + web push) ──────────────────────────
+// Fans a notification out to recipients across IN-APP + PUSH per each user's
+// notificationPrefs[type] (both default on). Email is intentionally NOT handled
+// here — the existing per-event email CFs own email and are left untouched, so
+// this only ADDS the two new channels. Never throws (notification delivery must
+// never break the parent action). Invalid push tokens are pruned.
+async function deliverNotification(churchId, recipientUids, payload) {
+  try {
+    const { type, title, body, link } = payload || {};
+    const uids = [...new Set((recipientUids || []).filter(Boolean))];
+    if (!churchId || !uids.length || !title) return;
+    const db = getFirestore();
+    const snaps = await Promise.all(uids.map((uid) => db.doc(`users/${uid}`).get()));
+    const batch = db.batch();
+    let wrote = false;
+    const tokenJobs = [];
+    for (const snap of snaps) {
+      if (!snap.exists) continue;
+      const u = snap.data();
+      if (u.churchId !== churchId) continue; // never cross tenants
+      const prefs = (u.notificationPrefs && u.notificationPrefs[type]) || {};
+      if (prefs.inApp !== false) {
+        const ref = db.collection(`churches/${churchId}/notifications`).doc();
+        batch.set(ref, { recipientUid: snap.id, type: type || 'general', title, body: body || '', link: link || null, read: false, createdAt: new Date().toISOString() });
+        wrote = true;
+      }
+      if (prefs.push !== false && Array.isArray(u.fcmTokens)) {
+        for (const t of u.fcmTokens) if (t) tokenJobs.push({ token: t, uid: snap.id });
+      }
+    }
+    if (wrote) await batch.commit();
+    if (tokenJobs.length) {
+      const messaging = getMessaging();
+      const results = await Promise.allSettled(tokenJobs.map((j) => messaging.send({
+        token: j.token,
+        notification: { title, body: body || '' },
+        webpush: { fcmOptions: { link: 'https://churchopshub.com' }, notification: { icon: '/icon-192.png' } },
+        data: { type: type || '', link: link ? JSON.stringify(link) : '' },
+      })));
+      const invalid = {};
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') {
+          const code = r.reason?.errorInfo?.code || r.reason?.code || '';
+          if (code.includes('registration-token-not-registered') || code.includes('invalid-registration-token') || code.includes('invalid-argument')) {
+            (invalid[tokenJobs[i].uid] ||= []).push(tokenJobs[i].token);
+          }
+        }
+      });
+      const entries = Object.entries(invalid);
+      if (entries.length) {
+        const pruneBatch = db.batch();
+        for (const [uid, toks] of entries) pruneBatch.update(db.doc(`users/${uid}`), { fcmTokens: FieldValue.arrayRemove(...toks) });
+        await pruneBatch.commit();
+      }
+    }
+  } catch (err) {
+    try { Sentry.captureException(err, { tags: { fn: 'deliverNotification' } }); } catch { /* ignore */ }
+  }
+}
 
 // ─── Scheduled-job heartbeat (audit obs-H1) ────────────────────────────────
 // Per-run breadcrumb so we can detect "the cron didn't fire" — without this,
@@ -1296,6 +1357,26 @@ exports.sendTicketAssignedEmail = onCall({ cors: true }, async (req) => {
   await sendEmailSafe({ to: toEmail, from: FROM, subject, html, text });
   return { sent: true };
 });
+
+// ── notify (in-app inbox + web push) ──────────────────────────────────────
+// Client producers call this ALONGSIDE their existing email CF to add an
+// in-app + push notification. Validates the caller is a member of churchId;
+// deliverNotification additionally pins each recipient to that church. Email
+// stays owned by the existing per-event CFs (untouched). Fire-and-forget on
+// the client — failures here never block the underlying action.
+exports.notify = onCall({ cors: true }, wrapCall('notify', async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  const { churchId, recipientUids, type, title, body, link } = req.data || {};
+  if (!churchId || !title) return { ok: false };
+  const db = getFirestore();
+  const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
+  if (!callerSnap.exists || callerSnap.data().churchId !== churchId) {
+    throw new HttpsError('permission-denied', 'Not a member of this church.');
+  }
+  const uids = Array.isArray(recipientUids) ? recipientUids : [recipientUids];
+  await deliverNotification(churchId, uids, { type, title, body, link });
+  return { ok: true };
+}));
 
 // ── sendJobAnnouncementEmails ─────────────────────────────────────────────
 // Called from client when a Job Hub announcement is posted.
@@ -2507,6 +2588,12 @@ exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
   if (!promoted) return { promoted: false };
   const jobSnap = await db.doc(`churches/${churchId}/jobListings/${jobDocId}`).get();
   await sendWaitlistPromotionNotifications(db, churchId, jobSnap.exists ? jobSnap.data() : {}, promoted.uid);
+  await deliverNotification(churchId, [promoted.uid], {
+    type: 'shift_waitlist_promoted',
+    title: "You're off the waitlist",
+    body: `A spot opened up${jobSnap.exists && jobSnap.data().title ? ` for ${jobSnap.data().title}` : ''} — you're now signed up.`,
+    link: { kind: 'hub', hub: 'jobs' },
+  });
   return { promoted: true, promotedName: promoted.name };
 });
 

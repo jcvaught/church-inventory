@@ -23,3 +23,8 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export const storage = getStorage(app);
+
+// FCM Web Push public key (VAPID). Public by design — safe to ship in the
+// client bundle. Used by src/utils/push.js getToken(). Generated in the
+// Firebase console → Project settings → Cloud Messaging → Web Push certificates.
+export const VAPID_KEY = 'BDI5p2M4XfDC9Pn52vDr32Yebhvb_w_QGt1vNsO575AUb2XfY9KSkd_SgTtDudhAG6TX1sOeN2JhxMZoHTny9_g';

@@ -4,6 +4,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, doc, onSnapshot, query as fsQuery, orderBy, runTransaction, getDocs, where, updateDoc, deleteField, arrayRemove } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebase.js';
+import { notify } from '../../utils/notify.js';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
@@ -1478,6 +1479,10 @@ export function TasksPage({ store, userProfile }) {
           fn({ kind: 'task', toEmail: assigneeUser.email, toName: assignee.name, churchName: config?.churchName || '', ticketNumber: showDetail.taskNumber, ticketName: detailEdits.name, assignedBy: userName }).catch(err => { console.error('[ChurchOpsHub] CF sendTicketAssignedEmail failed', err); });
         }
       }
+      // In-app + push for newly added assignees (independent of the email toggle)
+      if (newlyAdded.length > 0) {
+        notify({ churchId, recipientUids: newlyAdded.map(a => a.uid), type: 'task_assigned', title: 'Task assigned to you', body: `${showDetail.taskNumber}: ${detailEdits.name || ''} — by ${userName}`, link: { kind: 'hub', hub: 'tasks' } });
+      }
 
       // Auto-create next recurring task on completion
       if (isNowComplete && !wasComplete && detailEdits.recurrence) {
@@ -1508,6 +1513,9 @@ export function TasksPage({ store, userProfile }) {
       if (mentions.length > 0 && notificationConfig?.enabled) {
         const fn = httpsCallable(getFunctions(), 'sendTaskMentionEmail');
         fn({ churchId, taskNumber: showDetail.taskNumber, taskName: showDetail.name || '', commentText: text, mentionedUids: mentions, commentAuthorName: userName }).catch(err => { console.error('[ChurchOpsHub] CF sendTaskMentionEmail failed', err); });
+      }
+      if (mentions.length > 0) {
+        notify({ churchId, recipientUids: mentions, type: 'task_mention', title: `${userName} mentioned you`, body: `${showDetail.taskNumber}: ${text.slice(0, 120)}`, link: { kind: 'hub', hub: 'tasks' } });
       }
       setNewComment('');
     } catch { flash('Failed to post comment.', true); }

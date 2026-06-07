@@ -439,6 +439,17 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // ── Notifications (in-app inbox) — a member reads/updates/deletes only
+    //    their OWN notifications. Create is Admin-SDK-only (the deliverNotification
+    //    helper / notify callable) — clients never write these directly.
+    match /churches/{churchId}/notifications/{docId} {
+      allow read:   if isMember(churchId) && (resource == null || resource.data.recipientUid == request.auth.uid);
+      allow update: if isMember(churchId) && resource.data.recipientUid == request.auth.uid
+                    && request.resource.data.recipientUid == resource.data.recipientUid;
+      allow delete: if isMember(churchId) && resource.data.recipientUid == request.auth.uid;
+      allow create: if false;
+    }
+
     // ── App-wide banner (maintenance / announcements) — any signed-in user
     //    reads; owner-only writes. Drives the GlobalBanner in the app shell and
     //    the "we're updating" notice during migration windows.

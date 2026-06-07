@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { notify } from '../utils/notify.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
@@ -176,6 +177,7 @@ export function ReservationsPage({ store, userProfile }) {
       eventName: res.eventName, resourceDesc: res.itemDesc || res.roomName || '',
       eventDate: formatDate(res.eventDate), actionBy: userName,
     });
+    notify({ churchId: userProfile?.churchId, recipientUids: [res.requestedBy], type: 'reservation_decided', title: 'Reservation approved', body: `${res.eventName} — ${res.itemDesc || res.roomName || ''}`, link: { kind: 'tab', tab: 'reservations' } });
     flash("Reservation approved!");
     setShowDetail(null);
     setSaving(false);
@@ -190,6 +192,7 @@ export function ReservationsPage({ store, userProfile }) {
       eventName: res.eventName, resourceDesc: res.itemDesc || res.roomName || '',
       eventDate: formatDate(res.eventDate), actionBy: userName,
     });
+    notify({ churchId: userProfile?.churchId, recipientUids: [res.requestedBy], type: 'reservation_decided', title: 'Reservation denied', body: `${res.eventName} — ${res.itemDesc || res.roomName || ''}`, link: { kind: 'tab', tab: 'reservations' } });
     flash("Reservation denied.");
     setShowDetail(null);
     setSaving(false);
