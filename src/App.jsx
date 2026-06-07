@@ -31,6 +31,7 @@ import { PrivacyBody } from './components/legal/PrivacyBody.jsx';
 import { RES_STATUS } from './utils/constants.js';
 import { useGlobalBanner } from './hooks/useGlobalBanner.js';
 import { GlobalBanner } from './components/GlobalBanner.jsx';
+import { GlobalSearch } from './components/GlobalSearch.jsx';
 
 
 class PageErrorBoundary extends Component {
@@ -505,6 +506,7 @@ function AppShell({ authHook }) {
   const accountMenuId = useId();
   const isMobile = useWindowWidth() < 768;
   const globalBanner = useGlobalBanner();
+  const [showSearch, setShowSearch] = useState(false);
 
   // Audit 2026-05-24 Phase 3 (item 3): account menu a11y — focus the first
   // menu item on open, trap Tab/Shift+Tab inside, close on Escape, and
@@ -565,6 +567,18 @@ function AppShell({ authHook }) {
     const t = setTimeout(() => store.clearError(), 10000);
     return () => clearTimeout(t);
   }, [store.error]);
+
+  // Cmd/Ctrl+K toggles global search
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setShowSearch((s) => !s);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   // Auto-link accessPerson by email when user logs in
   useEffect(() => {
@@ -627,6 +641,15 @@ function AppShell({ authHook }) {
     setHubKey(key);
   }
 
+  // Route a global-search result to its area.
+  function handleSearchNav(nav) {
+    if (!nav) return;
+    if (nav.kind === 'item') { setScannedItemId(nav.itemId); setTab('inventory'); }
+    else if (nav.kind === 'tab') { setTab(nav.tab); }
+    else if (nav.kind === 'hub') { openHub(nav.hub); setTab('hubs'); }
+    setMenuOpen(false);
+  }
+
   // Mobile bottom nav + desktop tabs. Volunteers (role:user, allowedHubs=['jobs'])
   // get a 4-tab jobs-first shell; everyone else gets the standard 7-tab admin shell.
   // The "Hubs" key stays the same — for volunteers it just auto-routes into Jobs.
@@ -652,8 +675,11 @@ function AppShell({ authHook }) {
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
             <FullLogo size={36} light={true} />
             <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+              <button onClick={() => setShowSearch(true)} aria-label="Search (Cmd/Ctrl+K)" style={{ display:"flex", alignItems:"center", gap:6, background:"rgba(255,255,255,0.08)", borderRadius:10, padding:"7px 12px", border:"1px solid rgba(255,255,255,0.1)", cursor:"pointer", color:B.white, fontFamily:f1, fontSize:13, fontWeight:600 }}>
+                🔍{!isMobile && " Search"}
+              </button>
               <button onClick={() => setShowScanner(true)} aria-label="Scan barcode or QR code" style={{ display:"flex", alignItems:"center", gap:6, background:"rgba(255,255,255,0.08)", borderRadius:10, padding:"7px 12px", border:"1px solid rgba(255,255,255,0.1)", cursor:"pointer", color:B.white, fontFamily:f1, fontSize:13, fontWeight:600 }}>
-                📷 Scan
+                📷{!isMobile && " Scan"}
               </button>
               <div style={{ position:"relative" }}>
                 <button ref={accountTriggerRef} onClick={()=>setMenuOpen(!menuOpen)} aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={accountMenuId} style={{ display:"flex", alignItems:"center", gap:8, background:"rgba(255,255,255,0.08)", borderRadius:10, padding:"7px 14px", border:"1px solid rgba(255,255,255,0.1)", cursor:"pointer", color:B.white }}>
@@ -821,6 +847,7 @@ function AppShell({ authHook }) {
       )}
       {/* Onboarding modal — new admins, no items yet */}
       {showScanner && <BarcodeScanner onScan={handleScan} onClose={() => setShowScanner(false)} />}
+      {showSearch && <GlobalSearch store={store} canSeeHub={userCanSeeHub} onNavigate={handleSearchNav} onClose={() => setShowSearch(false)} />}
 
       {showOnboarding && (() => {
         const steps = [
