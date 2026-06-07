@@ -14,6 +14,23 @@ It is written to be executed in phases, smallest-risk-first, with the contractor
 
 ---
 
+## 0. Refinement (owner, 2026-06-07): the primary axis is the SCHEDULING MODEL
+
+Before building, a sharper cut than the original "three flat categories" framing below. The fundamental split is **not** category or assignment mode — it's the **scheduling model**, and it runs between maint/tasks and jobs:
+
+- **Flow / to-do work (tasks + maintenance):** organized by **status** (todo → doing → done) on a board. A due date is an optional *attribute*, not the organizing principle. *"What needs doing?"*
+- **Dated / scheduled work (jobs/shifts):** organized by **date** — the date is mandatory and the whole point; sign-up or assignment is *per date*. *"Who's covering Sunday / the workday?"*
+
+A job does **not** belong on a kanban — its home is a calendar/roster. This re-cuts the model:
+
+1. **Tasks + Maintenance fully merge** into one status-driven to-do board. The "minimal but not nothing" difference is a `type` flag, NOT two hubs: maintenance adds a linked **asset (itemId)** + **vendor** + **cost** (now fed by contractor hours), is **admin/manager-create**, uses **MNT-** numbering, and carries the "upkeep on a thing" framing; tasks add **visibility** (private/team/shared), are **any-member-create**, use **TSK-**. Everything else (status columns, assignees, due dates, comments, checklists, photos, recurrence, the board engine) is shared. This is the merge that kills the two ~80%-duplicate board engines.
+2. **Jobs stays date-driven** — a Schedule/calendar with sign-ups, not a board column. Its mature machinery (signups/waitlist, compliance gate, SMS, public board, the audited H1 refactor) stays intact.
+3. **Unify at the EXPERIENCE level, not by one schema:** one "Work" area, two views — **Board** (to-dos) and **Schedule** (shifts) — sharing the people model, assignees, comments, recurrence, notifications, and search; each keeps its natural primary axis.
+
+**Storage direction (recommended — supersedes the single-`workItems` pitch in §2): TWO collections.** `workItems` = tasks+maintenance merged; **keep jobs/shifts as its own collection** (mature, audited, date-shaped — migrating it is the riskiest step in the plan, and "jobs is fundamentally different" is the reason not to cram it into a shared schema). Consequence: **Phase 3 (jobs) becomes a UI/navigation unification, NOT a data migration** — big risk reduction. The "convert a maintenance chore → a volunteer shift" capability becomes *spawn a linked shift*, not a same-record field flip (which is more truthful anyway). The one-vs-two-collection call is logged in §11.
+
+The original §1–§2 framing below is kept for context but read it through this refinement.
+
 ## 1. The core idea: there is only "Work"
 
 Today COH models the work a church does as three separate, ~80%-duplicated hubs:
@@ -273,6 +290,7 @@ Everything in the "meantime" list (§13) is **purely additive** — new collecti
 4. ~~**Keep SMS?**~~ — **RESOLVED 2026-06-06: KEEP.** Shifts/volunteer reminders are now a core, broadly-used surface, so the A2P burden is justified.
 5. **Subtasks:** keep or cut? (Depends on whether FXCC actually uses them.) — still open.
 6. **Contractor self-logging:** can a linked contractor log their own hours (admin approves), or admin-only entry? (Recommend: support both; default admin-entry.) — still open.
+7. **One collection vs two (KEY — added 2026-06-07, see §0).** Recommend **TWO**: `workItems` (tasks+maintenance merged, status-driven board) + keep jobs/shifts as its own date-driven collection. Rationale: honors the flow-vs-dated axis, and avoids migrating the mature/audited jobListings (the riskiest step) — Phase 3 becomes UI unification, not data migration. Trade-off: convert-to-shift is a linked spawn, not an in-place flip. Confirm before Phase 2.
 
 ---
 
