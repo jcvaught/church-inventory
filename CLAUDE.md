@@ -9,7 +9,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/CHANGELOG.md` — All phase history and dated fixes
 - `docs/SENTRY-ALERTS.md` — Sentry alert rules to configure for Jobs Hub launch
 - `docs/SEO-REFOCUS-2026-05-26.md` — internal-link rewire plan for volunteer-coordinator post; verify script for 2026-06-23 re-check
-- `docs/WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md` — **strategy plan (not yet started):** unify Tasks+Maintenance+Jobs into one "Work" model + contractor hours tracking; collapse the 8-hub pricing matrix to one flat plan. 6 open decisions pending owner sign-off before Phase 2.
+- `docs/WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md` — **strategy plan (not yet started):** unify Tasks+Maintenance+Jobs into one "Work" model + contractor hours tracking; collapse the 8-hub pricing matrix to one flat $15 plan. Open decisions + Thursday-evening cutover safety.
+- `docs/PLATFORM-FOUNDATIONS-2026-06-06.md` — **architecture contracts** the premier features plug into (Work model · People model · Notification/delivery layer · Attention engine · Scheduled-occurrences · Search). The consumer matrix + build-order that keep incremental delivery from re-fragmenting. Read before building any premier feature.
+- `docs/LOCAL-TESTING-AND-REVERT-2026-06-06.md` — **how to build/test/revert safely:** Firebase emulator setup, migration-against-prod-data-copy protocol, optional staging project, backups, feature-flag dark-launch, per-layer revert runbook, pre-prod gate checklist.
 
 ## Commands
 
