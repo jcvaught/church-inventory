@@ -8,7 +8,7 @@ import { useConfirm } from '../components/primitives/ConfirmDialog.jsx';
 import { UndoToast } from '../components/primitives/UndoToast.jsx';
 import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { app, db } from '../firebase.js';
 
 function formatPhoneDisplay(e164) {
@@ -47,6 +47,12 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [loadingSuppressions, setLoadingSuppressions] = useState(false);
   const [togglingSuppressionId, setTogglingSuppressionId] = useState(null);
   const [ownerTab, setOwnerTab] = useState('suggestions');
+  // App-wide banner (owner-only) — maintenance / announcement control.
+  const [bannerActive, setBannerActive] = useState(false);
+  const [bannerType, setBannerType] = useState('info');
+  const [bannerMessage, setBannerMessage] = useState('');
+  const [bannerSaving, setBannerSaving] = useState(false);
+  const [bannerSaved, setBannerSaved] = useState(false);
   const [editAccessUser, setEditAccessUser] = useState(null);
   const [editRole, setEditRole] = useState('user');
   const [editHubs, setEditHubs] = useState([]);
@@ -133,6 +139,36 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
 
   // NOTE: owner emails also defined in functions/index.js (OWNER_EMAILS) and firestore.rules. Keep in sync.
   const isOwner = ['jcvaught@gmail.com', 'jvaught@fxcc.org'].includes(user?.email);
+
+  // Load the current global banner into the owner editor (owner only). The
+  // snapshot reflects the owner's own saves; while typing (no save yet) no
+  // snapshot fires, so in-progress edits aren't clobbered.
+  useEffect(() => {
+    if (!isOwner) return;
+    const unsub = onSnapshot(doc(db, 'appConfig', 'banner'), (snap) => {
+      const d = snap.exists() ? snap.data() : null;
+      setBannerActive(!!d?.active);
+      setBannerType(d?.type === 'maintenance' ? 'maintenance' : 'info');
+      setBannerMessage(d?.message || '');
+    });
+    return () => unsub();
+  }, [isOwner]);
+
+  async function handleSaveBanner() {
+    setBannerSaving(true);
+    try {
+      await setDoc(doc(db, 'appConfig', 'banner'), {
+        active: bannerActive,
+        type: bannerType,
+        message: bannerMessage.trim(),
+        updatedAt: new Date().toISOString(),
+        updatedBy: user?.email || '',
+      }, { merge: true });
+      setBannerSaved(true);
+      setTimeout(() => setBannerSaved(false), 3000);
+    } catch { /* owner-only tool; write failure is non-fatal */ }
+    setBannerSaving(false);
+  }
 
   if (!settings || !config) return <Spinner />;
 
@@ -1068,7 +1104,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
         <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginTop:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
           {/* Tab bar */}
           <div style={{ display:"flex", gap:8, marginBottom:18 }}>
-            {[['suggestions','Suggestions'],['churches','Churches'],['suppressions','Email']].map(([key, label]) => (
+            {[['suggestions','Suggestions'],['churches','Churches'],['suppressions','Email'],['banner','Banner']].map(([key, label]) => (
               <button key={key} onClick={() => setOwnerTab(key)}
                 style={{ padding:"6px 18px", borderRadius:20, border:"1px solid "+(ownerTab===key?B.teal:B.sand), background:ownerTab===key?B.tealPale:B.white, color:ownerTab===key?B.teal:B.textMid, fontFamily:f1, fontWeight:600, fontSize:13, cursor:"pointer" }}>
                 {label}
@@ -1205,6 +1241,53 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                     </div>
               )}
               {!suppressions && <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Click "Load" to see suppressed email addresses.</p>}
+            </>
+          )}
+
+          {/* App-wide banner tab */}
+          {ownerTab === 'banner' && (
+            <>
+              <h3 style={{ margin:"0 0 6px", fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>App-Wide Banner</h3>
+              <p style={{ margin:"0 0 16px", fontSize:13, color:B.textLight, lineHeight:1.6 }}>
+                Shows a banner to <strong>every signed-in user across all churches</strong>. Use the maintenance type during an update window ("we're updating, back soon") — it can't be dismissed. Use the announcement type for general notices — users can dismiss it, and posting a new message re-shows it.
+              </p>
+
+              <label style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16, cursor:"pointer" }}>
+                <input type="checkbox" checked={bannerActive} onChange={e=>setBannerActive(e.target.checked)} style={{ width:18, height:18, accentColor:B.teal, cursor:"pointer" }} />
+                <span style={{ fontSize:14, fontWeight:600, fontFamily:f1, color:B.navy }}>Banner active (visible to everyone)</span>
+              </label>
+
+              <div style={{ display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" }}>
+                {[['info','📣 Announcement'],['maintenance','🛠️ Maintenance']].map(([val,label]) => (
+                  <button key={val} onClick={()=>setBannerType(val)}
+                    style={{ padding:"7px 16px", borderRadius:20, border:"1px solid "+(bannerType===val?B.teal:B.sand), background:bannerType===val?B.tealPale:B.white, color:bannerType===val?B.teal:B.textMid, fontFamily:f1, fontWeight:600, fontSize:13, cursor:"pointer" }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <FF label="Message">
+                <textarea value={bannerMessage} onChange={e=>setBannerMessage(e.target.value)} rows={2} maxLength={300}
+                  placeholder="e.g. ChurchOpsHub is updating — back in ~20 minutes. Finish your current edit and we'll be right back."
+                  style={{ ...inp, resize:"vertical", fontFamily:f2 }} />
+              </FF>
+
+              {bannerMessage.trim() && (
+                <div style={{ marginTop:6, marginBottom:16 }}>
+                  <div style={{ fontSize:11, color:B.textLight, fontFamily:f1, marginBottom:6 }}>Preview</div>
+                  <div style={{ background: bannerType==='maintenance' ? '#FFF1F2' : B.tealPale, border:`1px solid ${bannerType==='maintenance' ? '#FECACA' : B.teal}`, borderRadius:8, padding:'10px 14px', fontSize:13, fontWeight:600, fontFamily:f1, color: bannerType==='maintenance' ? '#B91C1C' : B.teal }}>
+                    {bannerType==='maintenance' ? '🛠️ ' : '📣 '}{bannerMessage.trim()}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                <button onClick={handleSaveBanner} disabled={bannerSaving || (bannerActive && !bannerMessage.trim())}
+                  style={{ ...btnP, opacity:(bannerSaving || (bannerActive && !bannerMessage.trim()))?0.6:1 }}>
+                  {bannerSaving ? "Saving…" : "Save banner"}
+                </button>
+                {bannerSaved && <span style={{ fontSize:13, color:B.teal, fontWeight:600, fontFamily:f1 }}>Saved ✓</span>}
+              </div>
             </>
           )}
         </div>

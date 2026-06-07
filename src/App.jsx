@@ -29,6 +29,8 @@ import { BlogPost } from './pages/BlogPost.jsx';
 import { TermsBody } from './components/legal/TermsBody.jsx';
 import { PrivacyBody } from './components/legal/PrivacyBody.jsx';
 import { RES_STATUS } from './utils/constants.js';
+import { useGlobalBanner } from './hooks/useGlobalBanner.js';
+import { GlobalBanner } from './components/GlobalBanner.jsx';
 
 
 class PageErrorBoundary extends Component {
@@ -502,6 +504,7 @@ function AppShell({ authHook }) {
   const accountMenuRef = useRef(null);
   const accountMenuId = useId();
   const isMobile = useWindowWidth() < 768;
+  const globalBanner = useGlobalBanner();
 
   // Audit 2026-05-24 Phase 3 (item 3): account menu a11y — focus the first
   // menu item on open, trap Tab/Shift+Tab inside, close on Escape, and
@@ -696,6 +699,9 @@ function AppShell({ authHook }) {
 
       {/* Accent bar */}
       <div style={{ height:3, background:`linear-gradient(90deg, ${B.teal}, ${B.gold})` }}/>
+
+      {/* Global app-wide banner (owner-controlled; maintenance / announcements) */}
+      <GlobalBanner banner={globalBanner} />
 
       {/* Trial banner */}
       {subscription?.freeHubsSelected === null && subscription?.trialEndsAt && !trialBannerDismissed && (() => {

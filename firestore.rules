@@ -431,6 +431,16 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // ── App-wide banner (maintenance / announcements) — any signed-in user
+    //    reads; owner-only writes. Drives the GlobalBanner in the app shell and
+    //    the "we're updating" notice during migration windows.
+    //    NOTE: owner emails also in functions/index.js (OWNER_EMAILS) and
+    //    SettingsPage.jsx (isOwner). Keep in sync.
+    match /appConfig/{docId} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
+    }
+
     // ── Errors (audit M5) — no client error-telemetry collection exists;
     //    Sentry (@sentry/react) handles all error reporting. This explicit
     //    deny makes the absence intentional: any future feature that needs an
