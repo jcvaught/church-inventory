@@ -6,6 +6,12 @@ export const WHATS_NEW = [
   {
     date: '2026-06-07',
     tag: 'New',
+    title: 'Contractor scheduling & payments',
+    body: "The Timesheet (People Access → Timesheet) now tracks contractor work end to end: schedule upcoming work, log the actual hours when it's done, approve it, and mark it Paid — with an at-a-glance Awaiting Payment total. You can also schedule a contractor straight from a maintenance ticket (open a ticket → Contractor Work → Schedule Contractor); when you log those hours, the cost rolls into the ticket's Actual Cost automatically.",
+  },
+  {
+    date: '2026-06-07',
+    tag: 'New',
     title: 'Weekly email digests',
     body: "Admins can now get a Monday-morning email recap. The Insights digest flags warranty alerts, supplies running low, and your most-used items; the Compliance digest lists background checks, certifications, and key assignments expiring soon. Turn either on under Settings → Church Settings — they only send when there's something worth reporting. (We also fixed Insights charts so they now reflect your full year of activity, not just the last 100 actions.)",
   },

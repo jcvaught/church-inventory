@@ -484,7 +484,7 @@ const getEmptyTicket = () => ({ name:'', description:'', priority:'Medium', tags
 const getEmptyVendor = () => ({ name:'', phone:'', email:'', specialty:'', notes:'' });
 
 export function MaintenancePage({ store, userProfile }) {
-  const { config, items, maintenanceTickets, vendors, users, settings, notificationConfig, loading, addTicket, updateTicket, deleteTicket, addTicketComment, updateTicketComment, deleteTicketComment, addMaintenanceTags, addVendor, updateVendor, deleteVendor } = store;
+  const { config, items, maintenanceTickets, vendors, users, settings, notificationConfig, loading, addTicket, updateTicket, deleteTicket, addTicketComment, updateTicketComment, deleteTicketComment, addMaintenanceTags, addVendor, updateVendor, deleteVendor, accessPeople = [], timeEntries = [], addTimeEntry } = store;
   const isMobile = useContext(MobileCtx);
 
   const userId = userProfile?.id || userProfile?.uid;
@@ -521,6 +521,8 @@ export function MaintenancePage({ store, userProfile }) {
   const [detailEdits, setDetailEdits] = useState({});
   const [detailSnapshot, setDetailSnapshot] = useState({});
   const [vendorForm, setVendorForm] = useState(getEmptyVendor);
+  const [contractorModal, setContractorModal] = useState(false);
+  const [contractorForm, setContractorForm] = useState({ personId: '', date: '', hours: '' });
   const [sortBy, setSortBy] = useState(() => localStorage.getItem('maint_sortBy') || 'createdDesc');
   const [detailChecklistInput, setDetailChecklistInput] = useState('');
   const checklistInputRef = useRef();
@@ -871,6 +873,37 @@ export function MaintenancePage({ store, userProfile }) {
     if (!ok) return;
     await deleteVendor(vendor._docId);
     flash('Vendor deleted.');
+  }
+
+  // ── Schedule a contractor against this ticket ──
+  // Creates a linked, scheduled timeEntry (People Access → Timesheet). When the
+  // hours are later logged there, the cost rolls back into this ticket's
+  // actualCost (handled in Timesheet.rollUpToTicket via linkedTicketId).
+  const contractors = (accessPeople || []).filter(p => p.active !== false && p.personType === 'contractor');
+  function openContractorModal() {
+    setContractorForm({ personId: contractors[0]?._docId || '', date: detailEdits.dueDate || localDateStr(new Date()), hours: '' });
+    setContractorModal(true);
+  }
+  async function handleScheduleContractor() {
+    const person = contractors.find(p => p._docId === contractorForm.personId);
+    if (!person || !showDetail) return;
+    const hrs = Number(contractorForm.hours);
+    await addTimeEntry({
+      personId: person._docId,
+      personName: person.name || '',
+      date: contractorForm.date,
+      estHours: hrs > 0 ? hrs : null,
+      hours: 0,
+      cost: 0,
+      description: `${showDetail.ticketNumber || ''}: ${showDetail.name || ''}`.trim().replace(/^:\s*/, ''),
+      ministry: person.ministries?.[0] || null,
+      rate: person.hourlyRate != null ? Number(person.hourlyRate) : null,
+      status: 'scheduled',
+      linkedTicketId: showDetail._docId,
+      createdBy: userProfile.uid,
+    });
+    setContractorModal(false);
+    flash('Contractor scheduled — see it in People Access → Timesheet.');
   }
 
   async function handleDrop(docId, newStatus) {
@@ -1317,6 +1350,27 @@ export function MaintenancePage({ store, userProfile }) {
                 <input style={inp} type="number" min="0" step="0.01" value={detailEdits.estimatedCost} onChange={e => setDetailEdits(d => ({ ...d, estimatedCost:e.target.value }))} placeholder="0.00" disabled={!canOperate}/>
               </FF>
             </div>
+            {/* Contractor scheduling — links a scheduled timeEntry to this ticket;
+                logged hours roll their cost back into Actual Cost. */}
+            <FF label="Contractor Work">
+              <div style={{ border:'1px dashed '+B.sand, borderRadius:10, padding:'10px 14px', display:'flex', flexDirection:'column', gap:8 }}>
+                {timeEntries.filter(e => e.linkedTicketId === showDetail?._docId).map(e => {
+                  const st = { scheduled:'Scheduled', logged:'Logged', approved:'Approved', paid:'Paid' }[e.status] || e.status;
+                  return (
+                    <div key={e._docId} style={{ fontSize:13, color:B.textDark, fontFamily:f2 }}>
+                      <EmojiIcon emoji="🔧" decorative /> <strong>{e.personName || 'Contractor'}</strong> · {e.date}
+                      {e.estHours != null && e.status === 'scheduled' ? ` · ~${Number(e.estHours).toFixed(2)} h` : ''}
+                      {e.cost ? ` · $${Number(e.cost).toFixed(2)}` : ''}
+                      <span style={{ marginLeft:6, fontSize:11, fontWeight:700, color:B.textLight }}>{st}</span>
+                    </div>
+                  );
+                })}
+                {canOperate && (contractors.length > 0
+                  ? <button type="button" onClick={openContractorModal} style={{ ...btnS, padding:'6px 14px', fontSize:12, alignSelf:'flex-start' }}>+ Schedule Contractor</button>
+                  : <span style={{ fontSize:12, color:B.textLight, fontFamily:f2 }}>Add a person of type <strong>Contractor</strong> in People Access to schedule work here.</span>
+                )}
+              </div>
+            </FF>
             <FF label="Notes">
               <RichTextarea style={{ ...inp, minHeight:52, resize:'vertical' }} value={detailEdits.notes} onChange={v => setDetailEdits(d => ({ ...d, notes:v }))} placeholder="Additional notes..."/>
             </FF>
@@ -1461,6 +1515,32 @@ export function MaintenancePage({ store, userProfile }) {
       </Modal>
 
       {/* ═══ ADD VENDOR MODAL ═══ */}
+      {/* Schedule contractor against the open ticket */}
+      <Modal open={contractorModal} onClose={() => setContractorModal(false)} title="Schedule Contractor">
+        <FF label="Contractor" required>
+          <select style={inp} value={contractorForm.personId} onChange={e => setContractorForm(f => ({ ...f, personId:e.target.value }))}>
+            {contractors.length === 0 && <option value="">No contractors yet</option>}
+            {contractors.map(p => (
+              <option key={p._docId} value={p._docId}>{p.name}{p.hourlyRate != null ? ` ($${Number(p.hourlyRate).toFixed(2)}/hr)` : ''}</option>
+            ))}
+          </select>
+        </FF>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+          <FF label="Date" required>
+            <input style={inp} type="date" value={contractorForm.date} onChange={e => setContractorForm(f => ({ ...f, date:e.target.value }))} />
+          </FF>
+          <FF label="Estimated hours">
+            <input style={inp} type="number" min="0" step="0.25" value={contractorForm.hours} onChange={e => setContractorForm(f => ({ ...f, hours:e.target.value }))} placeholder="optional" />
+          </FF>
+        </div>
+        <p style={{ fontSize:12, color:B.textLight, fontFamily:f2, margin:'4px 0 12px' }}>
+          Creates a scheduled entry in People Access → Timesheet, linked to this ticket. When you log the actual hours there, the cost rolls into this ticket's Actual Cost.
+        </p>
+        <button onClick={handleScheduleContractor} disabled={!contractorForm.personId || !contractorForm.date} style={{ ...btnP, width:'100%', opacity:(!contractorForm.personId || !contractorForm.date) ? .5 : 1 }}>
+          Schedule
+        </button>
+      </Modal>
+
       <Modal open={showAddVendor} onClose={() => { setShowAddVendor(false); setVendorForm(getEmptyVendor()); }} title="Add Vendor">
         <FF label="Vendor / Company Name" required>
           <input style={inp} value={vendorForm.name} onChange={e => setVendorForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. Smith's HVAC"/>

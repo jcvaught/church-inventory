@@ -4,6 +4,15 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-07 — Contractor scheduling + payments (timesheet lifecycle + maintenance link)
+
+Phase-1 follow-on to the contractor Timesheet, and the data foundation for the AI "what needs attention" digest. Frontend-only — reuses the existing `timeEntries` collection + admin/manager rules (no rules/functions deploy).
+
+- **Timesheet lifecycle (`Scheduled → Logged → Approved → Paid`)** — `src/pages/hubs/Timesheet.jsx`. A time entry can now start as **Scheduled** (planned future work, optional `estHours`, `hours/cost: 0`), convert to **Logged** in place via "Log actuals" (sets real hours + cost), then **Approve** → **Mark Paid** (`status:'paid'` + `paidDate`). New surfaces: an **Upcoming Work** card (all scheduled entries, oldest-first, past-dated flagged "needs logging"), an **Awaiting Payment** summary stat (sum of `approved`-but-not-`paid` cost, not range-bound), and 4-state badges. "Schedule Work" button alongside "Log Time"; modal handles log/schedule/convert modes.
+- **Maintenance → Schedule Contractor** — `src/pages/hubs/MaintenancePage.jsx`. A ticket's detail modal has a **Contractor Work** section: lists any linked entries (derived from `timeEntries.linkedTicketId === ticket._docId` — no backref field to keep in sync) and a **+ Schedule Contractor** button (admin/manager, when a `personType:'contractor'` exists) → mini-modal (contractor + date prefilled from due date + est. hours) creates a linked **scheduled** entry with `linkedTicketId` + description `"<ticketNumber>: <name>"`.
+- **Cost rollup** — when a ticket-linked entry is logged in the Timesheet, `rollUpToTicket` adds its cost to the ticket's `actualCost` **once** (guarded by a `rolledUp` flag so re-logging won't double-add; deleting a rolled-up entry backs the cost out). Closes the deferred Phase-1 follow-up.
+- New `timeEntries` fields: `status` adds `'scheduled'|'paid'`, plus `estHours`, `paidDate`, `linkedTicketId`, `rolledUp`. All covered by the existing admin/manager write rule. lint 0-err, build clean.
+
 ## 2026-06-07 — Tier B "meantime" features (Insights digest · ICS feed · Serving readiness)
 
 Three additive, read-only features from the Work-Unification plan §13 (no schema migration, no maintenance window). Shipped + deployed together.
