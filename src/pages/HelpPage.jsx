@@ -557,6 +557,10 @@ export function HelpPage({ onBack }) {
               ]} />
               <Tip>Use this before an event to do a quick walk-through of a room and confirm everything is present.</Tip>
             </Accordion>
+
+            <Accordion title="Weekly email digest">
+              <P>Admins can get a Monday-morning email recap of the alerts that matter most — warranty expirations, supplies running low, and your most-used items. Turn it on under <strong>Settings → Church Settings → Weekly Email Digests</strong>. It only sends when there's something to report.</P>
+            </Accordion>
           </Section>
 
           {/* ──────────────────────────────────── */}
@@ -653,6 +657,11 @@ export function HelpPage({ onBack }) {
               ]} />
               <P>An alert banner at the top of the People Access page lists all expiring records, grouped by severity. Click any name to jump straight to that person\'s record list. Person cards are bordered red or gold when any of their records are critical or warning.</P>
               <Tip>The Settings page also shows a compliance badge (🔴/🟡) next to team members whose linked records are expiring.</Tip>
+            </Accordion>
+
+            <Accordion title="Serving readiness & weekly digest">
+              <P>The <strong>✅ Readiness</strong> view gives you an at-a-glance picture of who is cleared to serve. A by-requirement table shows, across your active people, how many are clear, renewing (still valid but expiring within 30 days), expired, or have no record on file — with a "Required for shifts" badge on any requirement an upcoming job depends on. Below it, an expiry timeline lists everything coming due in the next 90 days.</P>
+              <P>Admins can also turn on a <strong>weekly compliance email</strong> (Settings → Church Settings → Weekly Email Digests) that lists records expired or expiring within 30 days every Monday morning. It only sends when something needs attention.</P>
             </Accordion>
 
             <Accordion title="Custom requirements">
@@ -967,6 +976,14 @@ export function HelpPage({ onBack }) {
 
             <Accordion title="Church code">
               <P>Your church code is shown in Settings → Church Info. Use the copy button to share it. Admins can change it (requires confirmation) — existing members are unaffected since their profiles already store the church ID.</P>
+            </Accordion>
+
+            <Accordion title="Timezone & weekly email digests">
+              <P>In <strong>Church Settings</strong>, admins set your church's timezone — all scheduled emails and texts (shift reminders, the new-jobs digest, the weekly task/insights/compliance digests) go out at the right local time. Below it, two opt-in <strong>Weekly Email Digest</strong> toggles (Insights and Compliance) email admins a Monday-morning recap; each only appears if you have that hub and only sends when there's something to report.</P>
+            </Accordion>
+
+            <Accordion title="Calendar feed (subscribe in Google Calendar)">
+              <P>Admins can generate a read-only <strong>Calendar Feed</strong> link in Settings that shows your church's shifts, reservations, and maintenance in Google Calendar, Apple Calendar, or Outlook. In Google Calendar choose <strong>Other calendars → + → From URL</strong> and paste the link — it updates automatically. The link is private to your church; use <strong>Rotate</strong> to revoke an old one and issue a fresh link.</P>
             </Accordion>
 
             <Accordion title="Subscription and billing">
