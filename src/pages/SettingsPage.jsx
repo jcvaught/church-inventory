@@ -345,7 +345,10 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const isAdmin = userProfile?.role === "admin";
   const isManager = userProfile?.role === "manager";
   const managedMinistries = userProfile?.managedMinistries || [];
-  const hasJobsHub = (subscription?.hubs || []).includes('jobs') || subscription?.plan === 'all_in' || subscription?.grandfathered;
+  const allHubsUnlocked = subscription?.plan === 'all_in' || subscription?.grandfathered;
+  const hasJobsHub = (subscription?.hubs || []).includes('jobs') || allHubsUnlocked;
+  const hasInsightsHub = (subscription?.hubs || []).includes('insights') || allHubsUnlocked;
+  const hasPeopleHub = (subscription?.hubs || []).includes('people') || allHubsUnlocked;
   const userHasJobsAccess = hasJobsHub && (!userProfile?.allowedHubs || userProfile.allowedHubs.includes('jobs'));
   const adminManagerUsers = (users || []).filter(u => ['admin', 'manager'].includes(u.role) && u.id !== userProfile?.uid && u.active !== false);
 
@@ -726,6 +729,31 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
               { v:'Pacific/Honolulu',    label:'Hawaii (Honolulu)' },
             ].map(tz => <option key={tz.v} value={tz.v}>{tz.label}</option>)}
           </select>
+
+          {(hasInsightsHub || hasPeopleHub) && (
+            <div style={{ marginTop:22, paddingTop:18, borderTop:'1px solid '+B.sand }}>
+              <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Weekly Email Digests</div>
+              <div style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:12 }}>
+                Emailed to admins every Monday morning (your church's timezone). Sent only when there's something to report.
+              </div>
+              {hasInsightsHub && (
+                <label style={{ display:'flex', alignItems:'flex-start', gap:10, marginBottom:10, cursor:'pointer', fontSize:14, fontFamily:f2, color:B.textDark }}>
+                  <input type="checkbox" style={{ marginTop:3 }}
+                    checked={settings?.insightsDigestEnabled === true}
+                    onChange={(e) => updateSettings({ insightsDigestEnabled: e.target.checked })} />
+                  <span><strong>Insights digest</strong> — warranty alerts, supplies running low, and your most-used items.</span>
+                </label>
+              )}
+              {hasPeopleHub && (
+                <label style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', fontSize:14, fontFamily:f2, color:B.textDark }}>
+                  <input type="checkbox" style={{ marginTop:3 }}
+                    checked={settings?.complianceDigestEnabled === true}
+                    onChange={(e) => updateSettings({ complianceDigestEnabled: e.target.checked })} />
+                  <span><strong>Compliance expiry digest</strong> — background checks, certifications, and key assignments expiring soon.</span>
+                </label>
+              )}
+            </div>
+          )}
         </div>
       )}
 

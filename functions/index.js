@@ -1733,6 +1733,134 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 * * * *', timeZone: 'Am
   }
 }));
 
+// ── sendWeeklyInsightsDigest ──────────────────────────────────────────────
+// Runs hourly; for each church it fires only at the church's LOCAL Monday 8am
+// (per-church timezone, same gate as sendTaskDueReminders). Emails admins a
+// weekly digest of the same alerts the Insights Hub surfaces in-app —
+// warranty-expiring items, supplies running low, and the most-used items —
+// computed server-side (no 100-row activityLog cap). Opt-in: only churches
+// with config/settings.insightsDigestEnabled === true. Empty digests are
+// skipped so nobody gets a "nothing to report" email.
+exports.sendWeeklyInsightsDigest = onSchedule({ schedule: '0 * * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendWeeklyInsightsDigest', async () => {
+  if (!emailConfigured()) { console.warn('sendWeeklyInsightsDigest: Brevo not configured, skipping.'); return; }
+  const db = getFirestore();
+  const tzCache = {};
+
+  const churchSnap = await db.collection('churches').get();
+  if (churchSnap.empty) return;
+
+  let processed = 0;
+  for (const churchDoc of churchSnap.docs) {
+    const churchId = churchDoc.id;
+
+    // One settings read serves both the opt-in gate and the timezone gate.
+    let settings;
+    try { settings = (await db.doc(`churches/${churchId}/config/settings`).get()).data() || {}; }
+    catch (err) { console.error('sendWeeklyInsightsDigest: settings read failed', { churchId, err: err.message }); continue; }
+    if (settings.insightsDigestEnabled !== true) continue;
+
+    const parts = localPartsFor(await getChurchTimeZone(db, churchId, tzCache));
+    if (!(parts.weekday === 1 && parts.hour === 8)) continue; // church-local Monday 8am only
+
+    // Hub must be active for this church.
+    let sub;
+    try { sub = (await db.doc(`churches/${churchId}/config/subscription`).get()).data() || {}; }
+    catch { continue; }
+    if (!subHasHub(sub, 'insights')) continue;
+
+    const todayStr = parts.ymd;
+    const in90 = ymdAddDays(todayStr, 90);
+    const since90 = ymdAddDays(todayStr, -90);
+
+    let itemsSnap, suppliesSnap, logSnap;
+    try {
+      [itemsSnap, suppliesSnap, logSnap] = await Promise.all([
+        db.collection(`churches/${churchId}/items`).get(),
+        db.collection(`churches/${churchId}/supplies`).get(),
+        db.collection(`churches/${churchId}/activityLog`).where('timestamp', '>=', since90).get(),
+      ]);
+    } catch (err) { console.error('sendWeeklyInsightsDigest: data read failed', { churchId, err: err.message }); Sentry.captureException(err); continue; }
+
+    const items = itemsSnap.docs.map(d => d.data());
+    const supplies = suppliesSnap.docs.map(d => d.data());
+    const logs = logSnap.docs.map(d => d.data());
+
+    // Warranty-expiring (incl. already-expired), not disposed — same as Insights.
+    const warranty = items
+      .filter(i => i.warrantyExpiry && i.status !== 'Disposed' && i.warrantyExpiry <= in90)
+      .sort((a, b) => a.warrantyExpiry.localeCompare(b.warrantyExpiry));
+
+    // Supplies running low (≤14 days left) from 90-day burn rate.
+    const usage = {};
+    logs.filter(l => l.action === 'use_supply').forEach(l => {
+      usage[l.itemId] = (usage[l.itemId] || 0) + (l.details?.quantityUsed || 0);
+    });
+    const lowSupplies = supplies
+      .map(s => {
+        const used90 = usage[s.supplyId] || 0;
+        const dailyRate = used90 / 90;
+        const daysLeft = dailyRate > 0 ? Math.floor(s.quantity / dailyRate) : null;
+        return { description: s.description, quantity: s.quantity, unit: s.unit || '', daysLeft };
+      })
+      .filter(s => s.daysLeft != null && s.daysLeft <= 14)
+      .sort((a, b) => a.daysLeft - b.daysLeft);
+
+    // Most-used items (90-day checkout counts).
+    const checkouts = {};
+    logs.filter(l => l.action === 'check_out').forEach(l => { checkouts[l.itemId] = (checkouts[l.itemId] || 0) + 1; });
+    const descById = {};
+    items.forEach(i => { descById[i.itemId] = i.description; });
+    const topUtil = Object.entries(checkouts)
+      .map(([itemId, count]) => ({ description: descById[itemId] || itemId, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    // No empty digests.
+    if (warranty.length === 0 && lowSupplies.length === 0 && topUtil.length === 0) continue;
+
+    const adminsSnap = await db.collection('users').where('churchId', '==', churchId).get();
+    const admins = adminsSnap.docs.map(d => d.data())
+      .filter(a => a.role === 'admin' && a.active !== false && a.email);
+    if (admins.length === 0) continue;
+
+    const churchName = churchDoc.data()?.churchName || settings.churchName || 'your church';
+    const sections = [];
+    if (warranty.length) {
+      sections.push(`<h3 style="font-size:14px;color:#1B2A4A;margin:18px 0 6px">⚠️ Warranty alerts (${warranty.length})</h3>
+<ul style="padding-left:20px;margin:0">${warranty.slice(0, 15).map(i => {
+        const expired = i.warrantyExpiry < todayStr;
+        return `<li style="margin-bottom:4px">${escapeHtml(i.description)} — <strong style="color:${expired ? '#DC2626' : '#B45309'}">${expired ? 'EXPIRED' : 'expires'} ${escapeHtml(i.warrantyExpiry)}</strong></li>`;
+      }).join('')}</ul>`);
+    }
+    if (lowSupplies.length) {
+      sections.push(`<h3 style="font-size:14px;color:#1B2A4A;margin:18px 0 6px">🧴 Supplies running low (${lowSupplies.length})</h3>
+<ul style="padding-left:20px;margin:0">${lowSupplies.slice(0, 15).map(s =>
+        `<li style="margin-bottom:4px">${escapeHtml(s.description)} — <strong style="color:#DC2626">${s.quantity}${s.unit ? ' ' + escapeHtml(s.unit) : ''} left · ~${s.daysLeft} day${s.daysLeft === 1 ? '' : 's'}</strong></li>`).join('')}</ul>`);
+    }
+    if (topUtil.length) {
+      sections.push(`<h3 style="font-size:14px;color:#1B2A4A;margin:18px 0 6px">📊 Most-used items (last 90 days)</h3>
+<ul style="padding-left:20px;margin:0">${topUtil.map(i =>
+        `<li style="margin-bottom:4px">${escapeHtml(i.description)} — <strong>${i.count} checkout${i.count === 1 ? '' : 's'}</strong></li>`).join('')}</ul>`);
+    }
+
+    const subject = `${churchName}: weekly insights digest`;
+    const html = `<p>Here's this week's snapshot for <strong>${escapeHtml(churchName)}</strong>:</p>
+${sections.join('\n')}
+<p style="margin-top:18px"><a href="https://churchopshub.com">Open ChurchOpsHub</a> for the full Insights Hub.</p>
+<p style="font-size:12px;color:#888">You're an admin getting the weekly Insights digest. Turn it off any time in Settings → Church Settings.</p>`;
+    const textLines = [];
+    if (warranty.length) textLines.push(`Warranty alerts (${warranty.length}):`, ...warranty.slice(0, 15).map(i => `  - ${i.description} — ${i.warrantyExpiry < todayStr ? 'EXPIRED' : 'expires'} ${i.warrantyExpiry}`));
+    if (lowSupplies.length) textLines.push(`Supplies running low (${lowSupplies.length}):`, ...lowSupplies.slice(0, 15).map(s => `  - ${s.description} — ${s.quantity}${s.unit ? ' ' + s.unit : ''} left, ~${s.daysLeft} days`));
+    if (topUtil.length) textLines.push('Most-used items (last 90 days):', ...topUtil.map(i => `  - ${i.description} — ${i.count} checkouts`));
+    const text = `Weekly insights for ${churchName}\n\n${textLines.join('\n')}\n\nOpen churchopshub.com for the full Insights Hub.\n`;
+
+    const results = await Promise.allSettled(admins.map(a => sendEmailSafe({ to: a.email, from: FROM, subject, html, text })));
+    results.forEach((r) => { if (r.status === 'rejected') { console.error('sendWeeklyInsightsDigest: email failed', { churchId, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
+    processed += results.filter(r => r.status === 'fulfilled').length;
+  }
+  return { processed };
+}));
+
 // ── closePastJobs ─────────────────────────────────────────────────────────
 // Runs daily at 2:00 AM Central time. Flips any `open` job whose
 // scheduledDate is strictly before today to `completed`. Without this,
@@ -2799,6 +2927,7 @@ const SCHEDULED_JOB_REGISTRY = [
   // church's local target hour (per-church timezone), so they write a heartbeat
   // every hour — monitored on the tighter 'hourly' window.
   { name: 'sendTaskDueReminders',          cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
+  { name: 'sendWeeklyInsightsDigest',      cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendJobReminders',              cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendNewJobsDigest',             cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'closePastJobs',                 cadence: 'daily',  maxRunMs:   5 * 60 * 1000 },
