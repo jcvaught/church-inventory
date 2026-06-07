@@ -6,6 +6,12 @@ export const WHATS_NEW = [
   {
     date: '2026-06-07',
     tag: 'New',
+    title: 'What needs attention this week',
+    body: "Admins now get an AI summary right on the Dashboard that reads across everything — overdue tasks and maintenance, expiring background checks and certifications, low stock, unfilled shifts, and contractor schedule and payments — and tells you, in plain language, what to look at this week. It refreshes weekly (tap ↻ to update sooner). Want it in your inbox too? Turn on the new Monday digest in Settings → Church Settings.",
+  },
+  {
+    date: '2026-06-07',
+    tag: 'New',
     title: 'Contractor scheduling & payments',
     body: "The Timesheet (People Access → Timesheet) now tracks contractor work end to end: schedule upcoming work, log the actual hours when it's done, approve it, and mark it Paid — with an at-a-glance Awaiting Payment total. You can also schedule a contractor straight from a maintenance ticket (open a ticket → Contractor Work → Schedule Contractor); when you log those hours, the cost rolls into the ticket's Actual Cost automatically.",
   },

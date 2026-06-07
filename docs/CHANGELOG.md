@@ -4,6 +4,18 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-07 — AI "What needs attention this week" digest (in-app panel + weekly email)
+
+Premier feature pulled forward ahead of the Work migration. Reads across every hub's existing signals and uses Claude (Haiku) to write a short prioritized briefing. **Admin-only** (the contractor-payment line is financial). Prerequisite: `ANTHROPIC_API_KEY` in `functions/.env` (loads at deploy).
+
+- **Signal gather** (`gatherAttentionSignals`): per church, hub-gated — overdue/due-soon tasks (`tasks` hub), maintenance (`maintenance`), expiring/expired compliance within 30d (`people_access`), low stock (`quantity ≤ minQuantity`) + warranty-expiring items (Inventory base, always on), unfilled upcoming shifts (`jobs`), and contractor upcoming scheduled work + hours logged (7d) + outstanding payments (approved-unpaid) (`people_access`). Each block contributes counts + a few example strings.
+- **Claude call** (`callClaude`): dependency-free Node-22 `fetch` to `/v1/messages`, model `claude-haiku-4-5-20251001`, `x-api-key` + `anthropic-version: 2023-06-01` (mirrors `sendViaBrevo`'s no-SDK style — COH does not add the Anthropic SDK). Asks for minified JSON `{summary, items:[{priority,text}]}`; parse is fence-tolerant (`indexOf('{')`/`lastIndexOf('}')` slice). Verified live: 200, ~733 tokens ≈ $0.002/generation.
+- **Weekly cache** (`buildAttentionDigest`): one generation per church per ISO-week (`isoWeekKey`) in `churches/{id}/aiDigests/current`; repeat views + the email reuse it. Empty weeks short-circuit to a "nothing needs attention" payload (no Claude call, no email).
+- **`getAttentionDigest`** (onCall, admin-only, `wrapCall`): powers the in-app panel; returns cached or regenerates on `{refresh:true}`. IAM probe-verified (401 JSON).
+- **`sendWeeklyAttentionDigest`** (onSchedule, hourly, church-local **Monday 8am**; opt-in `config/settings.attentionDigestEnabled`): emails admins, reuses the weekly cache, skips empty weeks. Registered in `SCHEDULED_JOB_REGISTRY`.
+- **Client:** `src/components/AttentionPanel.jsx` on the Dashboard (admin-only) — calls the callable on mount, renders summary + priority-tagged items + a Refresh button + "updated … refreshes weekly". Third digest toggle (always-shown, admin) in Settings → Church Settings.
+- No firestore.rules change — `aiDigests` is written by the CF via Admin SDK and read only through the callable (clients never touch the collection). lint 0-err, build clean.
+
 ## 2026-06-07 — Contractor scheduling + payments (timesheet lifecycle + maintenance link)
 
 Phase-1 follow-on to the contractor Timesheet, and the data foundation for the AI "what needs attention" digest. Frontend-only — reuses the existing `timeEntries` collection + admin/manager rules (no rules/functions deploy).

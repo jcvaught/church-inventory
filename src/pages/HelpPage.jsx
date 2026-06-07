@@ -979,7 +979,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Timezone & weekly email digests">
-              <P>In <strong>Church Settings</strong>, admins set your church's timezone — all scheduled emails and texts (shift reminders, the new-jobs digest, the weekly task/insights/compliance digests) go out at the right local time. Below it, two opt-in <strong>Weekly Email Digest</strong> toggles (Insights and Compliance) email admins a Monday-morning recap; each only appears if you have that hub and only sends when there's something to report.</P>
+              <P>In <strong>Church Settings</strong>, admins set your church's timezone — all scheduled emails and texts (shift reminders, the new-jobs digest, the weekly task/insights/compliance digests) go out at the right local time. Below it, opt-in <strong>Weekly Email Digest</strong> toggles email admins a Monday-morning recap: <strong>What needs attention this week</strong> (an AI summary across overdue work, expiring compliance, low stock, unfilled shifts, and contractor schedule/payments), plus per-hub <strong>Insights</strong> and <strong>Compliance</strong> digests. Each only sends when there's something to report. The "what needs attention" summary also appears live on the admin Dashboard any time.</P>
             </Accordion>
 
             <Accordion title="Calendar feed (subscribe in Google Calendar)">
