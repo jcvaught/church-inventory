@@ -5,9 +5,9 @@
 // ╚══════════════════════════════════════════════════════════════╝
 
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getStorage } from 'firebase/storage';
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider, connectAuthEmulator } from 'firebase/auth';
+import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey:            "AIzaSyBH6VE_mROLAkdWXZ1A7TXEdBSijV5bf9Y",
@@ -23,6 +23,21 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export const storage = getStorage(app);
+
+// ── Local sandbox (Firebase Emulator Suite) ──────────────────────────────
+// When the app is started with VITE_USE_EMULATORS=true (`npm run dev:emulator`),
+// Auth/Firestore/Storage point at the LOCAL emulators — zero connection to
+// production data. The flag is unset in every real build, so prod/Vercel is
+// completely unaffected (this whole block dead-code-eliminates). Cloud
+// Functions are intentionally NOT emulated, so callable-backed actions
+// (job sign-up, @mention emails, Stripe) won't work in the sandbox — test
+// those against the e2e test tenant instead. See docs/LOCAL-TESTING-AND-REVERT.
+if (import.meta.env.VITE_USE_EMULATORS === 'true') {
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  connectStorageEmulator(storage, '127.0.0.1', 9199);
+  console.warn('🧪 Firebase EMULATOR mode — Auth/Firestore/Storage are local. No production data is touched. (Cloud Functions are NOT emulated.)');
+}
 
 // FCM Web Push public key (VAPID). Public by design — safe to ship in the
 // client bundle. Used by src/utils/push.js getToken(). Generated in the

@@ -25,6 +25,18 @@ npm run analyze   # Build + open bundle size visualizer in browser (dist/bundle-
 npm run test:e2e  # Playwright E2E suite against prod (~80s, requires E2E_MEMBER_B_EMAIL env)
 ```
 
+### Local sandbox — Firebase Emulator Suite (2026-06-07)
+
+A fully-isolated local backend for testing UI/data changes with **zero connection to production** (groundwork for the Work-unification phases; see `docs/LOCAL-TESTING-AND-REVERT-2026-06-06.md`). **Requires Java** (Firestore emulator runs on the JVM): `brew install --cask temurin`. Three terminals:
+
+```bash
+npm run emulators        # 1. start Auth+Firestore+Storage emulators (UI at localhost:4000)
+npm run seed:emulator    # 2. seed a grandfathered test church + sample data (login: admin@test.local / Test1234!)
+npm run dev:emulator     # 3. Vite with VITE_USE_EMULATORS=true → app talks to the local emulators
+```
+
+`src/firebase.js` connects the emulators only when `VITE_USE_EMULATORS=true` (unset in every real build, so prod/Vercel is unaffected — the block dead-code-eliminates). **Cloud Functions are NOT emulated** (avoids local code firing real Brevo/Twilio/Stripe/Claude calls), so callable-backed actions (job sign-up, @mention emails, checkout) won't work in the sandbox — test those against the `e2e-test-church` tenant instead. The emulator is empty on each start; re-run `seed:emulator` after restarting (or add `--import/--export-on-exit=.emulator-data` to the `emulators` script to persist). `scripts/seed-emulator.mjs` refuses to run unless the admin SDK is pointed at a localhost emulator (can never touch prod).
+
 **Run `npm run build` and fix any errors before pushing.** Run `npm run lint` regularly — the baseline is 0 errors, ~45 intentional `exhaustive-deps` warnings. Any new errors should be fixed before committing.
 
 ### E2E test suite
