@@ -723,8 +723,6 @@ export function HelpPage({ onBack }) {
                 'Assignees — one or more team members',
                 'Tags — searchable labels',
                 'Visibility — Team, Private, or Shared (see below)',
-                'Parent Task — optionally nest this task under another (creates a subtask)',
-                'Blocked By — list TSK-### numbers this task depends on',
                 'Photos and notes',
               ]} />
               <P>Tasks are auto-numbered (TSK-001, TSK-002, …). Status starts at Backlog and moves through: Backlog → Planning → In Progress → On Hold → Complete → Cancelled.</P>
@@ -754,15 +752,6 @@ export function HelpPage({ onBack }) {
 
             <Accordion title="Checklist items">
               <P>Open a task and scroll to <strong>Checklist</strong>. Type an item and press Enter (or click Add) to add it. Check items off as you work. The card shows your progress (e.g. ✓ 3/5) at a glance. Checklist items carry over when a recurring task auto-creates, with done state reset.</P>
-            </Accordion>
-
-            <Accordion title="Subtasks and parent-child relationships">
-              <P>When creating or editing a task, choose a <strong>Parent Task</strong> to make it a subtask. In the list view, subtasks appear nested under their parent. Parent task cards show a progress badge (e.g. ↳ 2/3 subtasks done). In Kanban view, subtasks appear in their own status column with a parent reference.</P>
-              <P>Open a parent task to see all its subtasks listed with their current status. Click any subtask to open it directly.</P>
-            </Accordion>
-
-            <Accordion title="Task dependencies (Blocked By)">
-              <P>Use the <strong>Blocked By</strong> field to indicate that a task depends on other tasks being finished first. Enter one or more TSK-### numbers. Blocked tasks show an ⛔ badge on their card. When you try to mark a blocked task Complete, the app shows a soft warning so you can confirm the blockers are actually resolved.</P>
             </Accordion>
 
             <Accordion title="Task templates">

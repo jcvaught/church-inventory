@@ -4,6 +4,14 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-07 — Removed subtasks + task dependencies from Tasks Hub
+
+Owner decision ("too much information") and a Work-unification §9 cleanup, landed early as a self-contained removal (independent of the migration). Frontend-only — no rules/functions/deploy. Existing task docs keep their `parentTaskId`/`blockedBy` fields (forward-only; nothing reads/writes them now).
+
+- **TasksPage.jsx:** deleted the `BlockedByInput` component; the Parent Task `<select>` + Blocked By field from both the new-task and detail modals; the subtask card badge (`↳ N/M`), the ⛔ "Blocked by" card badge, and the parent-name line on `TaskCard`; the list-view nested subtree render + `subtaskDocIds` top-level filter; the Kanban subtask/parent/depth props; the `tasksByParent` / `subtaskDocIds` / `depthByDocId` derived memos; the blocked-complete soft warnings in `handleUpdateTask` / `handleDrop` / `handleBulkStatusChange`; the subtask-cascade + `blockedBy` array-remove cleanup in `handleDeleteTask`; the parent-link + Subtasks list in the detail modal; the `parentTaskId`/`blockedBy` fields from `getEmptyTask`, the dirty-check, `openDetail`, and the recurring-task clone. Dropped now-unused imports (`getDocs`, `where`, `arrayRemove`).
+- **JobsPage.jsx:** dropped `parentTaskId`/`blockedBy` from the → Task convert payload.
+- **HelpPage.jsx:** removed the Subtasks and "Task dependencies (Blocked By)" accordions + the two field-list lines. lint 0-err, build clean.
+
 ## 2026-06-07 — AI "What needs attention this week" digest (in-app panel + weekly email)
 
 Premier feature pulled forward ahead of the Work migration. Reads across every hub's existing signals and uses Claude (Haiku) to write a short prioritized briefing. **Admin-only** (the contractor-payment line is financial). Prerequisite: `ANTHROPIC_API_KEY` in `functions/.env` (loads at deploy).

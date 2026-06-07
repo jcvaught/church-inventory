@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext, useRef, useMemo, memo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { collection, doc, onSnapshot, query as fsQuery, orderBy, runTransaction, getDocs, where, updateDoc, deleteField, arrayRemove } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query as fsQuery, orderBy, runTransaction, updateDoc, deleteField } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebase.js';
 import { notify } from '../../utils/notify.js';
@@ -154,7 +154,7 @@ function PriorityBadge({ priority }) {
 }
 
 
-const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusChange, isMobile, subtaskCount, subtaskDone, parentName, depth = 0 }) {
+const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusChange, isMobile }) {
   const sc = statusColors[task.status] || statusColors['Backlog'];
   const isOverdue = task.dueDate && task.dueDate < localDateStr(new Date()) && task.status !== 'Complete' && task.status !== 'Cancelled';
   const visIcon = task.visibility === 'private' ? '🔒' : task.visibility === 'shared' ? '👥' : null;
@@ -167,7 +167,7 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
       onClick={() => onClick(task)}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(task); } }}
       aria-label={`${task.taskNumber ? task.taskNumber + ': ' : ''}${task.name}${isOverdue ? ' (overdue)' : ''}`}
-      style={{ background:B.white, borderRadius:12, padding:'14px 16px', border:'1px solid '+B.sand, cursor: !isMobile && onDragStart ? 'grab' : 'pointer', borderLeft:'4px solid '+sc.dot, boxShadow:'0 1px 3px rgba(27,42,74,0.06)', marginBottom:8, marginLeft: depth ? depth * 12 : 0, transition:'box-shadow 0.15s' }}
+      style={{ background:B.white, borderRadius:12, padding:'14px 16px', border:'1px solid '+B.sand, cursor: !isMobile && onDragStart ? 'grab' : 'pointer', borderLeft:'4px solid '+sc.dot, boxShadow:'0 1px 3px rgba(27,42,74,0.06)', marginBottom:8, transition:'box-shadow 0.15s' }}
       onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(27,42,74,0.12)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 3px rgba(27,42,74,0.06)'}
     >
@@ -187,10 +187,6 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
           <PriorityBadge priority={task.priority}/>
         </div>
       </div>
-      {task.blockedBy?.length > 0 && task.status !== 'Complete' && task.status !== 'Cancelled' && (
-        <div style={{ fontSize:11, fontWeight:700, color:B.red, fontFamily:f1, marginBottom:3 }}><EmojiIcon emoji="⛔" label="Blocked" /> Blocked by {task.blockedBy.join(', ')}</div>
-      )}
-      {parentName && <div style={{ fontSize:11, color:B.textLight, fontFamily:f1, marginBottom:3 }}>Parent: {parentName}</div>}
       <div style={{ fontWeight:600, fontSize:14, color:B.navy, marginBottom:4, lineHeight:1.3 }}>{task.name}</div>
       {task.description && (
         <div style={{ fontSize:12, color:B.textMid, lineHeight:1.4, marginBottom:6, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', whiteSpace:'pre-wrap' }}>
@@ -205,17 +201,12 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
           ))}
         </div>
       )}
-      {(task.recurrence || task.checklist?.length > 0 || subtaskCount > 0) && (
+      {(task.recurrence || task.checklist?.length > 0) && (
         <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
           {task.recurrence && <span style={{ fontSize:12, color:B.teal, fontFamily:f1 }}><EmojiIcon emoji="🔁" decorative /> {RECURRENCE_LABELS[task.recurrence]}</span>}
           {task.checklist?.length > 0 && (
             <span style={{ fontSize:12, color:task.checklist.filter(c=>c.done).length===task.checklist.length ? B.teal : B.textMid, fontFamily:f1 }}>
               ✓ {task.checklist.filter(c=>c.done).length}/{task.checklist.length}
-            </span>
-          )}
-          {subtaskCount > 0 && (
-            <span style={{ fontSize:12, color:subtaskDone===subtaskCount ? B.teal : B.textMid, fontFamily:f1 }}>
-              ↳ {subtaskDone}/{subtaskCount} subtask{subtaskCount !== 1 ? 's' : ''}
             </span>
           )}
         </div>
@@ -321,86 +312,6 @@ function TagInput({ tags = [], onChange, suggestions = [] }) {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function BlockedByInput({ blockedBy = [], onChange, tasks = [], currentTaskNumber }) {
-  const [inputVal, setInputVal] = useState('');
-  const [blockerError, setBlockerError] = useState('');
-  const [highlightIdx, setHighlightIdx] = useState(-1);
-  const errorTimerRef = useRef(null);
-  const enterHandledRef = useRef(false);
-  useEffect(() => () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current); }, []);
-  const suggestions = tasks.filter(t =>
-    t.taskNumber?.startsWith('TSK-') &&
-    t.taskNumber !== currentTaskNumber &&
-    !blockedBy.includes(t.taskNumber) &&
-    !['Complete', 'Cancelled'].includes(t.status) &&
-    t.taskNumber.toLowerCase().includes(inputVal.toLowerCase())
-  ).slice(0, 8);
-  const safeIdx = highlightIdx >= 0 && highlightIdx < suggestions.length ? highlightIdx : -1;
-  const dropOpen = !!inputVal && suggestions.length > 0;
-
-  function addBlocker(num) {
-    const v = num.trim().toUpperCase();
-    if (!v || blockedBy.includes(v)) { setInputVal(''); return; }
-    if (!tasks.find(t => t.taskNumber === v)) {
-      setBlockerError('Task not found.');
-      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
-      errorTimerRef.current = setTimeout(() => setBlockerError(''), 3000);
-      return;
-    }
-    onChange([...blockedBy, v]);
-    setInputVal('');
-    setHighlightIdx(-1);
-  }
-  function onKey(e) {
-    if (dropOpen) {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightIdx(i => (i + 1) % suggestions.length); return; }
-      if (e.key === 'ArrowUp')   { e.preventDefault(); setHighlightIdx(i => i <= 0 ? suggestions.length - 1 : i - 1); return; }
-      if (e.key === 'Escape')    { e.preventDefault(); setInputVal(''); return; }
-      if (e.key === 'Enter' && safeIdx >= 0) {
-        e.preventDefault();
-        enterHandledRef.current = true;
-        addBlocker(suggestions[safeIdx].taskNumber);
-        return;
-      }
-    }
-    if ((e.key === 'Enter' || e.key === ',') && inputVal.trim()) {
-      e.preventDefault();
-      if (e.key === 'Enter') enterHandledRef.current = true;
-      addBlocker(inputVal);
-    }
-    else if (e.key === 'Backspace' && !inputVal && blockedBy.length) onChange(blockedBy.slice(0, -1));
-  }
-  function onKeyUp(e) {
-    if (e.key !== 'Enter') return;
-    if (enterHandledRef.current) { enterHandledRef.current = false; return; }
-    if (inputVal.trim()) { e.preventDefault(); addBlocker(inputVal); }
-  }
-
-  return (
-    <div style={{ position:'relative' }}>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:6, padding:'7px 10px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, minHeight:42, alignItems:'center' }}>
-        {blockedBy.map(num => (
-          <span key={num} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 8px', borderRadius:12, background:'#FEE8E8', color:B.red, fontSize:12, fontFamily:f1 }}>
-            {num}
-            <button onMouseDown={e => { e.preventDefault(); onChange(blockedBy.filter(x => x !== num)); }} aria-label={`Remove blocker ${num}`} style={{ border:'none', background:'none', color:B.red, cursor:'pointer', padding:'0 0 0 2px', fontSize:14, lineHeight:1 }}>×</button>
-          </span>
-        ))}
-        <input value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={onKey} onKeyUp={onKeyUp} enterKeyHint="done" placeholder={blockedBy.length ? '' : 'Type TSK-###, press Enter...'} style={{ border:'none', outline:'none', fontSize:13, flex:1, minWidth:100, fontFamily:f2, color:B.textDark, background:'transparent' }}/>
-      </div>
-      {dropOpen && (
-        <div role="listbox" style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:200, background:B.white, border:'1px solid '+B.sand, borderRadius:10, boxShadow:'0 4px 16px rgba(27,42,74,0.1)', maxHeight:130, overflowY:'auto', marginTop:2 }}>
-          {suggestions.map((t, idx) => (
-            <div key={t._docId} role="option" aria-selected={idx === safeIdx} onMouseDown={() => addBlocker(t.taskNumber)} style={{ padding:'8px 14px', cursor:'pointer', fontSize:13, fontFamily:f2, color:B.textDark, background: idx === safeIdx ? B.warmGray : '' }}
-              onMouseEnter={() => setHighlightIdx(idx)}
-            ><strong>{t.taskNumber}</strong> — {t.name}</div>
-          ))}
-        </div>
-      )}
-      {blockerError && <div style={{ fontSize:11, color:B.red, fontFamily:f1, marginTop:3 }}>{blockerError}</div>}
     </div>
   );
 }
@@ -718,7 +629,7 @@ function CommentThread({ comments, loading, newComment, onChange, onPost, postin
   );
 }
 
-const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, onDrop, onReorder, onStatusChange, isMobile, tasksByParent, tasksByDocId, depthByDocId, onQuickAdd }) {
+const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, onDrop, onReorder, onStatusChange, isMobile, onQuickAdd }) {
   const sc = statusColors[status] || statusColors['Backlog'];
   const [dragOver, setDragOver] = useState(false);
   const [quickAddName, setQuickAddName] = useState('');
@@ -738,8 +649,6 @@ const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, on
         {tasks.length === 0
           ? <div style={{ textAlign:'center', color:B.textLight, fontSize:12, padding:'16px 0', fontStyle:'italic' }}>Empty</div>
           : tasks.map(t => {
-              const subs = tasksByParent?.[t._docId] || [];
-              const parentTask = t.parentTaskId ? tasksByDocId?.[t.parentTaskId] : null;
               return (
                 <div
                   key={t._docId}
@@ -757,7 +666,7 @@ const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, on
                     }
                   } : undefined}
                 >
-                  <TaskCard task={t} onClick={onTaskClick} onDragStart={onDrop || onReorder || undefined} onStatusChange={onStatusChange} isMobile={isMobile} subtaskCount={subs.length} subtaskDone={subs.filter(s=>s.status==='Complete').length} parentName={parentTask?.taskNumber ? parentTask.taskNumber + ' ' + parentTask.name : parentTask?.name} depth={depthByDocId?.[t._docId] || 0}/>
+                  <TaskCard task={t} onClick={onTaskClick} onDragStart={onDrop || onReorder || undefined} onStatusChange={onStatusChange} isMobile={isMobile}/>
                 </div>
               );
             })
@@ -1006,7 +915,7 @@ function PastePanel({ pasteText, setPasteText, taskHubUsers, pasteSaving, pasteP
   );
 }
 
-const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', status:'Backlog', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], parentTaskId:null, blockedBy:[], linkedItemDocId:null, linkedTicketDocId:null, estimatedHours:null, actualHours:null, ministry:'' });
+const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', status:'Backlog', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], linkedItemDocId:null, linkedTicketDocId:null, estimatedHours:null, actualHours:null, ministry:'' });
 
 export function TasksPage({ store, userProfile }) {
   const { tasks, items, maintenanceTickets, users, settings, config, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser, taskTemplates, addTaskTemplate, deleteTaskTemplate, addJobListing, addTicket, deleteJobListing, deleteTicket } = store;
@@ -1173,13 +1082,12 @@ export function TasksPage({ store, userProfile }) {
 
   // ── Dirty-state tracking ──
   const isDetailDirtyNow = useMemo(() => {
-    const fields = ['name', 'description', 'status', 'priority', 'dueDate', 'recurrence', 'visibility', 'notes', 'parentTaskId'];
+    const fields = ['name', 'description', 'status', 'priority', 'dueDate', 'recurrence', 'visibility', 'notes'];
     if (fields.some(f => (detailEdits[f] ?? '') !== (detailSnapshot[f] ?? ''))) return true;
     if (JSON.stringify(detailEdits.tags) !== JSON.stringify(detailSnapshot.tags)) return true;
     if (JSON.stringify(detailEdits.assignees) !== JSON.stringify(detailSnapshot.assignees)) return true;
     if (JSON.stringify(detailEdits.sharedWith) !== JSON.stringify(detailSnapshot.sharedWith)) return true;
     if (JSON.stringify(detailEdits.checklist) !== JSON.stringify(detailSnapshot.checklist)) return true;
-    if (JSON.stringify(detailEdits.blockedBy) !== JSON.stringify(detailSnapshot.blockedBy)) return true;
     if ((detailEdits.linkedItemDocId ?? null) !== (detailSnapshot.linkedItemDocId ?? null)) return true;
     if ((detailEdits.linkedTicketDocId ?? null) !== (detailSnapshot.linkedTicketDocId ?? null)) return true;
     if ((detailEdits.estimatedHours ?? null) !== (detailSnapshot.estimatedHours ?? null)) return true;
@@ -1252,8 +1160,6 @@ export function TasksPage({ store, userProfile }) {
       sharedWith: task.sharedWith || [],
       notes: task.notes || '',
       checklist: task.checklist || [],
-      parentTaskId: task.parentTaskId || null,
-      blockedBy: task.blockedBy || [],
       linkedItemDocId: task.linkedItemDocId || null,
       linkedTicketDocId: task.linkedTicketDocId || null,
       estimatedHours: task.estimatedHours ?? null,
@@ -1333,8 +1239,6 @@ export function TasksPage({ store, userProfile }) {
         photos: [],
         visibility: source.visibility || 'team',
         sharedWith: source.visibility === 'shared' ? (source.sharedWith || []) : [],
-        parentTaskId: source.parentTaskId || null,
-        blockedBy: source.blockedBy || [],
         completedAt: null,
       }, userId, userName);
     } catch (err) {
@@ -1446,15 +1350,6 @@ export function TasksPage({ store, userProfile }) {
     if (!showDetail) return;
     const wasComplete = showDetail.status === 'Complete';
     const isNowComplete = detailEdits.status === 'Complete';
-    const blockers = detailEdits.blockedBy || [];
-    if (!wasComplete && isNowComplete && blockers.length > 0) {
-      const ok = await confirm({
-        title: 'Force complete?',
-        message: `This task is marked as blocked by ${blockers.join(', ')}. Mark it Complete anyway?`,
-        confirmLabel: 'Complete anyway',
-      });
-      if (!ok) return;
-    }
     setSaving(true);
     try {
       const updates = {
@@ -1604,14 +1499,6 @@ export function TasksPage({ store, userProfile }) {
   async function handleDrop(docId, newStatus) {
     const task = visibleTasks.find(t => t._docId === docId);
     if (!task || task.status === newStatus) return;
-    if (newStatus === 'Complete' && task.blockedBy?.length > 0) {
-      const ok = await confirm({
-        title: 'Force complete?',
-        message: <><strong>{task.name}</strong> is blocked by {task.blockedBy.join(', ')}. Mark it Complete anyway?</>,
-        confirmLabel: 'Complete anyway',
-      });
-      if (!ok) return;
-    }
     if (newStatus === 'Complete' || newStatus === 'Cancelled') {
       const extra = newStatus === 'Complete' && task.recurrence ? ' A new recurring task will be created.' : '';
       const ok = await confirm({
@@ -1650,41 +1537,19 @@ export function TasksPage({ store, userProfile }) {
 
   async function handleDeleteTask() {
     if (!showDetail?._docId) return;
-    const subtasks = (tasks || []).filter(t => t.parentTaskId === showDetail._docId);
-    const subtaskNote = subtasks.length > 0
-      ? <> and its <strong>{subtasks.length}</strong> subtask{subtasks.length !== 1 ? 's' : ''}</>
-      : null;
     const ok = await confirm({
       title: 'Delete task?',
-      message: <>Permanently delete <strong>{showDetail.name}</strong>{subtaskNote}. This cannot be undone.</>,
+      message: <>Permanently delete <strong>{showDetail.name}</strong>. This cannot be undone.</>,
       confirmLabel: 'Delete',
       danger: true,
     });
     if (!ok) return;
     setSaving(true);
     try {
-      const subtaskResults = await Promise.allSettled(subtasks.map(st => deleteTask(st._docId, st, userId, userName)));
-      const subtaskFailed = subtaskResults.filter(r => r.status === 'rejected').length;
-      const deletedTaskNumber = showDetail.taskNumber;
       await deleteTask(showDetail._docId, showDetail, userId, userName);
-      let blockedFailed = 0;
-      if (deletedTaskNumber) {
-        const blockedSnap = await getDocs(
-          fsQuery(collection(db, 'churches', churchId, 'tasks'), where('blockedBy', 'array-contains', deletedTaskNumber))
-        );
-        const blockedResults = await Promise.allSettled(blockedSnap.docs.map(d => updateDoc(d.ref, { blockedBy: arrayRemove(deletedTaskNumber) })));
-        blockedFailed = blockedResults.filter(r => r.status === 'rejected').length;
-      }
       setShowDetail(null);
       setDetailEdits({});
-      if (subtaskFailed === 0 && blockedFailed === 0) {
-        flash('Task deleted.');
-      } else {
-        const parts = [];
-        if (subtaskFailed > 0) parts.push(`${subtaskFailed} subtask${subtaskFailed !== 1 ? 's' : ''}`);
-        if (blockedFailed > 0) parts.push(`${blockedFailed} dependent task${blockedFailed !== 1 ? 's' : ''}`);
-        flash(`Task deleted. Cleanup of ${parts.join(' and ')} failed — refresh to verify.`, true);
-      }
+      flash('Task deleted.');
     } catch {
       flash('Failed to delete task.', true);
     } finally {
@@ -1701,8 +1566,7 @@ export function TasksPage({ store, userProfile }) {
   }
 
   function selectAllVisible() {
-    const topLevel = sortedTasks.filter(t => !subtaskDocIds.has(t._docId));
-    setSelectedTaskIds(new Set(topLevel.map(t => t._docId)));
+    setSelectedTaskIds(new Set(sortedTasks.map(t => t._docId)));
   }
 
   function clearSelection() { setSelectedTaskIds(new Set()); setBulkStatus(''); setBulkAssigneeId(''); }
@@ -1710,17 +1574,6 @@ export function TasksPage({ store, userProfile }) {
   async function handleBulkStatusChange() {
     if (!bulkStatus || selectedTaskIds.size === 0) return;
     const tasksToUpdate = [...selectedTaskIds].map(docId => tasksByDocId[docId]).filter(Boolean);
-    if (bulkStatus === 'Complete') {
-      const blocked = tasksToUpdate.filter(t => (t.blockedBy || []).length > 0 && t.status !== 'Complete' && t.status !== 'Cancelled');
-      if (blocked.length > 0) {
-        const ok = await confirm({
-          title: 'Force complete?',
-          message: `${blocked.length} selected task${blocked.length !== 1 ? 's' : ''} ha${blocked.length !== 1 ? 've' : 's'} open dependencies. Mark complete anyway?`,
-          confirmLabel: 'Complete anyway',
-        });
-        if (!ok) return;
-      }
-    }
     setBulkSaving(true);
     try {
       const results = await Promise.allSettled(tasksToUpdate.map(task =>
@@ -2085,41 +1938,6 @@ export function TasksPage({ store, userProfile }) {
     return map;
   }, [sortedTasks]);
 
-  // Subtask support
-  const tasksByParent = useMemo(() => {
-    const map = {};
-    sortedTasks.forEach(t => {
-      if (t.parentTaskId) {
-        if (!map[t.parentTaskId]) map[t.parentTaskId] = [];
-        map[t.parentTaskId].push(t);
-      }
-    });
-    return map;
-  }, [sortedTasks]);
-
-  // Subtask docIds that have a visible parent (used to hide them from top-level list view)
-  const subtaskDocIds = useMemo(() => {
-    const ids = new Set();
-    sortedTasks.forEach(t => { if (t.parentTaskId && tasksByDocId[t.parentTaskId]) ids.add(t._docId); });
-    return ids;
-  }, [sortedTasks, tasksByDocId]);
-
-  // Nesting depth (0 = top level). Walks parentTaskId chain; capped at 5 to
-  // contain cycles or pathological data without an infinite loop.
-  const depthByDocId = useMemo(() => {
-    const cache = {};
-    function depthOf(t, seen) {
-      if (cache[t._docId] != null) return cache[t._docId];
-      if (!t.parentTaskId || !tasksByDocId[t.parentTaskId]) return (cache[t._docId] = 0);
-      if (seen.has(t._docId) || seen.size >= 5) return (cache[t._docId] = seen.size);
-      seen.add(t._docId);
-      const d = depthOf(tasksByDocId[t.parentTaskId], seen) + 1;
-      return (cache[t._docId] = d);
-    }
-    sortedTasks.forEach(t => depthOf(t, new Set()));
-    return cache;
-  }, [sortedTasks, tasksByDocId]);
-
   // Whether current user can edit visibility on the detail task
   const canEditVisibility = showDetail && (showDetail.createdBy === userId || canOperate);
 
@@ -2291,7 +2109,7 @@ export function TasksPage({ store, userProfile }) {
       {viewMode === 'kanban' && visibleTasks.length > 0 && (
         <div style={{ display:'flex', gap:12, overflowX:isMobile ? 'hidden' : 'auto', flexDirection:isMobile ? 'column' : 'row', paddingBottom:8, alignItems:'flex-start' }}>
           {STATUSES.map(status => (
-            <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onReorder={(from, to) => handleReorder(from, to, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile} tasksByParent={tasksByParent} tasksByDocId={tasksByDocId} depthByDocId={depthByDocId} onQuickAdd={name => handleQuickAddTask(name, status)}/>
+            <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onReorder={(from, to) => handleReorder(from, to, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile} onQuickAdd={name => handleQuickAddTask(name, status)}/>
           ))}
         </div>
       )}
@@ -2341,35 +2159,15 @@ export function TasksPage({ store, userProfile }) {
                 </div>
                 {!collapsed && (
                   <div style={{ padding:'12px 16px 4px' }}>
-                    {statusTasks.filter(t => !subtaskDocIds.has(t._docId)).length === 0
+                    {statusTasks.length === 0
                       ? <div style={{ color:B.textLight, fontSize:13, textAlign:'center', padding:'12px 0' }}>No tasks in {status}</div>
-                      : statusTasks.filter(t => !subtaskDocIds.has(t._docId)).map(t => {
-                          const subs = tasksByParent[t._docId] || [];
+                      : statusTasks.map(t => {
                           const isSelected = selectedTaskIds.has(t._docId);
-                          // Recursively render subtask trees; depth supplies the per-level indent on TaskCard.
-                          const renderSubtree = (parent, level) => {
-                            const children = tasksByParent[parent._docId] || [];
-                            if (children.length === 0) return null;
-                            return (
-                              <div style={{ marginLeft:20, borderLeft:'2px solid '+B.sand, paddingLeft:8, marginBottom:4 }}>
-                                {children.map(sub => {
-                                  const parentLabel = parent.taskNumber ? parent.taskNumber + (parent.name ? ' ' + parent.name : '') : parent.name;
-                                  return (
-                                    <div key={sub._docId}>
-                                      <TaskCard task={sub} onClick={openDetail} subtaskCount={(tasksByParent[sub._docId] || []).length} subtaskDone={(tasksByParent[sub._docId] || []).filter(s=>s.status==='Complete').length} parentName={parentLabel} depth={level}/>
-                                      {renderSubtree(sub, level + 1)}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            );
-                          };
                           return (
                             <div key={t._docId} style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
                               <input type="checkbox" checked={isSelected} onChange={() => toggleSelectTask(t._docId)} onClick={e => e.stopPropagation()} style={{ marginTop:18, width:15, height:15, cursor:'pointer', flexShrink:0 }} aria-label={`Select task ${t.name}`}/>
                               <div style={{ flex:1, minWidth:0 }}>
-                                <TaskCard task={t} onClick={openDetail} subtaskCount={subs.length} subtaskDone={subs.filter(s=>s.status==='Complete').length}/>
-                                {renderSubtree(t, 1)}
+                                <TaskCard task={t} onClick={openDetail}/>
                               </div>
                             </div>
                           );
@@ -2483,17 +2281,6 @@ export function TasksPage({ store, userProfile }) {
             <SharedWithSelect sharedWith={taskForm.sharedWith} onChange={sharedWith => setTaskForm(f => ({ ...f, sharedWith }))} users={taskHubUsers} assignees={taskForm.assignees} currentUserId={userId}/>
           </FF>
         )}
-        <FF label="Parent Task (optional)">
-          <select style={{ ...inp, cursor:'pointer' }} value={taskForm.parentTaskId || ''} onChange={e => setTaskForm(f => ({ ...f, parentTaskId: e.target.value || null }))}>
-            <option value="">— None (top-level task) —</option>
-            {(visibleTasks).filter(t => !t.parentTaskId && t.status !== 'Complete' && t.status !== 'Cancelled').map(t => (
-              <option key={t._docId} value={t._docId}>{t.taskNumber ? t.taskNumber + ' — ' : ''}{t.name}</option>
-            ))}
-          </select>
-        </FF>
-        <FF label="Blocked By (optional)">
-          <BlockedByInput blockedBy={taskForm.blockedBy || []} onChange={blockedBy => setTaskForm(f => ({ ...f, blockedBy }))} tasks={visibleTasks}/>
-        </FF>
         <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap:12 }}>
           {(settings?.ministries || []).length > 0 && (
             <FF label="Ministry (optional)">
@@ -2629,9 +2416,6 @@ export function TasksPage({ store, userProfile }) {
                 <SharedWithSelect sharedWith={detailEdits.sharedWith || []} onChange={sharedWith => setDetailEdits(d => ({ ...d, sharedWith }))} users={taskHubUsers} assignees={detailEdits.assignees || []} currentUserId={userId}/>
               </FF>
             )}
-            <FF label="Blocked By (optional)">
-              <BlockedByInput blockedBy={detailEdits.blockedBy || []} onChange={blockedBy => setDetailEdits(d => ({ ...d, blockedBy }))} tasks={visibleTasks} currentTaskNumber={showDetail.taskNumber}/>
-            </FF>
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap:12 }}>
               {(settings?.ministries || []).length > 0 && (
                 <FF label="Ministry">
@@ -2767,37 +2551,6 @@ export function TasksPage({ store, userProfile }) {
               <div style={{ marginBottom:12, padding:'8px 12px', borderRadius:8, background:'#EDF2FF', border:'1px solid #C7D2FE', display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ fontSize:12, color:'#3730A3', fontFamily:f1, fontWeight:600 }}><EmojiIcon emoji="💼" decorative /> Linked Job</span>
                 <span style={{ fontSize:12, color:'#4F46E5', fontFamily:'monospace' }}>{showDetail.linkedJobDocId.slice(0,8)}…</span>
-              </div>
-            )}
-
-            {/* Parent link */}
-            {showDetail.parentTaskId && tasksByDocId[showDetail.parentTaskId] && (
-              <div style={{ marginBottom:16, padding:'8px 12px', borderRadius:8, background:B.warmGray, border:'1px solid '+B.sand, display:'flex', alignItems:'center', gap:8 }}>
-                <span style={{ fontSize:12, color:B.textLight, fontFamily:f1 }}>Parent:</span>
-                <button onClick={() => openDetail(tasksByDocId[showDetail.parentTaskId])} style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, fontFamily:f1, color:B.teal, fontWeight:600, padding:0 }}>
-                  {tasksByDocId[showDetail.parentTaskId].taskNumber} — {tasksByDocId[showDetail.parentTaskId].name}
-                </button>
-              </div>
-            )}
-
-            {/* Subtasks */}
-            {(tasksByParent[showDetail._docId]||[]).length > 0 && (
-              <div style={{ marginBottom:20 }}>
-                <div style={{ fontWeight:700, fontSize:12, color:B.textMid, fontFamily:f1, textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>
-                  Subtasks ({tasksByParent[showDetail._docId].filter(s=>s.status==='Complete').length}/{tasksByParent[showDetail._docId].length} done)
-                </div>
-                <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-                  {tasksByParent[showDetail._docId].map(sub => {
-                    const sc2 = statusColors[sub.status] || statusColors['Backlog'];
-                    return (
-                      <div key={sub._docId} onClick={() => openDetail(sub)} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:8, background:B.white, border:'1px solid '+B.sand, cursor:'pointer' }}>
-                        <span style={{ width:8, height:8, borderRadius:'50%', background:sc2.dot, flexShrink:0 }}/>
-                        <span style={{ flex:1, fontSize:13, fontFamily:f2, color:B.textDark }}>{sub.name}</span>
-                        <span style={{ fontSize:11, fontFamily:f1, color:sc2.tx, background:sc2.bg, padding:'2px 8px', borderRadius:12, fontWeight:600 }}>{sub.status}</span>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
             )}
 

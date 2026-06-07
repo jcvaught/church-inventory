@@ -1320,8 +1320,6 @@ export function JobsPage({ store, userProfile, initialView }) {
         tags: [],
         checklist: [],
         sharedWith: [],
-        parentTaskId: null,
-        blockedBy: [],
         linkedItemDocId: null,
         linkedTicketDocId: null,
         estimatedHours: null,
