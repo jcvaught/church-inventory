@@ -349,7 +349,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const allHubsUnlocked = subscription?.plan === 'all_in' || subscription?.grandfathered;
   const hasJobsHub = (subscription?.hubs || []).includes('jobs') || allHubsUnlocked;
   const hasInsightsHub = (subscription?.hubs || []).includes('insights') || allHubsUnlocked;
-  const hasPeopleHub = (subscription?.hubs || []).includes('people') || allHubsUnlocked;
+  const hasPeopleHub = (subscription?.hubs || []).includes('people_access') || allHubsUnlocked;
   const userHasJobsAccess = hasJobsHub && (!userProfile?.allowedHubs || userProfile.allowedHubs.includes('jobs'));
   const adminManagerUsers = (users || []).filter(u => ['admin', 'manager'].includes(u.role) && u.id !== userProfile?.uid && u.active !== false);
 

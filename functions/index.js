@@ -1962,6 +1962,107 @@ ${sections.join('\n')}
   return { processed };
 }));
 
+// ── sendWeeklyComplianceDigest ────────────────────────────────────────────
+// Same skeleton as sendWeeklyInsightsDigest (hourly; fires at each church's
+// local Monday 8am). For churches with the People Access hub active and
+// config/settings.complianceDigestEnabled === true, emails admins a list of
+// access records (background checks, certifications, keys, custom) expiring
+// within the next 30 days or recently expired (within 90 days, so ancient
+// lapses don't nag forever), grouped by person. Empty digests are skipped.
+const COMPLIANCE_TYPE_LABELS = {
+  background_check: 'Background Check',
+  key_assignment: 'Key / Fob',
+  certification: 'Certification',
+  custom: 'Requirement',
+};
+exports.sendWeeklyComplianceDigest = onSchedule({ schedule: '0 * * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendWeeklyComplianceDigest', async () => {
+  if (!emailConfigured()) { console.warn('sendWeeklyComplianceDigest: Brevo not configured, skipping.'); return; }
+  const db = getFirestore();
+  const tzCache = {};
+
+  const churchSnap = await db.collection('churches').get();
+  if (churchSnap.empty) return;
+
+  let processed = 0;
+  for (const churchDoc of churchSnap.docs) {
+    const churchId = churchDoc.id;
+
+    let settings;
+    try { settings = (await db.doc(`churches/${churchId}/config/settings`).get()).data() || {}; }
+    catch (err) { console.error('sendWeeklyComplianceDigest: settings read failed', { churchId, err: err.message }); continue; }
+    if (settings.complianceDigestEnabled !== true) continue;
+
+    const parts = localPartsFor(await getChurchTimeZone(db, churchId, tzCache));
+    if (!(parts.weekday === 1 && parts.hour === 8)) continue; // church-local Monday 8am only
+
+    let sub;
+    try { sub = (await db.doc(`churches/${churchId}/config/subscription`).get()).data() || {}; }
+    catch { continue; }
+    if (!subHasHub(sub, 'people_access')) continue;
+
+    const todayStr = parts.ymd;
+    const floorStr = ymdAddDays(todayStr, -90); // ignore lapses older than 90 days
+    const ceilStr = ymdAddDays(todayStr, 30);   // through the next 30 days
+
+    let recSnap;
+    try {
+      recSnap = await db.collection(`churches/${churchId}/accessRecords`)
+        .where('expiryDate', '>=', floorStr)
+        .where('expiryDate', '<=', ceilStr)
+        .get();
+    } catch (err) { console.error('sendWeeklyComplianceDigest: records read failed', { churchId, err: err.message }); Sentry.captureException(err); continue; }
+    if (recSnap.empty) continue;
+
+    // Group expiring/expired records by person.
+    const byPerson = new Map(); // personId -> { name, records: [] }
+    recSnap.docs.forEach(d => {
+      const r = d.data();
+      if (!r.expiryDate) return;
+      const key = r.personId || r.personName || d.id;
+      if (!byPerson.has(key)) byPerson.set(key, { name: r.personName || 'Unknown', records: [] });
+      byPerson.get(key).records.push(r);
+    });
+    if (byPerson.size === 0) continue;
+
+    const adminsSnap = await db.collection('users').where('churchId', '==', churchId).get();
+    const admins = adminsSnap.docs.map(d => d.data())
+      .filter(a => a.role === 'admin' && a.active !== false && a.email);
+    if (admins.length === 0) continue;
+
+    const churchName = churchDoc.data()?.churchName || settings.churchName || 'your church';
+    let expiredTotal = 0, expiringTotal = 0;
+    const personBlocks = [];
+    for (const { name, records } of byPerson.values()) {
+      records.sort((a, b) => (a.expiryDate || '').localeCompare(b.expiryDate || ''));
+      const rows = records.map(r => {
+        const expired = r.expiryDate < todayStr;
+        if (expired) expiredTotal++; else expiringTotal++;
+        const label = COMPLIANCE_TYPE_LABELS[r.type] || 'Requirement';
+        const detail = r.type === 'certification' && r.certType ? ` (${r.certType})` : (r.type === 'custom' && r.requirementName ? ` (${r.requirementName})` : '');
+        return `<li style="margin-bottom:3px">${escapeHtml(label)}${escapeHtml(detail)} — <strong style="color:${expired ? '#DC2626' : '#B45309'}">${expired ? 'EXPIRED' : 'expires'} ${escapeHtml(r.expiryDate)}</strong></li>`;
+      }).join('');
+      personBlocks.push(`<p style="margin:12px 0 4px"><strong>${escapeHtml(name)}</strong></p><ul style="padding-left:20px;margin:0">${rows}</ul>`);
+    }
+
+    const subject = `${churchName}: ${expiredTotal + expiringTotal} compliance item${expiredTotal + expiringTotal === 1 ? '' : 's'} need attention${expiredTotal > 0 ? ` (${expiredTotal} expired)` : ''}`;
+    const html = `<p>These access records for <strong>${escapeHtml(churchName)}</strong> are expired or expiring within 30 days:</p>
+${personBlocks.join('\n')}
+<p style="margin-top:18px"><a href="https://churchopshub.com">Open ChurchOpsHub</a> → People Access to update them.</p>
+<p style="font-size:12px;color:#888">You're an admin getting the weekly compliance digest. Turn it off any time in Settings → Church Settings.</p>`;
+    const textBlocks = [];
+    for (const { name, records } of byPerson.values()) {
+      textBlocks.push(`${name}:`);
+      records.forEach(r => textBlocks.push(`  - ${COMPLIANCE_TYPE_LABELS[r.type] || 'Requirement'} — ${r.expiryDate < todayStr ? 'EXPIRED' : 'expires'} ${r.expiryDate}`));
+    }
+    const text = `Compliance digest for ${churchName}\n\n${textBlocks.join('\n')}\n\nOpen churchopshub.com → People Access to update them.\n`;
+
+    const results = await Promise.allSettled(admins.map(a => sendEmailSafe({ to: a.email, from: FROM, subject, html, text })));
+    results.forEach((r) => { if (r.status === 'rejected') { console.error('sendWeeklyComplianceDigest: email failed', { churchId, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
+    processed += results.filter(r => r.status === 'fulfilled').length;
+  }
+  return { processed };
+}));
+
 // ── closePastJobs ─────────────────────────────────────────────────────────
 // Runs daily at 2:00 AM Central time. Flips any `open` job whose
 // scheduledDate is strictly before today to `completed`. Without this,
@@ -3029,6 +3130,7 @@ const SCHEDULED_JOB_REGISTRY = [
   // every hour — monitored on the tighter 'hourly' window.
   { name: 'sendTaskDueReminders',          cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendWeeklyInsightsDigest',      cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
+  { name: 'sendWeeklyComplianceDigest',    cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendJobReminders',              cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendNewJobsDigest',             cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'closePastJobs',                 cadence: 'daily',  maxRunMs:   5 * 60 * 1000 },
