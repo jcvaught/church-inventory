@@ -4,6 +4,18 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-07 — Notification center + web push + PWA install (Foundation 3)
+
+The load-bearing notification layer (Platform Foundations §3) + push (§13 #4). Email behavior is **unchanged** — this only ADDS in-app + push channels alongside the existing per-event email CFs.
+
+- **Server:** `deliverNotification(churchId, uids, {type,title,body,link})` helper (in-app inbox write + FCM push per each user's `notificationPrefs[type]`, both default on; invalid push tokens pruned; never throws). New `notify` onCall (member-validated) for client producers. `promoteFromWaitlist` now also delivers a `shift_waitlist_promoted` notification. New import `firebase-admin/messaging`.
+- **In-app inbox:** `churches/{churchId}/notifications` (rules: recipient reads/updates/deletes own; **create is Admin-SDK-only** — clients never write). `useNotifications` hook + `NotificationBell` in the header (unread badge, mark-read / mark-all-read, click routes via the global-search nav descriptor). Composite index `notifications (recipientUid ASC, createdAt DESC)`.
+- **Web push (FCM):** `public/firebase-messaging-sw.js` (background handler, registered with dedicated scope `/firebase-push/` so it never clobbers the PWA `/sw.js`), `src/utils/push.js` (`enablePush` permission + `getToken` + store on `users/{uid}.fcmTokens`), public **VAPID key** in `src/firebase.js`.
+- **Preferences:** per-event In-app/Push toggles + "Enable push on this device" in Settings → Notifications (`users/{uid}.notificationPrefs`).
+- **PWA install:** `InstallPrompt` (Android/desktop `beforeinstallprompt`; iOS Share→Add-to-Home-Screen hint, required for iOS web push), 30-day dismiss.
+- **Producers (in-app + push, independent of the church email toggle):** maintenance ticket assigned · task assigned · task @mention · reservation approved/denied · waitlist promotion. Event types: `ticket_assigned` · `task_assigned` · `task_mention` · `reservation_decided` · `shift_waitlist_promoted`.
+- **Ship:** lint 0 errors (47 baseline warnings) · build clean (0 jsxDEV) · deployed `firestore:indexes,firestore:rules` then `functions:notify,functions:promoteFromWaitlist` (both curl-probed **401 JSON** = IAM intact). **`firebase deploy` silently skipped the notifications composite index** (documented Case-A gotcha — only jobListings indexes existed after) → created via `gcloud firestore indexes composite create`. Deferred fast-follows: low-stock / compliance-expiring admin alerts (need scheduled checks); foreground in-app toast on push receipt.
+
 ## 2026-06-06 — App-wide banner + Contractor Timesheet (premier-app groundwork)
 
 First two builds off the strategy plan (`docs/WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md` §13 "meantime" items #1–#2). Both purely additive — no maintenance window needed.
