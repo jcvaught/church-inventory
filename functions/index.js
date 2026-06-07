@@ -7,6 +7,7 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 const { getMessaging } = require('firebase-admin/messaging');
 const { jobEventLines, reservationEventLines, maintenanceEventLines, buildCalendar } = require('./lib/ics');
+const { calculateNextDue } = require('./lib/recurrence');
 const Sentry = require('@sentry/node');
 
 Sentry.init({
@@ -3263,16 +3264,6 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
     return subCache[churchId];
   }
 
-  function advanceDate(dateStr, freq) {
-    const base = new Date(dateStr + 'T12:00:00');
-    if (freq === 'weekly') { base.setDate(base.getDate() + 7); }
-    else if (freq === 'biweekly') { base.setDate(base.getDate() + 14); }
-    else if (freq === 'monthly') { const d = base.getDate(); base.setDate(1); base.setMonth(base.getMonth() + 1); base.setDate(Math.min(d, new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate())); }
-    else if (freq === 'quarterly') { const d = base.getDate(); base.setDate(1); base.setMonth(base.getMonth() + 3); base.setDate(Math.min(d, new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate())); }
-    else if (freq === 'annually') { const d = base.getDate(); base.setDate(1); base.setFullYear(base.getFullYear() + 1); base.setDate(Math.min(d, new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate())); }
-    return `${base.getFullYear()}-${pad(base.getMonth()+1)}-${pad(base.getDate())}`;
-  }
-
   for (const templateDoc of due) {
     const template = templateDoc.data();
     const churchId = templateDoc.ref.parent.parent.id;
@@ -3282,7 +3273,7 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
       const configRef = db.doc(`churches/${churchId}/config/main`);
       const newTaskRef = db.collection(`churches/${churchId}/tasks`).doc();
       let taskNumber;
-      const nextDate = template.autoGenerateFrequency ? advanceDate(todayStr, template.autoGenerateFrequency) : todayStr;
+      const nextDate = template.autoGenerateFrequency ? calculateNextDue(todayStr, template.autoGenerateFrequency) : todayStr;
 
       // F-RC-6 from the 2026-05-12 audit: the template's autoGenerateNextAt
       // advance used to happen AFTER the task-creation transaction committed.
@@ -3347,7 +3338,7 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
       if (!ann.expiresAt || ann.expiresAt <= todayStr) {
         const churchId = annDoc.ref.parent.parent.id;
         if (!await churchHasJobsHub(churchId)) continue;
-        await annDoc.ref.update({ expiresAt: advanceDate(todayStr, 'weekly') });
+        await annDoc.ref.update({ expiresAt: calculateNextDue(todayStr, 'weekly') });
       }
     }
   } catch (err) {

@@ -2,51 +2,42 @@ export function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-// Computes next recurrence date from a YYYY-MM-DD string. Month-end and Feb-29 safe.
+// ── Recurrence date math ──────────────────────────────────────────────────
+// Month-end- and Feb-29-safe. Server twin: functions/lib/recurrence.js (Cloud
+// Functions can't import from src/). KEEP THE TWO IN SYNC — functions/test/
+// recurrence.test.mjs asserts they produce identical output.
+
+// Advance a Date by ONE recurrence step in place; month-adds clamp to the last
+// valid day of the target month (Jan 31 + 1 month → Feb 28/29, never Mar 3).
+function advanceOnce(d, freq) {
+  if (freq === 'weekly') { d.setDate(d.getDate() + 7); return; }
+  if (freq === 'biweekly') { d.setDate(d.getDate() + 14); return; }
+  const months = { monthly: 1, quarterly: 3, annually: 12 }[freq];
+  if (!months) return;
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+}
+
+// Next single occurrence after a YYYY-MM-DD string (parsed at local noon to
+// stay clear of DST/UTC midnight edges).
 export function calculateNextDue(dueDate, recurrence) {
   const base = dueDate ? new Date(dueDate + 'T12:00:00') : new Date();
-  if (recurrence === 'weekly') {
-    base.setDate(base.getDate() + 7);
-  } else if (recurrence === 'biweekly') {
-    base.setDate(base.getDate() + 14);
-  } else if (recurrence === 'monthly') {
-    const day = base.getDate();
-    base.setDate(1);
-    base.setMonth(base.getMonth() + 1);
-    base.setDate(Math.min(day, new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate()));
-  } else if (recurrence === 'quarterly') {
-    const day = base.getDate();
-    base.setDate(1);
-    base.setMonth(base.getMonth() + 3);
-    base.setDate(Math.min(day, new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate()));
-  } else if (recurrence === 'annually') {
-    const day = base.getDate();
-    base.setDate(1);
-    base.setFullYear(base.getFullYear() + 1);
-    base.setDate(Math.min(day, new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate()));
-  }
+  advanceOnce(base, recurrence);
   return localDateStr(base);
 }
 
-// Returns an array of YYYY-MM-DD strings for a recurrence series (month-end safe).
+// Every occurrence from startDate through endDate inclusive (YYYY-MM-DD), capped.
 export function generateRecurrenceDates(startDate, freq, endDate, cap = 100) {
   if (!startDate || !freq || !endDate || endDate < startDate) return [];
-  const mi = { monthly: 1, quarterly: 3, annually: 12 }[freq];
-  const di = { weekly: 7, biweekly: 14 }[freq];
   const parse = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
   const end = parse(endDate);
   const cur = parse(startDate);
   const dates = [];
   while (cur <= end && dates.length < cap) {
     dates.push(localDateStr(cur));
-    if (mi) {
-      const day = cur.getDate();
-      cur.setDate(1);
-      cur.setMonth(cur.getMonth() + mi);
-      cur.setDate(Math.min(day, new Date(cur.getFullYear(), cur.getMonth() + 1, 0).getDate()));
-    } else {
-      cur.setDate(cur.getDate() + (di || 7));
-    }
+    advanceOnce(cur, freq);
   }
   return dates;
 }

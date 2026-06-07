@@ -1,0 +1,51 @@
+// Recurrence date math for Cloud Functions — the SERVER TWIN of the recurrence
+// helpers in src/utils/date.js (Cloud Functions can't import from src/).
+// Month-end- and Feb-29-safe: a monthly/quarterly/annual step from a day that
+// doesn't exist in the target month clamps to that month's last valid day
+// (Jan 31 + 1 month → Feb 28/29, never Mar 3).
+//
+// ⚠️ KEEP IN SYNC with src/utils/date.js. functions/test/recurrence.test.mjs
+// imports BOTH and asserts they produce identical output across a battery of
+// dates, so any drift fails the test.
+
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Advance a Date by ONE recurrence step in place, clamping month-adds to the
+// last valid day of the target month.
+function advanceOnce(d, freq) {
+  if (freq === 'weekly') { d.setDate(d.getDate() + 7); return; }
+  if (freq === 'biweekly') { d.setDate(d.getDate() + 14); return; }
+  const months = { monthly: 1, quarterly: 3, annually: 12 }[freq];
+  if (!months) return;
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+}
+
+// Next single occurrence after `dueDate` (YYYY-MM-DD). Parsed at local noon to
+// stay clear of DST/UTC midnight edges.
+function calculateNextDue(dueDate, recurrence) {
+  const base = dueDate ? new Date(dueDate + 'T12:00:00') : new Date();
+  advanceOnce(base, recurrence);
+  return localDateStr(base);
+}
+
+// Every occurrence from `startDate` through `endDate` inclusive (YYYY-MM-DD),
+// capped at `cap`. Empty when inputs are missing or the range is inverted.
+function generateRecurrenceDates(startDate, freq, endDate, cap = 100) {
+  if (!startDate || !freq || !endDate || endDate < startDate) return [];
+  const parse = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const end = parse(endDate);
+  const cur = parse(startDate);
+  const dates = [];
+  while (cur <= end && dates.length < cap) {
+    dates.push(localDateStr(cur));
+    advanceOnce(cur, freq);
+  }
+  return dates;
+}
+
+module.exports = { calculateNextDue, generateRecurrenceDates };
