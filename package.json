@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "emulators": "firebase emulators:start --only auth,firestore,storage",
+    "emulators": "PATH=\"/opt/homebrew/opt/openjdk/bin:$PATH\" firebase emulators:start --only auth,firestore,storage",
     "dev:emulator": "VITE_USE_EMULATORS=true vite",
     "seed:emulator": "node scripts/seed-emulator.mjs",
     "build": "NODE_ENV=production rm -rf node_modules/.vite && vite build",

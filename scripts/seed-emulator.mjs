@@ -114,6 +114,13 @@ async function main() {
   // 10. A compliance record expiring soon — feeds the readiness/compliance views
   await C('accessRecords').add({ personId: personRef.id, personName: 'Bob the Plumber', type: 'certification', certType: 'OSHA', completedDate: '2024-06-01', expiryDate: ymd(addDays(14)), recordedBy: uid, recordedByName: 'Test Admin', createdAt: NOW, updatedAt: NOW });
 
+  // Read back through the same connection to prove the writes landed where we
+  // think (the emulator, never prod — the host guard above already enforced that).
+  const backChurch = await db.doc(`churches/${churchId}`).get();
+  const backTasks = await db.collection(`churches/${churchId}/tasks`).get();
+  console.log(`  verify : churches/${churchId} exists=${backChurch.exists}, tasks=${backTasks.size}, FIRESTORE_EMULATOR_HOST=${process.env.FIRESTORE_EMULATOR_HOST}`);
+  if (!backChurch.exists || backTasks.size === 0) { console.error('  ✗ read-back found nothing — aborting.'); process.exit(1); }
+
   console.log('✓ Seeded sandbox church:');
   console.log(`  church : ${churchId}`);
   console.log(`  login  : ${EMAIL} / ${PASSWORD}`);

@@ -27,7 +27,7 @@ npm run test:e2e  # Playwright E2E suite against prod (~80s, requires E2E_MEMBER
 
 ### Local sandbox — Firebase Emulator Suite (2026-06-07)
 
-A fully-isolated local backend for testing UI/data changes with **zero connection to production** (groundwork for the Work-unification phases; see `docs/LOCAL-TESTING-AND-REVERT-2026-06-06.md`). **Requires Java** (Firestore emulator runs on the JVM): `brew install --cask temurin`. Three terminals:
+A fully-isolated local backend for testing UI/data changes with **zero connection to production** (groundwork for the Work-unification phases; see `docs/LOCAL-TESTING-AND-REVERT-2026-06-06.md`). **Requires Java** (Firestore emulator runs on the JVM). Installed via the no-sudo formula `brew install openjdk` (keg-only at `/opt/homebrew/opt/openjdk`); the `emulators` npm script prepends that to PATH so no `sudo`/symlink is needed (the `--cask temurin` route also works but needs a sudo password). Three terminals:
 
 ```bash
 npm run emulators        # 1. start Auth+Firestore+Storage emulators (UI at localhost:4000)
