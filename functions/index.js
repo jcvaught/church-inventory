@@ -2063,6 +2063,249 @@ ${personBlocks.join('\n')}
   return { processed };
 }));
 
+// ═══ AI "What Needs Attention This Week" digest ════════════════════════════
+// Reads across every hub's existing signals (overdue work, expiring
+// compliance, low stock, unfilled shifts, contractor schedule/payments) and
+// asks Claude (Haiku) to write a short prioritized "here's what to look at"
+// list. Generated once per church per ISO-week and cached in
+// churches/{id}/aiDigests/current so repeat views + the email reuse one call.
+// Admin-only (the contractor-payment line is financial).
+
+function isoWeekKey(ymd) {
+  // ISO-week key (e.g. "2026-W23") from a YYYY-MM-DD church-local date.
+  const [y, m, d] = ymd.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const day = dt.getUTCDay() || 7;          // Mon=1..Sun=7
+  dt.setUTCDate(dt.getUTCDate() + 4 - day); // nearest Thursday
+  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((dt - yearStart) / 86400000) + 1) / 7);
+  return `${dt.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+// Dependency-free Claude Messages call (Node 22 fetch, mirrors sendViaBrevo's
+// no-SDK style). Returns the assistant text. Throws if the key is unset.
+async function callClaude({ system, user, maxTokens = 900 }) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: maxTokens,
+      system,
+      messages: [{ role: 'user', content: user }],
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Claude call failed: ${res.status} ${detail.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  return (data.content || []).map(b => b.text || '').join('').trim();
+}
+
+// Collect this week's attention signals for one church. Each block is
+// hub-gated and contributes a compact summary + a few example strings.
+async function gatherAttentionSignals(db, churchId, todayStr) {
+  const in7 = ymdAddDays(todayStr, 7);
+  const in30 = ymdAddDays(todayStr, 30);
+  const floor90 = ymdAddDays(todayStr, -90);
+
+  const [tasksSnap, ticketsSnap, recordsSnap, suppliesSnap, itemsSnap, jobsSnap, timeSnap, subSnap] = await Promise.all([
+    db.collection(`churches/${churchId}/tasks`).get(),
+    db.collection(`churches/${churchId}/maintenanceTickets`).get(),
+    db.collection(`churches/${churchId}/accessRecords`).get(),
+    db.collection(`churches/${churchId}/supplies`).get(),
+    db.collection(`churches/${churchId}/items`).get(),
+    db.collection(`churches/${churchId}/jobListings`).where('scheduledDate', '>=', todayStr).limit(500).get(),
+    db.collection(`churches/${churchId}/timeEntries`).get(),
+    db.doc(`churches/${churchId}/config/subscription`).get(),
+  ]);
+  const has = (h) => subHasHub(subSnap.data() || {}, h);
+  const sig = {};
+
+  if (has('tasks')) {
+    const open = tasksSnap.docs.map(d => d.data())
+      .filter(t => t.dueDate && t.status !== 'Complete' && t.status !== 'Cancelled' && t.dueDate <= in7);
+    if (open.length) sig.tasks = {
+      overdue: open.filter(t => t.dueDate < todayStr).length,
+      dueThisWeek: open.filter(t => t.dueDate >= todayStr).length,
+      examples: open.sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')).slice(0, 5)
+        .map(t => `${t.name || 'Task'} (due ${t.dueDate}${t.dueDate < todayStr ? ', OVERDUE' : ''})`),
+    };
+  }
+  if (has('maintenance')) {
+    const open = ticketsSnap.docs.map(d => d.data())
+      .filter(t => t.dueDate && t.status !== 'Complete' && t.status !== 'Cancelled' && t.dueDate <= in7);
+    if (open.length) sig.maintenance = {
+      overdue: open.filter(t => t.dueDate < todayStr).length,
+      dueThisWeek: open.filter(t => t.dueDate >= todayStr).length,
+      examples: open.sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')).slice(0, 5)
+        .map(t => `${t.name || 'Ticket'} (due ${t.dueDate}${t.dueDate < todayStr ? ', OVERDUE' : ''})`),
+    };
+  }
+  if (has('people_access')) {
+    const recs = recordsSnap.docs.map(d => d.data())
+      .filter(r => r.expiryDate && r.expiryDate >= floor90 && r.expiryDate <= in30);
+    if (recs.length) sig.compliance = {
+      expired: recs.filter(r => r.expiryDate < todayStr).length,
+      expiringSoon: recs.filter(r => r.expiryDate >= todayStr).length,
+      examples: recs.sort((a, b) => (a.expiryDate || '').localeCompare(b.expiryDate || '')).slice(0, 5)
+        .map(r => `${r.personName || 'Someone'} — ${r.type || 'record'} ${r.expiryDate < todayStr ? 'EXPIRED' : 'expires'} ${r.expiryDate}`),
+    };
+  }
+  // Inventory base (always on): low stock + warranty.
+  const lowSupplies = suppliesSnap.docs.map(d => d.data())
+    .filter(s => s.minQuantity != null && Number(s.quantity) <= Number(s.minQuantity));
+  const warrantyItems = itemsSnap.docs.map(d => d.data())
+    .filter(i => i.warrantyExpiry && i.status !== 'Disposed' && i.warrantyExpiry <= in30);
+  if (lowSupplies.length || warrantyItems.length) sig.inventory = {
+    lowStock: lowSupplies.length,
+    warrantyExpiring: warrantyItems.length,
+    examples: [
+      ...lowSupplies.slice(0, 4).map(s => `${s.description} low (${s.quantity}${s.unit ? ' ' + s.unit : ''} left)`),
+      ...warrantyItems.slice(0, 3).map(i => `${i.description} warranty ${i.warrantyExpiry < todayStr ? 'EXPIRED' : 'expires'} ${i.warrantyExpiry}`),
+    ],
+  };
+  if (has('jobs')) {
+    const unfilled = jobsSnap.docs.map(d => d.data())
+      .filter(j => j.status === 'open' && (Number(j.signupCount) || 0) < (Number(j.spotsTotal) || 1));
+    if (unfilled.length) sig.shifts = {
+      unfilled: unfilled.length,
+      examples: unfilled.sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || '')).slice(0, 5)
+        .map(j => `${j.title || 'Shift'} ${j.scheduledDate} — ${(Number(j.signupCount) || 0)}/${j.spotsTotal || 1} filled`),
+    };
+  }
+  if (has('people_access')) {
+    const entries = timeSnap.docs.map(d => d.data());
+    const upcoming = entries.filter(e => e.status === 'scheduled' && e.date >= todayStr)
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const outstanding = entries.filter(e => e.status === 'approved');
+    const outstandingTotal = outstanding.reduce((s, e) => s + (Number(e.cost) || 0), 0);
+    const loggedThisWeek = entries.filter(e => e.status !== 'scheduled' && e.date >= ymdAddDays(todayStr, -7));
+    if (upcoming.length || outstandingTotal > 0 || loggedThisWeek.length) sig.contractor = {
+      upcoming: upcoming.length,
+      outstandingPayment: Math.round(outstandingTotal * 100) / 100,
+      hoursLoggedLast7d: Math.round(loggedThisWeek.reduce((s, e) => s + (Number(e.hours) || 0), 0) * 100) / 100,
+      examples: upcoming.slice(0, 4).map(e => `${e.personName || 'Contractor'} scheduled ${e.date}${e.estHours ? ` (~${e.estHours}h)` : ''}`),
+    };
+  }
+  return sig;
+}
+
+// Build (or reuse) this week's digest payload for a church.
+async function buildAttentionDigest(db, churchId, churchName, todayStr, { force = false } = {}) {
+  const weekKey = isoWeekKey(todayStr);
+  const cacheRef = db.doc(`churches/${churchId}/aiDigests/current`);
+  if (!force) {
+    const cached = await cacheRef.get();
+    if (cached.exists && cached.data()?.weekKey === weekKey) return cached.data();
+  }
+
+  const signals = await gatherAttentionSignals(db, churchId, todayStr);
+  const hasAny = Object.keys(signals).length > 0;
+
+  let payload;
+  if (!hasAny) {
+    payload = { weekKey, generatedAt: new Date().toISOString(), empty: true, summary: 'Nothing needs your attention this week — everything looks current.', items: [] };
+  } else {
+    const system = `You are an operations assistant for a church using ChurchOpsHub. You are given this week's flagged signals across the church's tools. Write a brief, warm, plain-language "what needs attention this week" briefing for the church admin. Be specific and reference the real numbers/names given. Prioritize by urgency. Do NOT invent anything not in the data. Respond ONLY with minified JSON of the form {"summary":"one or two sentences","items":[{"priority":"high|medium|low","text":"one actionable line"}]}. Keep to at most 8 items.`;
+    const user = `Church: ${churchName}\nToday: ${todayStr}\nSignals:\n${JSON.stringify(signals, null, 2)}`;
+    let parsed;
+    try {
+      const raw = await callClaude({ system, user });
+      const jsonStr = raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1);
+      parsed = JSON.parse(jsonStr);
+    } catch (err) {
+      console.error('buildAttentionDigest: Claude/parse failed', { churchId, err: err.message });
+      Sentry.captureException(err, { tags: { fn: 'buildAttentionDigest' } });
+      throw new HttpsError('internal', 'Could not generate the digest right now. Please try again shortly.');
+    }
+    payload = {
+      weekKey,
+      generatedAt: new Date().toISOString(),
+      empty: false,
+      summary: String(parsed.summary || '').slice(0, 600),
+      items: (Array.isArray(parsed.items) ? parsed.items : []).slice(0, 8).map(it => ({
+        priority: ['high', 'medium', 'low'].includes(it.priority) ? it.priority : 'medium',
+        text: String(it.text || '').slice(0, 300),
+      })),
+      counts: Object.fromEntries(Object.entries(signals).map(([k, v]) => [k, v.overdue != null ? `${v.overdue}+${v.dueThisWeek || v.expiringSoon || 0}` : (v.unfilled || v.lowStock || v.upcoming || 0)])),
+    };
+  }
+  await cacheRef.set(payload);
+  return payload;
+}
+
+// getAttentionDigest (onCall, admin-only) — powers the in-app "This Week"
+// panel. Returns the cached weekly digest, or regenerates when stale / forced.
+exports.getAttentionDigest = onCall({ cors: true }, wrapCall('getAttentionDigest', async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  const db = getFirestore();
+  const userSnap = await db.doc(`users/${req.auth.uid}`).get();
+  if (!userSnap.exists) throw new HttpsError('not-found', 'User profile not found.');
+  const user = userSnap.data();
+  if (user.role !== 'admin') throw new HttpsError('permission-denied', 'Admins only.');
+  const churchId = user.churchId;
+
+  const churchSnap = await db.doc(`churches/${churchId}`).get();
+  const churchName = churchSnap.data()?.churchName || 'your church';
+  const tz = await getChurchTimeZone(db, churchId, {});
+  const todayStr = localPartsFor(tz).ymd;
+  const payload = await buildAttentionDigest(db, churchId, churchName, todayStr, { force: !!req.data?.refresh });
+  return payload;
+}));
+
+// sendWeeklyAttentionDigest (onSchedule, hourly; fires church-local Monday 8am).
+// Opt-in via config/settings.attentionDigestEnabled. Emails admins the same
+// digest the in-app panel shows (reuses the weekly cache). Skips empty weeks.
+exports.sendWeeklyAttentionDigest = onSchedule({ schedule: '0 * * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendWeeklyAttentionDigest', async () => {
+  if (!emailConfigured()) { console.warn('sendWeeklyAttentionDigest: Brevo not configured, skipping.'); return; }
+  if (!process.env.ANTHROPIC_API_KEY) { console.warn('sendWeeklyAttentionDigest: ANTHROPIC_API_KEY not set, skipping.'); return; }
+  const db = getFirestore();
+  const tzCache = {};
+
+  const churchSnap = await db.collection('churches').get();
+  if (churchSnap.empty) return;
+
+  let processed = 0;
+  for (const churchDoc of churchSnap.docs) {
+    const churchId = churchDoc.id;
+    let settings;
+    try { settings = (await db.doc(`churches/${churchId}/config/settings`).get()).data() || {}; }
+    catch (err) { console.error('sendWeeklyAttentionDigest: settings read failed', { churchId, err: err.message }); continue; }
+    if (settings.attentionDigestEnabled !== true) continue;
+
+    const parts = localPartsFor(await getChurchTimeZone(db, churchId, tzCache));
+    if (!(parts.weekday === 1 && parts.hour === 8)) continue; // church-local Monday 8am
+
+    const churchName = churchDoc.data()?.churchName || settings.churchName || 'your church';
+    let payload;
+    try { payload = await buildAttentionDigest(db, churchId, churchName, parts.ymd, { force: false }); }
+    catch (err) { console.error('sendWeeklyAttentionDigest: build failed', { churchId, err: err.message }); Sentry.captureException(err); continue; }
+    if (payload.empty || !payload.items?.length) continue; // no empty emails
+
+    const adminsSnap = await db.collection('users').where('churchId', '==', churchId).get();
+    const admins = adminsSnap.docs.map(d => d.data()).filter(a => a.role === 'admin' && a.active !== false && a.email);
+    if (admins.length === 0) continue;
+
+    const dot = { high: '#DC2626', medium: '#B45309', low: '#0F766E' };
+    const itemsHtml = payload.items.map(it => `<li style="margin-bottom:6px"><span style="color:${dot[it.priority]};font-weight:700">●</span> ${escapeHtml(it.text)}</li>`).join('');
+    const html = `<p>${escapeHtml(payload.summary)}</p>
+<ul style="padding-left:18px;margin:12px 0">${itemsHtml}</ul>
+<p style="margin-top:16px"><a href="https://churchopshub.com">Open ChurchOpsHub</a> to act on these.</p>
+<p style="font-size:12px;color:#888">Your weekly "what needs attention" summary. Turn it off any time in Settings → Church Settings.</p>`;
+    const text = `${payload.summary}\n\n${payload.items.map(it => `- [${it.priority}] ${it.text}`).join('\n')}\n\nOpen churchopshub.com to act on these.\n`;
+    const subject = `${churchName}: what needs attention this week`;
+
+    const results = await Promise.allSettled(admins.map(a => sendEmailSafe({ to: a.email, from: FROM, subject, html, text })));
+    results.forEach((r) => { if (r.status === 'rejected') { console.error('sendWeeklyAttentionDigest: email failed', { churchId, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
+    processed += results.filter(r => r.status === 'fulfilled').length;
+  }
+  return { processed };
+}));
+
 // ── closePastJobs ─────────────────────────────────────────────────────────
 // Runs daily at 2:00 AM Central time. Flips any `open` job whose
 // scheduledDate is strictly before today to `completed`. Without this,
@@ -3131,6 +3374,7 @@ const SCHEDULED_JOB_REGISTRY = [
   { name: 'sendTaskDueReminders',          cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendWeeklyInsightsDigest',      cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendWeeklyComplianceDigest',    cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
+  { name: 'sendWeeklyAttentionDigest',     cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendJobReminders',              cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendNewJobsDigest',             cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'closePastJobs',                 cadence: 'daily',  maxRunMs:   5 * 60 * 1000 },

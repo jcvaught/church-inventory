@@ -731,12 +731,17 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             ].map(tz => <option key={tz.v} value={tz.v}>{tz.label}</option>)}
           </select>
 
-          {(hasInsightsHub || hasPeopleHub) && (
-            <div style={{ marginTop:22, paddingTop:18, borderTop:'1px solid '+B.sand }}>
+          <div style={{ marginTop:22, paddingTop:18, borderTop:'1px solid '+B.sand }}>
               <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Weekly Email Digests</div>
               <div style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:12 }}>
                 Emailed to admins every Monday morning (your church's timezone). Sent only when there's something to report.
               </div>
+              <label style={{ display:'flex', alignItems:'flex-start', gap:10, marginBottom:10, cursor:'pointer', fontSize:14, fontFamily:f2, color:B.textDark }}>
+                <input type="checkbox" style={{ marginTop:3 }}
+                  checked={settings?.attentionDigestEnabled === true}
+                  onChange={(e) => updateSettings({ attentionDigestEnabled: e.target.checked })} />
+                <span><strong>What needs attention this week</strong> — an AI summary across overdue work, expiring compliance, low stock, unfilled shifts, and contractor schedule/payments.</span>
+              </label>
               {hasInsightsHub && (
                 <label style={{ display:'flex', alignItems:'flex-start', gap:10, marginBottom:10, cursor:'pointer', fontSize:14, fontFamily:f2, color:B.textDark }}>
                   <input type="checkbox" style={{ marginTop:3 }}
@@ -754,7 +759,6 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                 </label>
               )}
             </div>
-          )}
         </div>
       )}
 

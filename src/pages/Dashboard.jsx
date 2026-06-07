@@ -7,6 +7,7 @@ import { MobileCtx, useBreakpoint } from '../hooks/useMobile.js';
 import { localDateStr } from '../utils/date.js';
 import { actionLabels, actionIcons } from '../utils/activityLabels.js';
 import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
+import { AttentionPanel } from '../components/AttentionPanel.jsx';
 
 export function Dashboard({ store, userProfile, canSeeJobHub }) {
   const { items, supplies, activityLog, reservations, jobAnnouncements } = store;
@@ -57,6 +58,7 @@ export function Dashboard({ store, userProfile, canSeeJobHub }) {
   return (
     <div>
       <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:"0 0 20px" }}>Dashboard</h2>
+      {isAdmin && <AttentionPanel />}
 
       <div style={{ display:"grid", gridTemplateColumns:statCols, gap:14, marginBottom:24 }}>
         <Stat label="Total Items" value={counts.total} icon="📦"/>
