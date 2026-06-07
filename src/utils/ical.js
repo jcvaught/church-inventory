@@ -1,3 +1,6 @@
+// Client-side .ics export (Blob download). The server-side calendar FEED uses
+// a parallel pure builder at functions/lib/ics.js (Cloud Functions can't import
+// from src/). If the VEVENT shape changes here, mirror it there.
 import { localDateStr } from './date.js';
 
 function escICS(str) {

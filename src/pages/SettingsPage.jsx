@@ -91,6 +91,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [inviteHubs, setInviteHubs] = useState(() => []);
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
   const [requestLinkCopied, setRequestLinkCopied] = useState(false);
+  const [feedUrlCopied, setFeedUrlCopied] = useState(false);
   const [teamHubFilter, setTeamHubFilter] = useState('all');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [undo, setUndo] = useState(null);
@@ -756,6 +757,48 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           )}
         </div>
       )}
+
+      {/* Calendar Feed — admin only. Read-only ICS subscribe URL for shifts,
+          reservations, and maintenance. Token-protected + rotatable. */}
+      {isAdmin && (() => {
+        const churchId = userProfile?.churchId;
+        const feedToken = settings?.feedToken;
+        const feedUrl = feedToken && churchId
+          ? `https://us-central1-church-inventory-9615c.cloudfunctions.net/icsCalendarFeed?churchId=${encodeURIComponent(churchId)}&token=${encodeURIComponent(feedToken)}`
+          : '';
+        const genToken = () => {
+          const t = (window.crypto?.randomUUID?.() || (Date.now().toString(36) + Math.random().toString(36).slice(2)));
+          updateSettings({ feedToken: t });
+        };
+        return (
+          <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
+            <h3 style={{ margin:"0 0 16px", fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Calendar Feed</h3>
+            <div style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:14 }}>
+              Subscribe to your church's shifts, reservations, and maintenance in Google Calendar, Apple Calendar, or Outlook. In Google Calendar: <strong>Other calendars → + → From URL</strong>, then paste this link. It updates automatically and is read-only.
+            </div>
+            {!feedUrl ? (
+              <button onClick={genToken} style={{ ...btnP, fontSize:13, padding:"9px 18px" }}>
+                <EmojiIcon emoji="📅" decorative /> Generate feed link
+              </button>
+            ) : (
+              <>
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", marginBottom:10 }}>
+                  <input readOnly value={feedUrl} onFocus={(e)=>e.target.select()}
+                    style={{ ...inp, flex:"1 1 320px", fontFamily:"monospace", fontSize:12 }} />
+                  <button
+                    onClick={()=>{ navigator.clipboard.writeText(feedUrl).catch(()=>{}); setFeedUrlCopied(true); setTimeout(()=>setFeedUrlCopied(false), 2000); }}
+                    style={{ ...btnS, fontSize:13, padding:"9px 16px", color:feedUrlCopied?B.teal:undefined }}>
+                    {feedUrlCopied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+                <button onClick={genToken} style={{ background:"none", border:"none", color:B.textMid, cursor:"pointer", fontSize:12, fontFamily:f1, fontWeight:600, padding:0 }}>
+                  Rotate link (revokes the old one)
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Job Hub Settings — admin only, gated on jobs hub */}
       {isAdmin && hasJobsHub && (

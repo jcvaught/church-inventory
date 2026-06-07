@@ -6,6 +6,7 @@ const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 const { getMessaging } = require('firebase-admin/messaging');
+const { jobEventLines, reservationEventLines, maintenanceEventLines, buildCalendar } = require('./lib/ics');
 const Sentry = require('@sentry/node');
 
 Sentry.init({
@@ -912,6 +913,106 @@ exports.emailEventWebhook = onRequest({ cors: false, invoker: 'public' }, async 
 
   console.log(`[emailEventWebhook] processed ${events.length} events: ${suppressed} suppress, ${other} other, ${errors} errors`);
   res.status(200).send(`OK (${events.length})`);
+});
+
+// ─── ICS Calendar Feed (read-only, token-protected) ────────────────────────
+// A subscribable text/calendar feed so a church can see its shifts,
+// reservations, and maintenance in Google Calendar / Apple Calendar etc.
+//   GET /icsCalendarFeed?churchId=<id>&token=<feedToken>[&types=jobs,reservations,maintenance]
+// Auth is a per-church rotatable token stored on config/settings.feedToken
+// (generated + rotated from Settings → Church Settings). Each requested type
+// is additionally gated on the church's active hubs via subHasHub, mirroring
+// getPublicJobs. A 60s in-process cache blunts calendar clients that re-poll
+// aggressively. Mutating data never happens here — strictly read + render.
+const _icsCache = new Map();
+const ICS_TTL_MS = 60_000;
+const ICS_TYPES = ['jobs', 'reservations', 'maintenance'];
+const ICS_HUB_FOR_TYPE = { jobs: 'jobs', reservations: null, maintenance: 'maintenance' };
+// reservations are part of the always-on Inventory base, so no hub gate.
+
+exports.icsCalendarFeed = onRequest({ cors: true, invoker: 'public' }, async (req, res) => {
+  const churchId = String(req.query?.churchId || '').trim();
+  const token = String(req.query?.token || '').trim();
+  const typesRaw = String(req.query?.types || ICS_TYPES.join(',')).trim();
+  const types = typesRaw.split(',').map(t => t.trim().toLowerCase()).filter(t => ICS_TYPES.includes(t));
+
+  if (!churchId || !token) { res.status(400).send('Missing churchId or token'); return; }
+  if (types.length === 0) { res.status(400).send('No valid calendar types requested'); return; }
+
+  const cacheKey = `${churchId}|${token}|${types.slice().sort().join(',')}`;
+  const cached = _icsCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    res.set('Cache-Control', 'public, max-age=60');
+    res.type('text/calendar').send(cached.body);
+    return;
+  }
+
+  const db = getFirestore();
+  try {
+    const churchSnap = await db.doc(`churches/${churchId}`).get();
+    if (!churchSnap.exists) { res.status(404).send('Calendar not found'); return; }
+
+    const settingsSnap = await db.doc(`churches/${churchId}/config/settings`).get();
+    const storedToken = settingsSnap.exists ? settingsSnap.data()?.feedToken : null;
+    // Constant-ish comparison; tokens are opaque UUIDs so a plain check is fine.
+    if (!storedToken || storedToken !== token) { res.status(403).send('Forbidden'); return; }
+
+    const subSnap = await db.doc(`churches/${churchId}/config/subscription`).get();
+    const sub = subSnap.data() || {};
+    // Only keep requested types whose hub is active (reservations always allowed).
+    const activeTypes = types.filter(t => {
+      const hub = ICS_HUB_FOR_TYPE[t];
+      return hub === null || subHasHub(sub, hub);
+    });
+
+    // Bound the read window: 90 days back through everything upcoming.
+    const cutoff = (() => {
+      const d = new Date(Date.now() - 90 * 86400000);
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    })();
+
+    const blocks = [];
+    if (activeTypes.includes('jobs')) {
+      const snap = await db.collection(`churches/${churchId}/jobListings`)
+        .where('scheduledDate', '>=', cutoff).limit(1000).get();
+      snap.docs.forEach(d => {
+        const job = { _docId: d.id, ...d.data() };
+        if (job.status === 'cancelled') return;
+        const ev = jobEventLines(job);
+        if (ev) blocks.push(ev);
+      });
+    }
+    if (activeTypes.includes('reservations')) {
+      const snap = await db.collection(`churches/${churchId}/reservations`)
+        .where('eventDate', '>=', cutoff).limit(1000).get();
+      snap.docs.forEach(d => {
+        const res2 = { _docId: d.id, ...d.data() };
+        if (res2.status === 'denied') return;
+        const ev = reservationEventLines(res2);
+        if (ev) blocks.push(ev);
+      });
+    }
+    if (activeTypes.includes('maintenance')) {
+      const snap = await db.collection(`churches/${churchId}/maintenanceTickets`)
+        .where('dueDate', '>=', cutoff).limit(1000).get();
+      snap.docs.forEach(d => {
+        const t = { _docId: d.id, ...d.data() };
+        if (t.status === 'Complete' || t.status === 'Cancelled') return;
+        const ev = maintenanceEventLines(t);
+        if (ev) blocks.push(ev);
+      });
+    }
+
+    const churchName = churchSnap.data()?.churchName || 'ChurchOpsHub';
+    const body = buildCalendar(`${churchName} — Calendar`, blocks);
+    _icsCache.set(cacheKey, { expiresAt: Date.now() + ICS_TTL_MS, body });
+    res.set('Cache-Control', 'public, max-age=60');
+    res.type('text/calendar').send(body);
+  } catch (err) {
+    console.error('[icsCalendarFeed] failed', { churchId, err: err.message });
+    Sentry.captureException(err, { tags: { fn: 'icsCalendarFeed' } });
+    res.status(500).send('Calendar temporarily unavailable');
+  }
 });
 
 // Shared hub-access check used by all hub-gating Cloud Functions.
