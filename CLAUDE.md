@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/CHANGELOG.md` — All phase history and dated fixes
 - `docs/SENTRY-ALERTS.md` — Sentry alert rules to configure for Jobs Hub launch
 - `docs/SEO-REFOCUS-2026-05-26.md` — internal-link rewire plan for volunteer-coordinator post; verify script for 2026-06-23 re-check
+- `docs/WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md` — **strategy plan (not yet started):** unify Tasks+Maintenance+Jobs into one "Work" model + contractor hours tracking; collapse the 8-hub pricing matrix to one flat plan. 6 open decisions pending owner sign-off before Phase 2.
 
 ## Commands
 
