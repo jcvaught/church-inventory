@@ -1,5 +1,89 @@
 export const BLOG_POSTS = [
   {
+    slug: 'quarterly-church-inventory-audit-checklist',
+    title: "What to Audit in Your Church's Inventory Every Quarter",
+    description: "An annual physical audit is good. A quarterly rhythm is what actually keeps a church's inventory trustworthy. Here's a category-by-category checklist of what to check every three months — supplies, equipment, AV gear, keys, and safety items — so nothing goes missing, expires, or surprises you on the Sunday you need it.",
+    date: '2026-06-11',
+    keywords: 'church inventory audit, quarterly inventory check, church asset audit, church equipment inventory, how to audit church supplies, church inventory checklist, church asset management, tracking church equipment',
+    related: ['how-to-do-a-church-physical-audit', 'why-churches-need-inventory-management', 'church-facilities-management-guide'],
+    content: `
+## Once a Year Isn't Enough
+
+Most churches that take inventory seriously do it once a year — a big annual count, usually tied to budget season or an insurance renewal. That's a real improvement over never, and if a yearly audit is all you can manage, keep doing it. But a year is a long time. In twelve months, communion supplies expire, a projector bulb dies, a set of keys quietly disappears, the nursery's first-aid kit gets raided, and three power drills walk off to someone's garage and never come back. By the time the annual count catches any of it, the trail is cold and the damage is done.
+
+A quarterly rhythm fixes that. Four lighter touches a year keep the data fresh, catch problems while they're still small, and turn the dreaded annual audit into a quick confirmation instead of an archaeological dig. The trick is knowing *what* to check each quarter so it stays a 90-minute job and not a weekend. This is that checklist.
+
+If you've never done a full count, start with our guide to [doing a church physical audit](/blog/how-to-do-a-church-physical-audit) first — that's your baseline. The quarterly check below assumes you already have a list to check *against*.
+
+## Category 1: Consumable Supplies (Check Quantities and Expiration)
+
+Consumables are the fastest-moving, most-forgotten part of church inventory, and the category most likely to embarrass you at the worst possible moment.
+
+- **Communion supplies** — cups, wafers, juice, bread. Check both the count *and* the expiration dates. Running out mid-month is bad; serving expired elements is worse.
+- **Cleaning and janitorial supplies** — paper towels, trash bags, disinfectant, restroom stock. These deplete invisibly until the day they're gone.
+- **Office and printing supplies** — toner, paper, envelopes, stamps. A ministry that can't print bulletins on Saturday night is a ministry with an inventory problem.
+- **Kitchen and hospitality** — coffee, cups, napkins, plates. The coffee station is the social heart of most churches; let it run dry and people notice.
+- **Children's and nursery consumables** — diapers, wipes, snacks, craft supplies, hand sanitizer.
+
+The quarterly question for every consumable is simple: *do we have enough to get to the next check, and is anything past its date?* This is exactly the kind of rolling visibility that's nearly impossible in a spreadsheet that only gets opened once a year — one of the core reasons we keep arguing for [moving church operations beyond spreadsheets](/blog/moving-beyond-spreadsheets).
+
+## Category 2: Equipment and Tools (Check Presence and Condition)
+
+Durable equipment doesn't deplete, so it doesn't trigger the same urgency as supplies — which is precisely why it disappears. Every quarter, physically lay eyes on:
+
+- **Power tools and maintenance equipment** — drills, ladders, extension cords, shop vacs, the lawn equipment.
+- **Folding tables and chairs** — count them. This is the single most-borrowed, least-returned category in any church.
+- **Portable heaters, fans, and seasonal gear** — confirm they exist and work *before* the season you need them, not during it.
+- **Kitchen appliances** — coffee makers, warmers, the big urn, refrigerator function.
+
+For each item, note two things: *is it here* and *does it still work?* Equipment that's present but broken is functionally missing, and you want to discover that on a quiet Tuesday, not when you reach for it during an event. Pairing the audit with a maintenance pass is the most efficient way to do both at once — see [church equipment maintenance](/blog/church-equipment-maintenance) for how to fold upkeep into the same rhythm.
+
+## Category 3: AV and Technology (Check It Actually Powers On)
+
+The booth at the back of the sanctuary holds some of the most expensive — and most theft-attractive — gear a church owns, and it's the category where "it was working last time" gives the most false comfort.
+
+- **Microphones** — wireless handhelds, lavaliers, and the batteries that feed them. Count them; mics wander.
+- **Cameras, capture cards, and streaming gear** if you broadcast services.
+- **Cables, adapters, and DI boxes** — the unglamorous stuff whose absence silently kills a service.
+- **Laptops, tablets, and the presentation computer** — confirm location and that each one boots.
+- **Projector and TV bulb hours / lamp life** — bulbs fail predictably; track the hours so you replace on your schedule, not theirs.
+
+The quarterly AV check is one of the highest-leverage things on this entire list, because AV failure is *visible to the whole congregation* in real time. We've written a deeper guide on building a proper [church AV equipment inventory](/blog/church-av-equipment-inventory) if this is a weak spot for your church.
+
+## Category 4: Keys, Access, and Security
+
+This is the category churches almost never audit — and the one with the highest risk if it goes wrong.
+
+- **Physical keys** — who holds them, how many exist, and whether anyone who's left a role still has one. Departed staff and volunteers with live keys are a standing liability.
+- **Alarm codes and door access fobs** — review the active list; deactivate anyone who no longer needs entry.
+- **Master key accountability** — there should be a known, short list of who can open everything.
+
+Quarterly is roughly the right cadence here because volunteer and staff turnover happens continuously. A key that's still in a former volunteer's possession isn't an inconvenience — it's an insurance and safety exposure. This connects directly to the broader discipline of [equipment accountability for volunteers](/blog/church-volunteer-equipment-accountability): knowing who has what, and getting it back when their role ends.
+
+## Category 5: Safety and Emergency Items (Check Dates and Function)
+
+These items spend their whole life unused, which is exactly why they decay unnoticed — and exactly why a missed check here is the most serious kind.
+
+- **Fire extinguishers** — check the gauge and the inspection tag; many require annual professional service, but a quarterly visual confirms they're present and charged.
+- **First-aid kits** — every campus, the nursery, the kitchen. Restock what's been used and toss what's expired.
+- **AED (defibrillator)** — confirm the battery and pad expiration dates. An AED with dead pads is no AED at all.
+- **Emergency lighting and exit signs** — push the test button.
+- **Smoke and CO detectors** — confirm they're present and powered.
+
+Nobody wants to be the church that discovers its fire extinguisher is empty during a fire. A five-minute quarterly safety sweep is the cheapest insurance you will ever buy.
+
+## Make It a System, Not a Heroic Effort
+
+A checklist only works if someone actually runs it, on schedule, every quarter — and that's where most good intentions die. Three things turn this from a someday-task into a reliable rhythm:
+
+1. **Assign an owner.** "Everyone" audits nothing. One person — a facilities manager, a deacon, a trusted volunteer — owns the quarterly check and reports it. Our guide to [church facilities management](/blog/church-facilities-management-guide) covers how this role functions when it's done well.
+2. **Put it on the calendar as a recurring event.** Tie it to something you'll never forget — the first week of each quarter, or alongside another standing task. A floating "we should do this sometime" never happens.
+3. **Check against a living list, not your memory.** This is the whole case for real inventory software: a system where every item has a record, a location, a quantity, and a last-checked date turns the quarterly audit into confirming a list on your phone instead of reconstructing reality from scratch. That's the difference between an audit that takes an afternoon and one that takes a weekend — and the deeper reason [churches need inventory management](/blog/why-churches-need-inventory-management) at all.
+
+The first quarterly audit will take the longest, because you're establishing the baseline. By the third, it's muscle memory — a quick, calm confirmation that everything the church owns is where it should be, works the way it should, and won't surprise you on the one Sunday you can't afford a surprise. That quiet confidence is the entire point.
+`,
+  },
+  {
     slug: 'volunteer-coordinator-burnout-warning-signs',
     title: "Volunteer Coordinator Burnout: 5 Warning Signs",
     description: "Volunteer coordinator burnout rarely announces itself. It looks like dedication right up until the coordinator quits. Here are five early warning signs — and the systems that actually relieve the pressure instead of just admiring it.",
