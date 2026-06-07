@@ -288,11 +288,11 @@ Everything in the "meantime" list (§13) is **purely additive** — new collecti
 2. ~~**Does Inventory stay free?**~~ — **RESOLVED 2026-06-07: stays VERY free** (generous cap; it's the wedge + SEO winner).
 3. ~~**Shift numbering**~~ — **RESOLVED 2026-06-07: keep `JOB-###`** in the DB (avoid breaking references); relabel UI to Shifts/Volunteer only.
 4. ~~**Keep SMS?**~~ — **RESOLVED 2026-06-06: KEEP.** Shifts/volunteer reminders are now a core, broadly-used surface, so the A2P burden is justified.
-5. **Subtasks:** keep or cut? — **DEFERRED (not a Phase-2 blocker).** This is a Phase-4 cleanup judgment, decided from actual FXCC usage at convergence time, not now.
+5. ~~**Subtasks:** keep or cut?~~ — **RESOLVED 2026-06-07: CUT.** Owner: too much information for the team's needs. Remove subtasks (`parentTaskId`) from the Tasks Hub.
 6. ~~**Contractor self-logging?**~~ — **RESOLVED 2026-06-07: admin-only entry for now** (self-logging deferred as a later follow-up).
 7. ~~**One collection vs two (KEY)**~~ — **RESOLVED 2026-06-07: TWO.** `workItems` (tasks+maintenance merged, status-driven board) + keep jobs/shifts as its own date-driven collection. Avoids migrating the mature/audited jobListings (riskiest step) → Phase 3 becomes UI unification, not data migration. Convert-to-shift is a linked spawn, not an in-place flip.
 
-**Also DEFERRED (Phase-4 cleanup, not blockers):** task dependencies (`blockedBy`) keep-or-cut — same usage-driven call as subtasks, decided at convergence.
+**Task dependencies (`blockedBy`):** **RESOLVED 2026-06-07: CUT** (same call as subtasks — too much info). Remove the `blockedBy` soft-warning feature from Tasks. Both removals are small, self-contained UI/field deletions that can ship now, ahead of and independent of the migration.
 
 ---
 
