@@ -325,6 +325,14 @@ service cloud.firestore {
       allow write: if isChurchAdminOrManager(churchId);
     }
 
+    // ── Time Entries (contractor / labor hours) — payroll-sensitive, so
+    //    admin/manager only for both read and write. (Contractor self-logging
+    //    is a deferred follow-up; it would relax create for a linked user.)
+    match /churches/{churchId}/timeEntries/{docId} {
+      allow read:  if isChurchAdminOrManager(churchId);
+      allow write: if isChurchAdminOrManager(churchId);
+    }
+
     // ── Public requests — anyone can submit; only church members can read/dismiss ──
     //    create is unauthenticated by design (public item-request form); audit L6
     //    bounds it with an exact key allowlist + length caps so it can't be used

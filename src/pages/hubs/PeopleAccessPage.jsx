@@ -9,6 +9,7 @@ import { EmojiIcon } from '../../components/primitives/EmojiIcon.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { exportAccessRecordsCSV } from '../../utils/csv.js';
 import { localDateStr } from '../../utils/date.js';
+import { Timesheet } from './Timesheet.jsx';
 
 const TYPE_LABELS = {
   background_check: 'Background Check',
@@ -48,7 +49,7 @@ export function PeopleAccessPage({ store, userProfile }) {
   const [editPerson, setEditPerson] = useState(null);
   const [showAddRecord, setShowAddRecord] = useState(false);
   const [editRecord, setEditRecord] = useState(null);
-  const [personForm, setPersonForm] = useState({ name: '', email: '', phone: '', ministries: [], notes: '' });
+  const [personForm, setPersonForm] = useState({ name: '', email: '', phone: '', ministries: [], notes: '', personType: 'member', hourlyRate: '' });
   const [recordForm, setRecordForm] = useState({
     type: 'background_check', completedDate: '', expiryDate: '', ministry: '', notes: '',
     keyIdentifier: '', returnedDate: '',
@@ -131,7 +132,7 @@ export function PeopleAccessPage({ store, userProfile }) {
 
   // ── Handlers ──
   function openAddPerson() {
-    setPersonForm({ name: '', email: '', phone: '', ministries: [], notes: '' });
+    setPersonForm({ name: '', email: '', phone: '', ministries: [], notes: '', personType: 'member', hourlyRate: '' });
     setEditPerson(null);
     setShowAddPerson(true);
   }
@@ -141,6 +142,8 @@ export function PeopleAccessPage({ store, userProfile }) {
     setPersonForm({
       name: person.name || '', email: person.email || '', phone: person.phone || '',
       ministries: person.ministries || [], notes: person.notes || '',
+      personType: person.personType || 'member',
+      hourlyRate: person.hourlyRate != null ? String(person.hourlyRate) : '',
     });
     setEditPerson(person);
     setShowAddPerson(true);
@@ -149,10 +152,15 @@ export function PeopleAccessPage({ store, userProfile }) {
   async function handleSavePerson() {
     if (!personForm.name.trim()) return;
     setBusy(true);
+    // Coerce hourlyRate to a number (contractors only; null otherwise).
+    const rate = personForm.personType === 'contractor' && personForm.hourlyRate !== ''
+      ? Number(personForm.hourlyRate) || 0
+      : null;
+    const payload = { ...personForm, hourlyRate: rate };
     if (editPerson) {
-      await updateAccessPerson(editPerson._docId, personForm);
+      await updateAccessPerson(editPerson._docId, payload);
     } else {
-      await addAccessPerson(personForm, userProfile.uid);
+      await addAccessPerson(payload, userProfile.uid);
     }
     setBusy(false);
     setShowAddPerson(false);
@@ -419,7 +427,7 @@ export function PeopleAccessPage({ store, userProfile }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexShrink: 0, flexWrap: 'wrap' }}>
-          {allRecords.length > 0 && (
+          {allRecords.length > 0 && view !== 'timesheet' && (
             <button onClick={() => exportAccessRecordsCSV(allRecords)} style={{ ...btnS, padding: '8px 14px', fontSize: 13 }}>
               ⬇ Export CSV
             </button>
@@ -439,7 +447,7 @@ export function PeopleAccessPage({ store, userProfile }) {
 
       {/* ── View Toggle ── */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: B.sand, borderRadius: 12, padding: 4, width: 'fit-content' }}>
-        {[['people', '👥 People'], ['requirements', '📋 Requirements']].map(([k, label]) => (
+        {[['people', '👥 People'], ['requirements', '📋 Requirements'], ['timesheet', '⏱️ Timesheet']].map(([k, label]) => (
           <button key={k} onClick={() => setView(k)} style={{
             padding: '7px 18px', borderRadius: 9, border: 'none', cursor: 'pointer',
             fontSize: 13, fontWeight: 600, fontFamily: f1,
@@ -449,6 +457,9 @@ export function PeopleAccessPage({ store, userProfile }) {
           }}>{label}</button>
         ))}
       </div>
+
+      {/* ═══════════════════════════════════════ TIMESHEET VIEW ════════════ */}
+      {view === 'timesheet' && <Timesheet store={store} userProfile={userProfile} canEdit={canEdit} />}
 
       {/* ═══════════════════════════════════════ PEOPLE VIEW ═══════════════ */}
       {view === 'people' && (
@@ -752,6 +763,20 @@ export function PeopleAccessPage({ store, userProfile }) {
               <input value={personForm.phone} onChange={e => setPersonForm(f => ({ ...f, phone: e.target.value }))}
                 placeholder="(555) 555-5555" type="tel" style={inp} />
             </FF>
+            <FF label="Person Type">
+              <select value={personForm.personType} onChange={e => setPersonForm(f => ({ ...f, personType: e.target.value }))} style={inp}>
+                <option value="member">Member</option>
+                <option value="volunteer">Volunteer</option>
+                <option value="staff">Staff</option>
+                <option value="contractor">Contractor (track hours)</option>
+              </select>
+            </FF>
+            {personForm.personType === 'contractor' && (
+              <FF label="Hourly Rate (USD)">
+                <input value={personForm.hourlyRate} onChange={e => setPersonForm(f => ({ ...f, hourlyRate: e.target.value }))}
+                  placeholder="e.g. 25" type="number" min="0" step="0.01" style={inp} />
+              </FF>
+            )}
             {ministries.length > 0 && (
               <FF label="Ministries">
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

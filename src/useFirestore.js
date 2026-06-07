@@ -26,6 +26,7 @@ export function useFirestore(churchId) {
   const [publicRequests, setPublicRequests] = useState([]);
   const [accessPeople, setAccessPeople] = useState([]);
   const [accessRecords, setAccessRecords] = useState([]);
+  const [timeEntries, setTimeEntries] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [jobListings, setJobListings] = useState([]);
@@ -85,7 +86,7 @@ export function useFirestore(churchId) {
     if (!churchId) return;
     const unsubs = [];
     let loaded = 0;
-    const totalSubs = 20;
+    const totalSubs = 21;
     const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
     // Config
@@ -191,6 +192,14 @@ export function useFirestore(churchId) {
     // Access Records
     unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'accessRecords'), orderBy('createdAt', 'desc')), (snap) => {
       setAccessRecords(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
+      checkDone();
+    }, (err) => { handleErr(err); checkDone(); }));
+
+    // Time Entries (contractor / labor hours) — sorted newest-first; the
+    // Timesheet view filters by person + date range client-side (church-scale
+    // volumes are small, so no composite index is needed).
+    unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'timeEntries'), orderBy('date', 'desc')), (snap) => {
+      setTimeEntries(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
     }, (err) => { handleErr(err); checkDone(); }));
 
@@ -858,6 +867,32 @@ export function useFirestore(churchId) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
+  // ── Time Entries (contractor / labor hours) ──
+  const addTimeEntry = useCallback(async (entry) => {
+    try {
+      await addDoc(collection(db, 'churches', churchId, 'timeEntries'), {
+        ...entry,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err) { handleErr(err, { op: 'addTimeEntry', hub: 'people_access' }); }
+  }, [churchId]);
+
+  const updateTimeEntry = useCallback(async (docId, updates) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId, 'timeEntries', docId), {
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err) { handleErr(err, { op: 'updateTimeEntry', hub: 'people_access' }); }
+  }, [churchId]);
+
+  const deleteTimeEntry = useCallback(async (docId) => {
+    try {
+      await deleteDoc(doc(db, 'churches', churchId, 'timeEntries', docId));
+    } catch (err) { handleErr(err, { op: 'deleteTimeEntry', hub: 'people_access' }); }
+  }, [churchId]);
+
   // ── Access Records ──
   const addAccessRecord = useCallback(async (record) => {
     try {
@@ -1314,8 +1349,9 @@ export function useFirestore(churchId) {
     addAudit, updateAudit,
     submitSuggestion, loadSuggestions,
     publicRequests, dismissPublicRequest,
-    accessPeople, accessRecords,
+    accessPeople, accessRecords, timeEntries,
     addAccessPerson, updateAccessPerson, archiveAccessPerson,
+    addTimeEntry, updateTimeEntry, deleteTimeEntry,
     linkAccessPerson, unlinkAccessPerson,
     addAccessRecord, updateAccessRecord, deleteAccessRecord,
     addPeopleAccessRequirement, removePeopleAccessRequirement,
