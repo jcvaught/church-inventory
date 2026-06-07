@@ -285,12 +285,14 @@ Everything in the "meantime" list (§13) is **purely additive** — new collecti
 ## 11. Open decisions
 
 1. ~~**Flat price**~~ — **RESOLVED 2026-06-06: $15/mo flat (or $150/yr).**
-2. **Does Inventory stay free, or does the free tier shrink/grow?** (Recommend: stays free, generous user cap — it's the wedge + the SEO winner.) — still open, lean stays free.
-3. **Shift numbering:** keep `JOB-###` for continuity, or re-prefix to `SHF-###`? (Recommend: keep `JOB-` to avoid breaking references; just relabel "Jobs" → "Shifts/Volunteer" in UI.) — still open.
+2. ~~**Does Inventory stay free?**~~ — **RESOLVED 2026-06-07: stays VERY free** (generous cap; it's the wedge + SEO winner).
+3. ~~**Shift numbering**~~ — **RESOLVED 2026-06-07: keep `JOB-###`** in the DB (avoid breaking references); relabel UI to Shifts/Volunteer only.
 4. ~~**Keep SMS?**~~ — **RESOLVED 2026-06-06: KEEP.** Shifts/volunteer reminders are now a core, broadly-used surface, so the A2P burden is justified.
-5. **Subtasks:** keep or cut? (Depends on whether FXCC actually uses them.) — still open.
-6. **Contractor self-logging:** can a linked contractor log their own hours (admin approves), or admin-only entry? (Recommend: support both; default admin-entry.) — still open.
-7. **One collection vs two (KEY — added 2026-06-07, see §0).** Recommend **TWO**: `workItems` (tasks+maintenance merged, status-driven board) + keep jobs/shifts as its own date-driven collection. Rationale: honors the flow-vs-dated axis, and avoids migrating the mature/audited jobListings (the riskiest step) — Phase 3 becomes UI unification, not data migration. Trade-off: convert-to-shift is a linked spawn, not an in-place flip. Confirm before Phase 2.
+5. **Subtasks:** keep or cut? — **DEFERRED (not a Phase-2 blocker).** This is a Phase-4 cleanup judgment, decided from actual FXCC usage at convergence time, not now.
+6. ~~**Contractor self-logging?**~~ — **RESOLVED 2026-06-07: admin-only entry for now** (self-logging deferred as a later follow-up).
+7. ~~**One collection vs two (KEY)**~~ — **RESOLVED 2026-06-07: TWO.** `workItems` (tasks+maintenance merged, status-driven board) + keep jobs/shifts as its own date-driven collection. Avoids migrating the mature/audited jobListings (riskiest step) → Phase 3 becomes UI unification, not data migration. Convert-to-shift is a linked spawn, not an in-place flip.
+
+**Also DEFERRED (Phase-4 cleanup, not blockers):** task dependencies (`blockedBy`) keep-or-cut — same usage-driven call as subtasks, decided at convergence.
 
 ---
 
