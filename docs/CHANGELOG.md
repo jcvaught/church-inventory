@@ -4,6 +4,10 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-07 — User-facing "What's New" log
+
+A persistent, browsable release-notes surface for users — distinct from this (technical) CHANGELOG. `src/data/whatsNew.js` holds newest-first `{date,tag,title,body}` entries (tag: New/Improved/Fixed), written benefit-first in plain language. `src/components/WhatsNew.jsx` renders `WhatsNewModal` (via the Modal primitive) + exports `getUnseenCount`/`markWhatsNewSeen` (unseen = entries newer than the `coh_whatsnew_seen` localStorage stamp; read at render time, no forced login modal). Surfaced as a **"What's New" item in the account dropdown** with a teal unseen-count badge; opening marks all seen and clears the dot. Seeded with the last 4 shipments (notifications, search, timesheet, banner). **New doc-ritual step (noted in CLAUDE.md): every user-visible change gets a whatsNew.js entry** so it stays fresh. Frontend-only — no rules/functions/index/deploy. lint 0 errors, build clean.
+
 ## 2026-06-07 — Notification center + web push + PWA install (Foundation 3)
 
 The load-bearing notification layer (Platform Foundations §3) + push (§13 #4). Email behavior is **unchanged** — this only ADDS in-app + push channels alongside the existing per-event email CFs.

@@ -123,7 +123,8 @@ src/
 │   └── constants.js           ← ITEM_STATUS, RES_STATUS, TICKET_STATUS, ACCESS_RECORD_TYPE string enums
 └── data/
     ├── referenceData.js       ← Static reference inventory (not auto-seeded; reference only)
-    └── blogPosts.js           ← Blog post data: slug, title, description, date, keywords, content (markdown string)
+    ├── blogPosts.js           ← Blog post data: slug, title, description, date, keywords, content (markdown string)
+    └── whatsNew.js            ← User-facing "What's New" log (newest-first {date,tag,title,body}). Surfaced via the account-menu "What's New" item (unseen dot) → WhatsNewModal. NOT the dev changelog (that's docs/CHANGELOG.md). **DOC RITUAL: when a user-VISIBLE change ships, add a plain-language, benefit-first entry here** — keep it fed or it goes stale.
 public/
 ├── robots.txt                 ← Disallows ?request=, ?signup, ?invite; references sitemap
 ├── sitemap.xml                ← Static sitemap: /, /?help, /blog, and all 3 blog post URLs

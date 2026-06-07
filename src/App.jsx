@@ -34,6 +34,7 @@ import { GlobalBanner } from './components/GlobalBanner.jsx';
 import { GlobalSearch } from './components/GlobalSearch.jsx';
 import { NotificationBell } from './components/NotificationBell.jsx';
 import { InstallPrompt } from './components/InstallPrompt.jsx';
+import { WhatsNewModal, getUnseenCount, markWhatsNewSeen } from './components/WhatsNew.jsx';
 
 
 class PageErrorBoundary extends Component {
@@ -509,6 +510,15 @@ function AppShell({ authHook }) {
   const isMobile = useWindowWidth() < 768;
   const globalBanner = useGlobalBanner();
   const [showSearch, setShowSearch] = useState(false);
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
+  const [, bumpWhatsNew] = useState(0); // forces re-read of the unseen count after marking seen
+  const whatsNewUnseen = getUnseenCount();
+  function openWhatsNew() {
+    setShowWhatsNew(true);
+    markWhatsNewSeen();
+    bumpWhatsNew((n) => n + 1);
+    setMenuOpen(false);
+  }
 
   // Audit 2026-05-24 Phase 3 (item 3): account menu a11y — focus the first
   // menu item on open, trap Tab/Shift+Tab inside, close on Escape, and
@@ -695,6 +705,13 @@ function AppShell({ authHook }) {
                     <div style={{ padding:"8px 12px", fontSize:12, color:B.textLight }}>{userProfile.email}</div>
                     <div style={{ padding:"4px 12px", marginBottom:4 }}><span style={{ padding:"2px 8px", borderRadius:12, fontSize:11, fontWeight:600, fontFamily:f1, background:userProfile.role==="admin"?B.goldLight:userProfile.role==="manager"?"#EDF2FF":B.tealPale, color:userProfile.role==="admin"?"#96750E":userProfile.role==="manager"?"#3730A3":B.teal }}>{userProfile.role}</span></div>
                     <div style={{ height:1, background:B.sand, margin:"4px 0" }}/>
+                    <button role="menuitem" onClick={openWhatsNew} style={{ width:"100%", textAlign:"left", padding:"8px 12px", background:"none", border:"none", cursor:"pointer", color:B.textDark, fontSize:13, fontWeight:600, fontFamily:f1, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"space-between" }}
+                      onMouseEnter={e=>e.currentTarget.style.background=B.warmGray}
+                      onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                      What's New
+                      {whatsNewUnseen > 0 && <span style={{ background:B.teal, color:"#fff", borderRadius:10, minWidth:16, height:16, fontSize:10, fontWeight:700, fontFamily:f1, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 5px" }}>{whatsNewUnseen}</span>}
+                    </button>
+                    <div style={{ height:1, background:B.sand, margin:"4px 0" }}/>
                     <button role="menuitem" onClick={()=>{logout();setMenuOpen(false);}} style={{ width:"100%", textAlign:"left", padding:"8px 12px", background:"none", border:"none", cursor:"pointer", color:B.red, fontSize:13, fontWeight:600, fontFamily:f1, borderRadius:6 }}
                       onMouseEnter={e=>e.currentTarget.style.background=B.redPale}
                       onMouseLeave={e=>e.currentTarget.style.background="none"}>
@@ -851,6 +868,7 @@ function AppShell({ authHook }) {
       {/* Onboarding modal — new admins, no items yet */}
       {showScanner && <BarcodeScanner onScan={handleScan} onClose={() => setShowScanner(false)} />}
       {showSearch && <GlobalSearch store={store} canSeeHub={userCanSeeHub} onNavigate={handleSearchNav} onClose={() => setShowSearch(false)} />}
+      {showWhatsNew && <WhatsNewModal onClose={() => setShowWhatsNew(false)} />}
       <InstallPrompt />
 
       {showOnboarding && (() => {
