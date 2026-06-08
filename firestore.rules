@@ -117,6 +117,17 @@ service cloud.firestore {
       allow write: if isChurchAdmin(churchId);
     }
 
+    // ── Feature flags — members read; admins+managers write (Work-unification
+    //    Phase 2). Holds `workItemsEnabled`, the per-church read-path switch
+    //    between the legacy tasks/maintenanceTickets collections and the unified
+    //    workItems collection. Members must read it so useFirestore can pick the
+    //    right subscription; flipping it is an admin/manager action (instant
+    //    revert during a maintenance window). ─────────────────────────────────
+    match /churches/{churchId}/config/featureFlags {
+      allow read:           if isMember(churchId);
+      allow create, update, delete: if isChurchAdminOrManager(churchId);
+    }
+
     // ── Items — members read + update (checkout/return); admins+mgrs create/delete ──
     match /churches/{churchId}/items/{docId} {
       allow read:          if isMember(churchId);

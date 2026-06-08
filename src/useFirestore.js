@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   doc, setDoc, getDoc, deleteDoc, getDocs,
   collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction, writeBatch, startAfter
@@ -9,6 +9,47 @@ import { ref as stRef, deleteObject } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { generateRecurrenceDates } from './utils/date.js';
 import { excludeTestAccounts } from './utils/testAccounts.js';
+
+// ── Work-unification read-path abstraction (Phase 2) ─────────────────────────
+// When the per-church `config/featureFlags.workItemsEnabled` flag is on, tasks
+// and maintenance tickets are read from / written to one unified `workItems`
+// collection (a single doc per item, discriminated by a `type: 'task' |
+// 'maintenance'` field) instead of the legacy `tasks` / `maintenanceTickets`
+// collections. The flip is invisible to the pages: the hook still exposes
+// `tasks` and `maintenanceTickets` arrays and the same CRUD signatures, so the
+// only switch needed in a maintenance window is this flag.
+//
+// The workItems doc id carries a `task_` / `mnt_` prefix (set deterministically
+// by the backfill migration, `scripts/migrate-work-unification.cjs`), but the
+// `_docId` surfaced to the app is the *bare* id with the prefix stripped — so
+// every cross-collection link field (linkedTaskDocId, linkedTicketDocId,
+// linkedJobDocId, …) keeps speaking exactly the ids it spoke before the flip.
+// No page edits, no stored-reference rewrites. CRUD re-applies the prefix when
+// resolving a doc ref, and newly-created items get a fresh prefixed id whose
+// bare form is what we surface/return for linking.
+const stripWorkPrefix = (id) => id.replace(/^(?:task|mnt)_/, '');
+
+function taskDocRef(churchId, bareId, enabled) {
+  return enabled
+    ? doc(db, 'churches', churchId, 'workItems', `task_${bareId}`)
+    : doc(db, 'churches', churchId, 'tasks', bareId);
+}
+function ticketDocRef(churchId, bareId, enabled) {
+  return enabled
+    ? doc(db, 'churches', churchId, 'workItems', `mnt_${bareId}`)
+    : doc(db, 'churches', churchId, 'maintenanceTickets', bareId);
+}
+// Mint a new doc ref, returning the ref to write and the bare id to surface.
+function newTaskDocRef(churchId, enabled) {
+  if (!enabled) { const ref = doc(collection(db, 'churches', churchId, 'tasks')); return { ref, id: ref.id }; }
+  const id = doc(collection(db, 'churches', churchId, 'workItems')).id;
+  return { ref: doc(db, 'churches', churchId, 'workItems', `task_${id}`), id };
+}
+function newTicketDocRef(churchId, enabled) {
+  if (!enabled) { const ref = doc(collection(db, 'churches', churchId, 'maintenanceTickets')); return { ref, id: ref.id }; }
+  const id = doc(collection(db, 'churches', churchId, 'workItems')).id;
+  return { ref: doc(db, 'churches', churchId, 'workItems', `mnt_${id}`), id };
+}
 
 export function useFirestore(churchId) {
   const [settings, setSettings] = useState(null);
@@ -35,6 +76,14 @@ export function useFirestore(churchId) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const clearError = useCallback(() => setError(null), []);
+
+  // Work-unification feature flag (Phase 2). `null` = not yet resolved; the data
+  // effect waits for it before subscribing so it picks the right collections.
+  // A mirror ref lets the (stable) CRUD callbacks read the current value without
+  // every one of them taking the flag as a dependency.
+  const [workItemsEnabled, setWorkItemsEnabled] = useState(null);
+  const workItemsEnabledRef = useRef(false);
+  useEffect(() => { workItemsEnabledRef.current = workItemsEnabled === true; }, [workItemsEnabled]);
 
   function handleErr(err, ctx = {}) {
     // Audit overnight 2026-05-12 / Error-resilience #1: this is the single
@@ -81,12 +130,33 @@ export function useFirestore(churchId) {
     }
   }
 
+  // Feature-flag probe (Work-unification Phase 2). Kept in its own cheap
+  // subscription so the data effect below can re-subscribe to the right
+  // collections the instant the flag flips, without coupling to the frequently
+  // -changing config/main doc (which would thrash all 20+ subscriptions on
+  // every task-number increment). Absence or a read error = feature off: a
+  // church with no featureFlags doc (or rules not yet deployed during the dark
+  // launch) is the normal state, not a reportable fault, so errors are swallowed
+  // here rather than routed through handleErr/Sentry.
+  useEffect(() => {
+    if (!churchId) { setWorkItemsEnabled(false); return; }
+    const unsub = onSnapshot(
+      doc(db, 'churches', churchId, 'config', 'featureFlags'),
+      (snap) => setWorkItemsEnabled(snap.exists() && snap.data().workItemsEnabled === true),
+      () => setWorkItemsEnabled(false)
+    );
+    return unsub;
+  }, [churchId]);
+
   // Subscribe to all collections
   useEffect(() => {
     if (!churchId) return;
+    if (workItemsEnabled === null) return; // wait until the feature flag resolves
     const unsubs = [];
     let loaded = 0;
-    const totalSubs = 21;
+    // Unified mode reads tasks + maintenance from one workItems subscription
+    // (one fewer than the two legacy collection subscriptions).
+    const totalSubs = workItemsEnabled ? 20 : 21;
     const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
     // Config
@@ -134,13 +204,16 @@ export function useFirestore(churchId) {
       checkDone();
     }, (err) => { handleErr(err); checkDone(); }));
 
-    // Maintenance Tickets
-    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'maintenanceTickets'), (snap) => {
-      const tickets = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
-      tickets.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-      setMaintenanceTickets(tickets);
-      checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    // Maintenance Tickets (legacy collection — unified mode derives these from
+    // the workItems subscription added below).
+    if (!workItemsEnabled) {
+      unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'maintenanceTickets'), (snap) => {
+        const tickets = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+        tickets.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        setMaintenanceTickets(tickets);
+        checkDone();
+      }, (err) => { handleErr(err); checkDone(); }));
+    }
 
     // Vendors
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'vendors'), (snap) => {
@@ -203,13 +276,33 @@ export function useFirestore(churchId) {
       checkDone();
     }, (err) => { handleErr(err); checkDone(); }));
 
-    // Tasks
-    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'tasks'), (snap) => {
-      const t = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
-      t.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-      setTasks(t);
-      checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    // Tasks (legacy collection — unified mode derives these from the workItems
+    // subscription below).
+    if (!workItemsEnabled) {
+      unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'tasks'), (snap) => {
+        const t = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+        t.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        setTasks(t);
+        checkDone();
+      }, (err) => { handleErr(err); checkDone(); }));
+    }
+
+    // Work Items (unified Tasks + Maintenance — Work-unification Phase 2). One
+    // subscription feeds both the `tasks` and `maintenanceTickets` arrays, split
+    // by the `type` discriminator. `_docId` is the bare id (prefix stripped) so
+    // downstream link fields and CRUD calls are identical to legacy mode.
+    if (workItemsEnabled) {
+      unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'workItems'), (snap) => {
+        const all = snap.docs.map(d => ({ _docId: stripWorkPrefix(d.id), ...d.data() }));
+        const t = all.filter(w => w.type === 'task');
+        const m = all.filter(w => w.type === 'maintenance');
+        t.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        m.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        setTasks(t);
+        setMaintenanceTickets(m);
+        checkDone();
+      }, (err) => { handleErr(err); checkDone(); }));
+    }
 
     // Rooms/Spaces
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'rooms'), (snap) => {
@@ -251,7 +344,7 @@ export function useFirestore(churchId) {
     }, (err) => { handleErr(err); checkDone(); }));
 
     return () => unsubs.forEach(u => u());
-  }, [churchId]);
+  }, [churchId, workItemsEnabled]);
 
   // ── Settings ──
   const updateSettings = useCallback(async (updates) => {
@@ -500,27 +593,32 @@ export function useFirestore(churchId) {
   // ── Maintenance Tickets ──
   const addTicket = useCallback(async (ticket, userId, userName) => {
     try {
-      // Atomic ticket numbering via transaction on config/main
+      // Atomic ticket numbering + doc create via one transaction on config/main.
+      // In unified mode the doc is minted in `workItems` (id `mnt_<bare>`, with a
+      // `type: 'maintenance'` discriminator); the bare id is returned for linking.
+      const enabled = workItemsEnabledRef.current;
       let ticketNumber;
       const configRef = doc(db, 'churches', churchId, 'config', 'main');
+      const { ref, id: newId } = newTicketDocRef(churchId, enabled);
       await runTransaction(db, async (t) => {
         const configSnap = await t.get(configRef);
         const maxNum = (configSnap.data()?.maxTicketNumber || 0) + 1;
         ticketNumber = 'MNT-' + String(maxNum).padStart(3, '0');
         t.update(configRef, { maxTicketNumber: maxNum });
-      });
-      const ref = await addDoc(collection(db, 'churches', churchId, 'maintenanceTickets'), {
-        ...ticket,
-        ticketNumber,
-        createdBy: userId,
-        createdByName: userName,
-        status: ticket.status || 'Backlog',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        completedAt: null
+        t.set(ref, {
+          ...ticket,
+          ...(enabled ? { type: 'maintenance' } : {}),
+          ticketNumber,
+          createdBy: userId,
+          createdByName: userName,
+          status: ticket.status || 'Backlog',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          completedAt: null
+        });
       });
       await logActivity('add_ticket', ticket.linkedItemId || ticketNumber, userId, userName, { name: ticket.name, priority: ticket.priority });
-      return ref.id;
+      return newId;
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
@@ -530,13 +628,13 @@ export function useFirestore(churchId) {
       if (updates.status === 'Complete' && !updates.completedAt) {
         data.completedAt = new Date().toISOString();
       }
-      await updateDoc(doc(db, 'churches', churchId, 'maintenanceTickets', docId), data);
+      await updateDoc(ticketDocRef(churchId, docId, workItemsEnabledRef.current), data);
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const addTicketComment = useCallback(async (ticketId, text, authorId, authorName) => {
     try {
-      await addDoc(collection(db, 'churches', churchId, 'maintenanceTickets', ticketId, 'comments'), {
+      await addDoc(collection(ticketDocRef(churchId, ticketId, workItemsEnabledRef.current), 'comments'), {
         text,
         authorId,
         authorName,
@@ -547,7 +645,7 @@ export function useFirestore(churchId) {
 
   const updateTicketComment = useCallback(async (ticketId, commentId, text) => {
     try {
-      await updateDoc(doc(db, 'churches', churchId, 'maintenanceTickets', ticketId, 'comments', commentId), {
+      await updateDoc(doc(ticketDocRef(churchId, ticketId, workItemsEnabledRef.current), 'comments', commentId), {
         text, updatedAt: new Date().toISOString()
       });
     } catch (err) { handleErr(err); }
@@ -555,18 +653,19 @@ export function useFirestore(churchId) {
 
   const deleteTicketComment = useCallback(async (ticketId, commentId) => {
     try {
-      await deleteDoc(doc(db, 'churches', churchId, 'maintenanceTickets', ticketId, 'comments', commentId));
+      await deleteDoc(doc(ticketDocRef(churchId, ticketId, workItemsEnabledRef.current), 'comments', commentId));
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
   const deleteTicket = useCallback(async (docId) => {
     try {
-      const ref = doc(db, 'churches', churchId, 'maintenanceTickets', docId);
+      const enabled = workItemsEnabledRef.current;
+      const ref = ticketDocRef(churchId, docId, enabled);
       const snap = await getDoc(ref);
       const linkedTaskDocId = snap.exists() ? snap.data()?.linkedTaskDocId : null;
       await deleteDoc(ref);
       if (linkedTaskDocId) {
-        updateDoc(doc(db, 'churches', churchId, 'tasks', linkedTaskDocId), { linkedTicketDocId: null }).catch(() => {});
+        updateDoc(taskDocRef(churchId, linkedTaskDocId, enabled), { linkedTicketDocId: null }).catch(() => {});
       }
     } catch (err) { handleErr(err); }
   }, [churchId]);
@@ -583,9 +682,12 @@ export function useFirestore(churchId) {
   // ── Tasks ──
   const addTask = useCallback(async (task, userId, userName) => {
     try {
+      // In unified mode the doc is minted in `workItems` (id `task_<bare>`, with
+      // a `type: 'task'` discriminator); the bare id is returned for linking.
+      const enabled = workItemsEnabledRef.current;
       let taskNumber;
       const configRef = doc(db, 'churches', churchId, 'config', 'main');
-      const newDocRef = doc(collection(db, 'churches', churchId, 'tasks'));
+      const { ref: newDocRef, id: newId } = newTaskDocRef(churchId, enabled);
       await runTransaction(db, async (t) => {
         const configSnap = await t.get(configRef);
         const maxNum = (configSnap.data()?.maxTaskNumber || 0) + 1;
@@ -593,6 +695,7 @@ export function useFirestore(churchId) {
         t.set(configRef, { maxTaskNumber: maxNum }, { merge: true });
         t.set(newDocRef, {
           ...task,
+          ...(enabled ? { type: 'task' } : {}),
           taskNumber,
           createdBy: userId,
           createdByName: userName,
@@ -607,7 +710,7 @@ export function useFirestore(churchId) {
       const addLogDetails = { priority: task.priority };
       if (task.visibility !== 'private' && task.visibility !== 'shared') addLogDetails.name = task.name;
       await logActivity('add_task', taskNumber, userId, userName, addLogDetails);
-      return newDocRef.id;
+      return newId;
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
@@ -618,7 +721,7 @@ export function useFirestore(churchId) {
       if (updates.status === 'Complete' && !updates.completedAt) {
         data.completedAt = new Date().toISOString();
       }
-      await updateDoc(doc(db, 'churches', churchId, 'tasks', docId), data);
+      await updateDoc(taskDocRef(churchId, docId, workItemsEnabledRef.current), data);
       if (userId) {
         const action = safe.status === 'Complete' ? 'complete_task' : 'update_task';
         const updateLogDetails = { ...(safe.status ? { status: safe.status } : {}) };
@@ -634,10 +737,12 @@ export function useFirestore(churchId) {
       const photoUrls = typeof task === 'object' ? (task?.photos || []) : [];
       const linkedJobDocId = typeof task === 'object' ? task?.linkedJobDocId : null;
       const linkedTicketDocId = typeof task === 'object' ? task?.linkedTicketDocId : null;
-      const commentsSnap = await getDocs(collection(db, 'churches', churchId, 'tasks', docId, 'comments'));
+      const enabled = workItemsEnabledRef.current;
+      const taskRef = taskDocRef(churchId, docId, enabled);
+      const commentsSnap = await getDocs(collection(taskRef, 'comments'));
       const batch = writeBatch(db);
       commentsSnap.docs.forEach(d => batch.delete(d.ref));
-      batch.delete(doc(db, 'churches', churchId, 'tasks', docId));
+      batch.delete(taskRef);
       await batch.commit();
       if (photoUrls.length > 0) {
         await Promise.allSettled(photoUrls.map(url => {
@@ -648,7 +753,7 @@ export function useFirestore(churchId) {
         updateDoc(doc(db, 'churches', churchId, 'jobListings', linkedJobDocId), { linkedTaskDocId: null }).catch(() => {});
       }
       if (linkedTicketDocId) {
-        updateDoc(doc(db, 'churches', churchId, 'maintenanceTickets', linkedTicketDocId), { linkedTaskDocId: null }).catch(() => {});
+        updateDoc(ticketDocRef(churchId, linkedTicketDocId, enabled), { linkedTaskDocId: null }).catch(() => {});
       }
       if (userId) await logActivity('delete_task', taskNumber, userId, userName, {});
     } catch (err) { handleErr(err); throw err; }
@@ -659,13 +764,13 @@ export function useFirestore(churchId) {
     try {
       const data = { text, authorId, authorName, createdAt: new Date().toISOString() };
       if (mentions && mentions.length > 0) data.mentions = mentions;
-      await addDoc(collection(db, 'churches', churchId, 'tasks', taskId, 'comments'), data);
+      await addDoc(collection(taskDocRef(churchId, taskId, workItemsEnabledRef.current), 'comments'), data);
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
   const updateTaskComment = useCallback(async (taskId, commentId, text) => {
     try {
-      await updateDoc(doc(db, 'churches', churchId, 'tasks', taskId, 'comments', commentId), {
+      await updateDoc(doc(taskDocRef(churchId, taskId, workItemsEnabledRef.current), 'comments', commentId), {
         text, updatedAt: new Date().toISOString()
       });
     } catch (err) { handleErr(err); throw err; }
@@ -673,7 +778,7 @@ export function useFirestore(churchId) {
 
   const deleteTaskComment = useCallback(async (taskId, commentId) => {
     try {
-      await deleteDoc(doc(db, 'churches', churchId, 'tasks', taskId, 'comments', commentId));
+      await deleteDoc(doc(taskDocRef(churchId, taskId, workItemsEnabledRef.current), 'comments', commentId));
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
@@ -1065,7 +1170,7 @@ export function useFirestore(churchId) {
       const linkedTaskDocId = snap.exists() ? snap.data()?.linkedTaskDocId : null;
       await deleteDoc(ref);
       if (linkedTaskDocId) {
-        updateDoc(doc(db, 'churches', churchId, 'tasks', linkedTaskDocId), { linkedJobDocId: null }).catch(() => {});
+        updateDoc(taskDocRef(churchId, linkedTaskDocId, workItemsEnabledRef.current), { linkedJobDocId: null }).catch(() => {});
       }
       await clearJobSwapRequests([docId]);
       if (userId) await logActivity('delete_job', jobNumber || docId, userId, userName, {});
@@ -1131,7 +1236,7 @@ export function useFirestore(churchId) {
     // Best-effort fire-and-forget. If a task was also deleted concurrently
     // we don't want the series delete to fail; just log + Sentry on errors.
     await Promise.allSettled(linkedTaskDocIds.map(taskId =>
-      updateDoc(doc(db, 'churches', churchId, 'tasks', taskId), { linkedJobDocId: null })
+      updateDoc(taskDocRef(churchId, taskId, workItemsEnabledRef.current), { linkedJobDocId: null })
     ));
   }
 
