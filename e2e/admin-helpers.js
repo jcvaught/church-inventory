@@ -214,3 +214,30 @@ export function daysFromNowStr(n) {
   const p = (x) => String(x).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
 }
+
+// ── Work-unification (Phase 2) helpers ────────────────────────────────────
+// The read/write path flips to the unified `workItems` collection per-church
+// via config/featureFlags.workItemsEnabled. These let the work-unification
+// spec gate on the flag and assert the migrated shape.
+export async function workItemsEnabled() {
+  const snap = await db().doc(`churches/${CHURCH_ID}/config/featureFlags`).get();
+  return snap.exists && snap.data()?.workItemsEnabled === true;
+}
+export async function listCollection(coll) {
+  const snap = await db().collection(`churches/${CHURCH_ID}/${coll}`).get();
+  return snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+}
+export async function getWorkItem(docId) {
+  const snap = await db().doc(`churches/${CHURCH_ID}/workItems/${docId}`).get();
+  return snap.exists ? { _docId: snap.id, ...snap.data() } : null;
+}
+// Delete every E2E-titled (name starting with the [E2E] prefix) task/maintenance
+// doc across BOTH the legacy and unified collections, plus their comments.
+export async function purgeWorkItemsArtifacts() {
+  const f = db();
+  for (const coll of ['tasks', 'maintenanceTickets', 'workItems']) {
+    const snap = await f.collection(`churches/${CHURCH_ID}/${coll}`)
+      .where('name', '>=', E2E_PREFIX).where('name', '<', E2E_PREFIX + '~').get();
+    for (const d of snap.docs) await f.recursiveDelete(d.ref);
+  }
+}
