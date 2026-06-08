@@ -8,6 +8,7 @@
     "emulators": "PATH=\"/opt/homebrew/opt/openjdk/bin:$PATH\" firebase emulators:start --only auth,firestore,storage",
     "dev:emulator": "VITE_USE_EMULATORS=true vite",
     "seed:emulator": "node scripts/seed-emulator.mjs",
+    "migrate:emulator": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node scripts/migrate-work-unification.cjs",
     "test:unit": "node --test functions/test/*.test.mjs",
     "build": "NODE_ENV=production rm -rf node_modules/.vite && vite build",
     "postbuild": "node scripts/prerender-blog.mjs && node scripts/prerender-static.mjs && node scripts/verify-prod-bundle.mjs",

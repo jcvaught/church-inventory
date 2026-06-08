@@ -78,7 +78,13 @@ async function main() {
     { taskNumber: 'TSK-003', name: 'Restock coffee bar', status: 'Planning', priority: 'Low', dueDate: ymd(addDays(5)) },
     { taskNumber: 'TSK-004', name: 'Quarterly board report', status: 'On Hold', priority: 'Medium', dueDate: ymd(addDays(20)), recurrence: 'quarterly' },
   ];
-  for (const t of tasks) await C('tasks').add({ ...t, description: '', assignees: me, visibility: 'team', tags: [], checklist: [], createdBy: uid, createdByName: 'Test Admin', createdAt: NOW, sortOrder: 0 });
+  let firstTaskRef;
+  for (const t of tasks) {
+    const ref = await C('tasks').add({ ...t, description: '', assignees: me, visibility: 'team', tags: [], checklist: [], createdBy: uid, createdByName: 'Test Admin', createdAt: NOW, sortOrder: 0 });
+    firstTaskRef ||= ref;
+  }
+  // One comment so the Work-unification migration's comment-copy path is exercised.
+  await firstTaskRef.collection('comments').add({ text: 'Picked up the paper stock.', authorId: uid, authorName: 'Test Admin', createdAt: NOW });
 
   // 5. Maintenance tickets — incl. recurring
   const tickets = [
@@ -86,7 +92,12 @@ async function main() {
     { ticketNumber: 'MNT-002', name: 'Fix leaking faucet (Kids Wing)', status: 'In Progress', priority: 'High', dueDate: ymd(addDays(-2)) },
     { ticketNumber: 'MNT-003', name: 'Annual fire-extinguisher inspection', status: 'Planning', priority: 'High', dueDate: ymd(addDays(45)), recurrence: 'annually' },
   ];
-  for (const t of tickets) await C('maintenanceTickets').add({ ...t, description: '', assignees: me, tags: [], createdBy: uid, createdByName: 'Test Admin', createdAt: NOW });
+  let firstTicketRef;
+  for (const t of tickets) {
+    const ref = await C('maintenanceTickets').add({ ...t, description: '', assignees: me, tags: [], createdBy: uid, createdByName: 'Test Admin', createdAt: NOW });
+    firstTicketRef ||= ref;
+  }
+  await firstTicketRef.collection('comments').add({ text: 'Ordered the replacement filter.', authorId: uid, authorName: 'Test Admin', createdAt: NOW });
 
   // 6. Jobs / shifts — incl. a recurring series + one with open spots
   const jobs = [
