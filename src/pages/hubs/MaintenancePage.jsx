@@ -16,6 +16,7 @@ import { resizeImageForUpload } from '../../utils/imageResize.js';
 import { localDateStr, calculateNextDue } from '../../utils/date.js';
 import { STATUSES, PRIORITIES, RECURRENCE_OPTIONS, RECURRENCE_LABELS, statusColors, initials, assigneeColor, PriorityBadge } from '../../components/board/boardUI.jsx';
 import { BoardCalendar } from '../../components/board/BoardCalendar.jsx';
+import { CommentThread } from '../../components/comments/CommentThread.jsx';
 
 function TicketCard({ ticket, onClick, onDragStart, onStatusChange, isMobile }) {
   const sc = statusColors[ticket.status] || statusColors['Backlog'];
@@ -190,92 +191,6 @@ function PhotoGrid({ photos = [], onAdd, onRemove, uploading }) {
         )}
       </div>
       {onAdd && <input ref={fileRef} type="file" accept="image/*" multiple style={{ display:'none' }} onChange={e => { if (e.target.files?.length) onAdd(Array.from(e.target.files)); e.target.value = ''; }}/>}
-    </div>
-  );
-}
-
-function formatCommentDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const now = new Date();
-  const diffMs = now - d;
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `${diffH}h ago`;
-  const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return d.toLocaleDateString([], { month:'short', day:'numeric' });
-}
-
-function CommentThread({ comments, loading, newComment, onChange, onPost, posting, userId, canOperate, onEdit, onDelete }) {
-  const endRef = useRef();
-  const [editingId, setEditingId] = useState(null);
-  const [editText, setEditText] = useState('');
-  useEffect(() => { if (comments.length) endRef.current?.scrollIntoView({ behavior:'smooth' }); }, [comments.length]);
-
-  function startEdit(c) { setEditingId(c.id); setEditText(c.text); }
-  function cancelEdit() { setEditingId(null); setEditText(''); }
-  async function submitEdit(c) { await onEdit(c.id, editText); setEditingId(null); setEditText(''); }
-
-  return (
-    <div>
-      <div style={{ maxHeight:200, overflowY:'auto', display:'flex', flexDirection:'column', gap:10, marginBottom:10, paddingRight:2 }}>
-        {loading
-          ? <div style={{ color:B.textLight, fontSize:13 }}>Loading...</div>
-          : comments.length === 0
-            ? <div style={{ color:B.textLight, fontSize:13 }}>No comments yet.</div>
-            : comments.map(c => {
-                const isOwn = c.authorId === userId;
-                const canModify = isOwn || canOperate;
-                return (
-                  <div key={c.id} style={{ background: isOwn ? B.tealPale : B.warmGray, borderRadius:10, padding:'10px 14px', border: isOwn ? '1px solid '+B.tealLight : '1px solid transparent' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3, gap:6 }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        <span style={{ fontWeight:700, fontSize:13, color:B.navy, fontFamily:f1 }}>{c.authorName}</span>
-                        {isOwn && <span style={{ fontSize:10, fontWeight:700, color:B.teal, fontFamily:f1, background:B.white, borderRadius:10, padding:'1px 6px' }}>You</span>}
-                      </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                        <span style={{ fontSize:11, color:B.textLight }}>{formatCommentDate(c.createdAt)}{c.updatedAt ? ' · edited' : ''}</span>
-                        {canModify && editingId !== c.id && (
-                          <div style={{ display:'flex', gap:4 }}>
-                            <button onClick={() => startEdit(c)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:14, color:B.textLight, padding:'6px 8px', minWidth:28, minHeight:28 }} title="Edit">✏️</button>
-                            <button onClick={() => onDelete(c.id)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:14, color:B.textLight, padding:'6px 8px', minWidth:28, minHeight:28 }} title="Delete">🗑️</button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    {editingId === c.id
-                      ? (
-                        <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:4 }}>
-                          <textarea value={editText} onChange={e => setEditText(e.target.value)} style={{ ...inp, minHeight:60, resize:'vertical', width:'100%', boxSizing:'border-box' }} autoFocus/>
-                          <div style={{ display:'flex', gap:6, justifyContent:'flex-end' }}>
-                            <button onClick={cancelEdit} style={{ ...btnS, padding:'5px 12px', fontSize:12 }}>Cancel</button>
-                            <button onClick={() => submitEdit(c)} disabled={!editText.trim()} style={{ ...btnP, padding:'5px 12px', fontSize:12, opacity:editText.trim() ? 1 : 0.5 }}>Save</button>
-                          </div>
-                        </div>
-                      )
-                      : <div style={{ fontSize:13, color:B.textDark, lineHeight:1.5, whiteSpace:'pre-wrap' }}>{c.text}</div>
-                    }
-                  </div>
-                );
-              })
-        }
-        <div ref={endRef}/>
-      </div>
-      <div style={{ display:'flex', gap:8, alignItems:'flex-start' }}>
-        <div style={{ flex:1 }}>
-          <RichTextarea
-            value={newComment}
-            onChange={onChange}
-            style={{ ...inp, minHeight:38, resize:'vertical', width:'100%', boxSizing:'border-box' }}
-            placeholder="Add a comment... (Enter to post · Shift+Enter for new line)"
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && newComment.trim()) { e.preventDefault(); onPost(); } }}
-          />
-        </div>
-        <button onClick={onPost} disabled={posting || !newComment.trim()} style={{ ...btnP, padding:'11px 18px', opacity:(posting || !newComment.trim()) ? .5 : 1, flexShrink:0 }}>Post</button>
-      </div>
     </div>
   );
 }
