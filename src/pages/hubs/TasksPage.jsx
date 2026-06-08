@@ -18,6 +18,7 @@ import { exportTasksCSV } from '../../utils/csv.js';
 import { exportTasksICS } from '../../utils/ical.js';
 import { localDateStr, calculateNextDue } from '../../utils/date.js';
 import { STATUSES, PRIORITIES, RECURRENCE_OPTIONS, RECURRENCE_LABELS, priorityColors, statusColors, initials, assigneeColor, PriorityBadge } from '../../components/board/boardUI.jsx';
+import { BoardCalendar } from '../../components/board/BoardCalendar.jsx';
 
 // ── Bulk paste-import parsing ──
 // Per-import cap. Above this, hint that the user split into batches.
@@ -645,136 +646,6 @@ const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, on
     </div>
   );
 });
-
-// ── Task Calendar ─────────────────────────────────────────────────────────
-const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-
-const TaskChip = memo(function TaskChip({ task, todayStr, onTaskClick }) {
-  const pc = priorityColors[task.priority] || priorityColors.Medium;
-  const isOverdue = task.dueDate < todayStr && task.status !== 'Complete' && task.status !== 'Cancelled';
-  return (
-    <div onClick={e => { e.stopPropagation(); onTaskClick(task); }}
-      style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 5px', borderRadius:5, background:isOverdue ? '#FEE8E8' : pc.bg, borderLeft:'3px solid '+pc.dot, cursor:'pointer', marginBottom:2, overflow:'hidden' }}
-      title={task.name}>
-      <span style={{ fontSize:11, color:isOverdue ? B.red : pc.tx, fontWeight:600, fontFamily:f1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flex:1 }}>{task.name}</span>
-      {task.recurrence && <EmojiIcon emoji="🔁" label="Recurring" style={{ fontSize:10, flexShrink:0 }} />}
-    </div>
-  );
-});
-
-function TaskCalendar({ tasks, onTaskClick, isMobile }) {
-  const now = new Date();
-  const [viewYear, setViewYear] = useState(now.getFullYear());
-  const [viewMonth, setViewMonth] = useState(now.getMonth());
-  const [expandedDay, setExpandedDay] = useState(null);
-
-  const tasksByDate = useMemo(() => {
-    const map = new Map();
-    tasks.forEach(t => {
-      if (!t.dueDate) return;
-      const key = t.dueDate.slice(0, 10);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(t);
-    });
-    return map;
-  }, [tasks]);
-
-  function prevMonth() { if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); } else setViewMonth(m => m - 1); setExpandedDay(null); }
-  function nextMonth() { if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); } else setViewMonth(m => m + 1); setExpandedDay(null); }
-  function goToday() { setViewYear(now.getFullYear()); setViewMonth(now.getMonth()); setExpandedDay(null); }
-
-  const calendarDays = useMemo(() => {
-    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
-    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-    const daysInPrev = new Date(viewYear, viewMonth, 0).getDate();
-    const days = [];
-    for (let i = firstDay - 1; i >= 0; i--) days.push({ date: new Date(viewYear, viewMonth - 1, daysInPrev - i), isCurrentMonth: false });
-    for (let d = 1; d <= daysInMonth; d++) days.push({ date: new Date(viewYear, viewMonth, d), isCurrentMonth: true });
-    while (days.length % 7 !== 0) { const last = days[days.length - 1].date; days.push({ date: new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1), isCurrentMonth: false }); }
-    return days;
-  }, [viewYear, viewMonth]);
-
-  const todayStr = localDateStr(now);
-
-  // Mobile: grouped vertical list
-  if (isMobile) {
-    const weekEnd = new Date(now); weekEnd.setDate(now.getDate() + 7);
-    const monthEnd = new Date(now); monthEnd.setDate(now.getDate() + 30);
-    const weekEndStr = localDateStr(weekEnd);
-    const monthEndStr = localDateStr(monthEnd);
-    const withDue = tasks.filter(t => t.dueDate).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-    const groups = [
-      { label:'Overdue', tasks: withDue.filter(t => t.dueDate < todayStr && t.status !== 'Complete' && t.status !== 'Cancelled') },
-      { label:'This Week', tasks: withDue.filter(t => t.dueDate >= todayStr && t.dueDate <= weekEndStr) },
-      { label:'Next 30 Days', tasks: withDue.filter(t => t.dueDate > weekEndStr && t.dueDate <= monthEndStr) },
-      { label:'Later', tasks: withDue.filter(t => t.dueDate > monthEndStr) },
-    ];
-    return (
-      <div>
-        {groups.map(g => g.tasks.length > 0 && (
-          <div key={g.label} style={{ marginBottom:20 }}>
-            <div style={{ fontFamily:f1, fontWeight:700, fontSize:13, color:g.label==='Overdue' ? B.red : B.textMid, textTransform:'uppercase', letterSpacing:.8, marginBottom:8 }}>{g.label}</div>
-            {g.tasks.map(t => (
-              <div key={t._docId} onClick={() => onTaskClick(t)} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:10, background:B.white, border:'1px solid '+B.sand, marginBottom:6, cursor:'pointer' }}>
-                <span style={{ width:8, height:8, borderRadius:'50%', background:(priorityColors[t.priority]||priorityColors.Medium).dot, flexShrink:0 }}/>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:14, fontWeight:600, color:B.navy, fontFamily:f1 }}>{t.name}</div>
-                  <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>{t.dueDate}{t.recurrence ? <> · <EmojiIcon emoji="🔁" label="Recurring" /></> : ''}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ))}
-        {tasks.filter(t => t.dueDate).length === 0 && <div style={{ textAlign:'center', color:B.textLight, fontSize:14, padding:32 }}>No tasks with due dates.</div>}
-      </div>
-    );
-  }
-
-  // Desktop: month grid
-  return (
-    <div>
-      {/* Nav */}
-      <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-        <button onClick={prevMonth} style={{ ...btnS, padding:'6px 12px', fontSize:16, lineHeight:1 }}>‹</button>
-        <span style={{ fontFamily:f1, fontWeight:700, fontSize:18, color:B.navy, minWidth:200, textAlign:'center' }}>{MONTH_NAMES[viewMonth]} {viewYear}</span>
-        <button onClick={nextMonth} style={{ ...btnS, padding:'6px 12px', fontSize:16, lineHeight:1 }}>›</button>
-        <button onClick={goToday} style={{ ...btnS, padding:'6px 14px', fontSize:13, marginLeft:4 }}>Today</button>
-        {(() => { const total = [...tasksByDate.values()].reduce((a, b) => a + b.length, 0); return (
-          <span style={{ marginLeft:'auto', fontSize:13, color:B.textLight, fontFamily:f1 }}>{total} task{total !== 1 ? 's' : ''} with due dates</span>
-        ); })()}
-      </div>
-      {/* Day headers */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', gap:2, marginBottom:2 }}>
-        {DAY_NAMES.map(d => <div key={d} style={{ textAlign:'center', fontSize:12, fontWeight:700, color:B.textLight, fontFamily:f1, padding:'4px 0', textTransform:'uppercase', letterSpacing:.6 }}>{d}</div>)}
-      </div>
-      {/* Day cells */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', gap:2 }}>
-        {calendarDays.map((day, idx) => {
-          const ds = localDateStr(day.date);
-          const dayTasks = tasksByDate.get(ds) || [];
-          const isToday = ds === todayStr;
-          const hasOverdue = dayTasks.some(t => ds < todayStr && t.status !== 'Complete' && t.status !== 'Cancelled');
-          const isExpanded = expandedDay === ds;
-          const CHIP_LIMIT = 3;
-          const visible = dayTasks.slice(0, CHIP_LIMIT);
-          const overflow = dayTasks.length - CHIP_LIMIT;
-          return (
-            <div key={idx}
-              onClick={() => dayTasks.length > CHIP_LIMIT && setExpandedDay(isExpanded ? null : ds)}
-              style={{ minHeight:88, background:day.isCurrentMonth ? B.white : '#F8F8FA', borderRadius:8, border:'1px solid '+(isToday ? B.teal : hasOverdue ? '#FECACA' : B.sand), padding:'5px 6px', position:'relative', cursor:dayTasks.length > CHIP_LIMIT ? 'pointer' : 'default', outline:isToday ? '2px solid '+B.teal : 'none', outlineOffset:'-1px' }}>
-              <div style={{ fontSize:12, fontWeight:isToday ? 800 : 500, color:isToday ? B.teal : day.isCurrentMonth ? B.textDark : B.textLight, fontFamily:f1, marginBottom:3, textAlign:'right' }}>{day.date.getDate()}</div>
-              {(isExpanded ? dayTasks : visible).map(t => <TaskChip key={t._docId} task={t} todayStr={todayStr} onTaskClick={onTaskClick}/>)}
-              {!isExpanded && overflow > 0 && (
-                <div style={{ fontSize:11, color:B.teal, fontWeight:700, fontFamily:f1, textAlign:'center', marginTop:2 }}>+{overflow} more</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function PastePanel({ pasteText, setPasteText, taskHubUsers, pasteSaving, pasteProgress, onCancel, onSubmit }) {
   const parsed = useMemo(() => parsePasteText(pasteText, taskHubUsers), [pasteText, taskHubUsers]);
@@ -2141,7 +2012,7 @@ export function TasksPage({ store, userProfile }) {
 
       {/* Calendar View */}
       {viewMode === 'calendar' && (
-        <TaskCalendar tasks={filteredTasks} onTaskClick={openDetail} isMobile={isMobile}/>
+        <BoardCalendar items={filteredTasks} onItemClick={openDetail} isMobile={isMobile} noun="task"/>
       )}
 
       {/* Insights View */}
