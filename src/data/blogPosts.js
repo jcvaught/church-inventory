@@ -1,5 +1,86 @@
 export const BLOG_POSTS = [
   {
+    slug: 'setting-up-qr-asset-labels-in-your-church',
+    title: 'Setting Up QR Asset Labels in Your Church',
+    description: "A label you scan with your phone turns every piece of church equipment into a living record — its location, condition, maintenance history, and who's responsible. Here's a practical, start-to-finish guide to setting up QR asset labels: what to buy, how to number things, what each label should link to, where to stick them, and how to roll it out one ministry area at a time.",
+    date: '2026-06-09',
+    keywords: 'church QR asset labels, QR code inventory church, church asset tagging, how to label church equipment, church inventory QR codes, asset tags for church, church equipment tracking, scan to inventory church',
+    related: ['why-churches-need-inventory-management', 'how-to-do-a-church-physical-audit', 'church-equipment-maintenance'],
+    content: `
+## Why a Label Beats a Spreadsheet Row
+
+Most church inventory lives in two places: a spreadsheet almost nobody opens, and the memory of one volunteer who knows where everything is. Both fail the moment you actually need them — when that volunteer is on vacation, or when the spreadsheet says "projector, sanctuary" and there are now three projectors and you don't know which is which.
+
+A QR asset label fixes the gap between the *thing* and the *record* of the thing. You stick a small coded label on a piece of equipment, point your phone at it, and the record opens instantly: what it is, where it belongs, its condition, when it was last serviced, and who's responsible for it. No hunting through a sheet. No asking around. The object tells you its own story.
+
+If you're not yet convinced inventory tracking is worth the effort at all, start with [why churches need inventory management](/blog/why-churches-need-inventory-management) — this guide assumes you've already decided it is, and you just want to know *how* to set up the labels.
+
+## What You Actually Need (It's Cheaper Than You Think)
+
+You don't need a barcode scanner gun or expensive enterprise software. The whole system runs on equipment you already have:
+
+- **A smartphone** — anyone's. The phone's camera reads QR codes natively now; no app required to scan.
+- **Durable label stock** — this is the one thing worth spending a little on. Don't use paper labels or a home inkjet for anything that gets handled, lives in a damp closet, or goes outside. Get **weatherproof vinyl or polyester labels** (often sold as "asset tags"). They survive moisture, cleaning chemicals, and years of handling.
+- **A way to print them** — a basic label printer, or order pre-printed sequential QR tags online for a few cents each.
+- **A place for the QR code to point** — this is the part that matters most, covered in the next section.
+
+For a small or mid-size church, labeling everything that matters is typically a one-time cost in the low tens of dollars, plus an afternoon.
+
+## The Most Important Decision: What the QR Code Links To
+
+A QR code is just a shortcut. The question is *what it shortcuts to* — and this is where most DIY attempts go wrong.
+
+**Don't** make the code link to a row in a spreadsheet, a static PDF, or a folder of photos. Those go stale the instant something changes, and they can't be updated from the closet where you're standing.
+
+**Do** make each code point to a single asset's record in a system that can be *read and updated from a phone, on the spot*. The whole payoff of QR labels is the round trip: scan the broken heater, see its history, and log "bulb out, pulled from service" right there — so the next person who scans it knows. A code that only *displays* information is a fancy bookmark. A code that lets you *update* the record is a living inventory. This live, scan-and-update loop is the core argument for [moving church operations beyond spreadsheets](/blog/moving-beyond-spreadsheets) in the first place — a spreadsheet simply can't do the update half from where the equipment lives.
+
+## Give Everything a Number (a Simple Naming Scheme)
+
+Before you print a single label, decide how you'll identify things. A consistent scheme makes the whole system searchable and keeps two "folding tables" from being indistinguishable. Keep it short and human-readable:
+
+- **Area prefix + category + number.** For example: \`SANC-AV-01\` (sanctuary AV item #1), \`KIT-APP-03\` (kitchen appliance #3), \`NUR-FURN-02\` (nursery furniture #2).
+- **One number per physical item**, even for identical objects. Six identical chairs that you track as a set can share a record, but the expensive, theft-prone, or individually-maintained items (each microphone, each laptop, each power tool) each get their own number.
+- **Never reuse a retired number.** When something is disposed of, its number is retired with it. Reusing numbers corrupts your history.
+
+Write the human-readable ID on the visible part of the label too, not just inside the QR code. When a label gets scuffed or a phone is dead, you can still read \`SANC-AV-01\` with your eyes.
+
+## Where to Put the Label (Placement Matters)
+
+A label in the wrong spot is a label nobody scans:
+
+- **Somewhere visible but protected** — flat surfaces near a handle or base, not on a moving part, a hot surface, or a spot that gets gripped constantly.
+- **Consistent within a category** — always the back-bottom-left of AV gear, always the underside of tables — so people learn where to look.
+- **Not on the removable part** — label the projector body, not the lens cap; the laptop, not the bag.
+- **Two labels for big or outdoor items** — equipment that lives outside or takes abuse gets a backup label in a second location.
+
+## Roll It Out One Ministry Area at a Time
+
+The fastest way to abandon this project is to try to label the entire building in one heroic weekend. Don't. Go area by area, and start with the area where missing or broken equipment hurts most — usually **AV**, because its failures are visible to the whole congregation. (We have a dedicated guide to building a proper [church AV equipment inventory](/blog/church-av-equipment-inventory) if that's your starting point.)
+
+A sane rollout order for most churches:
+
+1. **AV / tech booth** — highest value, highest visibility, most theft-attractive.
+2. **Kitchen and hospitality** — appliances and high-turnover gear.
+3. **Facilities and tools** — the most-borrowed, least-returned category.
+4. **Children's and nursery** — equipment plus safety items.
+5. **General furniture** — tables, chairs, portable staging.
+
+Label one area, live with it for a week, fix what's awkward, then move to the next. Each area is an afternoon, not a marathon.
+
+## Hand It Off — Don't Be the Only Scanner
+
+The point of QR labels is that *anyone* can use them, which means the system finally doesn't depend on the one person who knows where everything is. As you roll out each area, recruit that area's regular volunteers and show them the thirty-second loop: scan, look, update. A facilities volunteer who finds a dead drill should be able to flag it from the closet without filing a report or finding you. That's the whole win — accountability spread across the team instead of bottlenecked in one head.
+
+## Keep It Honest with a Quarterly Scan
+
+Labels drift out of date the same way spreadsheets do — unless you build in a light, regular check. Fold a scan-through into your existing rhythm: each quarter, walk an area, scan items, and confirm the record still matches reality. This is far faster than a from-scratch count because the labels do the lookup for you. It slots naturally into the [quarterly inventory audit checklist](/blog/quarterly-church-inventory-audit-checklist), and pairs well with a [church equipment maintenance](/blog/church-equipment-maintenance) pass so you check condition and presence at once. If you've never done a full baseline count, run [a church physical audit](/blog/how-to-do-a-church-physical-audit) first so your labels start from accurate data.
+
+## The Bottom Line
+
+QR asset labels are the cheapest upgrade with the biggest payoff in church inventory. For the cost of some vinyl tags and an afternoon, every piece of equipment becomes self-documenting: scan it and the truth appears, update it and the truth stays current. The labels are only half the system, though — they're worthless pointing at a stale spreadsheet and powerful pointing at a record anyone can update from their phone, on the spot. Get that half right, and you've turned a building full of stuff into a building full of stuff that keeps track of itself.
+`,
+  },
+  {
     slug: 'quarterly-church-inventory-audit-checklist',
     title: "What to Audit in Your Church's Inventory Every Quarter",
     description: "An annual physical audit is good. A quarterly rhythm is what actually keeps a church's inventory trustworthy. Here's a category-by-category checklist of what to check every three months — supplies, equipment, AV gear, keys, and safety items — so nothing goes missing, expires, or surprises you on the Sunday you need it.",
