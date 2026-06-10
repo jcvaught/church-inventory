@@ -19,14 +19,21 @@
  */
 const admin = require('firebase-admin');
 const key = require('./serviceAccountKey.json');
-const { ELDER_EMAILS } = require('../functions/lib/elders');
+const { resolveRoster, rosterElderEmails } = require('../functions/lib/roster');
 
+const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
 const APPLY = process.argv.includes('--apply');
 admin.initializeApp({ credential: admin.credential.cert(key) });
 const auth = admin.auth();
-const allow = new Set(ELDER_EMAILS.map(e => e.toLowerCase()));
+const db = admin.firestore();
 
 (async () => {
+  // Read the live roster (config/shepherdRoster) so the script matches what the
+  // claimElderRole callable uses; fall back to DEFAULT_ROSTER if the doc is absent.
+  const snap = await db.doc(`churches/${SHEPHERD_CHURCH_ID}/config/shepherdRoster`).get();
+  const roster = resolveRoster(snap.exists ? snap.data() : null);
+  const allow = new Set(rosterElderEmails(roster));
+
   console.log(`Elder allow-list (${allow.size}): ${[...allow].join(', ')}`);
   console.log(APPLY ? '\nMODE: APPLY (claims will be changed)\n' : '\nMODE: dry-run (no changes; pass --apply to write)\n');
 

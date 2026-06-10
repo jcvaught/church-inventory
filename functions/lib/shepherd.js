@@ -17,48 +17,14 @@
 // scores, SOS, FSM, G6 Volunteer Status — is deliberately ignored.
 
 const Sentry = require('@sentry/node');
+const { DEFAULT_ROSTER, buildNormalizer } = require('./roster');
 
 const PCO_BASE = 'https://api.planningcenteronline.com/people/v2';
 const PCO_API_VERSION = '2026-06-04';
 
-// ── Elder roster + normalization ──────────────────────────────────────────
-// Ported verbatim from .scratch/pco-coverage.mjs (the read-only probe that
-// produced the coverage snapshot in the plan). Kept FXCC-specific for now; this
-// is the one block to lift into per-church config when Shepherd Hub graduates
-// into a multi-church module.
-const CURRENT = {
-  bell: 'David Bell', boyd: 'Lance Boyd', bingham: 'Ray Bingham (sabbatical)',
-  watkins: 'Steve Watkins', reiman: 'Paul Reiman', reed: 'Joel Reed',
-  mills: 'Ivan Mills', cesone: 'Dennis Cesone',
-};
-// substring patterns -> canonical key ('FORMER' = rolled-off elder). Typo
-// aliases included. Note `bakerr` already maps to FORMER via the `kerr`
-// substring, so no separate alias is needed for it.
-const PATTERNS = [
-  ['bingam', 'bingham'], ['bingham', 'bingham'], ['bell', 'bell'], ['boyd', 'boyd'],
-  ['watkins', 'watkins'], ['reiman', 'reiman'], ['reed', 'reed'], ['mills', 'mills'],
-  ['ceso', 'cesone'], ['cesone', 'cesone'],
-  ['coffman', 'FORMER'], ['reynolds', 'FORMER'], ['renner', 'FORMER'], ['kerr', 'FORMER'],
-  ['palmer', 'FORMER'], ['baither', 'FORMER'], ['beckner', 'FORMER'],
-];
-
-function mapSegment(seg) {
-  const s = String(seg).toLowerCase().replace(/[^a-z]/g, '');
-  for (const [pat, key] of PATTERNS) if (s.includes(pat)) return key;
-  return 'UNKNOWN';
-}
-
-// Given a raw (dirty, free-text) Elder Assigned value, derive the normalized
-// CURRENT-elder keys + flags. Compound/shared assignments split on '/'.
-function normalizeAssignment(rawValue) {
-  const raw = (rawValue ?? '').toString().trim();
-  const hasAssignment = raw !== '';
-  if (!hasAssignment) return { elderKeys: [], orphaned: false, hasAssignment: false, unknown: false };
-  const segKeys = raw.split('/').map(mapSegment);
-  const elderKeys = [...new Set(segKeys.filter(k => k in CURRENT))];
-  const unknown = segKeys.includes('UNKNOWN');
-  return { elderKeys, orphaned: elderKeys.length === 0, hasAssignment: true, unknown };
-}
+// Elder-assignment normalization is now data-driven from the roster (see
+// lib/roster.js) — the caller passes opts.roster (the config/shepherdRoster
+// doc) and we build the normalizer from it, falling back to DEFAULT_ROSTER.
 
 // ── PCO REST client (Node 22 global fetch, no SDK) ─────────────────────────
 function makePcoClient(appId, secret) {
@@ -184,7 +150,7 @@ function indexIncluded(included, idToKey, multiKeys) {
 
 // Build the minimized cache doc for one person. Explicit allow-list of
 // attributes — never spread PCO's attribute object.
-function buildPersonDoc(person, grouped, syncGeneration) {
+function buildPersonDoc(person, grouped, syncGeneration, normalizer) {
   const a = person.attributes || {};
   const id = person.id;
   const pastoralRaw = grouped.fieldByPerson[id] || {};
@@ -196,7 +162,7 @@ function buildPersonDoc(person, grouped, syncGeneration) {
     strengths:         pastoralRaw.strengths ?? [],   // StrengthsFinder themes (checkboxes)
     gifts:             pastoralRaw.gifts ?? [],        // spiritual gifts / interests / abilities (checkboxes)
   };
-  const norm = normalizeAssignment(pastoral.elderAssigned);
+  const norm = normalizer.normalize(pastoral.elderAssigned);
   return {
     doc: {
       pcoId: id,
@@ -231,10 +197,11 @@ function buildPersonDoc(person, grouped, syncGeneration) {
 // db: admin Firestore; FieldValue: admin FieldValue; opts: { churchId, appId,
 // secret, source }. Returns a summary object (also written to config/shepherdSync).
 async function syncShepherdPeople(db, FieldValue, opts) {
-  const { churchId, appId, secret, source = 'unknown' } = opts;
+  const { churchId, appId, secret, source = 'unknown', roster } = opts;
   if (!churchId) throw new Error('syncShepherdPeople: churchId required');
   if (!appId || !secret) throw new Error('syncShepherdPeople: PCO credentials required');
 
+  const normalizer = buildNormalizer(roster || DEFAULT_ROSTER);
   const get = makePcoClient(appId, secret);
   const { idToKey, multiKeys, fieldDefs } = await resolveFieldDefs(get);
 
@@ -252,7 +219,7 @@ async function syncShepherdPeople(db, FieldValue, opts) {
     return false;
   });
 
-  const perElderLoad = Object.fromEntries(Object.keys(CURRENT).map(k => [k, 0]));
+  const perElderLoad = Object.fromEntries(normalizer.activeKeys.map(k => [k, 0]));
   const unmapped = new Set();
   let totalFetched = 0, assigned = 0, orphaned = 0;
 
@@ -262,7 +229,7 @@ async function syncShepherdPeople(db, FieldValue, opts) {
     const grouped = indexIncluded(page.included, idToKey, multiKeys);
     for (const person of page.data || []) {
       totalFetched++;
-      const { doc, norm } = buildPersonDoc(person, grouped, syncGeneration);
+      const { doc, norm } = buildPersonDoc(person, grouped, syncGeneration, normalizer);
       if (norm.hasAssignment) {
         assigned++;
         if (norm.orphaned) orphaned++;
@@ -318,8 +285,4 @@ async function syncShepherdPeople(db, FieldValue, opts) {
 
 module.exports = {
   syncShepherdPeople,
-  // exported for unit-testing / reuse
-  normalizeAssignment,
-  mapSegment,
-  CURRENT,
 };

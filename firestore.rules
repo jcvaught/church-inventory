@@ -130,6 +130,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── Config/shepherdRoster — editable elder roster (names, sign-in emails,
+    //    PCO match surnames, active/sabbatical). Drives the claim grant + the
+    //    sync's name-matching. Read = elder or admin; write = admin only (the
+    //    roster-management UI). ────────────────────────────────────────────────
+    match /churches/{churchId}/config/shepherdRoster {
+      allow read:  if isElder() || isChurchAdmin(churchId);
+      allow write: if isChurchAdmin(churchId);
+    }
+
     // ── Items — members read + update (checkout/return); admins+mgrs create/delete ──
     match /churches/{churchId}/items/{docId} {
       allow read:          if isMember(churchId);

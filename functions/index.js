@@ -9,7 +9,21 @@ const { getMessaging } = require('firebase-admin/messaging');
 const { jobEventLines, reservationEventLines, maintenanceEventLines, buildCalendar } = require('./lib/ics');
 const { calculateNextDue } = require('./lib/recurrence');
 const { syncShepherdPeople } = require('./lib/shepherd');
-const { isElderEmail } = require('./lib/elders');
+const { resolveRoster, isElderEmail } = require('./lib/roster');
+
+// Read the editable elder roster (config/shepherdRoster) for the Shepherd
+// church, falling back to the baked-in DEFAULT_ROSTER if the doc is
+// missing/malformed — so a bad config can never blank assignments or revoke
+// every elder. Used by the sync (name-matching) + claimElderRole (allow-list).
+async function getShepherdRoster(db) {
+  try {
+    const snap = await db.doc(`churches/${SHEPHERD_CHURCH_ID}/config/shepherdRoster`).get();
+    return resolveRoster(snap.exists ? snap.data() : null);
+  } catch (e) {
+    Sentry.captureException(e, { tags: { area: 'shepherd', fn: 'getShepherdRoster' } });
+    return resolveRoster(null);
+  }
+}
 const Sentry = require('@sentry/node');
 
 Sentry.init({
@@ -3369,11 +3383,13 @@ exports.syncShepherdPeople = onSchedule(
   { schedule: '0 2 * * *', timeZone: 'America/Chicago', secrets: [PCO_APP_ID, PCO_SECRET] },
   async () => withScheduledRun('syncShepherdPeople', async () => {
     const db = getFirestore();
+    const roster = await getShepherdRoster(db);
     return await syncShepherdPeople(db, FieldValue, {
       churchId: SHEPHERD_CHURCH_ID,
       appId: PCO_APP_ID.value(),
       secret: PCO_SECRET.value(),
       source: 'scheduled',
+      roster,
     });
   })
 );
@@ -3392,11 +3408,13 @@ exports.refreshShepherdPeople = onCall(
     if (!OWNER_EMAILS.includes(userRecord.email) && !isFxccAdmin) {
       throw new HttpsError('permission-denied', 'Not authorized.');
     }
+    const roster = await getShepherdRoster(db);
     return await syncShepherdPeople(db, FieldValue, {
       churchId: SHEPHERD_CHURCH_ID,
       appId: PCO_APP_ID.value(),
       secret: PCO_SECRET.value(),
       source: 'callable',
+      roster,
     });
   })
 );
@@ -3414,7 +3432,8 @@ exports.claimElderRole = onCall(
   wrapCall('claimElderRole', async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
     const userRecord = await getAuth().getUser(req.auth.uid);
-    const shouldBeElder = isElderEmail(userRecord.email);
+    const roster = await getShepherdRoster(getFirestore());
+    const shouldBeElder = isElderEmail(roster, userRecord.email);
     const isElder = userRecord.customClaims?.elder === true;
     if (shouldBeElder === isElder) return { elder: isElder, changed: false };
     const claims = { ...(userRecord.customClaims || {}) };

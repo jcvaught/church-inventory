@@ -19,6 +19,7 @@ import { SuppliesPage } from './pages/SuppliesPage.jsx';
 import { ReservationsPage } from './pages/ReservationsPage.jsx';
 import { ActivityLogPage } from './pages/ActivityLogPage.jsx';
 import { SettingsPage } from './pages/SettingsPage.jsx';
+import { ShepherdHubPage } from './pages/hubs/ShepherdHubPage.jsx';
 import { BarcodeScanner } from './components/primitives/BarcodeScanner.jsx';
 import { HelpPage } from './pages/HelpPage.jsx';
 import { PrivacyPage } from './pages/PrivacyPage.jsx';
@@ -35,6 +36,10 @@ import { GlobalSearch } from './components/GlobalSearch.jsx';
 import { NotificationBell } from './components/NotificationBell.jsx';
 import { InstallPrompt } from './components/InstallPrompt.jsx';
 import { WhatsNewModal, getUnseenCount, markWhatsNewSeen } from './components/WhatsNew.jsx';
+
+// Shepherd Hub is FXCC-only for now (mirrors SHEPHERD_CHURCH_ID in
+// functions/index.js + useAuth.js — keep in sync).
+const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
 
 
 class PageErrorBoundary extends Component {
@@ -486,7 +491,7 @@ function ProfileMissingScreen({ authHook }) {
 }
 
 function AppShell({ authHook }) {
-  const { user, userProfile, logout, resendVerification, deleteAccount } = authHook;
+  const { user, userProfile, isElder, logout, resendVerification, deleteAccount } = authHook;
   const [verifyBannerDismissed, setVerifyBannerDismissed] = useState(false);
   const [resentVerify, setResentVerify] = useState(false);
   const store = useFirestore(userProfile.churchId);
@@ -666,12 +671,17 @@ function AppShell({ authHook }) {
   // get a 4-tab jobs-first shell; everyone else gets the standard 7-tab admin shell.
   // The "Hubs" key stays the same — for volunteers it just auto-routes into Jobs.
   const volunteerMode = isVolunteerOnly(userProfile);
+  // Shepherd Hub is FXCC-only and gated by the elder custom claim (rules enforce
+  // the real boundary). Admins of FXCC also see it so they can preview/demo and
+  // for oversight. Not a paid hub — a standalone top-level tab, not in HubsPage.
+  const canSeeShepherd = userProfile?.churchId === SHEPHERD_CHURCH_ID
+    && (isElder || userProfile?.role === 'admin') && !volunteerMode;
   const mobileTabs = volunteerMode
     ? [["dashboard","Home","🏠"], ["hubs","Jobs","💼"], ["log","Activity","📋"], ["settings","Settings","⚙️"]]
-    : [["dashboard","Home","🏠"], ["inventory","Items","📦"], ["supplies","Stock","🧴"], ["reservations","Reserve","📅"], ["log","Log","📋"], ["hubs","Hubs","🔌"], ["settings","Settings","⚙️"]];
+    : [["dashboard","Home","🏠"], ["inventory","Items","📦"], ["supplies","Stock","🧴"], ["reservations","Reserve","📅"], ["log","Log","📋"], ["hubs","Hubs","🔌"], ...(canSeeShepherd ? [["shepherd","Flock","🐑"]] : []), ["settings","Settings","⚙️"]];
   const desktopTabs = volunteerMode
     ? [["dashboard","Home"], ["hubs","Jobs"], ["log","Activity"], ["settings","Settings"]]
-    : [["dashboard","Dashboard"], ["inventory","All Items"], ["supplies","Supplies"], ["reservations","Reservations"], ["log","Activity Log"], ["hubs","Hubs"], ["settings","Settings"]];
+    : [["dashboard","Dashboard"], ["inventory","All Items"], ["supplies","Supplies"], ["reservations","Reservations"], ["log","Activity Log"], ["hubs","Hubs"], ...(canSeeShepherd ? [["shepherd","Shepherd"]] : []), ["settings","Settings"]];
 
   const canAdd = canAddUser((store.users || []).length);
 
@@ -801,6 +811,7 @@ function AppShell({ authHook }) {
         {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
         {tab === "reservations" && <ReservationsPage store={store} userProfile={userProfile} />}
         {tab === "log" && <ActivityLogPage store={store} userProfile={userProfile} />}
+        {tab === "shepherd" && canSeeShepherd && <ShepherdHubPage userProfile={userProfile} />}
         {tab === "hubs" && (
           <HubsPage
             store={store}
