@@ -4,6 +4,13 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-10 — Gate Sentry DSN to deployed builds (stop local dev polluting prod Sentry)
+
+A `dev:emulator` click-through (work-unification flag-on validation) deliberately triggered errors and they fired a **prod** Sentry high-priority alert (issue JAVASCRIPT-REACT-14) — because `main.jsx` loaded the prod DSN even on local dev servers. The two events were sandbox-church errors (`churches/…IA7aWdAvbp…/workItems/task_…`, 0 users), not real prod failures.
+
+- **Fix (`src/main.jsx`):** `dsn` is now `import.meta.env.PROD ? "<dsn>" : undefined`. No DSN ⇒ the SDK still initializes (so `Sentry.ErrorBoundary` and friends keep working) but transmits nothing. `import.meta.env.PROD` is true for `vite build` output (prod + Vercel preview deploys) and false for any dev server (`npm run dev`, `npm run dev:emulator`). build clean.
+- **Net:** deployed environments report to Sentry exactly as before; local/sandbox errors no longer fire prod alerts. (Resolve/ignore the two JAVASCRIPT-REACT-14 events in Sentry — they're the now-fixed `addJobListing` repro from the click-through.)
+
 ## 2026-06-10 — Work-unification Phase 2 pre-flip review (on `phase2-readpath`, still DARK)
 
 A correctness + flip-safety review of the full Phase 2 diff (steps 1+2) before the Thursday cutover. The diff is clean — additive, flag-gated, dark by default, with consistent prefix-based CRUD routing, correct dual-collectionGroup dedup in `sendTaskDueReminders`, valid read-before-write transaction shapes, null-safe `gatherAttentionSignals`, and `workItems` rules that faithfully reproduce the legacy `tasks` (visibility/immutability) + `maintenanceTickets` (member-update) semantics switched on `type`. Two code fixes applied; two operational must-dos surfaced for the window.
