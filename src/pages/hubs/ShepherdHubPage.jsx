@@ -19,6 +19,9 @@ import { B, f1, f2, inp, btnP, btnS } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 
 const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
+// Only non-elder allowed into the hub (admin side) — mirrors firestore.rules
+// isShepherdAdmin() + functions OWNER_EMAILS.
+const SHEPHERD_ADMIN_EMAILS = ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
 
 // Append a row to the shepherd audit log. Best-effort — never block the UI.
 async function logShepherdAudit(action, person, userProfile, detail) {
@@ -69,7 +72,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
   const [assignFilter, setAssignFilter] = useState('all');    // 'all' | 'assigned' | 'unassigned' | 'orphaned'
   const [selected, setSelected] = useState(null);
   const [showRoster, setShowRoster] = useState(false);
-  const isAdmin = userProfile?.role === 'admin';
+  const isAdmin = SHEPHERD_ADMIN_EMAILS.includes((userProfile?.email || '').toLowerCase());
 
   // Merge a reassignment result into local state (list + open detail).
   function patchPerson(personId, patch) {
@@ -251,7 +254,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
       {selected && <PersonDetail
         person={selected} elderName={elderName} userProfile={userProfile} isElder={isElder}
         activeElders={(roster.elders || []).filter(e => e.active !== false)}
-        canEdit={isElder || userProfile?.role === 'admin'}
+        canEdit={isElder || isAdmin}
         onPatch={patchPerson}
         onClose={() => setSelected(null)} />}
 

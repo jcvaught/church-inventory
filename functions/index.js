@@ -3402,10 +3402,8 @@ exports.refreshShepherdPeople = onCall(
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
     const db = getFirestore();
     const userRecord = await getAuth().getUser(req.auth.uid);
-    const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
-    const c = callerSnap.exists ? callerSnap.data() : {};
-    const isFxccAdmin = c.churchId === SHEPHERD_CHURCH_ID && c.role === 'admin';
-    if (!OWNER_EMAILS.includes(userRecord.email) && !isFxccAdmin) {
+    // John-only (OWNER_EMAILS) — drives the roster manager's "Save & re-sync".
+    if (!OWNER_EMAILS.includes(userRecord.email)) {
       throw new HttpsError('permission-denied', 'Not authorized.');
     }
     const roster = await getShepherdRoster(db);
@@ -3459,8 +3457,9 @@ exports.setElderAssignment = onCall(
     const email = req.auth.token?.email || '';
     const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
     const c = callerSnap.exists ? callerSnap.data() : {};
-    const isFxccAdmin = c.churchId === SHEPHERD_CHURCH_ID && c.role === 'admin';
-    if (!isElder && !isFxccAdmin && !OWNER_EMAILS.includes(email)) {
+    // Shepherd Hub admin access is John-only (OWNER_EMAILS); elders authorize via
+    // their claim. Other church admins cannot reassign.
+    if (!isElder && !OWNER_EMAILS.includes(email)) {
       throw new HttpsError('permission-denied', 'Not authorized.');
     }
 

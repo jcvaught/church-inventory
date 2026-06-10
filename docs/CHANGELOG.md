@@ -34,8 +34,11 @@ standalone top-level **Shepherd** tab (not a paid hub). `src/pages/hubs/Shepherd
   — add/remove/edit elders (name, surname, sign-in emails, PCO match patterns,
   active/sabbatical) + former-elder list. "Save & re-sync" applies match/active
   changes immediately via `refreshShepherdPeople`.
-- **Rules:** `config/shepherdRoster` read elder/admin, write admin; note
-  subcollections + `shepherdAudit` per slice 2.
+- **Rules:** all Shepherd reads/writes gated to `isElder()` or **`isShepherdAdmin()`**
+  — the latter is John's email only (`OWNER_EMAILS`), NOT any church admin
+  (pastoral data is need-to-know; tightened 2026-06-10). UI tab + `setElderAssignment`
+  / `refreshShepherdPeople` callables mirror this (elders via claim, else
+  John-only). Verified: another FXCC admin is denied; John + elders allowed.
 - **Verified live:** directory queries; notes privacy (owner-only, no forging,
   non-elder locked out); **full write-back through the live callable** (Watkins →
   Watkins/Reiman landed in PCO + cache + audit, then restored); admin roster

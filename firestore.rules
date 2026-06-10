@@ -19,6 +19,11 @@ service cloud.firestore {
     // NOT a Firestore-doc role (those are raceable/readable). Baked into the
     // signed token; this reads it directly with no get().
     function isElder() { return request.auth != null && request.auth.token.elder == true; }
+    // Shepherd Hub admin access is restricted to John specifically (NOT any
+    // church admin) — pastoral data is need-to-know. Mirrors OWNER_EMAILS in
+    // functions/index.js. Elders get in via isElder(); this is the only
+    // non-elder who can read the hub.
+    function isShepherdAdmin() { return request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org']; }
 
     // ── Jobs Hub access (audit H3 + M1, 2026-05-22) ──────────────────────────
     // jobsHubActive: the church's Jobs Hub subscription is active. Mirrors the
@@ -126,7 +131,7 @@ service cloud.firestore {
     // ── Config/shepherdSync — Shepherd Hub sync status (last run, counts,
     //    per-elder load). Read = elder or admin; CF-only write (Admin SDK). ────
     match /churches/{churchId}/config/shepherdSync {
-      allow read:  if isElder() || isChurchAdmin(churchId);
+      allow read:  if isElder() || isShepherdAdmin();
       allow write: if false;
     }
 
@@ -135,8 +140,8 @@ service cloud.firestore {
     //    sync's name-matching. Read = elder or admin; write = admin only (the
     //    roster-management UI). ────────────────────────────────────────────────
     match /churches/{churchId}/config/shepherdRoster {
-      allow read:  if isElder() || isChurchAdmin(churchId);
-      allow write: if isChurchAdmin(churchId);
+      allow read:  if isElder() || isShepherdAdmin();
+      allow write: if isShepherdAdmin();
     }
 
     // ── Items — members read + update (checkout/return); admins+mgrs create/delete ──
@@ -407,7 +412,7 @@ service cloud.firestore {
     //    PCO-sourced data). NO client write (Admin SDK / sync CF only). Holds
     //    sensitive pastoral data incl. medical_notes.
     match /churches/{churchId}/shepherdPeople/{docId} {
-      allow read:  if isElder() || isChurchAdmin(churchId);
+      allow read:  if isElder() || isShepherdAdmin();
       allow write: if false;
     }
 
@@ -431,8 +436,8 @@ service cloud.firestore {
     // ── Shepherd audit log — every note view/edit + reassignment. Append-only;
     //    readable by elders + admin; each entry stamped with the actor. ────────
     match /churches/{churchId}/shepherdAudit/{entryId} {
-      allow read:   if isElder() || isChurchAdmin(churchId);
-      allow create: if (isElder() || isChurchAdmin(churchId)) && request.resource.data.actorUid == request.auth.uid;
+      allow read:   if isElder() || isShepherdAdmin();
+      allow create: if (isElder() || isShepherdAdmin()) && request.resource.data.actorUid == request.auth.uid;
       allow update, delete: if false;
     }
 

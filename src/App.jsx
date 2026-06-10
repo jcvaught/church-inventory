@@ -40,6 +40,10 @@ import { WhatsNewModal, getUnseenCount, markWhatsNewSeen } from './components/Wh
 // Shepherd Hub is FXCC-only for now (mirrors SHEPHERD_CHURCH_ID in
 // functions/index.js + useAuth.js — keep in sync).
 const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
+// The only non-elder allowed into the hub (admin side). Mirrors OWNER_EMAILS in
+// functions/index.js + isShepherdAdmin() in firestore.rules. Elders get in via
+// their custom claim; no other church admin can see the hub.
+const SHEPHERD_ADMIN_EMAILS = ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
 
 
 class PageErrorBoundary extends Component {
@@ -675,7 +679,7 @@ function AppShell({ authHook }) {
   // the real boundary). Admins of FXCC also see it so they can preview/demo and
   // for oversight. Not a paid hub — a standalone top-level tab, not in HubsPage.
   const canSeeShepherd = userProfile?.churchId === SHEPHERD_CHURCH_ID
-    && (isElder || userProfile?.role === 'admin') && !volunteerMode;
+    && (isElder || SHEPHERD_ADMIN_EMAILS.includes((userProfile?.email || '').toLowerCase())) && !volunteerMode;
   const mobileTabs = volunteerMode
     ? [["dashboard","Home","🏠"], ["hubs","Jobs","💼"], ["log","Activity","📋"], ["settings","Settings","⚙️"]]
     : [["dashboard","Home","🏠"], ["inventory","Items","📦"], ["supplies","Stock","🧴"], ["reservations","Reserve","📅"], ["log","Log","📋"], ["hubs","Hubs","🔌"], ...(canSeeShepherd ? [["shepherd","Flock","🐑"]] : []), ["settings","Settings","⚙️"]];
