@@ -4,6 +4,45 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-10 — Shepherd Hub Phase 3: the hub UI (full #3 + roster management)
+
+The elders' working surface. FXCC-only; gated to `isElder || FXCC admin` as a
+standalone top-level **Shepherd** tab (not a paid hub). `src/pages/hubs/ShepherdHubPage.jsx`.
+
+- **Roster → Firestore config (foundation):** elder roster moved out of hardcoded
+  files into `config/shepherdRoster` (`functions/lib/roster.js`: DEFAULT_ROSTER +
+  buildNormalizer + rosterElderEmails). Single source for the claim grant, the
+  sync's name-matching, and the roster UI. `shepherd.js` + `claimElderRole` +
+  `set-elder-claims.cjs` all read it (DEFAULT fallback). Parity re-verified.
+- **Read-only directory + "View as elder":** My Flock / All Congregation /
+  Needs Reassignment views; name search + status/assignment filters; person
+  detail (contact, pastoral fields incl. strengths/gifts, medical notes, elder
+  chips); coverage strip. Admins (no flock) get a **View as [elder]** picker to
+  preview any elder's flock before elders log in.
+- **Pastoral notes + audit:** private note (owner-uid only) + shared care thread
+  (any elder, author-owned) as subcollections with their own rules; `shepherdAudit`
+  append-only log of views/edits/reassigns. `logShepherdAudit` helper.
+- **Elder Assigned editor + PCO write-back:** `setElderAssignment` callable
+  (authorizes via the `req.auth.token.elder` claim or FXCC admin) writes a CLEAN
+  canonical value ("Surname"/"Surname/Surname") via `setPcoElderAssignment`
+  (find/create FieldDatum 261343 → PATCH/POST → read-back verify), recomputes the
+  derived index, updates the cache doc, and audits. Multi-select editor in the
+  person detail. **This is also the orphan-cleanup mechanism.**
+- **Orphaned worklist:** the "Needs Reassignment" tab surfaces the ~140 active
+  people assigned only to former elders, one click into the reassign editor.
+- **Roster-management UI (admin):** `RosterManager` edits `config/shepherdRoster`
+  — add/remove/edit elders (name, surname, sign-in emails, PCO match patterns,
+  active/sabbatical) + former-elder list. "Save & re-sync" applies match/active
+  changes immediately via `refreshShepherdPeople`.
+- **Rules:** `config/shepherdRoster` read elder/admin, write admin; note
+  subcollections + `shepherdAudit` per slice 2.
+- **Verified live:** directory queries; notes privacy (owner-only, no forging,
+  non-elder locked out); **full write-back through the live callable** (Watkins →
+  Watkins/Reiman landed in PCO + cache + audit, then restored); admin roster
+  write allowed / non-admin denied. Build + lint clean throughout.
+
+---
+
 ## 2026-06-10 — Shepherd Hub Phase 2: elder custom-claim gate
 
 The access gate for Shepherd Hub. Elder status is a **server-set custom auth claim** (`elder: true`), not a Firestore-doc role. No hub UI yet (P3).

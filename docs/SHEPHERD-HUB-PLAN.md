@@ -5,7 +5,7 @@
 > pastoral notes. Hub name: **Shepherd Hub**. Each elder's assigned-people view
 > is labeled **"My Flock."**
 
-_Design agreed 2026-06-10. **P1 (sync) + P2 (elder gate) SHIPPED 2026-06-10** — see CHANGELOG. Next up: P3 (the hub UI). This doc is the spec to resume from._
+_Design agreed 2026-06-10. **P1 (sync) + P2 (elder gate) + P3 (hub UI, full #3 + roster management) SHIPPED 2026-06-10** — see CHANGELOG. Remaining: P4 (privacy-promise doc) + the Level-2 client-side-encryption fast-follow. This doc is the spec to resume from._
 
 > **P1 build notes (actual vs. spec):**
 > - FXCC `churchId` = `6cksNI9Uv8h0jXptdTESnXTXFgF3-church` (created by uid `6cksNI9U…`, not John's).
@@ -119,10 +119,13 @@ normalization):** Coffman, Reynolds, Renner, Kerr, Palmer, Baither, Beckner.
   MFA via Google Workspace 2SV (Firebase-level MFA deferred — would need Identity
   Platform). Client wires `isElder` in `useAuth` (FXCC-gated). Elders auto-grant on
   first COH sign-in.
-- **P3 — the hub UI:** **← next up.** "My Flock" + all-congregation search/browse; per-person private note +
-  shared care thread; Elder Assigned multi-select editor (write-back); orphaned/uncovered
-  worklist; audit logging.
-- **P4 — the promise:** plain-language privacy doc for the elders + Level-1 polish.
+- **P3 — the hub UI:** ✅ **DONE 2026-06-10.** Standalone Shepherd tab
+  (`src/pages/hubs/ShepherdHubPage.jsx`, FXCC + elder/admin gated). My Flock /
+  All / Needs-Reassignment views + search/filters + person detail; private note
+  + shared care thread + `shepherdAudit`; Elder Assigned multi-select editor →
+  PCO write-back (`setElderAssignment`); orphan worklist; admin "View as elder"
+  preview + roster-management UI (`config/shepherdRoster`).
+- **P4 — the promise:** plain-language privacy doc for the elders + Level-1 polish. **← next up.**
 - **Fast-follow:** Level 2 client-side encryption for private notes.
 - **Eventual:** one-time cleanup write-pass to canonicalize existing dirty PCO values.
 
