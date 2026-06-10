@@ -4,6 +4,19 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-10 — Shepherd Hub: moved from a top-level tab into the Hubs grid
+
+Per owner preference (thinks of it as a hub; role-gated fits; declutters the top
+nav; could graduate into a paid hub later). It's now a **special non-subscription
+card** in `HubsPage` (`HUB_DEFS` key `shepherd`, `special:true`): no price, an
+"Elders" badge, bypasses `UpgradeGate`/`hasHub`, opens straight in. The card +
+active view only render when `canSeeShepherd` (FXCC && (isElder || John)) — passed
+from App.jsx along with `isElder`. Removed the standalone `shepherd` top-level
+tab + its eager import; `ShepherdHubPage` is now a lazy chunk off the main bundle.
+Access boundary unchanged (rules still enforce elder/John). Build + lint clean.
+
+---
+
 ## 2026-06-10 — Shepherd Hub Phase 4: privacy/confidentiality doc
 
 Plain-language privacy promise for the elders, surfaced via an always-available

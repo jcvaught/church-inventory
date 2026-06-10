@@ -19,7 +19,6 @@ import { SuppliesPage } from './pages/SuppliesPage.jsx';
 import { ReservationsPage } from './pages/ReservationsPage.jsx';
 import { ActivityLogPage } from './pages/ActivityLogPage.jsx';
 import { SettingsPage } from './pages/SettingsPage.jsx';
-import { ShepherdHubPage } from './pages/hubs/ShepherdHubPage.jsx';
 import { BarcodeScanner } from './components/primitives/BarcodeScanner.jsx';
 import { HelpPage } from './pages/HelpPage.jsx';
 import { PrivacyPage } from './pages/PrivacyPage.jsx';
@@ -676,16 +675,16 @@ function AppShell({ authHook }) {
   // The "Hubs" key stays the same — for volunteers it just auto-routes into Jobs.
   const volunteerMode = isVolunteerOnly(userProfile);
   // Shepherd Hub is FXCC-only and gated by the elder custom claim (rules enforce
-  // the real boundary). Admins of FXCC also see it so they can preview/demo and
-  // for oversight. Not a paid hub — a standalone top-level tab, not in HubsPage.
+  // the real boundary), plus John as admin. Not a paid hub — it appears as a
+  // special non-subscription card inside HubsPage (not a top-level tab).
   const canSeeShepherd = userProfile?.churchId === SHEPHERD_CHURCH_ID
     && (isElder || SHEPHERD_ADMIN_EMAILS.includes((userProfile?.email || '').toLowerCase())) && !volunteerMode;
   const mobileTabs = volunteerMode
     ? [["dashboard","Home","🏠"], ["hubs","Jobs","💼"], ["log","Activity","📋"], ["settings","Settings","⚙️"]]
-    : [["dashboard","Home","🏠"], ["inventory","Items","📦"], ["supplies","Stock","🧴"], ["reservations","Reserve","📅"], ["log","Log","📋"], ["hubs","Hubs","🔌"], ...(canSeeShepherd ? [["shepherd","Flock","🐑"]] : []), ["settings","Settings","⚙️"]];
+    : [["dashboard","Home","🏠"], ["inventory","Items","📦"], ["supplies","Stock","🧴"], ["reservations","Reserve","📅"], ["log","Log","📋"], ["hubs","Hubs","🔌"], ["settings","Settings","⚙️"]];
   const desktopTabs = volunteerMode
     ? [["dashboard","Home"], ["hubs","Jobs"], ["log","Activity"], ["settings","Settings"]]
-    : [["dashboard","Dashboard"], ["inventory","All Items"], ["supplies","Supplies"], ["reservations","Reservations"], ["log","Activity Log"], ["hubs","Hubs"], ...(canSeeShepherd ? [["shepherd","Shepherd"]] : []), ["settings","Settings"]];
+    : [["dashboard","Dashboard"], ["inventory","All Items"], ["supplies","Supplies"], ["reservations","Reservations"], ["log","Activity Log"], ["hubs","Hubs"], ["settings","Settings"]];
 
   const canAdd = canAddUser((store.users || []).length);
 
@@ -815,7 +814,6 @@ function AppShell({ authHook }) {
         {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
         {tab === "reservations" && <ReservationsPage store={store} userProfile={userProfile} />}
         {tab === "log" && <ActivityLogPage store={store} userProfile={userProfile} />}
-        {tab === "shepherd" && canSeeShepherd && <ShepherdHubPage userProfile={userProfile} isElder={isElder} />}
         {tab === "hubs" && (
           <HubsPage
             store={store}
@@ -827,6 +825,8 @@ function AppShell({ authHook }) {
             userCanSeeHub={userCanSeeHub}
             onGoToSettings={() => setTab('settings')}
             jobsInitialView={jobsInitialView}
+            canSeeShepherd={canSeeShepherd}
+            isElder={isElder}
           />
         )}
       </div>
