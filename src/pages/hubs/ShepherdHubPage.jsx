@@ -68,6 +68,8 @@ export function ShepherdHubPage({ userProfile, isElder }) {
   const [statusFilter, setStatusFilter] = useState('active'); // 'active' | 'inactive' | 'all'
   const [assignFilter, setAssignFilter] = useState('all');    // 'all' | 'assigned' | 'unassigned' | 'orphaned'
   const [selected, setSelected] = useState(null);
+  const [showRoster, setShowRoster] = useState(false);
+  const isAdmin = userProfile?.role === 'admin';
 
   // Merge a reassignment result into local state (list + open detail).
   function patchPerson(personId, patch) {
@@ -125,6 +127,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
       if (view === 'flock') {
         if (!activeKey || !(p.elderKeys || []).includes(activeKey)) return false;
       }
+      if (view === 'worklist' && !p.orphaned) return false;
       if (statusFilter === 'active' && p.status !== 'active') return false;
       if (statusFilter === 'inactive' && p.status === 'active') return false;
       if (view === 'all') {
@@ -170,22 +173,26 @@ export function ShepherdHubPage({ userProfile, isElder }) {
             {coverage.active} active · {coverage.assigned} shepherded · {coverage.orphaned} need reassignment
           </p>
         </div>
-        {!myKey && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: B.textMid, fontFamily: f1 }}>View as</span>
-            <select value={viewAsKey || ''} onChange={e => setViewAsKey(e.target.value)} style={{ ...inp, width: 'auto', padding: '8px 12px' }}>
-              {(roster.elders || []).map(e => (
-                <option key={e.key} value={e.key}>{e.name}{e.sabbatical ? ' (sabbatical)' : ''}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {!myKey && (
+            <>
+              <span style={{ fontSize: 12, fontWeight: 700, color: B.textMid, fontFamily: f1 }}>View as</span>
+              <select value={viewAsKey || ''} onChange={e => setViewAsKey(e.target.value)} style={{ ...inp, width: 'auto', padding: '8px 12px' }}>
+                {(roster.elders || []).map(e => (
+                  <option key={e.key} value={e.key}>{e.name}{e.sabbatical ? ' (sabbatical)' : ''}</option>
+                ))}
+              </select>
+            </>
+          )}
+          {isAdmin && <button onClick={() => setShowRoster(true)} style={{ ...btnS, padding: '8px 14px' }}>⚙ Manage elders</button>}
+        </div>
       </div>
 
       {/* View toggle */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
         <Tab id="flock" label={myKey ? 'My Flock' : `${activeElder ? activeElder.name + "'s" : ''} Flock`} />
         <Tab id="all" label="All Congregation" />
+        <Tab id="worklist" label={`Needs Reassignment${coverage.orphaned ? ` (${coverage.orphaned})` : ''}`} />
         {view === 'flock' && activeElder?.sabbatical && (
           <span style={chip(B.goldLight, '#96750E')}>On sabbatical</span>
         )}
@@ -208,6 +215,12 @@ export function ShepherdHubPage({ userProfile, isElder }) {
           </select>
         )}
       </div>
+
+      {view === 'worklist' && (
+        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 13, color: '#991B1B' }}>
+          These people are assigned only to former elders. Open each to reassign a current elder — that writes a clean value back to Planning Center.
+        </div>
+      )}
 
       {/* Results */}
       <div style={{ fontSize: 12, color: B.textLight, marginBottom: 8, fontFamily: f1, fontWeight: 600 }}>{filtered.length} {filtered.length === 1 ? 'person' : 'people'}</div>
@@ -241,7 +254,115 @@ export function ShepherdHubPage({ userProfile, isElder }) {
         canEdit={isElder || userProfile?.role === 'admin'}
         onPatch={patchPerson}
         onClose={() => setSelected(null)} />}
+
+      {showRoster && <RosterManager roster={roster} onClose={() => setShowRoster(false)} onSaved={setRoster} />}
     </div>
+  );
+}
+
+// Admin-only editor for config/shepherdRoster — the single source feeding the
+// claim grant + the sync's name-matching. Changes to match patterns / active
+// flags re-classify people only on the next sync (offer "Save & re-sync").
+function RosterManager({ roster, onClose, onSaved }) {
+  const toRow = (e) => ({
+    key: e.key, name: e.name || '', surname: e.surname || '',
+    emailsStr: (e.emails || []).join(', '), matchStr: (e.match || []).join(', '),
+    active: e.active !== false, sabbatical: !!e.sabbatical,
+  });
+  const [rows, setRows] = useState((roster.elders || []).map(toRow));
+  const [formerStr, setFormerStr] = useState((roster.former || []).flatMap(f => f.match || [f.key]).join(', '));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const setRow = (i, patch) => setRows(rs => rs.map((r, j) => j === i ? { ...r, ...patch } : r));
+  const removeRow = (i) => setRows(rs => rs.filter((_, j) => j !== i));
+  const addRow = () => setRows(rs => [...rs, { key: '', name: '', surname: '', emailsStr: '', matchStr: '', active: true, sabbatical: false }]);
+
+  function buildRoster() {
+    const splitList = (s) => s.split(/[,\n]/).map(x => x.trim()).filter(Boolean);
+    const elders = rows.map(r => {
+      const surname = r.surname.trim();
+      const key = (r.key || surname).toLowerCase().replace(/[^a-z]/g, '');
+      const match = r.matchStr.trim() ? splitList(r.matchStr).map(m => m.toLowerCase()) : [surname.toLowerCase()];
+      return {
+        key, name: r.name.trim(), surname,
+        emails: splitList(r.emailsStr).map(e => e.toLowerCase()),
+        match, active: r.active, sabbatical: r.sabbatical,
+      };
+    });
+    const former = splitList(formerStr).map(s => ({ key: s.toLowerCase().replace(/[^a-z]/g, ''), match: [s.toLowerCase()] }));
+    return { elders, former };
+  }
+
+  function validate(r) {
+    if (r.elders.some(e => !e.name || !e.surname)) return 'Every elder needs a name and surname.';
+    if (r.elders.some(e => !e.key)) return 'Surname must contain letters (used as the elder key).';
+    const keys = r.elders.map(e => e.key);
+    if (new Set(keys).size !== keys.length) return 'Two elders resolve to the same key (surname). Make them distinct.';
+    return null;
+  }
+
+  async function save(resync) {
+    const built = buildRoster();
+    const v = validate(built);
+    if (v) { setErr(v); return; }
+    setSaving(true); setErr(null);
+    try {
+      await setDoc(doc(db, `churches/${SHEPHERD_CHURCH_ID}/config/shepherdRoster`), { ...built, updatedAt: serverTimestamp() });
+      onSaved(built);
+      if (resync) {
+        await httpsCallable(getFunctions(), 'refreshShepherdPeople')();
+      }
+      onClose();
+    } catch (e) {
+      setErr(e?.message || 'Could not save the roster.');
+      Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'roster-save' } });
+    } finally { setSaving(false); }
+  }
+
+  const cell = { ...inp, padding: '7px 9px', fontSize: 13 };
+  const lbl = { fontSize: 10, fontWeight: 700, color: B.textLight, fontFamily: f1, textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 2 };
+
+  return (
+    <Modal open onClose={onClose} title="Manage elders" maxWidth={680}>
+      <p style={{ fontSize: 13, color: B.textMid, marginTop: 0 }}>
+        Drives hub access (sign-in emails) and how Planning Center's "Elder Assigned" text maps to each elder. Match = the surname(s)/typo aliases to recognize.
+      </p>
+      <div style={{ display: 'grid', gap: 12 }}>
+        {rows.map((r, i) => (
+          <div key={i} style={{ border: `1px solid ${B.sand}`, borderRadius: 12, padding: 12, background: r.active ? B.white : B.warmGray }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div><div style={lbl}>Name</div><input value={r.name} onChange={e => setRow(i, { name: e.target.value })} style={cell} /></div>
+              <div><div style={lbl}>Surname (PCO + key)</div><input value={r.surname} onChange={e => setRow(i, { surname: e.target.value })} style={cell} /></div>
+            </div>
+            <div style={{ marginTop: 8 }}><div style={lbl}>Sign-in email(s) — comma-separated</div><input value={r.emailsStr} onChange={e => setRow(i, { emailsStr: e.target.value })} style={cell} placeholder="name@fxcc.org" /></div>
+            <div style={{ marginTop: 8 }}><div style={lbl}>PCO match patterns — comma-separated (defaults to surname)</div><input value={r.matchStr} onChange={e => setRow(i, { matchStr: e.target.value })} style={cell} placeholder="bingham, bingam" /></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 10 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={r.active} onChange={e => setRow(i, { active: e.target.checked })} /> Active</label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={r.sabbatical} onChange={e => setRow(i, { sabbatical: e.target.checked })} /> On sabbatical</label>
+              <button onClick={() => removeRow(i)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: B.red, cursor: 'pointer', fontSize: 12, fontFamily: f1, fontWeight: 700 }}>Remove</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button onClick={addRow} style={{ ...btnS, marginTop: 12, padding: '8px 16px' }}>+ Add elder</button>
+
+      <div style={{ marginTop: 16 }}>
+        <div style={lbl}>Former elders (recognized so their people show as orphaned) — comma-separated surnames</div>
+        <textarea value={formerStr} onChange={e => setFormerStr(e.target.value)} rows={2} style={{ ...cell, resize: 'vertical' }} />
+      </div>
+
+      <div style={{ background: B.warmGray, borderRadius: 8, padding: '8px 12px', fontSize: 12, color: B.textMid, marginTop: 14 }}>
+        Email changes take effect on the elder's next sign-in. Match/active changes re-classify people on the next sync — use <strong>Save &amp; re-sync</strong> to apply immediately (~1 min). Removing an elder revokes access on their next sign-in.
+      </div>
+      {err && <div style={{ color: B.red, fontSize: 13, marginTop: 8 }}>{err}</div>}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+        <button onClick={onClose} disabled={saving} style={btnS}>Cancel</button>
+        <button onClick={() => save(false)} disabled={saving} style={{ ...btnS, opacity: saving ? 0.5 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
+        <button onClick={() => save(true)} disabled={saving} style={{ ...btnP, opacity: saving ? 0.5 : 1 }}>{saving ? 'Working…' : 'Save & re-sync'}</button>
+      </div>
+    </Modal>
   );
 }
 
