@@ -811,7 +811,7 @@ function AppShell({ authHook }) {
         {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
         {tab === "reservations" && <ReservationsPage store={store} userProfile={userProfile} />}
         {tab === "log" && <ActivityLogPage store={store} userProfile={userProfile} />}
-        {tab === "shepherd" && canSeeShepherd && <ShepherdHubPage userProfile={userProfile} />}
+        {tab === "shepherd" && canSeeShepherd && <ShepherdHubPage userProfile={userProfile} isElder={isElder} />}
         {tab === "hubs" && (
           <HubsPage
             store={store}

@@ -9,13 +9,39 @@
 // Admins have no flock of their own, so they get a "View as [elder]" picker to
 // preview any elder's flock (and demo the hub before elders log in).
 import { useEffect, useMemo, useState } from 'react';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import {
+  collection, getDocs, getDoc, query, orderBy, doc, setDoc, addDoc, deleteDoc, serverTimestamp,
+} from 'firebase/firestore';
 import * as Sentry from '@sentry/react';
 import { db } from '../../firebase.js';
-import { B, f1, f2, inp, btnS } from '../../components/brand/tokens.js';
+import { B, f1, f2, inp, btnP, btnS } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 
 const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
+
+// Append a row to the shepherd audit log. Best-effort — never block the UI.
+async function logShepherdAudit(action, person, userProfile, detail) {
+  try {
+    await addDoc(collection(db, `churches/${SHEPHERD_CHURCH_ID}/shepherdAudit`), {
+      action,
+      personId: person?._id || person?.pcoId || null,
+      personName: person?.name || null,
+      actorUid: userProfile.uid,
+      actorName: userProfile.name || null,
+      actorEmail: userProfile.email || null,
+      at: serverTimestamp(),
+      ...(detail ? { detail } : {}),
+    });
+  } catch (e) {
+    Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'audit' } });
+  }
+}
+
+function fmtTime(ts) {
+  const d = ts?.toDate?.() || (ts ? new Date(ts) : null);
+  if (!d) return '';
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
 
 const chip = (bg, color) => ({
   display: 'inline-block', padding: '2px 9px', borderRadius: 999, fontSize: 11,
@@ -29,7 +55,7 @@ function StatusBadge({ status }) {
   </span>;
 }
 
-export function ShepherdHubPage({ userProfile }) {
+export function ShepherdHubPage({ userProfile, isElder }) {
   const [people, setPeople] = useState([]);
   const [roster, setRoster] = useState({ elders: [], former: [] });
   const [loading, setLoading] = useState(true);
@@ -202,7 +228,7 @@ export function ShepherdHubPage({ userProfile }) {
         {filtered.length === 0 && <div style={{ padding: 32, textAlign: 'center', color: B.textLight }}>No one matches these filters.</div>}
       </div>
 
-      {selected && <PersonDetail person={selected} elderName={elderName} onClose={() => setSelected(null)} />}
+      {selected && <PersonDetail person={selected} elderName={elderName} userProfile={userProfile} isElder={isElder} onClose={() => setSelected(null)} />}
     </div>
   );
 }
@@ -225,8 +251,10 @@ function Row({ label, children }) {
   );
 }
 
-function PersonDetail({ person: p, elderName, onClose }) {
+function PersonDetail({ person: p, elderName, userProfile, isElder, onClose }) {
   const addr = (p.addresses || [])[0];
+  // Audit the view once per open (covers "every note view" for elders).
+  useEffect(() => { logShepherdAudit('view_person', p, userProfile); }, [p._id]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Modal open onClose={onClose} title={p.name} maxWidth={560}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
@@ -267,9 +295,121 @@ function PersonDetail({ person: p, elderName, onClose }) {
       <Row label="Strengths">{(p.pastoral?.strengths || []).join(', ') || null}</Row>
       <Row label="Gifts">{(p.pastoral?.gifts || []).join(', ') || null}</Row>
 
+      {isElder
+        ? <NotesSection person={p} userProfile={userProfile} />
+        : <div style={{ marginTop: 16, padding: 12, background: B.warmGray, borderRadius: 10, fontSize: 13, color: B.textLight }}>Pastoral notes are visible to elders only.</div>}
+
       <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
         <button onClick={onClose} style={btnS}>Close</button>
       </div>
     </Modal>
+  );
+}
+
+// Private note (owner-only) + shared care thread for one person.
+function NotesSection({ person, userProfile }) {
+  const base = `churches/${SHEPHERD_CHURCH_ID}/shepherdPeople/${person._id}`;
+  const [privateText, setPrivateText] = useState('');
+  const [privateSaved, setPrivateSaved] = useState('');
+  const [savingPrivate, setSavingPrivate] = useState(false);
+  const [thread, setThread] = useState([]);
+  const [draft, setDraft] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [pn, ct] = await Promise.all([
+          getDoc(doc(db, `${base}/privateNotes/${userProfile.uid}`)),
+          getDocs(query(collection(db, `${base}/careThread`), orderBy('createdAt', 'asc'))),
+        ]);
+        if (cancelled) return;
+        const t = pn.exists() ? (pn.data().text || '') : '';
+        setPrivateText(t); setPrivateSaved(t);
+        setThread(ct.docs.map(d => ({ _id: d.id, ...d.data() })));
+      } catch (e) {
+        Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'notes-load' } });
+      } finally { if (!cancelled) setLoaded(true); }
+    })();
+    return () => { cancelled = true; };
+  }, [person._id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function savePrivate() {
+    setSavingPrivate(true);
+    try {
+      await setDoc(doc(db, `${base}/privateNotes/${userProfile.uid}`), {
+        text: privateText, authorName: userProfile.name || null, updatedAt: serverTimestamp(),
+      });
+      setPrivateSaved(privateText);
+      logShepherdAudit('edit_private_note', person, userProfile);
+    } catch (e) {
+      Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'notes-save-private' } });
+    } finally { setSavingPrivate(false); }
+  }
+
+  async function postEntry() {
+    const text = draft.trim();
+    if (!text) return;
+    setPosting(true);
+    try {
+      const ref = await addDoc(collection(db, `${base}/careThread`), {
+        text, authorUid: userProfile.uid, authorName: userProfile.name || null, createdAt: serverTimestamp(),
+      });
+      setThread(t => [...t, { _id: ref.id, text, authorUid: userProfile.uid, authorName: userProfile.name, createdAt: new Date() }]);
+      setDraft('');
+      logShepherdAudit('append_care', person, userProfile);
+    } catch (e) {
+      Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'notes-post-care' } });
+    } finally { setPosting(false); }
+  }
+
+  async function deleteEntry(entry) {
+    try {
+      await deleteDoc(doc(db, `${base}/careThread/${entry._id}`));
+      setThread(t => t.filter(x => x._id !== entry._id));
+      logShepherdAudit('delete_care', person, userProfile);
+    } catch (e) {
+      Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'notes-del-care' } });
+    }
+  }
+
+  const heading = (txt) => <div style={{ marginTop: 18, marginBottom: 6, fontSize: 12, fontWeight: 800, color: B.navy, fontFamily: f1, textTransform: 'uppercase', letterSpacing: 0.4 }}>{txt}</div>;
+
+  return (
+    <div>
+      {heading('🔒 My Private Note')}
+      <div style={{ fontSize: 11, color: B.textLight, marginBottom: 6 }}>Only you can see this.</div>
+      <textarea value={privateText} onChange={e => setPrivateText(e.target.value)} rows={3} placeholder={loaded ? 'Your private note about this person…' : 'Loading…'} disabled={!loaded}
+        style={{ ...inp, resize: 'vertical', minHeight: 70 }} />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+        <button onClick={savePrivate} disabled={savingPrivate || privateText === privateSaved} style={{ ...btnP, padding: '8px 18px', opacity: (savingPrivate || privateText === privateSaved) ? 0.5 : 1 }}>
+          {savingPrivate ? 'Saving…' : privateText === privateSaved ? 'Saved' : 'Save note'}
+        </button>
+      </div>
+
+      {heading('👥 Shared Care Thread')}
+      <div style={{ fontSize: 11, color: B.textLight, marginBottom: 8 }}>Visible to all elders.</div>
+      <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
+        {thread.map(en => (
+          <div key={en._id} style={{ background: B.warmGray, borderRadius: 10, padding: '8px 12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, fontFamily: f1, color: B.textDark }}>{en.authorName || 'Elder'}</span>
+              <span style={{ fontSize: 11, color: B.textLight }}>{fmtTime(en.createdAt)}</span>
+            </div>
+            <div style={{ fontSize: 14, color: B.textDark, whiteSpace: 'pre-wrap', marginTop: 2 }}>{en.text}</div>
+            {en.authorUid === userProfile.uid && (
+              <button onClick={() => deleteEntry(en)} style={{ background: 'none', border: 'none', color: B.red, cursor: 'pointer', fontSize: 11, fontFamily: f1, fontWeight: 600, padding: '4px 0 0' }}>Delete</button>
+            )}
+          </div>
+        ))}
+        {loaded && thread.length === 0 && <div style={{ fontSize: 13, color: B.textLight }}>No entries yet.</div>}
+      </div>
+      <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={2} placeholder="Add to the care thread…" style={{ ...inp, resize: 'vertical', minHeight: 56 }} />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+        <button onClick={postEntry} disabled={posting || !draft.trim()} style={{ ...btnP, padding: '8px 18px', opacity: (posting || !draft.trim()) ? 0.5 : 1 }}>{posting ? 'Posting…' : 'Post'}</button>
+      </div>
+    </div>
   );
 }
