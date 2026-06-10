@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   collection, getDocs, getDoc, query, orderBy, doc, setDoc, addDoc, deleteDoc, serverTimestamp,
 } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import * as Sentry from '@sentry/react';
 import { db } from '../../firebase.js';
 import { B, f1, f2, inp, btnP, btnS } from '../../components/brand/tokens.js';
@@ -67,6 +68,12 @@ export function ShepherdHubPage({ userProfile, isElder }) {
   const [statusFilter, setStatusFilter] = useState('active'); // 'active' | 'inactive' | 'all'
   const [assignFilter, setAssignFilter] = useState('all');    // 'all' | 'assigned' | 'unassigned' | 'orphaned'
   const [selected, setSelected] = useState(null);
+
+  // Merge a reassignment result into local state (list + open detail).
+  function patchPerson(personId, patch) {
+    setPeople(ps => ps.map(p => p._id === personId ? { ...p, ...patch } : p));
+    setSelected(s => (s && s._id === personId ? { ...s, ...patch } : s));
+  }
 
   const myEmail = (userProfile?.email || '').trim().toLowerCase();
 
@@ -228,7 +235,12 @@ export function ShepherdHubPage({ userProfile, isElder }) {
         {filtered.length === 0 && <div style={{ padding: 32, textAlign: 'center', color: B.textLight }}>No one matches these filters.</div>}
       </div>
 
-      {selected && <PersonDetail person={selected} elderName={elderName} userProfile={userProfile} isElder={isElder} onClose={() => setSelected(null)} />}
+      {selected && <PersonDetail
+        person={selected} elderName={elderName} userProfile={userProfile} isElder={isElder}
+        activeElders={(roster.elders || []).filter(e => e.active !== false)}
+        canEdit={isElder || userProfile?.role === 'admin'}
+        onPatch={patchPerson}
+        onClose={() => setSelected(null)} />}
     </div>
   );
 }
@@ -251,8 +263,9 @@ function Row({ label, children }) {
   );
 }
 
-function PersonDetail({ person: p, elderName, userProfile, isElder, onClose }) {
+function PersonDetail({ person: p, elderName, userProfile, isElder, activeElders, canEdit, onPatch, onClose }) {
   const addr = (p.addresses || [])[0];
+  const [editing, setEditing] = useState(false);
   // Audit the view once per open (covers "every note view" for elders).
   useEffect(() => { logShepherdAudit('view_person', p, userProfile); }, [p._id]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
@@ -265,13 +278,24 @@ function PersonDetail({ person: p, elderName, userProfile, isElder, onClose }) {
             {p.membership && <span style={chip(B.warmGray, B.textMid)}>{p.membership}</span>}
             {p.child && <span style={chip(B.goldLight, '#96750E')}>Child</span>}
           </div>
-          <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
             {(p.elderKeys || []).map(k => <span key={k} style={chip(B.tealPale, B.teal)}>{elderName(k)}</span>)}
             {!p.hasAssignment && <span style={chip(B.warmGray, B.textLight)}>No elder assigned</span>}
             {p.orphaned && <span style={chip('#FEF2F2', B.red)}>Orphaned</span>}
+            {canEdit && !editing && (
+              <button onClick={() => setEditing(true)} style={{ background: 'none', border: 'none', color: B.teal, cursor: 'pointer', fontSize: 12, fontFamily: f1, fontWeight: 700, padding: 0 }}>✎ Edit</button>
+            )}
           </div>
         </div>
       </div>
+
+      {editing && (
+        <AssignmentEditor
+          person={p} activeElders={activeElders}
+          onClose={() => setEditing(false)}
+          onSaved={(patch) => { onPatch(p._id, patch); setEditing(false); }}
+        />
+      )}
 
       {p.medicalNotes && (
         <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
@@ -303,6 +327,57 @@ function PersonDetail({ person: p, elderName, userProfile, isElder, onClose }) {
         <button onClick={onClose} style={btnS}>Close</button>
       </div>
     </Modal>
+  );
+}
+
+// Reassign who shepherds this person — writes a clean canonical value back to
+// PCO via the setElderAssignment callable (server validates + verifies).
+function AssignmentEditor({ person, activeElders, onClose, onSaved }) {
+  const [picked, setPicked] = useState(new Set(person.elderKeys || []));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const toggle = (key) => setPicked(s => {
+    const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n;
+  });
+
+  async function save() {
+    if (picked.size === 0) { setError('Select at least one elder.'); return; }
+    setSaving(true); setError(null);
+    try {
+      const fn = httpsCallable(getFunctions(), 'setElderAssignment');
+      const res = await fn({ personId: person._id, elderKeys: [...picked] });
+      const d = res.data || {};
+      onSaved({
+        elderKeys: d.elderKeys || [],
+        orphaned: !!d.orphaned,
+        hasAssignment: !!d.hasAssignment,
+        pastoral: { ...(person.pastoral || {}), elderAssigned: d.value },
+      });
+    } catch (e) {
+      setError(e?.message || 'Could not save. Try again.');
+      Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'reassign' } });
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div style={{ background: B.tealPale, border: `1px solid ${B.teal}33`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: B.navy, fontFamily: f1, textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 }}>Reassign elder(s)</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 6 }}>
+        {activeElders.map(e => (
+          <label key={e.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: B.textDark, cursor: 'pointer', background: B.white, borderRadius: 8, padding: '7px 10px', border: `1px solid ${B.sand}` }}>
+            <input type="checkbox" checked={picked.has(e.key)} onChange={() => toggle(e.key)} />
+            {e.name}{e.sabbatical ? ' (sab)' : ''}
+          </label>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: B.textLight, marginTop: 8 }}>Writes back to Planning Center as <strong>{activeElders.filter(e => picked.has(e.key)).map(e => e.surname).join('/') || '—'}</strong>.</div>
+      {error && <div style={{ color: B.red, fontSize: 12, marginTop: 6 }}>{error}</div>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+        <button onClick={onClose} disabled={saving} style={{ ...btnS, padding: '8px 16px' }}>Cancel</button>
+        <button onClick={save} disabled={saving || picked.size === 0} style={{ ...btnP, padding: '8px 16px', opacity: (saving || picked.size === 0) ? 0.5 : 1 }}>{saving ? 'Saving…' : 'Save to PCO'}</button>
+      </div>
+    </div>
   );
 }
 

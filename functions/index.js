@@ -8,8 +8,8 @@ const { getAuth } = require('firebase-admin/auth');
 const { getMessaging } = require('firebase-admin/messaging');
 const { jobEventLines, reservationEventLines, maintenanceEventLines, buildCalendar } = require('./lib/ics');
 const { calculateNextDue } = require('./lib/recurrence');
-const { syncShepherdPeople } = require('./lib/shepherd');
-const { resolveRoster, isElderEmail } = require('./lib/roster');
+const { syncShepherdPeople, setPcoElderAssignment } = require('./lib/shepherd');
+const { resolveRoster, isElderEmail, buildNormalizer } = require('./lib/roster');
 
 // Read the editable elder roster (config/shepherdRoster) for the Shepherd
 // church, falling back to the baked-in DEFAULT_ROSTER if the doc is
@@ -3440,6 +3440,72 @@ exports.claimElderRole = onCall(
     if (shouldBeElder) claims.elder = true; else delete claims.elder;
     await getAuth().setCustomUserClaims(req.auth.uid, claims);
     return { elder: shouldBeElder, changed: true };
+  })
+);
+
+// ── setElderAssignment (Shepherd Hub P3) ──────────────────────────────────
+// The one write-back to PCO. An elder (or FXCC admin) reassigns who shepherds a
+// person; we write a CLEAN canonical value ("Surname" or "Surname/Surname")
+// back to the PCO Elder Assigned field, read it back to verify, then update the
+// Firestore cache + audit log. This is also the orphan-cleanup mechanism.
+exports.setElderAssignment = onCall(
+  { secrets: [PCO_APP_ID, PCO_SECRET], cors: true },
+  wrapCall('setElderAssignment', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    const db = getFirestore();
+    // Read the elder claim off the token (the canonical place — propagates from
+    // setCustomUserClaims on refresh; getUser().customClaims would miss it).
+    const isElder = req.auth.token?.elder === true;
+    const email = req.auth.token?.email || '';
+    const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
+    const c = callerSnap.exists ? callerSnap.data() : {};
+    const isFxccAdmin = c.churchId === SHEPHERD_CHURCH_ID && c.role === 'admin';
+    if (!isElder && !isFxccAdmin && !OWNER_EMAILS.includes(email)) {
+      throw new HttpsError('permission-denied', 'Not authorized.');
+    }
+
+    const { personId, elderKeys } = req.data || {};
+    if (!personId || typeof personId !== 'string') throw new HttpsError('invalid-argument', 'personId required.');
+    if (!Array.isArray(elderKeys) || elderKeys.length === 0) throw new HttpsError('invalid-argument', 'Select at least one elder.');
+
+    const roster = await getShepherdRoster(db);
+    const byKey = Object.fromEntries((roster.elders || []).filter(e => e.active !== false).map(e => [e.key, e]));
+    const uniqueKeys = [...new Set(elderKeys)];
+    const chosen = uniqueKeys.map(k => byKey[k]);
+    if (chosen.some(e => !e)) throw new HttpsError('invalid-argument', 'Unknown or inactive elder key.');
+    // Canonical value: surnames joined by '/', in roster order for stability.
+    const ordered = (roster.elders || []).filter(e => uniqueKeys.includes(e.key));
+    const value = ordered.map(e => e.surname).join('/');
+
+    // Write to PCO (find/create FieldDatum) + read-back verify.
+    const { value: written } = await setPcoElderAssignment(PCO_APP_ID.value(), PCO_SECRET.value(), personId, value);
+
+    // Recompute the derived index + update the cache doc.
+    const norm = buildNormalizer(roster).normalize(written);
+    const ref = db.doc(`churches/${SHEPHERD_CHURCH_ID}/shepherdPeople/${personId}`);
+    const prevSnap = await ref.get();
+    const prev = prevSnap.exists ? prevSnap.data() : {};
+    await ref.update({
+      'pastoral.elderAssigned': written,
+      elderKeys: norm.elderKeys,
+      orphaned: norm.orphaned,
+      hasAssignment: norm.hasAssignment,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    // Audit.
+    await db.collection(`churches/${SHEPHERD_CHURCH_ID}/shepherdAudit`).add({
+      action: 'reassign',
+      personId,
+      personName: prev.name || null,
+      actorUid: req.auth.uid,
+      actorName: c.name || req.auth.token?.name || null,
+      actorEmail: email || null,
+      at: FieldValue.serverTimestamp(),
+      detail: { from: prev.pastoral?.elderAssigned || '', to: written },
+    });
+
+    return { ok: true, value: written, elderKeys: norm.elderKeys, orphaned: norm.orphaned, hasAssignment: norm.hasAssignment };
   })
 );
 

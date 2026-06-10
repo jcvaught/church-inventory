@@ -283,6 +283,44 @@ async function syncShepherdPeople(db, FieldValue, opts) {
   return { ...summary, lastSyncAt: syncGeneration };
 }
 
+// ── Elder Assigned write-back (the one mutation against PCO) ────────────────
+// Writes a CLEAN canonical value (never appends to the dirty free-text), then
+// reads it back to confirm the write took. `value` must be non-empty (the
+// editor requires ≥1 elder); clearing an assignment isn't supported here.
+const ELDER_ASSIGNED_FIELD_ID = '261343';
+
+async function setPcoElderAssignment(appId, secret, personId, value) {
+  if (!personId) throw new Error('setPcoElderAssignment: personId required');
+  if (!value) throw new Error('setPcoElderAssignment: value required (≥1 elder)');
+  const auth = 'Basic ' + Buffer.from(`${appId}:${secret}`).toString('base64');
+  const H = { Authorization: auth, 'X-PCO-API-Version': PCO_API_VERSION, 'Content-Type': 'application/json' };
+
+  // Find the person's existing Elder Assigned FieldDatum (if any).
+  const getRes = await fetch(`${PCO_BASE}/people/${personId}?include=field_data`, { headers: H });
+  if (!getRes.ok) throw new Error(`PCO get person ${personId}: ${getRes.status} ${(await getRes.text().catch(() => '')).slice(0, 200)}`);
+  const person = await getRes.json();
+  const fd = (person.included || []).find(x => x.type === 'FieldDatum' && x.relationships?.field_definition?.data?.id === ELDER_ASSIGNED_FIELD_ID);
+
+  let writeRes;
+  if (fd) {
+    writeRes = await fetch(`${PCO_BASE}/people/${personId}/field_data/${fd.id}`, {
+      method: 'PATCH', headers: H,
+      body: JSON.stringify({ data: { type: 'FieldDatum', id: fd.id, attributes: { value } } }),
+    });
+  } else {
+    writeRes = await fetch(`${PCO_BASE}/people/${personId}/field_data`, {
+      method: 'POST', headers: H,
+      body: JSON.stringify({ data: { type: 'FieldDatum', attributes: { value }, relationships: { field_definition: { data: { type: 'FieldDefinition', id: ELDER_ASSIGNED_FIELD_ID } } } } }),
+    });
+  }
+  if (!writeRes.ok) throw new Error(`PCO write ${personId}: ${writeRes.status} ${(await writeRes.text().catch(() => '')).slice(0, 200)}`);
+  const wj = await writeRes.json().catch(() => ({}));
+  const readBack = wj.data?.attributes?.value ?? null;
+  if (readBack !== value) throw new Error(`PCO write read-back mismatch: wrote "${value}" got "${readBack}"`);
+  return { value: readBack };
+}
+
 module.exports = {
   syncShepherdPeople,
+  setPcoElderAssignment,
 };
