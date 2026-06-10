@@ -17,6 +17,7 @@ import * as Sentry from '@sentry/react';
 import { db } from '../../firebase.js';
 import { B, f1, f2, inp, btnP, btnS } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
+import { exportShepherdPeopleCSV } from '../../utils/csv.js';
 
 const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
 // Only non-elder allowed into the hub (admin side) — mirrors firestore.rules
@@ -230,7 +231,18 @@ export function ShepherdHubPage({ userProfile, isElder }) {
       )}
 
       {/* Results */}
-      <div style={{ fontSize: 12, color: B.textLight, marginBottom: 8, fontFamily: f1, fontWeight: 600 }}>{filtered.length} {filtered.length === 1 ? 'person' : 'people'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: B.textLight, fontFamily: f1, fontWeight: 600 }}>{filtered.length} {filtered.length === 1 ? 'person' : 'people'}</div>
+        <button
+          onClick={() => exportShepherdPeopleCSV(filtered, {
+            elderName,
+            label: view === 'flock' ? `flock-${activeElder?.name || 'elder'}`
+              : view === 'worklist' ? 'needs-reassignment' : 'congregation',
+          })}
+          disabled={!filtered.length}
+          style={{ ...btnS, padding: '7px 14px', fontSize: 13, opacity: filtered.length ? 1 : 0.5 }}
+        >⬇ Export CSV</button>
+      </div>
       <div style={{ display: 'grid', gap: 8 }}>
         {filtered.map(p => (
           <button key={p._id} onClick={() => setSelected(p)} style={{

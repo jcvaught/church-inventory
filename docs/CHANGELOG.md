@@ -4,6 +4,18 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-10 — Shepherd Hub: per-elder flock CSV export
+
+**Export CSV** button on the results header (`ShepherdHubPage`) downloads the
+currently-shown list via `exportShepherdPeopleCSV` (`src/utils/csv.js`) — so each
+elder exports their own flock, and John exports any elder's via "View as." Filename
+is context-aware (`flock-<elder>` / `congregation` / `needs-reassignment` + date).
+**Contact fields only** (name, email, phone, address, status, membership, assigned
+elder[s]) — deliberately no medical notes or pastoral notes, keeping the export
+consistent with the elders' privacy promise. Frontend-only; build + lint clean.
+
+---
+
 ## 2026-06-10 — Shepherd Hub: moved from a top-level tab into the Hubs grid
 
 Per owner preference (thinks of it as a hub; role-gated fits; declutters the top
