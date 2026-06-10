@@ -26,6 +26,8 @@ scripts/serviceAccountKey.json
 
 # Firebase Emulator Suite (local sandbox)
 /.emulator-data/
+# Tenant data copied from prod into the emulator (may contain real PII — never commit)
+/.tenant-export/
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
