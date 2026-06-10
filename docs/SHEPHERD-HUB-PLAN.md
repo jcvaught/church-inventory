@@ -5,7 +5,7 @@
 > pastoral notes. Hub name: **Shepherd Hub**. Each elder's assigned-people view
 > is labeled **"My Flock."**
 
-_Design agreed 2026-06-10. **P1 (sync) SHIPPED 2026-06-10** — see CHANGELOG. Next up: P2 (elder custom-claim gate). This doc is the spec to resume from._
+_Design agreed 2026-06-10. **P1 (sync) + P2 (elder gate) SHIPPED 2026-06-10** — see CHANGELOG. Next up: P3 (the hub UI). This doc is the spec to resume from._
 
 > **P1 build notes (actual vs. spec):**
 > - FXCC `churchId` = `6cksNI9Uv8h0jXptdTESnXTXFgF3-church` (created by uid `6cksNI9U…`, not John's).
@@ -113,9 +113,13 @@ normalization):** Coffman, Reynolds, Renner, Kerr, Palmer, Baither, Beckner.
 - **P1 — sync:** ✅ **DONE 2026-06-10.** PCO token in Secret Manager; `syncShepherdPeople`
   (nightly) + `refreshShepherdPeople` (on-demand) pull people + contact + photo +
   medical_notes + pastoral fields, normalize, write the admin-locked elder-indexed cache.
-- **P2 — gate:** custom-claim infra + admin set/revoke script; elder Firestore rules; MFA.
-  **← next up.**
-- **P3 — the hub UI:** "My Flock" + all-congregation search/browse; per-person private note +
+- **P2 — gate:** ✅ **DONE 2026-06-10.** `elder` custom claim via `claimElderRole`
+  (email allow-list `functions/lib/elders.js`); `scripts/set-elder-claims.cjs` for
+  immediate force-sync/revoke; `isElder()` Firestore rules on the shepherd cache;
+  MFA via Google Workspace 2SV (Firebase-level MFA deferred — would need Identity
+  Platform). Client wires `isElder` in `useAuth` (FXCC-gated). Elders auto-grant on
+  first COH sign-in.
+- **P3 — the hub UI:** **← next up.** "My Flock" + all-congregation search/browse; per-person private note +
   shared care thread; Elder Assigned multi-select editor (write-back); orphaned/uncovered
   worklist; audit logging.
 - **P4 — the promise:** plain-language privacy doc for the elders + Level-1 polish.

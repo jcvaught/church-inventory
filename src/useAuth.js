@@ -28,6 +28,11 @@ import { auth, googleProvider, db } from './firebase.js';
 // see everything (role override); hub-scoped invites still set their own hubs.
 const DEFAULT_MEMBER_HUBS = ['jobs', 'maintenance'];
 
+// Shepherd Hub is FXCC-only (P2). Only FXCC members invoke the elder-claim
+// grant on sign-in, so every other church's logins don't hit the callable.
+// Mirrors SHEPHERD_CHURCH_ID in functions/index.js — keep in sync.
+const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
+
 const DEFAULT_LOCATIONS = [
   "Sanctuary", "Sound Booth", "Media Room", "Church Office",
   "Children's Wing", "Youth Room", "Security Office",
@@ -83,6 +88,10 @@ export function useAuth() {
   const [profileMissing, setProfileMissing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Shepherd Hub elder gate (P2): true iff the server-set `elder` custom claim
+  // is present on the signed-in token. Drives hub visibility in P3; Firestore
+  // rules enforce the real boundary regardless of this flag.
+  const [isElder, setIsElder] = useState(false);
 
   // Listen to auth state
   useEffect(() => {
@@ -93,8 +102,26 @@ export function useAuth() {
         try {
           const profileDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (profileDoc.exists()) {
-            setUserProfile({ id: firebaseUser.uid, uid: firebaseUser.uid, ...profileDoc.data() });
+            const profileData = profileDoc.data();
+            setUserProfile({ id: firebaseUser.uid, uid: firebaseUser.uid, ...profileData });
             setProfileMissing(false);
+            // Shepherd Hub elder gate (P2) — FXCC members only, so no other
+            // church's logins hit the callable. Grants/revokes the `elder`
+            // custom claim by email allow-list, then force-refreshes the ID
+            // token if it changed so Firestore rules see the new claim.
+            if (profileData.churchId === SHEPHERD_CHURCH_ID) {
+              try {
+                const claimFn = httpsCallable(getFunctions(), 'claimElderRole');
+                const res = await claimFn();
+                if (res.data?.changed) await firebaseUser.getIdToken(true);
+                setIsElder(!!res.data?.elder);
+              } catch (e) {
+                setIsElder(false);
+                Sentry.captureException(e, { tags: { flow: 'claimElderRole' } });
+              }
+            } else {
+              setIsElder(false);
+            }
           } else {
             // Authenticated but no Firestore profile — the half-signed-up
             // state. Surface to user + log to Sentry so we hear about
@@ -123,6 +150,7 @@ export function useAuth() {
         setUser(null);
         setUserProfile(null);
         setProfileMissing(false);
+        setIsElder(false);
       }
       setLoading(false);
     });
@@ -512,6 +540,7 @@ export function useAuth() {
   return {
     user,
     userProfile,
+    isElder,
     profileMissing,
     loading,
     error,

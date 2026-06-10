@@ -14,6 +14,12 @@ service cloud.firestore {
     function isChurchAdmin(churchId)          { return isMember(churchId) && userIsAdmin(); }
     function isChurchAdminOrManager(churchId) { return isMember(churchId) && userIsAdminOrManager(); }
 
+    // Shepherd Hub (P2): elder status is a server-set custom auth claim
+    // (`elder: true`), granted by claimElderRole against the email allow-list —
+    // NOT a Firestore-doc role (those are raceable/readable). Baked into the
+    // signed token; this reads it directly with no get().
+    function isElder() { return request.auth != null && request.auth.token.elder == true; }
+
     // ── Jobs Hub access (audit H3 + M1, 2026-05-22) ──────────────────────────
     // jobsHubActive: the church's Jobs Hub subscription is active. Mirrors the
     //   server-side subHasHub() minus the trial-expiry time check (rules cannot
@@ -118,9 +124,9 @@ service cloud.firestore {
     }
 
     // ── Config/shepherdSync — Shepherd Hub sync status (last run, counts,
-    //    per-elder load). Admin-only read; CF-only write (Admin SDK). ──────────
+    //    per-elder load). Read = elder or admin; CF-only write (Admin SDK). ────
     match /churches/{churchId}/config/shepherdSync {
-      allow read:  if isChurchAdmin(churchId);
+      allow read:  if isElder() || isChurchAdmin(churchId);
       allow write: if false;
     }
 
@@ -385,13 +391,14 @@ service cloud.firestore {
       allow write: if isChurchAdminOrManager(churchId);
     }
 
-    // ── Shepherd Hub people cache (Phase 1) ──────────────────────────────────
-    //    Cloud-Function-written mirror of Planning Center people. P1: admin-only
-    //    read, NO client write (Admin SDK / sync CF only — bypasses rules).
-    //    Tightens to an elder custom-claim in P2. Mirrors config/subscription's
-    //    write lock. Holds sensitive pastoral data incl. medical_notes.
+    // ── Shepherd Hub people cache ────────────────────────────────────────────
+    //    Cloud-Function-written mirror of Planning Center people. Read = elders
+    //    (custom claim) or church admin (P1 lock retained for support/debug —
+    //    the Level-1 privacy model already accepts admin readability of this
+    //    PCO-sourced data). NO client write (Admin SDK / sync CF only). Holds
+    //    sensitive pastoral data incl. medical_notes.
     match /churches/{churchId}/shepherdPeople/{docId} {
-      allow read:  if isChurchAdmin(churchId);
+      allow read:  if isElder() || isChurchAdmin(churchId);
       allow write: if false;
     }
 

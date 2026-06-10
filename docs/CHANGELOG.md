@@ -4,6 +4,22 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-10 — Shepherd Hub Phase 2: elder custom-claim gate
+
+The access gate for Shepherd Hub. Elder status is a **server-set custom auth claim** (`elder: true`), not a Firestore-doc role. No hub UI yet (P3).
+
+- **`functions/lib/elders.js`** (NEW): the `ELDER_EMAILS` allow-list (single source of truth) — all 8 FXCC elders sign in via `@fxcc.org` Google Workspace (Steve Watkins has two addresses, both listed). `isElderEmail(email)` compares lowercased.
+- **`claimElderRole`** (onCall): self-correcting grant/revoke. Looks up the caller's email; sets `elder:true` if allow-listed, clears it otherwise (preserving any other claims). Removing an email + redeploy revokes on that elder's next sign-in; `scripts/set-elder-claims.cjs` does it immediately. Provider-agnostic (keys off the verified email).
+- **Client (`src/useAuth.js`):** on sign-in, **FXCC members only** (gated on `churchId === SHEPHERD_CHURCH_ID` so no other church hits the callable) invoke `claimElderRole`, force-refresh the ID token when the claim changed (so rules see it), and expose `isElder` from the hook. Reset on sign-out.
+- **Rules:** `isElder()` helper (`request.auth.token.elder == true`, no `get()`); `shepherdPeople` + `config/shepherdSync` reads relaxed from admin-only (P1 lock) to **`isElder() || isChurchAdmin`** (admin retained for support; Level-1 model already accepts admin readability of this PCO-sourced data). Writes still `false` (CF-only).
+- **`scripts/set-elder-claims.cjs`** (NEW): out-of-band force-sync — grants to allow-listed accounts that exist, revokes stale claims; dry-run by default, `--apply` to write. Reports elders with no Auth account yet (auto-grant on first sign-in).
+- **MFA:** enforced at the **Google Workspace** level (FXCC can require 2-step verification org-wide in the Workspace admin console) rather than in-app — Firebase-level MFA (TOTP/SMS second factor) would require the Identity Platform upgrade, deferred. The `claimElderRole` callable approach also deliberately avoids that upgrade (a `beforeSignIn` blocking function would have needed it).
+- **Verified:** `claimElderRole` IAM probe = 401 JSON (invoker intact). Allow-list script resolves all 8 (none have COH accounts yet → auto-grant pending). **End-to-end rule test:** a neutral non-FXCC, non-admin identity is `permission-denied` on `shepherdPeople` without the claim and **READ ALLOWED with `elder:true`** — isolating the claim as the boundary. Client build + lint clean.
+
+**Still needed before P3:** the 8 elders each sign into COH once (joins them to FXCC + auto-grants the claim). Pastoral: who covers Bingham's flock during sabbatical.
+
+---
+
 ## 2026-06-10 — Shepherd Hub Phase 1: PCO → Firestore read-sync
 
 First build phase of **Shepherd Hub** (elders-only congregation view; full spec `docs/SHEPHERD-HUB-PLAN.md`). P1 is the read-only sync only — no UI, no pastoral notes, no elder auth-gate (P2/P3). FXCC-only for now (`SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church'`).

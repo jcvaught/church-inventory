@@ -9,6 +9,7 @@ const { getMessaging } = require('firebase-admin/messaging');
 const { jobEventLines, reservationEventLines, maintenanceEventLines, buildCalendar } = require('./lib/ics');
 const { calculateNextDue } = require('./lib/recurrence');
 const { syncShepherdPeople } = require('./lib/shepherd');
+const { isElderEmail } = require('./lib/elders');
 const Sentry = require('@sentry/node');
 
 Sentry.init({
@@ -3397,6 +3398,29 @@ exports.refreshShepherdPeople = onCall(
       secret: PCO_SECRET.value(),
       source: 'callable',
     });
+  })
+);
+
+// ── claimElderRole (Shepherd Hub P2 gate) ─────────────────────────────────
+// Self-correcting elder custom-claim grant/revoke. The client calls this on
+// sign-in (FXCC users only) and force-refreshes its ID token if the claim
+// changed. Grants `elder: true` when the signed-in email is in the allow-list
+// (functions/lib/elders.js), revokes it otherwise — so removing an email +
+// redeploy revokes on the elder's next sign-in (immediate revoke via
+// scripts/set-elder-claims.cjs). Provider-agnostic (keys off the verified
+// email), so Google or email/password both work. Other custom claims preserved.
+exports.claimElderRole = onCall(
+  { cors: true },
+  wrapCall('claimElderRole', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    const userRecord = await getAuth().getUser(req.auth.uid);
+    const shouldBeElder = isElderEmail(userRecord.email);
+    const isElder = userRecord.customClaims?.elder === true;
+    if (shouldBeElder === isElder) return { elder: isElder, changed: false };
+    const claims = { ...(userRecord.customClaims || {}) };
+    if (shouldBeElder) claims.elder = true; else delete claims.elder;
+    await getAuth().setCustomUserClaims(req.auth.uid, claims);
+    return { elder: shouldBeElder, changed: true };
   })
 );
 
