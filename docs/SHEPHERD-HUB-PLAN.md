@@ -5,7 +5,14 @@
 > pastoral notes. Hub name: **Shepherd Hub**. Each elder's assigned-people view
 > is labeled **"My Flock."**
 
-_Design agreed 2026-06-10. Build not yet started — this doc is the spec to resume from._
+_Design agreed 2026-06-10. **P1 (sync) SHIPPED 2026-06-10** — see CHANGELOG. Next up: P2 (elder custom-claim gate). This doc is the spec to resume from._
+
+> **P1 build notes (actual vs. spec):**
+> - FXCC `churchId` = `6cksNI9Uv8h0jXptdTESnXTXFgF3-church` (created by uid `6cksNI9U…`, not John's).
+> - Cache: `churches/{id}/shepherdPeople/{pcoPersonId}` (full congregation, ~3,993) + `config/shepherdSync` status doc. Admin-read, CF-only-write.
+> - CFs: `syncShepherdPeople` (nightly 2am Central) + `refreshShepherdPeople` (on-demand callable). Logic in `functions/lib/shepherd.js`. Secrets `PCO_APP_ID`/`PCO_SECRET` in Secret Manager.
+> - **Pastoral fields reconciled to real PCO schema:** kept Elder Assigned / Date Baptized / Growth Group Member / Discipleship (single-value). "Service Areas" **dropped** (no backing field — ministry selects unpopulated). "Strengths & Gifts" split into two `checkboxes` arrays: `strengths[]` (StrengthsFinder) + `gifts[]` ("Gifts, Interests, & Abilities").
+> - Counts verified against the §6 snapshot exactly.
 
 ---
 
@@ -103,11 +110,11 @@ normalization):** Coffman, Reynolds, Renner, Kerr, Palmer, Baither, Beckner.
 
 - **P0 — prereqs:** ✅ PCO PAT generated + stashed; ✅ scope locked; ✅ roster confirmed;
   ✅ name chosen. _Remaining: collect each elder's FXCC Google email (for P2)._
-- **P1 — sync:** push PCO token to Secret Manager; scheduled Cloud Function pulls people +
-  contact + photo + medical_notes + pastoral fields, applies normalization, writes
-  elder-indexed minimized Firestore cache (nightly + on-demand refresh); lock cache rules to
-  admin until P2. **← next up.**
+- **P1 — sync:** ✅ **DONE 2026-06-10.** PCO token in Secret Manager; `syncShepherdPeople`
+  (nightly) + `refreshShepherdPeople` (on-demand) pull people + contact + photo +
+  medical_notes + pastoral fields, normalize, write the admin-locked elder-indexed cache.
 - **P2 — gate:** custom-claim infra + admin set/revoke script; elder Firestore rules; MFA.
+  **← next up.**
 - **P3 — the hub UI:** "My Flock" + all-congregation search/browse; per-person private note +
   shared care thread; Elder Assigned multi-select editor (write-back); orphaned/uncovered
   worklist; audit logging.

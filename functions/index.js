@@ -8,6 +8,7 @@ const { getAuth } = require('firebase-admin/auth');
 const { getMessaging } = require('firebase-admin/messaging');
 const { jobEventLines, reservationEventLines, maintenanceEventLines, buildCalendar } = require('./lib/ics');
 const { calculateNextDue } = require('./lib/recurrence');
+const { syncShepherdPeople } = require('./lib/shepherd');
 const Sentry = require('@sentry/node');
 
 Sentry.init({
@@ -342,6 +343,14 @@ function validateRedirectUrl(url) {
 const STRIPE_SECRET_KEY     = defineSecret('STRIPE_SECRET_KEY');
 const STRIPE_WEBHOOK_SECRET = defineSecret('STRIPE_WEBHOOK_SECRET');
 const ANTHROPIC_API_KEY     = defineSecret('ANTHROPIC_API_KEY');
+// Planning Center People API token (Shepherd Hub read-sync). PCO_APP_ID is the
+// PAT's "Client ID"; PCO_SECRET is the token secret. Set via
+// `firebase functions:secrets:set PCO_APP_ID` / `PCO_SECRET`.
+const PCO_APP_ID = defineSecret('PCO_APP_ID');
+const PCO_SECRET = defineSecret('PCO_SECRET');
+
+// Shepherd Hub is FXCC-only for Phase 1 (see docs/SHEPHERD-HUB-PLAN.md).
+const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
 
 // ── Fill these in after creating products in the Stripe dashboard ──────────
 // Run: firebase functions:config:set is no longer used in v2.
@@ -3347,6 +3356,50 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
   }
 }));
 
+// ── Shepherd Hub PCO read-sync (Phase 1) ──────────────────────────────────
+// Pulls the FXCC congregation from Planning Center into a minimized,
+// elder-indexed Firestore cache (churches/{id}/shepherdPeople + a
+// config/shepherdSync status doc). READ-ONLY against PCO. No UI / notes / elder
+// auth-gate yet — see docs/SHEPHERD-HUB-PLAN.md. Core logic in lib/shepherd.js.
+
+// Nightly at 2am Central. The returned summary lands in
+// scheduledJobRuns/syncShepherdPeople.lastSummary (via withScheduledRun).
+exports.syncShepherdPeople = onSchedule(
+  { schedule: '0 2 * * *', timeZone: 'America/Chicago', secrets: [PCO_APP_ID, PCO_SECRET] },
+  async () => withScheduledRun('syncShepherdPeople', async () => {
+    const db = getFirestore();
+    return await syncShepherdPeople(db, FieldValue, {
+      churchId: SHEPHERD_CHURCH_ID,
+      appId: PCO_APP_ID.value(),
+      secret: PCO_SECRET.value(),
+      source: 'scheduled',
+    });
+  })
+);
+
+// On-demand "Refresh" callable. P1 gate: OWNER_EMAILS or FXCC admin (no elder
+// custom-claim exists until P2). Runs the same core sync.
+exports.refreshShepherdPeople = onCall(
+  { secrets: [PCO_APP_ID, PCO_SECRET], cors: true },
+  wrapCall('refreshShepherdPeople', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    const db = getFirestore();
+    const userRecord = await getAuth().getUser(req.auth.uid);
+    const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
+    const c = callerSnap.exists ? callerSnap.data() : {};
+    const isFxccAdmin = c.churchId === SHEPHERD_CHURCH_ID && c.role === 'admin';
+    if (!OWNER_EMAILS.includes(userRecord.email) && !isFxccAdmin) {
+      throw new HttpsError('permission-denied', 'Not authorized.');
+    }
+    return await syncShepherdPeople(db, FieldValue, {
+      churchId: SHEPHERD_CHURCH_ID,
+      appId: PCO_APP_ID.value(),
+      secret: PCO_SECRET.value(),
+      source: 'callable',
+    });
+  })
+);
+
 // ── monitorScheduledJobs ──────────────────────────────────────────────────
 // Hourly dead-man's switch for every other scheduled job in this file. Reads
 // each expected `scheduledJobRuns/{name}` heartbeat doc (written by
@@ -3370,6 +3423,7 @@ const SCHEDULED_JOB_REGISTRY = [
   { name: 'sendNewJobsDigest',             cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'closePastJobs',                 cadence: 'daily',  maxRunMs:   5 * 60 * 1000 },
   { name: 'generateRecurringTemplateTasks', cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },
+  { name: 'syncShepherdPeople',            cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },
 ];
 // Hourly gets a 2h grace beyond 1h; daily gets a 2h grace beyond 24h; weekly
 // gets a 24h grace beyond 7d (weekly retained for any future weekly job).

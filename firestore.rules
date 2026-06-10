@@ -117,6 +117,13 @@ service cloud.firestore {
       allow write: if isChurchAdmin(churchId);
     }
 
+    // ── Config/shepherdSync — Shepherd Hub sync status (last run, counts,
+    //    per-elder load). Admin-only read; CF-only write (Admin SDK). ──────────
+    match /churches/{churchId}/config/shepherdSync {
+      allow read:  if isChurchAdmin(churchId);
+      allow write: if false;
+    }
+
     // ── Items — members read + update (checkout/return); admins+mgrs create/delete ──
     match /churches/{churchId}/items/{docId} {
       allow read:          if isMember(churchId);
@@ -376,6 +383,16 @@ service cloud.firestore {
     match /churches/{churchId}/accessRecords/{docId} {
       allow read:  if isMember(churchId);
       allow write: if isChurchAdminOrManager(churchId);
+    }
+
+    // ── Shepherd Hub people cache (Phase 1) ──────────────────────────────────
+    //    Cloud-Function-written mirror of Planning Center people. P1: admin-only
+    //    read, NO client write (Admin SDK / sync CF only — bypasses rules).
+    //    Tightens to an elder custom-claim in P2. Mirrors config/subscription's
+    //    write lock. Holds sensitive pastoral data incl. medical_notes.
+    match /churches/{churchId}/shepherdPeople/{docId} {
+      allow read:  if isChurchAdmin(churchId);
+      allow write: if false;
     }
 
     // ── Time Entries (contractor / labor hours) — payroll-sensitive, so
