@@ -4,6 +4,17 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-10 — Shepherd Hub: First/Last name sort toggle
+
+Added a **Sort** dropdown beside the status filter in `ShepherdHubPage` (`sortBy`
+state, `'first' | 'last'`). "Last name" groups families together (surname, then
+first name as tiebreak); falls back to the last token of the full `name` when the
+split `firstName`/`lastName` fields are absent. Sort is applied in the `filtered`
+memo, so it flows through to **Export CSV** too. Works across all three views +
+search/status filters. Frontend-only; build + lint clean.
+
+---
+
 ## 2026-06-10 — Hub provisioning: roster-driven Shepherd-only elders + leaner signup default
 
 Tightened what a new member lands in, ahead of onboarding the FXCC elders as the
