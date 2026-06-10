@@ -71,6 +71,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('active'); // 'active' | 'inactive' | 'all'
   const [assignFilter, setAssignFilter] = useState('all');    // 'all' | 'assigned' | 'unassigned' | 'orphaned'
+  const [sortBy, setSortBy] = useState('first');              // 'first' | 'last' (last groups families)
   const [selected, setSelected] = useState(null);
   const [showRoster, setShowRoster] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
@@ -130,7 +131,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return people.filter(p => {
+    const result = people.filter(p => {
       if (view === 'flock') {
         if (!activeKey || !(p.elderKeys || []).includes(activeKey)) return false;
       }
@@ -145,7 +146,16 @@ export function ShepherdHubPage({ userProfile, isElder }) {
       if (q && !(p.name || '').toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [people, view, activeKey, statusFilter, assignFilter, search]);
+    // Sort key. 'last' groups families together (last name, then first as
+    // tiebreak); 'first' keeps the original given-name order. Fall back to the
+    // full name when the split first/last fields are missing.
+    const lastOf = (p) => (p.lastName || (p.name || '').trim().split(/\s+/).slice(-1)[0] || '').toLowerCase();
+    const firstOf = (p) => (p.firstName || p.name || '').toLowerCase();
+    result.sort(sortBy === 'last'
+      ? (a, b) => lastOf(a).localeCompare(lastOf(b)) || firstOf(a).localeCompare(firstOf(b))
+      : (a, b) => firstOf(a).localeCompare(firstOf(b)) || lastOf(a).localeCompare(lastOf(b)));
+    return result;
+  }, [people, view, activeKey, statusFilter, assignFilter, search, sortBy]);
 
   // Coverage counts (active people only) for the header strip.
   const coverage = useMemo(() => {
@@ -213,6 +223,10 @@ export function ShepherdHubPage({ userProfile, isElder }) {
           <option value="active">Active only</option>
           <option value="inactive">Inactive only</option>
           <option value="all">All statuses</option>
+        </select>
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ ...inp, width: 'auto' }} aria-label="Sort by">
+          <option value="first">Sort: First name</option>
+          <option value="last">Sort: Last name</option>
         </select>
         {view === 'all' && (
           <select value={assignFilter} onChange={e => setAssignFilter(e.target.value)} style={{ ...inp, width: 'auto' }}>
