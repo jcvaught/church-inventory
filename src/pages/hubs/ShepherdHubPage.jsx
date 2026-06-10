@@ -89,13 +89,15 @@ export function ShepherdHubPage({ userProfile, isElder }) {
     (async () => {
       try {
         const base = `churches/${SHEPHERD_CHURCH_ID}`;
+        // Read the single roster doc directly — NOT getDocs(collection('config')),
+        // which is a list over the whole config collection and is denied (config
+        // docs have per-doc rules with no collection list permission).
         const [rosterSnap, peopleSnap] = await Promise.all([
-          getDocs(collection(db, `${base}/config`)),
+          getDoc(doc(db, `${base}/config/shepherdRoster`)),
           getDocs(query(collection(db, `${base}/shepherdPeople`), orderBy('name'))),
         ]);
         if (cancelled) return;
-        const rosterDoc = rosterSnap.docs.find(d => d.id === 'shepherdRoster');
-        const r = rosterDoc?.data() || { elders: [], former: [] };
+        const r = rosterSnap.exists() ? rosterSnap.data() : { elders: [], former: [] };
         setRoster({ elders: r.elders || [], former: r.former || [] });
         setPeople(peopleSnap.docs.map(d => ({ _id: d.id, ...d.data() })));
       } catch (e) {
