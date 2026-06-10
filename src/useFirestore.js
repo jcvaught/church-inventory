@@ -140,6 +140,12 @@ export function useFirestore(churchId) {
   // here rather than routed through handleErr/Sentry.
   useEffect(() => {
     if (!churchId) { setWorkItemsEnabled(false); return; }
+    // Re-resolve per church: reset to `null` so the data effect below waits for
+    // THIS church's flag before subscribing. Without this, a churchId change
+    // (multi-church users) would re-run the data effect with the previous
+    // church's flag still in state and briefly read the wrong collections until
+    // the new featureFlags snapshot resolves.
+    setWorkItemsEnabled(null);
     const unsub = onSnapshot(
       doc(db, 'churches', churchId, 'config', 'featureFlags'),
       (snap) => setWorkItemsEnabled(snap.exists() && snap.data().workItemsEnabled === true),
