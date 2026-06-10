@@ -4,6 +4,19 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-10 — Shepherd Hub Phase 4: privacy/confidentiality doc
+
+Plain-language privacy promise for the elders, surfaced via an always-available
+**🔒 Privacy** link in the Shepherd Hub header → `PrivacyModal` (in
+`ShepherdHubPage.jsx`); repo copy at `docs/SHEPHERD-HUB-PRIVACY.md` (keep in
+sync). Covers: read-only PCO source + the one write-back; who sees what (private
+note = only you, shared thread = elders, directory/medical = elders + John); the
+honest Level-1 limit (rules + audit but not yet end-to-end encrypted — Level-2
+planned); audit logging; elder responsibilities; access lifecycle. Frontend-only.
+**Shepherd Hub P1–P4 now complete; only the Level-2 note-encryption fast-follow remains.**
+
+---
+
 ## 2026-06-10 — Shepherd Hub Phase 3: the hub UI (full #3 + roster management)
 
 The elders' working surface. FXCC-only; gated to `isElder || FXCC admin` as a

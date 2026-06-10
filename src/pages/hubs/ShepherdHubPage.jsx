@@ -72,6 +72,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
   const [assignFilter, setAssignFilter] = useState('all');    // 'all' | 'assigned' | 'unassigned' | 'orphaned'
   const [selected, setSelected] = useState(null);
   const [showRoster, setShowRoster] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const isAdmin = SHEPHERD_ADMIN_EMAILS.includes((userProfile?.email || '').toLowerCase());
 
   // Merge a reassignment result into local state (list + open detail).
@@ -187,6 +188,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
               </select>
             </>
           )}
+          <button onClick={() => setShowPrivacy(true)} style={{ ...btnS, padding: '8px 14px' }}>🔒 Privacy</button>
           {isAdmin && <button onClick={() => setShowRoster(true)} style={{ ...btnS, padding: '8px 14px' }}>⚙ Manage elders</button>}
         </div>
       </div>
@@ -259,7 +261,54 @@ export function ShepherdHubPage({ userProfile, isElder }) {
         onClose={() => setSelected(null)} />}
 
       {showRoster && <RosterManager roster={roster} onClose={() => setShowRoster(false)} onSaved={setRoster} />}
+      {showPrivacy && <PrivacyModal onClose={() => setShowPrivacy(false)} />}
     </div>
+  );
+}
+
+// Plain-language privacy + confidentiality promise for the elders (P4). Honest
+// about the Level-1 limits (rules + audit, not yet encrypted). Mirrors
+// docs/SHEPHERD-HUB-PRIVACY.md — keep the two in sync.
+function PrivacyModal({ onClose }) {
+  const h = { fontFamily: f1, fontWeight: 800, color: B.navy, fontSize: 14, margin: '16px 0 4px' };
+  const p = { fontSize: 14, color: B.textDark, lineHeight: 1.55, margin: '0 0 6px' };
+  const li = { fontSize: 14, color: B.textDark, lineHeight: 1.5, marginBottom: 4 };
+  return (
+    <Modal open onClose={onClose} title="🔒 Privacy & confidentiality" maxWidth={600}>
+      <p style={p}>This hub holds confidential pastoral information. Please read how it's protected — and what's expected of you.</p>
+
+      <div style={h}>What this is</div>
+      <p style={p}>A private, always-current view of our congregation, drawn from Planning Center, so you can shepherd the people in your care and keep your own notes.</p>
+
+      <div style={h}>Where the data comes from</div>
+      <p style={p}>People and contact details sync <strong>read-only</strong> from Planning Center (the church's system of record). The hub never changes Planning Center — with one exception you control: reassigning who shepherds someone writes that one field back, so the assignment stays accurate everywhere.</p>
+
+      <div style={h}>Who can see what</div>
+      <ul style={{ margin: '0 0 6px', paddingLeft: 20 }}>
+        <li style={li}><strong>Your private note</strong> on a person — <strong>only you.</strong> No other elder, and not the administrator, can read it through the app.</li>
+        <li style={li}><strong>The shared care thread</strong> — every elder can read it and add to it.</li>
+        <li style={li}><strong>The directory, contact info, and medical notes</strong> — elders and John (administrator) only. No other staff or members.</li>
+      </ul>
+
+      <div style={h}>The honest limit</div>
+      <p style={p}>Notes are protected by access rules and every view and edit is logged. But they are <strong>not yet end-to-end encrypted</strong> — a system administrator with direct database access could technically read them. Encryption that seals notes even from administrators is planned. Until then: treat this as private <em>from the church</em> and well-protected, but not cryptographically sealed.</p>
+
+      <div style={h}>Everything is logged</div>
+      <p style={p}>Opening a person's record or editing a note records who did it and when. This is for accountability, not surveillance — it protects everyone.</p>
+
+      <div style={h}>Your responsibility</div>
+      <p style={p}>This is confidential pastoral data, including medical and other sensitive details. Keep it within the eldership. Don't export, screenshot, or forward it. Sign out on shared devices.</p>
+
+      <div style={h}>Access</div>
+      <p style={p}>You're given access when you sign in with your church Google account. When you roll off the eldership, access is removed.</p>
+
+      <div style={h}>Questions or concerns</div>
+      <p style={p}>Contact John.</p>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+        <button onClick={onClose} style={btnP}>Got it</button>
+      </div>
+    </Modal>
   );
 }
 
