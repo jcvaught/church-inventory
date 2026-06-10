@@ -3429,14 +3429,34 @@ exports.claimElderRole = onCall(
   { cors: true },
   wrapCall('claimElderRole', async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    const db = getFirestore();
     const userRecord = await getAuth().getUser(req.auth.uid);
-    const roster = await getShepherdRoster(getFirestore());
+    const roster = await getShepherdRoster(db);
     const shouldBeElder = isElderEmail(roster, userRecord.email);
     const isElder = userRecord.customClaims?.elder === true;
     if (shouldBeElder === isElder) return { elder: isElder, changed: false };
     const claims = { ...(userRecord.customClaims || {}) };
     if (shouldBeElder) claims.elder = true; else delete claims.elder;
     await getAuth().setCustomUserClaims(req.auth.uid, claims);
+    // First-time elder grant (claim transitions false→true): scope the account
+    // to Shepherd-only (allowedHubs: []) so a new elder lands in just the
+    // Shepherd Hub, not the inventory/jobs shell. This is roster-driven — the
+    // roster is the single gate, so a non-rostered email never reaches here, and
+    // there's no leak-able "shepherd invite" link to mint. Guarded so we only
+    // touch an un-customized account (null = legacy all-access, or the plain
+    // ['jobs'] signup default): an existing member promoted to elder keeps any
+    // hub set an admin deliberately gave them. Hubs an admin adds later stick,
+    // because the claim no longer changes on subsequent sign-ins (early return
+    // above), so this block never runs twice for the same user.
+    if (shouldBeElder) {
+      const snap = await db.doc(`users/${req.auth.uid}`).get();
+      const cur = snap.exists ? snap.get('allowedHubs') : undefined;
+      const isUncustomized = cur == null
+        || (Array.isArray(cur) && cur.length === 1 && cur[0] === 'jobs');
+      if (isUncustomized) {
+        await db.doc(`users/${req.auth.uid}`).set({ allowedHubs: [] }, { merge: true });
+      }
+    }
     return { elder: shouldBeElder, changed: true };
   })
 );

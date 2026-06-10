@@ -22,11 +22,13 @@ import { auth, googleProvider, db } from './firebase.js';
 
 // Default hubs granted to a member who signs up with just the church code (no
 // hub-scoped invite). Previously this was "all hubs" (allowedHubs omitted),
-// which silently leaked new members into every hub's assignee/picker until an
-// admin restricted them. Now they start scoped: Job + Maintenance (Inventory is
-// the always-free base hub, available regardless of allowedHubs). Admins still
-// see everything (role override); hub-scoped invites still set their own hubs.
-const DEFAULT_MEMBER_HUBS = ['jobs', 'maintenance'];
+// then Job + Maintenance. Now scoped to Job only (2026-06-10): a plain
+// church-code signup should NOT auto-land in Maintenance/Inventory — least
+// privilege. ['jobs'] also makes the new member a volunteer (isVolunteerOnly),
+// so they get the jobs-first shell and never see inventory. Admins still see
+// everything (role override); hub-scoped invites still set their own hubs; an
+// admin grants more access per-member via Settings → Team Members → Edit Access.
+const DEFAULT_MEMBER_HUBS = ['jobs'];
 
 // Shepherd Hub is FXCC-only (P2). Only FXCC members invoke the elder-claim
 // grant on sign-in, so every other church's logins don't hit the callable.

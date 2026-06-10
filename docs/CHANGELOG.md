@@ -4,6 +4,33 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-10 — Hub provisioning: roster-driven Shepherd-only elders + leaner signup default
+
+Tightened what a new member lands in, ahead of onboarding the FXCC elders as the
+first Shepherd Hub pilot users.
+
+- **Elders land Shepherd-only, roster-driven (no leak-able link).** `claimElderRole`
+  (`functions/index.js`) now, on the *first* grant of the `elder` claim (the claim
+  transitions false→true), also sets `allowedHubs: []` on the user doc — so a new
+  elder sees only the Shepherd Hub, nothing else. The roster (`config/shepherdRoster`)
+  is the single gate: a non-rostered email never reaches this branch, so there's no
+  separate "Shepherd invite" URL to mint or leak. Empty `allowedHubs` does **not**
+  grant Shepherd access — that stays gated on the `elder` claim at three layers
+  (claim grant, `App.jsx:677` UI, `firestore.rules:21`). Guarded to only touch an
+  un-customized account (`allowedHubs` null = legacy all-access, or the plain
+  `['jobs']` signup default), so promoting an existing member to elder never strips
+  hubs an admin deliberately gave them; hubs added later via Settings → Team Members
+  stick (the claim no longer changes on later sign-ins → early return). Deployed +
+  invoker-probed (401 JSON, IAM intact).
+- **Bare signup default `['jobs','maintenance']` → `['jobs']`** (`useAuth.js`
+  `DEFAULT_MEMBER_HUBS`). A plain church-code signup (no hub-scoped invite) no longer
+  auto-lands in Maintenance, and `['jobs']` makes them a volunteer (`isVolunteerOnly`)
+  → jobs-first shell, never sees inventory. Admins (role override) and hub-scoped
+  invites are unaffected. Teen onboarding = a Jobs-only invite (check only Job Hub).
+  Build + lint clean (0 errors).
+
+---
+
 ## 2026-06-10 — Shepherd Hub: per-elder flock CSV export
 
 **Export CSV** button on the results header (`ShepherdHubPage`) downloads the
