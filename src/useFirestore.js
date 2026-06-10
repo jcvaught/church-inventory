@@ -1128,6 +1128,7 @@ export function useFirestore(churchId) {
         });
       });
       await logActivity('post_job', jobNumber, userId, userName, { title: job.title });
+      return newDocRef.id; // callers (e.g. task → Job convert) need the new id to write the backref
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 

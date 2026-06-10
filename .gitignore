@@ -23,6 +23,7 @@ scripts/serviceAccountKey.json
 /blob-report/
 /playwright/.cache/
 /e2e/.auth/
+/.playwright-mcp/
 
 # Firebase Emulator Suite (local sandbox)
 /.emulator-data/
