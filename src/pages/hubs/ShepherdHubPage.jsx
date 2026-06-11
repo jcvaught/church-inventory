@@ -15,7 +15,7 @@ import {
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import * as Sentry from '@sentry/react';
 import { db } from '../../firebase.js';
-import { B, f1, f2, inp, btnP, btnS } from '../../components/brand/tokens.js';
+import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { exportShepherdPeopleCSV } from '../../utils/csv.js';
 
@@ -48,6 +48,16 @@ function fmtTime(ts) {
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+// Client-side text-file download (used for an elder's "Export my notes").
+function downloadText(filename, text) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
 const chip = (bg, color) => ({
   display: 'inline-block', padding: '2px 9px', borderRadius: 999, fontSize: 11,
   fontWeight: 700, fontFamily: f1, background: bg, color, letterSpacing: 0.2,
@@ -75,7 +85,29 @@ export function ShepherdHubPage({ userProfile, isElder }) {
   const [selected, setSelected] = useState(null);
   const [showRoster, setShowRoster] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [exportingNotes, setExportingNotes] = useState(false);
+  const [exportMsg, setExportMsg] = useState(null);
   const isAdmin = SHEPHERD_ADMIN_EMAILS.includes((userProfile?.email || '').toLowerCase());
+
+  // Let an elder download their own private notes (e.g. before rolling off the
+  // eldership — their notes are purged when an admin removes them). Server-side
+  // gather so we don't need a client collectionGroup index.
+  async function exportMyNotes() {
+    setExportingNotes(true); setExportMsg(null);
+    try {
+      const res = await httpsCallable(getFunctions(), 'exportMyShepherdNotes')();
+      const notes = res.data?.notes || [];
+      if (!notes.length) { setExportMsg('You have no private notes to export.'); return; }
+      const body = notes.map(n =>
+        `=== ${n.personName} ===\n${n.text}${n.updatedAt ? `\n(updated ${fmtTime(n.updatedAt)})` : ''}`
+      ).join('\n\n');
+      downloadText('my-shepherd-notes.txt', `My Shepherd Notes\n\n${body}\n`);
+      logShepherdAudit('export_my_notes', null, userProfile, { count: notes.length });
+    } catch (e) {
+      setExportMsg(e?.message || 'Could not export your notes.');
+      Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'export-my-notes' } });
+    } finally { setExportingNotes(false); }
+  }
 
   // Merge a reassignment result into local state (list + open detail).
   function patchPerson(personId, patch) {
@@ -220,10 +252,17 @@ export function ShepherdHubPage({ userProfile, isElder }) {
               </select>
             </>
           )}
+          {isElder && <button onClick={exportMyNotes} disabled={exportingNotes} style={{ ...btnS, padding: '8px 14px', opacity: exportingNotes ? 0.5 : 1 }}>{exportingNotes ? 'Exporting…' : '⬇ Export my notes'}</button>}
           <button onClick={() => setShowPrivacy(true)} style={{ ...btnS, padding: '8px 14px' }}>🔒 Privacy</button>
           {isAdmin && <button onClick={() => setShowRoster(true)} style={{ ...btnS, padding: '8px 14px' }}>⚙ Manage elders</button>}
         </div>
       </div>
+
+      {exportMsg && (
+        <div onClick={() => setExportMsg(null)} style={{ background: B.tealPale, border: `1px solid ${B.teal}33`, borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13, color: B.textMid, cursor: 'pointer' }}>
+          {exportMsg} <span style={{ color: B.textLight }}>(tap to dismiss)</span>
+        </div>
+      )}
 
       {/* View toggle */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -385,6 +424,7 @@ function RosterManager({ roster, onClose, onSaved }) {
   const [formerStr, setFormerStr] = useState((roster.former || []).flatMap(f => f.match || [f.key]).join(', '));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
+  const [confirmRemoval, setConfirmRemoval] = useState(null); // { built, resync, removed:[{name,emails}] }
 
   const setRow = (i, patch) => setRows(rs => rs.map((r, j) => j === i ? { ...r, ...patch } : r));
   const removeRow = (i) => setRows(rs => rs.filter((_, j) => j !== i));
@@ -414,14 +454,38 @@ function RosterManager({ roster, onClose, onSaved }) {
     return null;
   }
 
-  async function save(resync) {
+  // Elders whose email(s) are entirely gone from the new roster = removed.
+  // Email-based (not key/surname-based) so renaming an elder never looks like a
+  // removal and never triggers a purge. An elder with no email can't be matched
+  // to an account, so they're skipped (nothing to purge).
+  function removedElders(built) {
+    const builtEmails = new Set(built.elders.flatMap(e => (e.emails || []).map(s => String(s).toLowerCase())));
+    return (roster.elders || [])
+      .filter(orig => {
+        const ems = (orig.emails || []).map(s => String(s).toLowerCase());
+        return ems.length > 0 && !ems.some(em => builtEmails.has(em));
+      })
+      .map(e => ({ name: e.name, emails: e.emails || [] }));
+  }
+
+  function attemptSave(resync) {
     const built = buildRoster();
     const v = validate(built);
     if (v) { setErr(v); return; }
+    const removed = removedElders(built);
+    if (removed.length) { setErr(null); setConfirmRemoval({ built, resync, removed }); return; }
+    doSave(built, resync, []);
+  }
+
+  async function doSave(built, resync, removed) {
     setSaving(true); setErr(null);
     try {
       await setDoc(doc(db, `churches/${SHEPHERD_CHURCH_ID}/config/shepherdRoster`), { ...built, updatedAt: serverTimestamp() });
       onSaved(built);
+      // Purge each removed elder's private notes (shared care-thread entries stay).
+      for (const r of removed) {
+        await httpsCallable(getFunctions(), 'purgeElderShepherdNotes')({ emails: r.emails, elderName: r.name });
+      }
       if (resync) {
         await httpsCallable(getFunctions(), 'refreshShepherdPeople')();
       }
@@ -429,6 +493,7 @@ function RosterManager({ roster, onClose, onSaved }) {
     } catch (e) {
       setErr(e?.message || 'Could not save the roster.');
       Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'roster-save' } });
+      setConfirmRemoval(null);
     } finally { setSaving(false); }
   }
 
@@ -471,9 +536,32 @@ function RosterManager({ roster, onClose, onSaved }) {
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
         <button onClick={onClose} disabled={saving} style={btnS}>Cancel</button>
-        <button onClick={() => save(false)} disabled={saving} style={{ ...btnS, opacity: saving ? 0.5 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
-        <button onClick={() => save(true)} disabled={saving} style={{ ...btnP, opacity: saving ? 0.5 : 1 }}>{saving ? 'Working…' : 'Save & re-sync'}</button>
+        <button onClick={() => attemptSave(false)} disabled={saving} style={{ ...btnS, opacity: saving ? 0.5 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
+        <button onClick={() => attemptSave(true)} disabled={saving} style={{ ...btnP, opacity: saving ? 0.5 : 1 }}>{saving ? 'Working…' : 'Save & re-sync'}</button>
       </div>
+
+      {confirmRemoval && (
+        <Modal open onClose={() => !saving && setConfirmRemoval(null)} title="⚠ Remove elder — notes will be deleted" maxWidth={520}>
+          <p style={{ fontSize: 14, color: B.textDark, lineHeight: 1.55, marginTop: 0 }}>
+            You're removing {confirmRemoval.removed.length === 1 ? <strong>{confirmRemoval.removed[0].name}</strong> : `${confirmRemoval.removed.length} elders`} from the roster. This <strong>permanently deletes their private pastoral notes</strong> on every person. Shared care-thread entries are kept.
+          </p>
+          {confirmRemoval.removed.length > 1 && (
+            <ul style={{ margin: '0 0 10px', paddingLeft: 20, fontSize: 14, color: B.textDark }}>
+              {confirmRemoval.removed.map(r => <li key={r.name}>{r.name}</li>)}
+            </ul>
+          )}
+          <p style={{ fontSize: 13, color: B.textMid, lineHeight: 1.5 }}>
+            Make sure they've saved anything they want to keep first — each elder can do that from <strong>⬇ Export my notes</strong> in the hub header. <strong>This cannot be undone.</strong>
+          </p>
+          {err && <div style={{ color: B.red, fontSize: 13, marginTop: 8 }}>{err}</div>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <button onClick={() => setConfirmRemoval(null)} disabled={saving} style={btnS}>Cancel</button>
+            <button onClick={() => doSave(confirmRemoval.built, confirmRemoval.resync, confirmRemoval.removed)} disabled={saving} style={{ ...btnD, opacity: saving ? 0.5 : 1 }}>
+              {saving ? 'Removing…' : 'Remove & delete notes'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </Modal>
   );
 }

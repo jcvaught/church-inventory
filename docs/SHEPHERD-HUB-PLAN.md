@@ -136,10 +136,13 @@ normalization):** Coffman, Reynolds, Renner, Kerr, Palmer, Baither, Beckner.
   or care-thread entry exists, deletes them outright otherwise, and re-evaluates the
   archive each run so a person is cleaned up once their notes are cleared. The hub
   shows a per-elder **"No longer in PCO"** tab + detail banner + a **Delete note**
-  action. See CHANGELOG 2026-06-11. (Resolves Fable 5 audit HIGH #3.) Still open: the
-  *elder roll-off* note-retention question — when an elder leaves, their private notes
-  + care-thread entries become un-deletable via UI (rules require the author); decide
-  purge-on-roll-off vs. documented limbo.
+  action. See CHANGELOG 2026-06-11. (Resolves Fable 5 audit HIGH #3.)
+- **Elder roll-off note retention:** ✅ **DONE 2026-06-11 (D1 = purge).** Removing an elder
+  from the roster now purges their private notes (`purgeElderShepherdNotes`, admin-only),
+  gated by a warning + Cancel modal in RosterManager (email-based removal detection so a
+  rename never purges). A departing elder can save their own notes first via the
+  **⬇ Export my notes** header button (`exportMyShepherdNotes`). Shared care-thread entries
+  are kept. See CHANGELOG 2026-06-11.
 - **Eventual:** one-time cleanup write-pass to canonicalize existing dirty PCO values.
 
 ## 7. Open items / still needed from John

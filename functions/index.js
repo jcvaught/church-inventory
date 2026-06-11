@@ -3545,6 +3545,86 @@ exports.setElderAssignment = onCall(
   })
 );
 
+// ── exportMyShepherdNotes (Shepherd Hub P6 / D1) ──────────────────────────
+// Lets an elder download all of THEIR OWN private notes — used so a departing
+// elder can save them before the admin removes them (their notes are purged on
+// removal, see purgeElderShepherdNotes). Elder-only (the `elder` claim is itself
+// verified-gated by claimElderRole). The privateNotes doc id IS the owner uid.
+exports.exportMyShepherdNotes = onCall(
+  { cors: true },
+  wrapCall('exportMyShepherdNotes', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    if (req.auth.token?.elder !== true) throw new HttpsError('permission-denied', 'Elders only.');
+    const db = getFirestore();
+    const uid = req.auth.uid;
+    const prefix = `churches/${SHEPHERD_CHURCH_ID}/`;
+    const snap = await db.collectionGroup('privateNotes').get();
+    const mine = snap.docs.filter(d => d.id === uid && d.ref.path.startsWith(prefix));
+    if (!mine.length) return { notes: [] };
+    // Resolve each note's person name (parent.parent = the shepherdPeople doc).
+    const personRefs = mine.map(d => d.ref.parent.parent);
+    const persons = await db.getAll(...personRefs);
+    const notes = mine.map((d, i) => ({
+      personName: persons[i]?.exists ? (persons[i].get('name') || personRefs[i].id) : personRefs[i].id,
+      text: d.get('text') || '',
+      updatedAt: d.get('updatedAt')?.toMillis?.() || null,
+    }));
+    return { notes };
+  })
+);
+
+// ── purgeElderShepherdNotes (Shepherd Hub P6 / D1) ────────────────────────
+// When the admin removes an elder from the roster, permanently delete THAT
+// elder's private notes across every person. Admin-only (OWNER_EMAILS + verified
+// email). The caller passes the departing elder's roster email(s); we resolve
+// their uid(s) and delete `privateNotes/{uid}` everywhere. Shared care-thread
+// entries are deliberately KEPT (pastoral history, D1). The admin UI shows a
+// confirm modal first so the elder has a chance to export their own notes.
+exports.purgeElderShepherdNotes = onCall(
+  { cors: true },
+  wrapCall('purgeElderShepherdNotes', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    const email = req.auth.token?.email || '';
+    const emailVerified = req.auth.token?.email_verified === true;
+    if (!(OWNER_EMAILS.includes(email) && emailVerified)) {
+      throw new HttpsError('permission-denied', 'Not authorized.');
+    }
+    const { emails, elderName } = req.data || {};
+    if (!Array.isArray(emails) || emails.length === 0) {
+      throw new HttpsError('invalid-argument', 'emails required.');
+    }
+    const db = getFirestore();
+    // Resolve the departing elder's uid(s) from their roster email(s). A missing
+    // account just means no notes to purge.
+    const uids = new Set();
+    for (const em of emails) {
+      try { const u = await getAuth().getUserByEmail(String(em).toLowerCase()); uids.add(u.uid); }
+      catch (e) { if (e.code !== 'auth/user-not-found') throw e; }
+    }
+    let purged = 0;
+    if (uids.size) {
+      const prefix = `churches/${SHEPHERD_CHURCH_ID}/`;
+      const snap = await db.collectionGroup('privateNotes').get();
+      const targets = snap.docs.filter(d => uids.has(d.id) && d.ref.path.startsWith(prefix));
+      if (targets.length) {
+        const writer = db.bulkWriter();
+        targets.forEach(d => writer.delete(d.ref));
+        await writer.close();
+        purged = targets.length;
+      }
+    }
+    // Audit (admin-readable).
+    await db.collection(`churches/${SHEPHERD_CHURCH_ID}/shepherdAudit`).add({
+      action: 'purge_elder_notes',
+      actorUid: req.auth.uid,
+      actorEmail: email || null,
+      at: FieldValue.serverTimestamp(),
+      detail: { elderName: elderName || null, emails, purged, accounts: uids.size },
+    });
+    return { purged, accounts: uids.size };
+  })
+);
+
 // ── monitorScheduledJobs ──────────────────────────────────────────────────
 // Hourly dead-man's switch for every other scheduled job in this file. Reads
 // each expected `scheduledJobRuns/{name}` heartbeat doc (written by

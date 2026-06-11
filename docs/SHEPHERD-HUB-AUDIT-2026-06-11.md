@@ -155,10 +155,13 @@ CQ-2 (hoist `Tab`) · CQ-3 (fix plan-doc drift) · CQ-5 (`EmojiIcon`).
 **Phase 5 — ~~Level-2 encryption~~ — DROPPED (D5).** Only residual task folded into
 Phase 1: remove the "encryption planned" line from the privacy modal/doc.
 
-**Phase 6 — Elder roll-off retention (D1 ✅).** CF that purges a removed elder's
-`privateNotes/{uid}` across all `shepherdPeople` on confirmed roster removal; a warning
-+ Cancel modal in RosterManager *before* removal commits; an owner-only **"Export my
-notes"** action so a departing elder can save their own notes first.
+**Phase 6 — Elder roll-off retention (D1) — ✅ DONE 2026-06-11 (deployed).**
+`purgeElderShepherdNotes` (admin-only, verified) deletes a removed elder's
+`privateNotes/{uid}` across all `shepherdPeople` (care-thread entries kept); RosterManager
+detects removed elders **by email** (so a rename never triggers a purge) and shows a
+warning + Cancel modal *before* the removal commits; `exportMyShepherdNotes` (elder-only)
++ a **"⬇ Export my notes"** header button let a departing elder download their own notes
+first. Both callables deployed + invoker-probed healthy.
 
 **Eventual.** CMP-1 one-time PCO cleanup write-pass.
 

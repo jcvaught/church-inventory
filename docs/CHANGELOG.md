@@ -4,6 +4,27 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-11 — Shepherd Hub: elder roll-off note retention (audit Phase 6 / D1)
+
+When an elder leaves the eldership their private notes used to be un-deletable through
+the UI (rules require the author), so a departed elder's notes lingered. Implemented the
+D1 decision (**purge, with a chance to export first**):
+
+- **`purgeElderShepherdNotes`** (onCall, admin-only + verified email): resolves the
+  departing elder's uid(s) from their roster email(s) and deletes `privateNotes/{uid}`
+  across every `shepherdPeople` doc via a collectionGroup sweep. Shared **care-thread
+  entries are kept** (pastoral history). Writes a `purge_elder_notes` audit row.
+- **RosterManager** detects removed elders **by email** (not key/surname — so renaming an
+  elder never looks like a removal and never triggers a purge) and shows a **warning +
+  Cancel modal before** the removal commits ("…permanently deletes their private notes…
+  make sure they've exported first. Remove & delete notes / Cancel").
+- **`exportMyShepherdNotes`** (onCall, elder-only) + a **"⬇ Export my notes"** header
+  button: a departing elder downloads all their own notes (server-side gather, no client
+  collectionGroup index) as a text file before being removed. Audited as `export_my_notes`.
+
+Both callables deployed + invoker-probed healthy (401 JSON). Build + lint clean. Closes the
+elder-roll-off retention item left open by the 2026-06-11 departed-from-PCO fix (SEC-3).
+
 ## 2026-06-11 — Shepherd Hub security + privacy hardening (audit Phases 0–1)
 
 Executed Phases 0–1 of `docs/SHEPHERD-HUB-AUDIT-2026-06-11.md` (Fable 5 findings).
