@@ -4,6 +4,19 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-11 — Hide non-domain test account (jcvaught@gmail.com) everywhere
+
+`excludeTestAccounts` only matched the `@churchopshub.com` E2E domain, so John's
+secondary "Member A Test" account (`jcvaught@gmail.com`, jobs-only, in the FXCC
+church) slipped into member-facing pickers and the billable seat count. Added a
+`TEST_EMAILS` allowlist to `src/utils/testAccounts.js` and OR'd it into
+`isTestAccount`. Since the filter runs once at the store level (`useFirestore.js:156`),
+the account now drops out of every picker and the seat count at once. Retired from
+the E2E suite 2026-05-26, so nothing depends on its visibility. Add future stray
+non-domain test emails to the set.
+
+---
+
 ## 2026-06-11 — Maintenance Hub: assignee picker respects hub access
 
 The Maintenance ticket assignee picker (and the "All assignees" filter dropdown)

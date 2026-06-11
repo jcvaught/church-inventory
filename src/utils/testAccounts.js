@@ -17,9 +17,18 @@
 
 const TEST_EMAIL_DOMAIN = '@churchopshub.com';
 
+// Test accounts that don't use the @churchopshub.com domain and so can't be
+// caught by the domain rule. jcvaught@gmail.com is John's secondary "Member A
+// Test" account in the FXCC church (his real login is jvaught@fxcc.org); it was
+// retired from the E2E suite 2026-05-26 and should not appear in member-facing
+// lists, pickers, or the billable seat count. Add future stray test emails here.
+const TEST_EMAILS = new Set([
+  'jcvaught@gmail.com',
+]);
+
 export function isTestAccount(user) {
   const email = (user?.email || '').toLowerCase();
-  return email.endsWith(TEST_EMAIL_DOMAIN);
+  return email.endsWith(TEST_EMAIL_DOMAIN) || TEST_EMAILS.has(email);
 }
 
 export function excludeTestAccounts(users) {
