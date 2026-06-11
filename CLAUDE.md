@@ -13,6 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/PLATFORM-FOUNDATIONS-2026-06-06.md` — **architecture contracts** the premier features plug into (Work model · People model · Notification/delivery layer · Attention engine · Scheduled-occurrences · Search). The consumer matrix + build-order that keep incremental delivery from re-fragmenting. Read before building any premier feature.
 - `docs/LOCAL-TESTING-AND-REVERT-2026-06-06.md` — **how to build/test/revert safely:** Firebase emulator setup, migration-against-prod-data-copy protocol, optional staging project, backups, feature-flag dark-launch, per-layer revert runbook, pre-prod gate checklist.
 - `docs/SHEPHERD-HUB-PLAN.md` — **Shepherd Hub** (FXCC-only elders' hub) spec + phase status. P1–P4 SHIPPED (live); only Level-2 note encryption remains. The doc to resume from.
+- `docs/SHEPHERD-HUB-AUDIT-2026-06-11.md` — **Shepherd Hub audit tracker** (Fable 5 findings): all issues by severity/status, a 6-phase remediation plan, and the open product/policy **decisions** (D1–D6) that gate several fixes. SEC-3 (departed-from-PCO notes) already ✅; **SEC-1 is a live Critical** auth hole. Start here for Shepherd hardening work.
 - `docs/SHEPHERD-HUB-PRIVACY.md` — plain-language privacy/confidentiality promise shown to elders in-app (🔒 Privacy link → `PrivacyModal`). Keep the two in sync.
 
 ## Commands
