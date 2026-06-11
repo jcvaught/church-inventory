@@ -3513,21 +3513,32 @@ exports.setElderAssignment = onCall(
     const ordered = (roster.elders || []).filter(e => uniqueKeys.includes(e.key));
     const value = ordered.map(e => e.surname).join('/');
 
+    // ROB-2: use the sync-resolved Elder Assigned field id (config/shepherdSync)
+    // so a PCO field recreate doesn't strand the write-back on a dead id; falls
+    // back to setPcoElderAssignment's constant if fieldDefs isn't stored yet.
+    const syncSnap = await db.doc(`churches/${SHEPHERD_CHURCH_ID}/config/shepherdSync`).get();
+    const fieldId = syncSnap.exists ? syncSnap.get('fieldDefs.elderAssigned.id') : undefined;
+
     // Write to PCO (find/create FieldDatum) + read-back verify.
-    const { value: written } = await setPcoElderAssignment(PCO_APP_ID.value(), PCO_SECRET.value(), personId, value);
+    const { value: written } = await setPcoElderAssignment(PCO_APP_ID.value(), PCO_SECRET.value(), personId, value, fieldId);
 
     // Recompute the derived index + update the cache doc.
     const norm = buildNormalizer(roster).normalize(written);
     const ref = db.doc(`churches/${SHEPHERD_CHURCH_ID}/shepherdPeople/${personId}`);
     const prevSnap = await ref.get();
     const prev = prevSnap.exists ? prevSnap.data() : {};
-    await ref.update({
-      'pastoral.elderAssigned': written,
+    // ROB-1: set+merge (not update) so a missing cache doc doesn't throw
+    // NOT_FOUND and leave PCO/cache divergent until the nightly sync. `pastoral`
+    // is written as a nested map (NOT a dotted key) because merge treats a
+    // dotted field name as a literal field — the nested map deep-merges, so the
+    // other pastoral.* fields are preserved.
+    await ref.set({
+      pastoral: { elderAssigned: written },
       elderKeys: norm.elderKeys,
       orphaned: norm.orphaned,
       hasAssignment: norm.hasAssignment,
       updatedAt: FieldValue.serverTimestamp(),
-    });
+    }, { merge: true });
 
     // Audit.
     await db.collection(`churches/${SHEPHERD_CHURCH_ID}/shepherdAudit`).add({

@@ -447,6 +447,7 @@ function RosterManager({ roster, onClose, onSaved }) {
   }
 
   function validate(r) {
+    if (!r.elders.length) return 'Add at least one elder. (Saving an empty roster would restore the built-in defaults on the next sync.)';
     if (r.elders.some(e => !e.name || !e.surname)) return 'Every elder needs a name and surname.';
     if (r.elders.some(e => !e.key)) return 'Surname must contain letters (used as the elder key).';
     const keys = r.elders.map(e => e.key);

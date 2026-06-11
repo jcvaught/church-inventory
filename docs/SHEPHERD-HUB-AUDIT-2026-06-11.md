@@ -32,12 +32,12 @@ the Shepherd blocks in `firestore.rules`, `docs/SHEPHERD-HUB-PLAN.md`,
 
 | ID | Sev | Status | Finding | Location |
 |----|-----|--------|---------|----------|
-| ROB-1 | 🟡 Medium | ⬜ | `setElderAssignment` writes PCO **then** does `ref.update(...)` on the cache doc — throws `NOT_FOUND` if the doc is missing, leaving PCO/cache divergent until the 2am sync. Use `set(..., {merge:true})` and write the audit row regardless. | `functions/index.js` `setElderAssignment` |
-| ROB-2 | 🟡 Medium | ⬜ | Write-back field id is hardcoded `ELDER_ASSIGNED_FIELD_ID = '261343'` while the sync resolves the field by name and already stores `fieldDefs`. If PCO recreates the field, write-back PATCHes a dead id. Resolve from stored `fieldDefs`. | `functions/lib/shepherd.js:329` |
-| ROB-3 | 🟢 Low | ⬜ | Concurrent sync race: nightly run + manual "Save & re-sync" can interleave; a later-generation run's delete pass could reap docs an older run just wrote. >50% valve caps blast radius; a `config/shepherdSync` mutex (running flag + TTL) would close it. | `functions/lib/shepherd.js` |
-| ROB-4 | 🟢 Low | ⬜ | `resolveFieldDefs` reads only the first page (`per_page=100`, no `links.next`). If FXCC ever exceeds 100 field definitions, "Elder Assigned" could fall off page 1 and the sync aborts. Follow pagination. | `functions/lib/shepherd.js` |
-| ROB-5 | 🟢 Low | ⬜ 🔶(minor) | Substring normalizer (`s.includes(pat)`) can mis-bind surnames that contain another elder's pattern (e.g. `'reed'` ⊂ `'Breeden'`). Fine for known FXCC data; surface collisions / add a guard. | `functions/lib/roster.js` |
-| ROB-6 | 🟢 Low | ⬜ | Emptying the roster in RosterManager silently resurrects the baked-in `DEFAULT_ROSTER` (8 hardcoded elders) on next sync. Block saving an empty roster. | `ShepherdHubPage.jsx` RosterManager; `roster.js` |
+| ROB-1 | 🟡 Medium | ✅ 2026-06-11 | `setElderAssignment` writes PCO **then** does `ref.update(...)` on the cache doc — throws `NOT_FOUND` if the doc is missing, leaving PCO/cache divergent until the 2am sync. Use `set(..., {merge:true})` and write the audit row regardless. | `functions/index.js` `setElderAssignment` |
+| ROB-2 | 🟡 Medium | ✅ 2026-06-11 | Write-back field id is hardcoded `ELDER_ASSIGNED_FIELD_ID = '261343'` while the sync resolves the field by name and already stores `fieldDefs`. If PCO recreates the field, write-back PATCHes a dead id. Resolve from stored `fieldDefs`. | `functions/lib/shepherd.js:329` |
+| ROB-3 | 🟢 Low | ✅ 2026-06-11 | Concurrent sync race: nightly run + manual "Save & re-sync" can interleave; a later-generation run's delete pass could reap docs an older run just wrote. >50% valve caps blast radius; a `config/shepherdSync` mutex (running flag + TTL) would close it. | `functions/lib/shepherd.js` |
+| ROB-4 | 🟢 Low | ✅ 2026-06-11 | `resolveFieldDefs` reads only the first page (`per_page=100`, no `links.next`). If FXCC ever exceeds 100 field definitions, "Elder Assigned" could fall off page 1 and the sync aborts. Follow pagination. | `functions/lib/shepherd.js` |
+| ROB-5 | 🟢 Low | ✅ 2026-06-11 | Substring normalizer (`s.includes(pat)`) can mis-bind surnames that contain another elder's pattern (e.g. `'reed'` ⊂ `'Breeden'`). Fine for known FXCC data; surface collisions / add a guard. | `functions/lib/roster.js` |
+| ROB-6 | 🟢 Low | ✅ 2026-06-11 | Emptying the roster in RosterManager silently resurrects the baked-in `DEFAULT_ROSTER` (8 hardcoded elders) on next sync. Block saving an empty roster. | `ShepherdHubPage.jsx` RosterManager; `roster.js` |
 
 ### C. UX & Pastoral Workflow
 
@@ -139,9 +139,9 @@ the shelved-encryption line per D5, and the honest-logging wording per D2) ·
 SEC-5 (✅ keep export, reword clause + `export_csv` audit row) ·
 SEC-6 (restrict `shepherdAudit` reads to admin — *pending D3*).
 
-**Phase 2 — Robustness.**
+**Phase 2 — Robustness — ✅ DONE 2026-06-11 (deployed).**
 ROB-1 (`set` merge) · ROB-2 (field id from `fieldDefs`) · ROB-6 (block empty roster) ·
-ROB-4 (paginate field defs) · ROB-3 (sync mutex) · ROB-5 (surface normalizer collisions).
+ROB-4 (paginate field defs) · ROB-3 (sync mutex, 15-min TTL) · ROB-5 (surface normalizer collisions in the sync summary).
 
 **Phase 3 — UX & pastoral.**
 UX-1 (flock-first load + render cap — do first; also unblocks scale) ·

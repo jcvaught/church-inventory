@@ -70,15 +70,22 @@ const PASTORAL_MULTI = {   // checkboxes → multiple FieldDatum rows → stored
 };
 
 async function resolveFieldDefs(get) {
-  const defs = await get(`${PCO_BASE}/field_definitions?per_page=100`);
   const nameToId = {};
+  // ROB-4: page through ALL field definitions, not just the first 100 — otherwise
+  // "Elder Assigned" could fall off page 1 (if FXCC ever exceeds 100 defs) and the
+  // sync would abort on the missing-field guard below.
+  let url = `${PCO_BASE}/field_definitions?per_page=100`;
+  while (url) {
+    const defs = await get(url);
+    for (const d of defs.data || []) {
+      const name = (d.attributes?.name || '').trim();
+      if (name) nameToId[name] = d.id;
+    }
+    url = defs.links?.next || null;
+  }
   const idToKey = {};      // pco field def id -> our key
   const multiKeys = new Set(); // our keys that accumulate into arrays
   const fieldDefs = {};    // ourKey -> { id, name } (stored in the status doc)
-  for (const d of defs.data || []) {
-    const name = (d.attributes?.name || '').trim();
-    if (name) nameToId[name] = d.id;
-  }
   for (const [pcoName, ourKey] of Object.entries(PASTORAL_SINGLE)) {
     const id = nameToId[pcoName];
     if (id) { idToKey[id] = ourKey; fieldDefs[ourKey] = { id, name: pcoName }; }
@@ -227,6 +234,22 @@ async function syncShepherdPeople(db, FieldValue, opts) {
   // Count the existing cache up front for the delete-missing safety valve.
   const priorCount = (await peopleCol.count().get()).data().count;
 
+  // ROB-3: lightweight mutex so the nightly run and a manual "Save & re-sync"
+  // can't overlap — otherwise one run's departure pass could reap docs the other
+  // just wrote. Acquired transactionally; released by setting syncRunning:false
+  // in the final summary write. A lock older than the TTL is force-broken, so a
+  // crashed run can never permanently block syncing (worst case: a ~15-min wait).
+  const syncDocRef = db.doc(`churches/${churchId}/config/shepherdSync`);
+  const LOCK_TTL_MS = 15 * 60 * 1000;
+  await db.runTransaction(async (tx) => {
+    const d = (await tx.get(syncDocRef)).data() || {};
+    const lockedAt = d.syncLockAt?.toMillis?.() || 0;
+    if (d.syncRunning === true && (syncGeneration - lockedAt) < LOCK_TTL_MS) {
+      throw new Error(`shepherd-sync: another sync is already running (source=${d.syncLockSource || '?'})`);
+    }
+    tx.set(syncDocRef, { syncRunning: true, syncLockAt: FieldValue.serverTimestamp(), syncLockSource: source }, { merge: true });
+  });
+
   const writer = db.bulkWriter();
   writer.onWriteError((err) => {
     // Retry transient errors a few times; otherwise surface.
@@ -237,6 +260,7 @@ async function syncShepherdPeople(db, FieldValue, opts) {
 
   const perElderLoad = Object.fromEntries(normalizer.activeKeys.map(k => [k, 0]));
   const unmapped = new Set();
+  const collisions = new Set(); // ROB-5: values that could map to 2+ elders
   let totalFetched = 0, assigned = 0, orphaned = 0;
 
   let url = `${PCO_BASE}/people?per_page=100&include=field_data,emails,phone_numbers,addresses`;
@@ -251,6 +275,7 @@ async function syncShepherdPeople(db, FieldValue, opts) {
         if (norm.orphaned) orphaned++;
         norm.elderKeys.forEach(k => { perElderLoad[k]++; });
         if (norm.unknown) unmapped.add((doc.pastoral.elderAssigned || '').toString().trim());
+        if (norm.ambiguous) collisions.add((doc.pastoral.elderAssigned || '').toString().trim());
       }
       // Full overwrite (not merge): each run writes the complete intended
       // document, and these docs are CF-only-written, so a plain set keeps the
@@ -312,7 +337,9 @@ async function syncShepherdPeople(db, FieldValue, opts) {
     orphaned,
     perElderLoad,
     unmappedValues: [...unmapped].slice(0, 50),
+    collisions: [...collisions].slice(0, 50), // ROB-5: ambiguous values for a human to disambiguate
     fieldDefs,
+    syncRunning: false, // ROB-3: releases the mutex acquired above
   };
 
   await db.doc(`churches/${churchId}/config/shepherdSync`).set(summary, { merge: true });
@@ -326,11 +353,15 @@ async function syncShepherdPeople(db, FieldValue, opts) {
 // Writes a CLEAN canonical value (never appends to the dirty free-text), then
 // reads it back to confirm the write took. `value` must be non-empty (the
 // editor requires ≥1 elder); clearing an assignment isn't supported here.
+// ROB-2: `fieldId` should come from the sync-resolved fieldDefs (stored in
+// config/shepherdSync) so a PCO field recreate doesn't strand the write-back on
+// a dead id; the constant is only a last-resort fallback.
 const ELDER_ASSIGNED_FIELD_ID = '261343';
 
-async function setPcoElderAssignment(appId, secret, personId, value) {
+async function setPcoElderAssignment(appId, secret, personId, value, fieldId) {
   if (!personId) throw new Error('setPcoElderAssignment: personId required');
   if (!value) throw new Error('setPcoElderAssignment: value required (≥1 elder)');
+  const fid = fieldId || ELDER_ASSIGNED_FIELD_ID;
   const auth = 'Basic ' + Buffer.from(`${appId}:${secret}`).toString('base64');
   const H = { Authorization: auth, 'X-PCO-API-Version': PCO_API_VERSION, 'Content-Type': 'application/json' };
 
@@ -338,7 +369,7 @@ async function setPcoElderAssignment(appId, secret, personId, value) {
   const getRes = await fetch(`${PCO_BASE}/people/${personId}?include=field_data`, { headers: H });
   if (!getRes.ok) throw new Error(`PCO get person ${personId}: ${getRes.status} ${(await getRes.text().catch(() => '')).slice(0, 200)}`);
   const person = await getRes.json();
-  const fd = (person.included || []).find(x => x.type === 'FieldDatum' && x.relationships?.field_definition?.data?.id === ELDER_ASSIGNED_FIELD_ID);
+  const fd = (person.included || []).find(x => x.type === 'FieldDatum' && x.relationships?.field_definition?.data?.id === fid);
 
   let writeRes;
   if (fd) {
@@ -349,7 +380,7 @@ async function setPcoElderAssignment(appId, secret, personId, value) {
   } else {
     writeRes = await fetch(`${PCO_BASE}/people/${personId}/field_data`, {
       method: 'POST', headers: H,
-      body: JSON.stringify({ data: { type: 'FieldDatum', attributes: { value }, relationships: { field_definition: { data: { type: 'FieldDefinition', id: ELDER_ASSIGNED_FIELD_ID } } } } }),
+      body: JSON.stringify({ data: { type: 'FieldDatum', attributes: { value }, relationships: { field_definition: { data: { type: 'FieldDefinition', id: fid } } } } }),
     });
   }
   if (!writeRes.ok) throw new Error(`PCO write ${personId}: ${writeRes.status} ${(await writeRes.text().catch(() => '')).slice(0, 200)}`);

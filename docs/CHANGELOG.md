@@ -4,6 +4,32 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-11 — Shepherd Hub robustness (audit Phase 2, ROB-1…6)
+
+- **ROB-1:** `setElderAssignment` now writes the cache doc with `set(..., {merge:true})`
+  instead of `update()` — a missing cache doc no longer throws `NOT_FOUND` and leaves
+  PCO/cache divergent until the nightly sync. `pastoral` is written as a nested map (not
+  a dotted key) so merge deep-merges and the other `pastoral.*` fields survive.
+- **ROB-2:** the Elder Assigned write-back resolves the PCO field id from the
+  sync-stored `config/shepherdSync.fieldDefs.elderAssigned.id` (constant `'261343'` is
+  now only a fallback), so a PCO field recreate can't strand the write-back on a dead id.
+- **ROB-3:** `syncShepherdPeople` takes a lightweight mutex on `config/shepherdSync`
+  (`syncRunning`/`syncLockAt`/`syncLockSource`, released in the summary write) so the
+  nightly run and a manual "Save & re-sync" can't overlap. A lock older than a 15-min TTL
+  is force-broken, so a crashed run can never permanently block syncing.
+- **ROB-4:** `resolveFieldDefs` now pages through ALL PCO field definitions (follows
+  `links.next`) — "Elder Assigned" can't fall off page 1 and trip the missing-field abort.
+- **ROB-5:** the dirty-value normalizer keeps first-match-wins (intentional typo
+  leniency), but now flags values that could map to 2+ different elders (`ambiguous`),
+  collected into `config/shepherdSync.collisions` for a human to disambiguate.
+- **ROB-6:** RosterManager blocks saving an empty roster (which would otherwise restore
+  the baked-in `DEFAULT_ROSTER` on the next sync).
+
+`syncShepherdPeople`/`refreshShepherdPeople`/`setElderAssignment` deployed; onCall
+invoker bindings re-probed healthy. Normalizer mapping + ambiguity unit-checked. Build +
+lint clean. New `config/shepherdSync` fields: `syncRunning`, `syncLockAt`,
+`syncLockSource`, `collisions`.
+
 ## 2026-06-11 — Shepherd Hub: elder roll-off note retention (audit Phase 6 / D1)
 
 When an elder leaves the eldership their private notes used to be un-deletable through

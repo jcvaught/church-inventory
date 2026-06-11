@@ -84,18 +84,30 @@ function buildNormalizer(roster) {
   }
   const activeKeys = new Set((roster.elders || []).filter(e => e.active !== false).map(e => e.key));
 
-  function mapSegment(seg) {
+  // All patterns a segment substring-matches (used for both mapping and ROB-5
+  // ambiguity detection).
+  function segMatches(seg) {
     const s = String(seg).toLowerCase().replace(/[^a-z]/g, '');
-    for (const [pat, key] of patterns) if (s.includes(pat)) return key;
-    return 'UNKNOWN';
+    return patterns.filter(([pat]) => s.includes(pat));
+  }
+
+  function mapSegment(seg) {
+    const m = segMatches(seg);
+    return m.length ? m[0][1] : 'UNKNOWN'; // first match wins (unchanged behavior)
   }
 
   function normalize(rawValue) {
     const raw = (rawValue ?? '').toString().trim();
-    if (raw === '') return { elderKeys: [], orphaned: false, hasAssignment: false, unknown: false };
-    const segKeys = raw.split('/').map(mapSegment);
+    if (raw === '') return { elderKeys: [], orphaned: false, hasAssignment: false, unknown: false, ambiguous: false };
+    const segs = raw.split('/');
+    const segKeys = segs.map(mapSegment);
+    // ROB-5: substring matching is intentionally lenient (catches PCO typos), but
+    // it can mis-bind a surname that contains another elder's pattern. We keep
+    // first-match-wins, but flag when a segment could have gone to 2+ DIFFERENT
+    // elders so the sync can surface it for a human to disambiguate.
+    const ambiguous = segs.some(seg => new Set(segMatches(seg).map(([, k]) => k)).size > 1);
     const elderKeys = [...new Set(segKeys.filter(k => activeKeys.has(k)))];
-    return { elderKeys, orphaned: elderKeys.length === 0, hasAssignment: true, unknown: segKeys.includes('UNKNOWN') };
+    return { elderKeys, orphaned: elderKeys.length === 0, hasAssignment: true, unknown: segKeys.includes('UNKNOWN'), ambiguous };
   }
 
   return { normalize, mapSegment, activeKeys: [...activeKeys] };
