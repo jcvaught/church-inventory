@@ -3,8 +3,10 @@
 > This is the plain-language promise shown to elders in the app via the
 > **🔒 Privacy** link in the Shepherd Hub header. The in-app copy lives in
 > `PrivacyModal` in `src/pages/hubs/ShepherdHubPage.jsx` — **keep the two in sync.**
-> Reflects the Level-1 privacy model (rules + audit, not yet encrypted); update
-> the "honest limit" section when Level-2 client-side encryption ships.
+> Reflects the Level-1 privacy model (access rules + app-level audit). Level-2
+> client-side encryption was evaluated and **shelved 2026-06-11** (accepted risk;
+> see `SHEPHERD-HUB-AUDIT-2026-06-11.md` D5) — do not re-add an "encryption is
+> planned" promise unless that decision is reversed.
 
 This hub holds confidential pastoral information. Please read how it's protected — and what's expected of you.
 
@@ -20,13 +22,13 @@ People and contact details sync **read-only** from Planning Center (the church's
 - **The directory, contact info, and medical notes** — elders and John (administrator) only. No other staff or members.
 
 ## The honest limit
-Notes are protected by access rules and every view and edit is logged. But they are **not yet end-to-end encrypted** — a system administrator with direct database access could technically read them. Encryption that seals notes even from administrators is planned. Until then: treat this as private *from the church* and well-protected, but not cryptographically sealed.
+Your private note is protected by access rules — only you can open it through the app. It is **not encrypted in the database**, so a system administrator with direct database access (the person who runs the app) could technically read it. Treat your notes as private *from the church* and well-protected by the app, but not cryptographically sealed.
 
-## Everything is logged
-Opening a person's record or editing a note records who did it and when. This is for accountability, not surveillance — it protects everyone.
+## What the app records
+When you open a person's record or edit a note *in the app*, it records who did it and when — for accountability, not surveillance. Only the administrator can read that log.
 
 ## Your responsibility
-This is confidential pastoral data, including medical and other sensitive details. Keep it within the eldership. Don't export, screenshot, or forward it. Sign out on shared devices.
+This is confidential pastoral data, including medical and other sensitive details. Keep it within the eldership. You may export a **contact list** (names and contact info) for your own flock — but never export, screenshot, or forward **notes, medical details, or the full directory**. Sign out on shared devices.
 
 ## Access
 You're given access when you sign in with your church Google account. When you roll off the eldership, access is removed.

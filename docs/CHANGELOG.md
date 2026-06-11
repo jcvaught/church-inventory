@@ -4,6 +4,35 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-11 — Shepherd Hub security + privacy hardening (audit Phases 0–1)
+
+Executed Phases 0–1 of `docs/SHEPHERD-HUB-AUDIT-2026-06-11.md` (Fable 5 findings).
+
+- **SEC-1 (Critical, live):** `claimElderRole` granted `elder: true` on email match alone
+  — no `emailVerified` check — so anyone could register an unclaimed rostered elder
+  email via email/password (Firebase doesn't prove ownership at signup) and read the
+  whole congregation cache incl. medical notes. Now requires `userRecord.emailVerified
+  === true` (Google sign-ins are always verified; email/password elders verify once).
+  Returns `{unverified:true}` for a rostered-but-unverified caller. **All 8 rostered
+  elders had no Auth account yet — the entire roster was squattable; now closed.**
+- **SEC-2 (High):** added `email_verified == true` to `isShepherdAdmin()` (firestore.rules)
+  and an `emailVerified` requirement to the `OWNER_EMAILS` paths in `refreshShepherdPeople`
+  + `setElderAssignment`.
+- **SEC-6:** `shepherdAudit` reads restricted to `isShepherdAdmin()` only (was elder-readable,
+  which leaked which people each elder kept private notes on). Writes unchanged.
+- **SEC-5:** Export CSV is now audited (`logShepherdAudit('export_csv', …)`); privacy promise
+  reworded to allow contact-list exports but forbid notes/medical/full-directory exports.
+- **SEC-4:** privacy modal + `SHEPHERD-HUB-PRIVACY.md` reworded — "everything is logged" →
+  honest "what the app records / only the admin can read that log" (D2=B); audit stays
+  best-effort client logging.
+- **SEC-7:** Level-2 note encryption shelved (D5, accepted risk); removed the "encryption is
+  planned" line from the modal + doc so the promise stays honest.
+
+Decisions D1 (elder roll-off purge + warning modal + owner "Export my notes"), D2 (B), D3
+(admin-only audit reads), D4, D5, D6 (minimal — no Google-provider requirement) recorded in
+the audit doc. Rules + `claimElderRole`/`refreshShepherdPeople`/`setElderAssignment` deployed;
+all three `onCall` invoker bindings re-probed healthy (401 JSON). Build + lint clean.
+
 ## 2026-06-11 — Shepherd Hub: surface departed-from-PCO people to their note-owners (no silent note loss)
 
 Previously the nightly `syncShepherdPeople` hard-deleted any `shepherdPeople` doc no

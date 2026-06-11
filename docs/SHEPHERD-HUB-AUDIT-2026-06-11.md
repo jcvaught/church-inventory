@@ -20,13 +20,13 @@ the Shepherd blocks in `firestore.rules`, `docs/SHEPHERD-HUB-PLAN.md`,
 
 | ID | Sev | Status | Finding | Location |
 |----|-----|--------|---------|----------|
-| SEC-1 | 🔴 Critical | ⬜ 🔶 | `claimElderRole` grants `elder: true` on email match alone — no `emailVerified` check and no FXCC-membership check. Anyone can register an unclaimed rostered elder email via email/password (Firebase doesn't verify ownership at signup) and read the whole congregation cache incl. medical notes + care threads. **Verified live.** | `functions/index.js` `claimElderRole` |
-| SEC-2 | 🟠 High | ⬜ | `isShepherdAdmin()` (and the `OWNER_EMAILS` callables `refreshShepherdPeople`/`setElderAssignment`) trust `token.email` with no `email_verified == true`. `email_verified` appears nowhere in `firestore.rules`. Currently mitigated only because John's accounts already exist. | `firestore.rules:26`; `functions/index.js` |
+| SEC-1 | 🔴 Critical | ✅ 2026-06-11 | `claimElderRole` grants `elder: true` on email match alone — no `emailVerified` check and no FXCC-membership check. Anyone can register an unclaimed rostered elder email via email/password (Firebase doesn't verify ownership at signup) and read the whole congregation cache incl. medical notes + care threads. **Verified live.** | `functions/index.js` `claimElderRole` |
+| SEC-2 | 🟠 High | ✅ 2026-06-11 | `isShepherdAdmin()` (and the `OWNER_EMAILS` callables `refreshShepherdPeople`/`setElderAssignment`) trust `token.email` with no `email_verified == true`. `email_verified` appears nowhere in `firestore.rules`. Currently mitigated only because John's accounts already exist. | `firestore.rules:26`; `functions/index.js` |
 | SEC-3 | 🟠 High | ✅ 2026-06-11 | Departed-from-PCO people were hard-deleted, orphaning `privateNotes/`+`careThread/` invisibly forever (no cascade). Fixed: sync now archives departed people with notes (`removedFromPco`) + surfaces them to the owning elder to keep/delete; deletes only when no pastoral data. | `functions/lib/shepherd.js`, `ShepherdHubPage.jsx` |
-| SEC-4 | 🟡 Medium | ⬜ 🔶 | Privacy modal + doc promise "every view and edit is logged," but the audit is **client-side, best-effort, swallow-on-fail** and bypassable via raw SDK reads. Promise overstates enforcement. | `ShepherdHubPage.jsx` `logShepherdAudit`; `SHEPHERD-HUB-PRIVACY.md` |
-| SEC-5 | 🟡 Medium | ⬜ 🔶 | Privacy doc says "Don't export," but the hub has an **Export CSV** button; exports are the one significant action that is **not audited**. (Export correctly omits medical/notes.) | `ShepherdHubPage.jsx` export; `csv.js` |
-| SEC-6 | 🟡 Medium | ⬜ 🔶 | `shepherdAudit` is readable by **every** elder, and `edit_private_note` rows carry `personId`+`personName`+actor — leaking *which people each elder keeps private notes on*, metadata about the very thing promised "only you." | `firestore.rules:439` |
-| SEC-7 | — | ⛔ Deferred (D5) | **Level-2 note encryption** — **shelved 2026-06-11** (accepted risk: only DB-level reader is John). Action required: drop the "encryption is planned" line from the privacy modal + doc so the promise stays honest. | privacy modal/doc |
+| SEC-4 | 🟡 Medium | ✅ 2026-06-11 | Privacy modal + doc promise "every view and edit is logged," but the audit is **client-side, best-effort, swallow-on-fail** and bypassable via raw SDK reads. Promise overstates enforcement. | `ShepherdHubPage.jsx` `logShepherdAudit`; `SHEPHERD-HUB-PRIVACY.md` |
+| SEC-5 | 🟡 Medium | ✅ 2026-06-11 | Privacy doc says "Don't export," but the hub has an **Export CSV** button; exports are the one significant action that is **not audited**. (Export correctly omits medical/notes.) | `ShepherdHubPage.jsx` export; `csv.js` |
+| SEC-6 | 🟡 Medium | ✅ 2026-06-11 | `shepherdAudit` is readable by **every** elder, and `edit_private_note` rows carry `personId`+`personName`+actor — leaking *which people each elder keeps private notes on*, metadata about the very thing promised "only you." | `firestore.rules:439` |
+| SEC-7 | — | ⛔ Deferred (D5) | **Level-2 note encryption** — **shelved 2026-06-11** (accepted risk: only DB-level reader is John). The "encryption is planned" line was removed from the privacy modal + doc 2026-06-11 ✅. | privacy modal/doc |
 
 ### B. Correctness & Robustness
 
@@ -126,14 +126,14 @@ The minimum (require `emailVerified`) closes the live hole. How much further?
 
 ## 3. Remediation plan (phased)
 
-**Phase 0 — Security hotfix (READY — D6 = minimal).**
+**Phase 0 — Security hotfix — ✅ DONE 2026-06-11 (deployed).**
 SEC-1 (`emailVerified === true` guard in `claimElderRole`) ·
 SEC-2 (`email_verified` in `isShepherdAdmin()` + `OWNER_EMAILS` callables) ·
 pre-register/claim the unregistered rostered elder accounts to remove the squat window.
 Redeploy functions + rules; re-probe the `onCall` invoker bindings. *No Google-provider
 or `churchId` gate (kept minimal per D6).*
 
-**Phase 1 — Promise ↔ reality (D4 ✅, D5 ✅; D2/D3 pending).**
+**Phase 1 — Promise ↔ reality — ✅ DONE 2026-06-11 (D2=B, D3=admin-only, D4, D5 all applied + deployed).**
 SEC-4 (reword privacy modal **and** `SHEPHERD-HUB-PRIVACY.md` in lockstep — incl. dropping
 the shelved-encryption line per D5, and the honest-logging wording per D2) ·
 SEC-5 (✅ keep export, reword clause + `export_csv` audit row) ·

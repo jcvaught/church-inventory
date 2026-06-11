@@ -274,12 +274,16 @@ export function ShepherdHubPage({ userProfile, isElder }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
         <div style={{ fontSize: 12, color: B.textLight, fontFamily: f1, fontWeight: 600 }}>{filtered.length} {filtered.length === 1 ? 'person' : 'people'}</div>
         <button
-          onClick={() => exportShepherdPeopleCSV(filtered, {
-            elderName,
-            label: view === 'flock' ? `flock-${activeElder?.name || 'elder'}`
-              : view === 'worklist' ? 'needs-reassignment'
-              : view === 'departed' ? 'no-longer-in-pco' : 'congregation',
-          })}
+          onClick={() => {
+            exportShepherdPeopleCSV(filtered, {
+              elderName,
+              label: view === 'flock' ? `flock-${activeElder?.name || 'elder'}`
+                : view === 'worklist' ? 'needs-reassignment'
+                : view === 'departed' ? 'no-longer-in-pco' : 'congregation',
+            });
+            // SEC-5: exports are now audited (contact-list only — never notes/medical).
+            logShepherdAudit('export_csv', null, userProfile, { count: filtered.length, view });
+          }}
           disabled={!filtered.length}
           style={{ ...btnS, padding: '7px 14px', fontSize: 13, opacity: filtered.length ? 1 : 0.5 }}
         >⬇ Export CSV</button>
@@ -347,13 +351,13 @@ function PrivacyModal({ onClose }) {
       </ul>
 
       <div style={h}>The honest limit</div>
-      <p style={p}>Notes are protected by access rules and every view and edit is logged. But they are <strong>not yet end-to-end encrypted</strong> — a system administrator with direct database access could technically read them. Encryption that seals notes even from administrators is planned. Until then: treat this as private <em>from the church</em> and well-protected, but not cryptographically sealed.</p>
+      <p style={p}>Your private note is protected by access rules — only you can open it through the app. It is <strong>not encrypted in the database</strong>, so a system administrator with direct database access (the person who runs the app) could technically read it. Treat your notes as private <em>from the church</em> and well-protected by the app, but not cryptographically sealed.</p>
 
-      <div style={h}>Everything is logged</div>
-      <p style={p}>Opening a person's record or editing a note records who did it and when. This is for accountability, not surveillance — it protects everyone.</p>
+      <div style={h}>What the app records</div>
+      <p style={p}>When you open a person's record or edit a note <em>in the app</em>, it records who did it and when — for accountability, not surveillance. Only the administrator can read that log.</p>
 
       <div style={h}>Your responsibility</div>
-      <p style={p}>This is confidential pastoral data, including medical and other sensitive details. Keep it within the eldership. Don't export, screenshot, or forward it. Sign out on shared devices.</p>
+      <p style={p}>This is confidential pastoral data, including medical and other sensitive details. Keep it within the eldership. You may export a <strong>contact list</strong> (names and contact info) for your own flock — but never export, screenshot, or forward <strong>notes, medical details, or the full directory</strong>. Sign out on shared devices.</p>
 
       <div style={h}>Access</div>
       <p style={p}>You're given access when you sign in with your church Google account. When you roll off the eldership, access is removed.</p>

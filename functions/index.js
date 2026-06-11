@@ -3403,7 +3403,8 @@ exports.refreshShepherdPeople = onCall(
     const db = getFirestore();
     const userRecord = await getAuth().getUser(req.auth.uid);
     // John-only (OWNER_EMAILS) — drives the roster manager's "Save & re-sync".
-    if (!OWNER_EMAILS.includes(userRecord.email)) {
+    // SEC-2: require a verified email (defense-in-depth alongside claimElderRole).
+    if (!OWNER_EMAILS.includes(userRecord.email) || userRecord.emailVerified !== true) {
       throw new HttpsError('permission-denied', 'Not authorized.');
     }
     const roster = await getShepherdRoster(db);
@@ -3432,9 +3433,22 @@ exports.claimElderRole = onCall(
     const db = getFirestore();
     const userRecord = await getAuth().getUser(req.auth.uid);
     const roster = await getShepherdRoster(db);
-    const shouldBeElder = isElderEmail(roster, userRecord.email);
+    // SEC-1 (2026-06-11): require a VERIFIED email before granting the elder
+    // claim. Firebase email/password signup accepts any address without proving
+    // ownership, so without this an attacker could register an unclaimed rostered
+    // elder email and read the whole congregation cache (incl. medical notes).
+    // emailVerified IS that proof of ownership — Firebase mails the link to the
+    // real inbox. Google sign-ins are always verified, so real elders are
+    // unaffected; an email/password elder just verifies once. (D6: minimal — no
+    // provider/churchId gate.)
+    const rostered = isElderEmail(roster, userRecord.email);
+    const shouldBeElder = rostered && userRecord.emailVerified === true;
     const isElder = userRecord.customClaims?.elder === true;
-    if (shouldBeElder === isElder) return { elder: isElder, changed: false };
+    if (shouldBeElder === isElder) {
+      // Tell a rostered-but-unverified caller why they didn't get in, so the
+      // client can prompt them to verify their email.
+      return { elder: isElder, changed: false, ...(rostered && !userRecord.emailVerified ? { unverified: true } : {}) };
+    }
     const claims = { ...(userRecord.customClaims || {}) };
     if (shouldBeElder) claims.elder = true; else delete claims.elder;
     await getAuth().setCustomUserClaims(req.auth.uid, claims);
@@ -3478,8 +3492,11 @@ exports.setElderAssignment = onCall(
     const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
     const c = callerSnap.exists ? callerSnap.data() : {};
     // Shepherd Hub admin access is John-only (OWNER_EMAILS); elders authorize via
-    // their claim. Other church admins cannot reassign.
-    if (!isElder && !OWNER_EMAILS.includes(email)) {
+    // their claim. Other church admins cannot reassign. SEC-2: the OWNER path
+    // also requires a verified email (the elder claim is already verified-gated
+    // by claimElderRole).
+    const emailVerified = req.auth.token?.email_verified === true;
+    if (!isElder && !(OWNER_EMAILS.includes(email) && emailVerified)) {
       throw new HttpsError('permission-denied', 'Not authorized.');
     }
 

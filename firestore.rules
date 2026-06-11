@@ -23,7 +23,9 @@ service cloud.firestore {
     // church admin) — pastoral data is need-to-know. Mirrors OWNER_EMAILS in
     // functions/index.js. Elders get in via isElder(); this is the only
     // non-elder who can read the hub.
-    function isShepherdAdmin() { return request.auth != null && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org']; }
+    // SEC-2 (2026-06-11): require a verified email so an unverified squat on one
+    // of these addresses can never satisfy the admin gate.
+    function isShepherdAdmin() { return request.auth != null && request.auth.token.email_verified == true && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org']; }
 
     // ── Jobs Hub access (audit H3 + M1, 2026-05-22) ──────────────────────────
     // jobsHubActive: the church's Jobs Hub subscription is active. Mirrors the
@@ -434,9 +436,12 @@ service cloud.firestore {
     }
 
     // ── Shepherd audit log — every note view/edit + reassignment. Append-only;
-    //    readable by elders + admin; each entry stamped with the actor. ────────
+    //    every elder/admin WRITES, but only the admin READS (SEC-6, 2026-06-11):
+    //    elder-readable rows leaked which people each elder kept private notes on
+    //    (personId+personName+actor), metadata about a note promised "only you".
+    //    Elders never needed to browse it — it's an accountability record. ──────
     match /churches/{churchId}/shepherdAudit/{entryId} {
-      allow read:   if isElder() || isShepherdAdmin();
+      allow read:   if isShepherdAdmin();
       allow create: if (isElder() || isShepherdAdmin()) && request.resource.data.actorUid == request.auth.uid;
       allow update, delete: if false;
     }
