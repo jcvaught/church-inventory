@@ -237,6 +237,29 @@ export function MaintenancePage({ store, userProfile }) {
   const activeItems = items.filter(i => i.status !== 'Disposed');
   const maintenanceTags = settings?.maintenanceTags || [];
 
+  // ── Filter users to those with Maintenance Hub access ──
+  // Without this the assignee picker lists every church member — including
+  // teens who only have the Jobs Hub (allowedHubs:['jobs']). Admins always
+  // qualify; allowedHubs == null means "all hubs" (legacy/full-access users).
+  const maintenanceHubUsers = useMemo(() =>
+    (users || []).filter(u => {
+      if (u.active === false) return false;
+      if (u.role === 'admin') return true;
+      const allowed = u.allowedHubs;
+      if (allowed == null) return true;
+      return allowed.includes('maintenance');
+    }),
+  [users]);
+
+  // Assignees for the filter dropdown: maintenance-hub users, plus anyone
+  // already on an existing ticket (so historical assignments stay filterable).
+  const filterableAssignees = useMemo(() => {
+    const fromTickets = (maintenanceTickets || []).flatMap(t => t.assignees || []);
+    const seen = new Set(maintenanceHubUsers.map(u => u.id));
+    const extra = fromTickets.filter(a => a.uid && !seen.has(a.uid)).map(a => ({ id: a.uid, name: a.name }));
+    return [...maintenanceHubUsers, ...extra];
+  }, [maintenanceHubUsers, maintenanceTickets]);
+
   // ── State ──
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('maint_viewMode') || 'kanban');
   const [filterSearch, setFilterSearch] = useState('');
@@ -857,7 +880,7 @@ export function MaintenancePage({ store, userProfile }) {
         </select>
         <select style={{ ...inp, width:'auto', cursor:'pointer' }} value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}>
           <option value="">All assignees</option>
-          {users.filter(u => u.active !== false).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          {filterableAssignees.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
         <button
           type="button"
@@ -996,7 +1019,7 @@ export function MaintenancePage({ store, userProfile }) {
           <TagInput tags={ticketForm.tags} onChange={tags => setTicketForm(f => ({ ...f, tags }))} suggestions={maintenanceTags}/>
         </FF>
         <FF label="Assignees">
-          <AssigneeSelect assignees={ticketForm.assignees} onChange={assignees => setTicketForm(f => ({ ...f, assignees }))} users={users} currentUserId={userId} currentUserName={userName}/>
+          <AssigneeSelect assignees={ticketForm.assignees} onChange={assignees => setTicketForm(f => ({ ...f, assignees }))} users={maintenanceHubUsers} currentUserId={userId} currentUserName={userName}/>
         </FF>
         <FF label="Linked Equipment (optional)">
           <select style={{ ...inp, cursor:'pointer' }} value={ticketForm.linkedItemDocId} onChange={e => setTicketForm(f => ({ ...f, linkedItemDocId:e.target.value }))}>
@@ -1069,7 +1092,7 @@ export function MaintenancePage({ store, userProfile }) {
               <TagInput tags={detailEdits.tags || []} onChange={tags => setDetailEdits(d => ({ ...d, tags }))} suggestions={maintenanceTags}/>
             </FF>
             <FF label="Assignees">
-              <AssigneeSelect assignees={detailEdits.assignees || []} onChange={assignees => setDetailEdits(d => ({ ...d, assignees }))} users={users} currentUserId={userId} currentUserName={userName}/>
+              <AssigneeSelect assignees={detailEdits.assignees || []} onChange={assignees => setDetailEdits(d => ({ ...d, assignees }))} users={maintenanceHubUsers} currentUserId={userId} currentUserName={userName}/>
             </FF>
             <FF label="Linked Equipment">
               <select style={{ ...inp, cursor: canOperate ? 'pointer' : 'default' }} value={detailEdits.linkedItemDocId} onChange={e => setDetailEdits(d => ({ ...d, linkedItemDocId:e.target.value }))} disabled={!canOperate}>

@@ -4,6 +4,19 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-11 — Maintenance Hub: assignee picker respects hub access
+
+The Maintenance ticket assignee picker (and the "All assignees" filter dropdown)
+listed **every** active church member, ignoring `allowedHubs`. Teens scoped to the
+Jobs Hub only (`allowedHubs: ['jobs']`) showed up as assignable maintenance workers.
+Added a `maintenanceHubUsers` memo in `MaintenancePage` mirroring the Tasks Hub
+pattern (`TasksPage.taskHubUsers`): admins always qualify, `allowedHubs == null`
+means full access, otherwise the user must include `'maintenance'`. Both
+`AssigneeSelect` call sites now receive the scoped list; the filter dropdown uses
+`filterableAssignees`, which adds back any deactivated/out-of-hub user already on an
+existing ticket so historical assignments stay filterable. The by-uid email lookup
+for already-assigned users stays church-wide (correct). Build + lint clean.
+
 ## 2026-06-10 — Shepherd Hub: First/Last name sort toggle
 
 Added a **Sort** dropdown beside the status filter in `ShepherdHubPage` (`sortBy`
