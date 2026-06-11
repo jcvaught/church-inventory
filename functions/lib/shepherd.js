@@ -193,6 +193,22 @@ function buildPersonDoc(person, grouped, syncGeneration, normalizer) {
   };
 }
 
+// For a person who has dropped out of PCO, find which elders have pastoral data
+// attached — private-note owners (the privateNotes doc id IS the owner's uid)
+// plus care-thread authors — so the UI can surface the departure to exactly
+// those elders, and report whether ANY pastoral data exists at all (if none,
+// the person doc is safe to delete outright).
+async function pastoralStakeholders(personRef) {
+  const [notes, thread] = await Promise.all([
+    personRef.collection('privateNotes').get(),
+    personRef.collection('careThread').get(),
+  ]);
+  const uids = new Set();
+  notes.docs.forEach(d => uids.add(d.id));
+  thread.docs.forEach(d => { const u = d.get('authorUid'); if (u) uids.add(u); });
+  return { uids: [...uids], hasData: notes.size > 0 || thread.size > 0 };
+}
+
 // ── Main orchestrator ──────────────────────────────────────────────────────
 // db: admin Firestore; FieldValue: admin FieldValue; opts: { churchId, appId,
 // secret, source }. Returns a summary object (also written to config/shepherdSync).
@@ -246,21 +262,43 @@ async function syncShepherdPeople(db, FieldValue, opts) {
 
   await writer.close(); // flush all upserts
 
-  // Delete-missing: docs not touched this run = removed from PCO (or filtered out).
-  let deleted = 0;
+  // Departed-from-PCO handling. Docs not touched this run are no longer in PCO
+  // (or were filtered out). We never silently delete an elder's pastoral notes:
+  // a departed person WITH notes/care-thread is *archived* (removedFromPco +
+  // removedAt + the stakeholder elder uids) and surfaced to the owning elder(s)
+  // so they can review and decide; a departed person with NO pastoral data is
+  // deleted outright. Already-archived docs keep their old generation, so they
+  // re-appear in this stale set each run and get re-evaluated — once an elder
+  // clears their notes, the person is cleaned up on the next sync. A reappearing
+  // person is rewritten by the upsert loop above (full set), which drops the
+  // removed* fields automatically.
+  let deleted = 0, archived = 0;
   const staleSnap = await peopleCol.where('syncGeneration', '<', syncGeneration).get();
-  const staleCount = staleSnap.size;
-  // Safety valve: never let a partial fetch nuke the cache.
-  if (priorCount > 0 && staleCount > priorCount * 0.5) {
+  // The safety valve counts only NEW departures, not the standing archive
+  // backlog — so a partial PCO fetch still trips it, but accumulated archives
+  // (which legitimately stay stale forever) never do.
+  const freshlyStale = staleSnap.docs.filter(d => d.get('removedFromPco') !== true);
+  if (priorCount > 0 && freshlyStale.length > priorCount * 0.5) {
     Sentry.captureMessage(
-      `shepherd-sync: delete-missing aborted — ${staleCount}/${priorCount} stale (>50%); likely a partial PCO fetch`,
+      `shepherd-sync: departure handling aborted — ${freshlyStale.length}/${priorCount} stale (>50%); likely a partial PCO fetch`,
       { level: 'warning', tags: { area: 'shepherd-sync', reason: 'delete-valve' } }
     );
-  } else if (staleCount > 0) {
-    const delWriter = db.bulkWriter();
-    staleSnap.forEach(d => { delWriter.delete(d.ref); });
-    await delWriter.close();
-    deleted = staleCount;
+  } else if (staleSnap.size > 0) {
+    const depWriter = db.bulkWriter();
+    for (const d of staleSnap.docs) {
+      const { uids, hasData } = await pastoralStakeholders(d.ref);
+      if (hasData) {
+        const patch = { removedFromPco: true, pastoralStakeholderUids: uids };
+        // Stamp removedAt only on first archival so the departure date is stable.
+        if (!d.get('removedAt')) patch.removedAt = FieldValue.serverTimestamp();
+        depWriter.set(d.ref, patch, { merge: true });
+        if (d.get('removedFromPco') !== true) archived++;
+      } else {
+        depWriter.delete(d.ref);
+        deleted++;
+      }
+    }
+    await depWriter.close();
   }
 
   const summary = {
@@ -269,6 +307,7 @@ async function syncShepherdPeople(db, FieldValue, opts) {
     totalFetched,
     stored: totalFetched,
     deleted,
+    archived,
     assigned,
     orphaned,
     perElderLoad,

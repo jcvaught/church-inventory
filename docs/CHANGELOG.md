@@ -4,6 +4,35 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-11 — Shepherd Hub: surface departed-from-PCO people to their note-owners (no silent note loss)
+
+Previously the nightly `syncShepherdPeople` hard-deleted any `shepherdPeople` doc no
+longer in PCO — but Firestore doesn't cascade, so the person's `privateNotes/` +
+`careThread/` subcollections orphaned invisibly forever (Fable 5 Shepherd-Hub audit,
+HIGH #3). Reworked so an elder is told a person left PCO and can decide what to do
+with their notes.
+
+**Sync (`functions/lib/shepherd.js`):** new `pastoralStakeholders(personRef)` helper
+(private-note owner uids — the doc id IS the owner uid — plus care-thread author
+uids). The departure pass now: archives a departed person *with* pastoral data
+(`removedFromPco: true` + `removedAt` [stamped once] + `pastoralStakeholderUids`)
+instead of deleting; deletes outright only when there's no pastoral data. Archived
+docs keep their old generation, so they're re-evaluated every run — once an elder
+clears their notes the person is cleaned up on the next sync; a reappearing person is
+rewritten by the upsert loop (full set drops the removed\* fields). The >50% safety
+valve now counts only *new* departures (`freshlyStale`) so the standing archive
+backlog never trips it. Added `archived` to the sync summary.
+
+**UI (`ShepherdHubPage.jsx`):** departed people are hidden from My Flock / All
+Congregation / Needs Reassignment and from the coverage counts. A new **"No longer in
+PCO (n)"** tab appears only for the logged-in elder and lists exactly the departed
+people *they* hold notes on (`pastoralStakeholderUids.includes(myUid)`, independent of
+admin "view as"). The person detail shows an amber "⚠ No longer in Planning Center
+(removed {date})" banner and hides the PCO reassign editor. `NotesSection` gained a
+**Delete note** action that removes the `privateNotes` doc outright (not just blanks
+the text) so the cleanup path can fire. No new Firestore index (client-side filter
+over the already-loaded cache). Build + lint clean.
+
 ## 2026-06-11 — Suppress transient Firestore listener errors from Sentry
 
 Two overnight Sentry alerts (`FirebaseError: deadline-exceeded`, `FirebaseError:

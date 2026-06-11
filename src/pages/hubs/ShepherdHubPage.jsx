@@ -84,6 +84,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
   }
 
   const myEmail = (userProfile?.email || '').trim().toLowerCase();
+  const myUid = userProfile?.uid;
 
   // Load roster + the full congregation cache once.
   useEffect(() => {
@@ -132,6 +133,15 @@ export function ShepherdHubPage({ userProfile, isElder }) {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const result = people.filter(p => {
+      // Departed view: people no longer in PCO that the *logged-in* elder has
+      // pastoral notes on (independent of any admin "view as"). Every other view
+      // hides departed people entirely so they never pollute the active roster.
+      if (view === 'departed') {
+        if (!p.removedFromPco || !(p.pastoralStakeholderUids || []).includes(myUid)) return false;
+        if (q && !(p.name || '').toLowerCase().includes(q)) return false;
+        return true;
+      }
+      if (p.removedFromPco) return false;
       if (view === 'flock') {
         if (!activeKey || !(p.elderKeys || []).includes(activeKey)) return false;
       }
@@ -155,18 +165,27 @@ export function ShepherdHubPage({ userProfile, isElder }) {
       ? (a, b) => lastOf(a).localeCompare(lastOf(b)) || firstOf(a).localeCompare(firstOf(b))
       : (a, b) => firstOf(a).localeCompare(firstOf(b)) || lastOf(a).localeCompare(lastOf(b)));
     return result;
-  }, [people, view, activeKey, statusFilter, assignFilter, search, sortBy]);
+  }, [people, view, activeKey, statusFilter, assignFilter, search, sortBy, myUid]);
 
-  // Coverage counts (active people only) for the header strip.
+  // Coverage counts (present, active people only) for the header strip — departed
+  // people are excluded so they don't inflate the congregation totals.
   const coverage = useMemo(() => {
-    const active = people.filter(p => p.status === 'active');
+    const present = people.filter(p => !p.removedFromPco);
+    const active = present.filter(p => p.status === 'active');
     return {
-      total: people.length,
+      total: present.length,
       active: active.length,
       assigned: active.filter(p => p.hasAssignment).length,
       orphaned: active.filter(p => p.orphaned).length,
     };
   }, [people]);
+
+  // Departed people the logged-in elder still holds notes on — drives the
+  // "No longer in PCO" tab (shown only when there's something to review).
+  const myDeparted = useMemo(
+    () => people.filter(p => p.removedFromPco && (p.pastoralStakeholderUids || []).includes(myUid)),
+    [people, myUid]
+  );
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: B.textLight, fontFamily: f2 }}>Loading Shepherd Hub…</div>;
   if (err) return <div style={{ padding: 24, color: B.red, fontFamily: f2 }}>{err}</div>;
@@ -211,6 +230,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
         <Tab id="flock" label={myKey ? 'My Flock' : `${activeElder ? activeElder.name + "'s" : ''} Flock`} />
         <Tab id="all" label="All Congregation" />
         <Tab id="worklist" label={`Needs Reassignment${coverage.orphaned ? ` (${coverage.orphaned})` : ''}`} />
+        {myDeparted.length > 0 && <Tab id="departed" label={`No longer in PCO (${myDeparted.length})`} />}
         {view === 'flock' && activeElder?.sabbatical && (
           <span style={chip(B.goldLight, '#96750E')}>On sabbatical</span>
         )}
@@ -244,6 +264,12 @@ export function ShepherdHubPage({ userProfile, isElder }) {
         </div>
       )}
 
+      {view === 'departed' && (
+        <div style={{ background: B.goldLight, border: '1px solid #E7C66B', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 13, color: '#7A5E0A' }}>
+          These people are no longer in Planning Center, but you kept notes on them. Open each to review your note and the care thread, then keep or delete them. Once your notes are removed, the record clears out automatically on the next sync.
+        </div>
+      )}
+
       {/* Results */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
         <div style={{ fontSize: 12, color: B.textLight, fontFamily: f1, fontWeight: 600 }}>{filtered.length} {filtered.length === 1 ? 'person' : 'people'}</div>
@@ -251,7 +277,8 @@ export function ShepherdHubPage({ userProfile, isElder }) {
           onClick={() => exportShepherdPeopleCSV(filtered, {
             elderName,
             label: view === 'flock' ? `flock-${activeElder?.name || 'elder'}`
-              : view === 'worklist' ? 'needs-reassignment' : 'congregation',
+              : view === 'worklist' ? 'needs-reassignment'
+              : view === 'departed' ? 'no-longer-in-pco' : 'congregation',
           })}
           disabled={!filtered.length}
           style={{ ...btnS, padding: '7px 14px', fontSize: 13, opacity: filtered.length ? 1 : 0.5 }}
@@ -269,6 +296,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
               <div style={{ fontSize: 12, color: B.textLight, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 2 }}>
                 {p.membership && <span>{p.membership}</span>}
                 <StatusBadge status={p.status} />
+                {p.removedFromPco && <span style={chip(B.goldLight, '#96750E')}>No longer in PCO</span>}
                 {p.orphaned && <span style={chip('#FEF2F2', B.red)}>Orphaned</span>}
               </div>
             </div>
@@ -483,12 +511,22 @@ function PersonDetail({ person: p, elderName, userProfile, isElder, activeElders
             {(p.elderKeys || []).map(k => <span key={k} style={chip(B.tealPale, B.teal)}>{elderName(k)}</span>)}
             {!p.hasAssignment && <span style={chip(B.warmGray, B.textLight)}>No elder assigned</span>}
             {p.orphaned && <span style={chip('#FEF2F2', B.red)}>Orphaned</span>}
-            {canEdit && !editing && (
+            {p.removedFromPco && <span style={chip(B.goldLight, '#96750E')}>No longer in PCO</span>}
+            {canEdit && !editing && !p.removedFromPco && (
               <button onClick={() => setEditing(true)} style={{ background: 'none', border: 'none', color: B.teal, cursor: 'pointer', fontSize: 12, fontFamily: f1, fontWeight: 700, padding: 0 }}>✎ Edit</button>
             )}
           </div>
         </div>
       </div>
+
+      {p.removedFromPco && (
+        <div style={{ background: B.goldLight, border: '1px solid #E7C66B', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: '#96750E', fontFamily: f1, textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 3 }}>⚠ No longer in Planning Center</div>
+          <div style={{ fontSize: 13, color: B.textDark }}>
+            This person was removed from Planning Center{p.removedAt ? ` on ${fmtTime(p.removedAt)}` : ''}. They no longer appear in your flock or the congregation. Decide what to do with your notes below — keep them, or delete them to clear this record on the next sync.
+          </div>
+        </div>
+      )}
 
       {editing && (
         <AssignmentEditor
@@ -625,6 +663,19 @@ function NotesSection({ person, userProfile }) {
     } finally { setSavingPrivate(false); }
   }
 
+  async function deletePrivate() {
+    setSavingPrivate(true);
+    try {
+      // Delete the doc outright (not just blank the text) so a departed person
+      // with no remaining pastoral data gets cleaned up by the next sync.
+      await deleteDoc(doc(db, `${base}/privateNotes/${userProfile.uid}`));
+      setPrivateText(''); setPrivateSaved('');
+      logShepherdAudit('delete_private_note', person, userProfile);
+    } catch (e) {
+      Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'notes-del-private' } });
+    } finally { setSavingPrivate(false); }
+  }
+
   async function postEntry() {
     const text = draft.trim();
     if (!text) return;
@@ -659,7 +710,12 @@ function NotesSection({ person, userProfile }) {
       <div style={{ fontSize: 11, color: B.textLight, marginBottom: 6 }}>Only you can see this.</div>
       <textarea value={privateText} onChange={e => setPrivateText(e.target.value)} rows={3} placeholder={loaded ? 'Your private note about this person…' : 'Loading…'} disabled={!loaded}
         style={{ ...inp, resize: 'vertical', minHeight: 70 }} />
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6 }}>
+        {privateSaved.trim() && (
+          <button onClick={deletePrivate} disabled={savingPrivate} style={{ ...btnS, padding: '8px 16px', color: B.red, opacity: savingPrivate ? 0.5 : 1 }}>
+            Delete note
+          </button>
+        )}
         <button onClick={savePrivate} disabled={savingPrivate || privateText === privateSaved} style={{ ...btnP, padding: '8px 18px', opacity: (savingPrivate || privateText === privateSaved) ? 0.5 : 1 }}>
           {savingPrivate ? 'Saving…' : privateText === privateSaved ? 'Saved' : 'Save note'}
         </button>

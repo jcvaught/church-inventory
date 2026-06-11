@@ -130,6 +130,16 @@ normalization):** Coffman, Reynolds, Renner, Kerr, Palmer, Baither, Beckner.
   (`PrivacyModal` in ShepherdHubPage; repo copy `docs/SHEPHERD-HUB-PRIVACY.md`).
   Honest about Level-1 (rules + audit, not yet encrypted).
 - **Fast-follow:** Level 2 client-side encryption for private notes.
+- **Departed-from-PCO handling:** ✅ **DONE 2026-06-11.** A person who drops out of
+  PCO is no longer hard-deleted out from under an elder's notes. The sync archives
+  them (`removedFromPco`/`removedAt`/`pastoralStakeholderUids`) when any private note
+  or care-thread entry exists, deletes them outright otherwise, and re-evaluates the
+  archive each run so a person is cleaned up once their notes are cleared. The hub
+  shows a per-elder **"No longer in PCO"** tab + detail banner + a **Delete note**
+  action. See CHANGELOG 2026-06-11. (Resolves Fable 5 audit HIGH #3.) Still open: the
+  *elder roll-off* note-retention question — when an elder leaves, their private notes
+  + care-thread entries become un-deletable via UI (rules require the author); decide
+  purge-on-roll-off vs. documented limbo.
 - **Eventual:** one-time cleanup write-pass to canonicalize existing dirty PCO values.
 
 ## 7. Open items / still needed from John
