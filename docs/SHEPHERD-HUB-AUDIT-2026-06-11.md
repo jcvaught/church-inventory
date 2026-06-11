@@ -26,7 +26,7 @@ the Shepherd blocks in `firestore.rules`, `docs/SHEPHERD-HUB-PLAN.md`,
 | SEC-4 | 🟡 Medium | ⬜ 🔶 | Privacy modal + doc promise "every view and edit is logged," but the audit is **client-side, best-effort, swallow-on-fail** and bypassable via raw SDK reads. Promise overstates enforcement. | `ShepherdHubPage.jsx` `logShepherdAudit`; `SHEPHERD-HUB-PRIVACY.md` |
 | SEC-5 | 🟡 Medium | ⬜ 🔶 | Privacy doc says "Don't export," but the hub has an **Export CSV** button; exports are the one significant action that is **not audited**. (Export correctly omits medical/notes.) | `ShepherdHubPage.jsx` export; `csv.js` |
 | SEC-6 | 🟡 Medium | ⬜ 🔶 | `shepherdAudit` is readable by **every** elder, and `edit_private_note` rows carry `personId`+`personName`+actor — leaking *which people each elder keeps private notes on*, metadata about the very thing promised "only you." | `firestore.rules:439` |
-| SEC-7 | — | ⬜ 🔶 | **Level-2 note encryption** (seal private notes even from a DB-level admin) is promised in the modal as "planned" but not built. Cheapest to do now, before notes accumulate. | new work |
+| SEC-7 | — | ⛔ Deferred (D5) | **Level-2 note encryption** — **shelved 2026-06-11** (accepted risk: only DB-level reader is John). Action required: drop the "encryption is planned" line from the privacy modal + doc so the promise stays honest. | privacy modal/doc |
 
 ### B. Correctness & Robustness
 
@@ -77,6 +77,8 @@ These are judgment calls — each shapes what the fix should be. (The departed-f
 fix SEC-3 was the same kind of decision, already resolved: *surface to the elder, don't
 silently delete.*)
 
+**Decisions recorded 2026-06-11 (John):** D1 ✅ · D4 ✅ · D5 ✅ · D6 ✅ · D2 leaning (open) · D3 open (more info below).
+
 ### D1 — Elder roll-off: what happens to a departing elder's notes? *(ties to SEC-3's sibling)*
 When an elder leaves the eldership, their `privateNotes` + authored `careThread` entries
 become **un-deletable through the UI** (rules require `isElder()` and authorship), so a
@@ -85,27 +87,32 @@ person they noted can stay archived forever and the data lingers.
 - **Option B — Transfer to successor / admin:** reassign the notes' ownership (or copy private notes into the shared thread) so care continuity survives. More work; raises its own privacy question (a "private" note becoming visible).
 - **Option C — Documented limbo:** leave them; document that console access is the only path. Zero work, but contradicts the minimization spirit.
 - **Recommendation:** **A**, with a grace window + an export-to-successor step the rolling-off elder can opt into. Care-thread entries (already shared) stay; only the *private* notes purge.
+- **✅ DECISION (2026-06-11): Purge, gated by a warning modal.** When an admin removes an elder from the roster (RosterManager), show a confirm modal *first* — "Removing **{elder}** will permanently delete all of their private pastoral notes. Make sure they've saved anything they want to keep. Continue / Cancel." Cancel aborts, so the admin can coordinate with the elder to save their notes before re-attempting. On confirm, a CF purges that elder's `privateNotes/{uid}` docs across all `shepherdPeople` (shared care-thread entries stay). **Implication to honor "time to export his own":** add an **"Export my notes"** action visible only to the owning elder (the current CSV export deliberately omits notes). An elder exporting *their own* private notes for their own pastoral continuity is treated as legitimate and distinct from the bulk medical export that D4's promise forbids — flag this nuance in the privacy wording.
 
 ### D2 — Audit: enforce it, or soften the promise? *(SEC-4)*
 - **Option A — Enforce:** move person-detail reads behind a callable that writes the audit row server-side. True logging, but adds latency and loses direct Firestore reads (bigger refactor; also collides with UX-1's flock-first reads).
 - **Option B — Soften wording:** change "every view and edit is logged" → "the app records…", keep best-effort client logging.
 - **Recommendation:** **B now** (honest, cheap), revisit A only if a real accountability need arises. Pairs with CQ-4 rules tests so the *enforceable* guarantees can't regress.
+- **Clarification (John asked "why wouldn't we log it?"):** we *do* — the app already writes a `shepherdAudit` row on every view/edit/delete; nothing is being removed. The finding is only that the logging is best-effort (swallows write failures) and not tamper-proof (a raw-SDK read bypasses it), so the promise "everything is logged" is slightly stronger than what's *enforced*. Both options keep logging. **Tentative: B** (keep logging + word the promise honestly). Open pending John's confirm.
 
 ### D3 — Audit log read visibility *(SEC-6)*
 - **Option A — Admin-only reads:** restrict `shepherdAudit` reads to `isShepherdAdmin()`. Elders don't need to browse it; removes the private-note-metadata leak.
 - **Option B — Keep elder-readable.**
 - **Recommendation:** **A.**
+- **More info (John asked):** this is *not* about whether to log — logging continues unchanged. It's about who can **read** the log. Each `shepherdAudit` row records `actorUid` + `personId` + `personName` + action + time. Today any elder can read the whole collection, so Elder A can see rows like *"Elder B edited a private note on Jane Doe on Jun 3"* — revealing that B keeps a private note on Jane, and when. The note's *content* stays hidden, but its **existence + subject + timing** leak, which undercuts the "your private note — only you" promise. Restricting reads to `isShepherdAdmin()` removes the leak; elders never needed to browse the audit (it's an accountability record for the admin). No downside except only John can review it — which is the intent. **Open pending John's call.**
 
 ### D4 — Export CSV: keep or remove? *(SEC-5)*
 - **Option A — Keep + reword + audit:** reword the promise ("contact-list exports are fine; never export notes/medical") and add a `logShepherdAudit('export_csv', …)` call. Export already excludes medical/notes.
 - **Option B — Remove the button.**
 - **Recommendation:** **A** — the contact-list export is genuinely useful (flock call lists); just make the promise consistent and audit it.
+- **✅ DECISION (2026-06-11): A** — keep the Export CSV, reword the privacy promise to allow *contact-list* exports while forbidding notes/medical exports, and add `logShepherdAudit('export_csv', …)`.
 
 ### D5 — Level-2 note encryption: do it, and how? *(SEC-7)*
 - **Do it now vs defer:** cheapest before notes accumulate (≈0 docs today).
 - **Key model:** per-device non-extractable `CryptoKey` (no passphrase, but per-device re-enroll) **vs** per-elder PBKDF2 passphrase (portable, but **lost passphrase = lost notes** on a retirement-age user base).
 - **Honest caveat:** John is both the admin being sealed out *and* the sole deployer, so the guarantee is partial unless deploys are audited.
 - **Recommendation:** do it **after** the auth fixes (Phase 0), passphrase model with a blunt no-recovery conversation + explicit "readable only where you've entered your passphrase" UX. Lower priority than SEC-1.
+- **✅ DECISION (2026-06-11): No encryption for now — accepted risk.** John's stated threat model: the only exposure is him looking at the data straight in the database. With no other DB-level readers, the cost/UX risk (lost-passphrase = lost notes) isn't worth it. SEC-7 → **deferred/accepted.** The privacy modal must be reworded to drop the "encryption is planned" line so the promise stays honest (don't claim a fast-follow we've shelved).
 
 ### D6 — Auth hardening strictness *(SEC-1 / SEC-2)*
 The minimum (require `emailVerified`) closes the live hole. How much further?
@@ -113,20 +120,24 @@ The minimum (require `emailVerified`) closes the live hole. How much further?
 - **Option B — + Provider/membership:** also require the Google provider (`firebase.sign_in_provider == 'google.com'`) and/or `users/{uid}.churchId == SHEPHERD_CHURCH_ID`.
 - **Option C — + Full MFA:** enforce Firebase-level MFA via Identity Platform (the plan's aspiration; larger lift).
 - **Recommendation:** ship **A immediately** (it's the live fix), then **B** in the same phase; **C** deferred to the encryption/identity-platform track.
+- **✅ DECISION (2026-06-11): A only (minimal).** Require `emailVerified === true` in `claimElderRole` + `email_verified` in `isShepherdAdmin()` / `OWNER_EMAILS` callables. **Do NOT require the Google provider** — an elder may prefer email/password; they'll just have to verify their email (Firebase emails them the link; an attacker who registers someone else's address can't click it). No `churchId` gate either, keeping it minimal. This still fully closes SEC-1: the squat works only because email/password signup doesn't prove ownership, and `emailVerified` is exactly that proof.
 
 ---
 
 ## 3. Remediation plan (phased)
 
-**Phase 0 — Security hotfix (do first; only D6 scope to pick).**
-SEC-1 (`emailVerified` guard in `claimElderRole`, + provider/`churchId` per D6) ·
+**Phase 0 — Security hotfix (READY — D6 = minimal).**
+SEC-1 (`emailVerified === true` guard in `claimElderRole`) ·
 SEC-2 (`email_verified` in `isShepherdAdmin()` + `OWNER_EMAILS` callables) ·
 pre-register/claim the unregistered rostered elder accounts to remove the squat window.
-Redeploy functions + rules; re-probe the `onCall` invoker bindings.
+Redeploy functions + rules; re-probe the `onCall` invoker bindings. *No Google-provider
+or `churchId` gate (kept minimal per D6).*
 
-**Phase 1 — Promise ↔ reality (needs D2, D3, D4).**
-SEC-4 (reword privacy modal **and** `SHEPHERD-HUB-PRIVACY.md` in lockstep) ·
-SEC-6 (restrict `shepherdAudit` reads) · SEC-5 (reword export clause + audit exports).
+**Phase 1 — Promise ↔ reality (D4 ✅, D5 ✅; D2/D3 pending).**
+SEC-4 (reword privacy modal **and** `SHEPHERD-HUB-PRIVACY.md` in lockstep — incl. dropping
+the shelved-encryption line per D5, and the honest-logging wording per D2) ·
+SEC-5 (✅ keep export, reword clause + `export_csv` audit row) ·
+SEC-6 (restrict `shepherdAudit` reads to admin — *pending D3*).
 
 **Phase 2 — Robustness.**
 ROB-1 (`set` merge) · ROB-2 (field id from `fieldDefs`) · ROB-6 (block empty roster) ·
@@ -141,9 +152,13 @@ UX-3 (birthdays strip) · UX-5 (search phone/email) · UX-6 (note undo).
 CQ-4 (rules unit tests + pure-fn tests — highest value) · CQ-1 (consolidate client allow-list) ·
 CQ-2 (hoist `Tab`) · CQ-3 (fix plan-doc drift) · CQ-5 (`EmojiIcon`).
 
-**Phase 5 — Level-2 encryption (needs D5).** SEC-7.
+**Phase 5 — ~~Level-2 encryption~~ — DROPPED (D5).** Only residual task folded into
+Phase 1: remove the "encryption planned" line from the privacy modal/doc.
 
-**Phase 6 — Elder roll-off retention (needs D1).** Implement the chosen policy.
+**Phase 6 — Elder roll-off retention (D1 ✅).** CF that purges a removed elder's
+`privateNotes/{uid}` across all `shepherdPeople` on confirmed roster removal; a warning
++ Cancel modal in RosterManager *before* removal commits; an owner-only **"Export my
+notes"** action so a departing elder can save their own notes first.
 
 **Eventual.** CMP-1 one-time PCO cleanup write-pass.
 
