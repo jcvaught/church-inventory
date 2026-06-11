@@ -14,6 +14,7 @@ import { PublicRequestPage } from './pages/PublicRequestPage.jsx';
 import { Dashboard } from './pages/Dashboard.jsx';
 import { VolunteerHome } from './pages/VolunteerHome.jsx';
 import { isVolunteerOnly } from './utils/roleHelpers.js';
+import { isOwnerEmail } from './utils/owners.js';
 import { ItemsPage } from './pages/ItemsPage.jsx';
 import { SuppliesPage } from './pages/SuppliesPage.jsx';
 import { ReservationsPage } from './pages/ReservationsPage.jsx';
@@ -39,10 +40,8 @@ import { WhatsNewModal, getUnseenCount, markWhatsNewSeen } from './components/Wh
 // Shepherd Hub is FXCC-only for now (mirrors SHEPHERD_CHURCH_ID in
 // functions/index.js + useAuth.js — keep in sync).
 const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
-// The only non-elder allowed into the hub (admin side). Mirrors OWNER_EMAILS in
-// functions/index.js + isShepherdAdmin() in firestore.rules. Elders get in via
-// their custom claim; no other church admin can see the hub.
-const SHEPHERD_ADMIN_EMAILS = ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
+// The only non-elder allowed into the hub (admin side) is the app owner —
+// `isOwnerEmail` from utils/owners.js. Elders get in via their custom claim.
 
 
 class PageErrorBoundary extends Component {
@@ -678,7 +677,7 @@ function AppShell({ authHook }) {
   // the real boundary), plus John as admin. Not a paid hub — it appears as a
   // special non-subscription card inside HubsPage (not a top-level tab).
   const canSeeShepherd = userProfile?.churchId === SHEPHERD_CHURCH_ID
-    && (isElder || SHEPHERD_ADMIN_EMAILS.includes((userProfile?.email || '').toLowerCase())) && !volunteerMode;
+    && (isElder || isOwnerEmail(userProfile?.email)) && !volunteerMode;
   const mobileTabs = volunteerMode
     ? [["dashboard","Home","🏠"], ["hubs","Jobs","💼"], ["log","Activity","📋"], ["settings","Settings","⚙️"]]
     : [["dashboard","Home","🏠"], ["inventory","Items","📦"], ["supplies","Stock","🧴"], ["reservations","Reserve","📅"], ["log","Log","📋"], ["hubs","Hubs","🔌"], ["settings","Settings","⚙️"]];

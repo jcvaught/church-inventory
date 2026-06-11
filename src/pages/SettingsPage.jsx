@@ -1,6 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { B, f1, f2, inp, btnP, btnS } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
+import { isOwnerEmail } from '../utils/owners.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
@@ -168,8 +169,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     }
   }, [churchHubs, inviteHubsInitialized]);
 
-  // NOTE: owner emails also defined in functions/index.js (OWNER_EMAILS) and firestore.rules. Keep in sync.
-  const isOwner = ['jcvaught@gmail.com', 'jvaught@fxcc.org'].includes(user?.email);
+  const isOwner = isOwnerEmail(user?.email);
 
   // Load the current global banner into the owner editor (owner only). The
   // snapshot reflects the owner's own saves; while typing (no save yet) no

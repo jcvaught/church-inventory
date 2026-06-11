@@ -26,6 +26,13 @@ npm run lint      # ESLint — catch bugs and hook violations (0 errors baseline
 npm run lint:fix  # ESLint with auto-fix
 npm run analyze   # Build + open bundle size visualizer in browser (dist/bundle-stats.html)
 npm run test:e2e  # Playwright E2E suite against prod (~80s, requires E2E_MEMBER_B_EMAIL env)
+npm run test:unit # Pure-logic unit tests (node --test functions/test/*.test.mjs) — no emulator
+npm run test:rules # Firestore RULES unit tests via @firebase/rules-unit-testing — boots the
+                  # Firestore emulator (needs Java) and runs functions/test/rules/*.test.mjs.
+                  # Covers the Shepherd Hub privacy guarantees (contact-info write-lock,
+                  # per-elder note privacy, audit admin-read-only + immutability, careThread
+                  # author pinning, SEC-2 email_verified admin gate). Add Shepherd rule
+                  # assertions here, NOT to test:unit (that glob runs without an emulator).
 ```
 
 ### Local sandbox — Firebase Emulator Suite (2026-06-07)

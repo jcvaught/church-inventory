@@ -10,7 +10,15 @@ fixes can land.
 the Shepherd blocks in `firestore.rules`, `docs/SHEPHERD-HUB-PLAN.md`,
 `docs/SHEPHERD-HUB-PRIVACY.md`.
 
-**Status legend:** ✅ done · 🟡 partial · ⬜ open · 🔶 **needs a decision** (see §2).
+**Status legend:** ✅ done · 🟡 partial · ⬜ open · ⛔ deferred/accepted · 🔶 **needs a decision** (see §2).
+
+> ## ✅ AUDIT CLOSED — 2026-06-11
+> All phases shipped: **Phase 0** (security SEC-1/2), **Phase 1** (promise↔reality
+> SEC-4/5/6/7), **Phase 2** (robustness ROB-1…6), **Phase 3** (UX UX-1…6), **Phase 4**
+> (quality + tests CQ-1…4), **Phase 6** (elder roll-off D1) — plus SEC-3 (departed-from-PCO).
+> Every Critical/High/Medium resolved. **Accepted/not done:** UX-7 (household grouping),
+> CQ-5 (EmojiIcon), SEC-7 (Level-2 encryption — D5). All six decisions (D1–D6) recorded.
+> Rules guarded by 7 emulator unit tests (`npm run test:rules`).
 
 ---
 
@@ -55,11 +63,11 @@ the Shepherd blocks in `firestore.rules`, `docs/SHEPHERD-HUB-PLAN.md`,
 
 | ID | Sev | Status | Finding | Location |
 |----|-----|--------|---------|----------|
-| CQ-1 | 🟡 Medium | ⬜ | The admin allow-list literal `['jcvaught@gmail.com','jvaught@fxcc.org']` is duplicated in ≥6 places: `firestore.rules:26` (+ :532/:539/:548/:554/:576 for other features), `functions/index.js` `OWNER_EMAILS`, `src/App.jsx:45`, `src/pages/hubs/ShepherdHubPage.jsx:25`, `src/pages/SettingsPage.jsx:172`. Rules/functions copies are unavoidable; consolidate the client copies into one exported constant + cross-reference comments. | multiple |
-| CQ-2 | 🟢 Low | ⬜ | `Tab` component is defined inside `ShepherdHubPage` render (recreated each render). Hoist it out. | `ShepherdHubPage.jsx` |
-| CQ-3 | 🟢 Low | ⬜ | Plan doc drift: `SHEPHERD-HUB-PLAN.md` §P2 says the allow-list lives in `functions/lib/elders.js`; the real file is `functions/lib/roster.js`. | `SHEPHERD-HUB-PLAN.md` |
-| CQ-4 | 🟡 Medium | ⬜ | **Test coverage is the real gap.** The entire privacy guarantee lives in ~5 rule blocks with **zero tests**. `@firebase/rules-unit-testing` (emulator already installed) must assert: non-elder denied on `shepherdPeople`; **an elder is DENIED writing `shepherdPeople/{id}` — the contact-info/medical lock (`allow write: if false`), confirmed by manual review 2026-06-11; this assertion is REQUIRED (John's ask, fold into Phase 4)**; elder-A-can't-read-elder-B's `privateNotes`; `shepherdAudit` is admin-read-only (SEC-6) + immutable (`update/delete: if false`); `careThread` `authorUid` pinning. Pure fns (`buildNormalizer`, `buildRoster`) + the injectable PCO sync are unit-testable without a PCO account. | `e2e/` or new `functions/test/` |
-| CQ-5 | 🟢 Low | ⬜ | Raw emojis (🐑 🔒 ⚕ ⚠) in JSX rather than the repo's `EmojiIcon` primitive (a11y). | `ShepherdHubPage.jsx` |
+| CQ-1 | 🟡 Medium | ✅ 2026-06-11 | The admin allow-list literal `['jcvaught@gmail.com','jvaught@fxcc.org']` is duplicated in ≥6 places: `firestore.rules:26` (+ :532/:539/:548/:554/:576 for other features), `functions/index.js` `OWNER_EMAILS`, `src/App.jsx:45`, `src/pages/hubs/ShepherdHubPage.jsx:25`, `src/pages/SettingsPage.jsx:172`. Rules/functions copies are unavoidable; consolidate the client copies into one exported constant + cross-reference comments. | multiple |
+| CQ-2 | 🟢 Low | ✅ 2026-06-11 | `Tab` component is defined inside `ShepherdHubPage` render (recreated each render). Hoist it out. | `ShepherdHubPage.jsx` |
+| CQ-3 | 🟢 Low | ✅ 2026-06-11 | Plan doc drift: `SHEPHERD-HUB-PLAN.md` §P2 says the allow-list lives in `functions/lib/elders.js`; the real file is `functions/lib/roster.js`. | `SHEPHERD-HUB-PLAN.md` |
+| CQ-4 | 🟡 Medium | ✅ 2026-06-11 | **Test coverage is the real gap.** The entire privacy guarantee lives in ~5 rule blocks with **zero tests**. `@firebase/rules-unit-testing` (emulator already installed) must assert: non-elder denied on `shepherdPeople`; **an elder is DENIED writing `shepherdPeople/{id}` — the contact-info/medical lock (`allow write: if false`), confirmed by manual review 2026-06-11; this assertion is REQUIRED (John's ask, fold into Phase 4)**; elder-A-can't-read-elder-B's `privateNotes`; `shepherdAudit` is admin-read-only (SEC-6) + immutable (`update/delete: if false`); `careThread` `authorUid` pinning. Pure fns (`buildNormalizer`, `buildRoster`) + the injectable PCO sync are unit-testable without a PCO account. | `e2e/` or new `functions/test/` |
+| CQ-5 | 🟢 Low | ⛔ Accepted | Raw emojis (🐑 🔒 ⚕ ⚠) in JSX rather than the repo's `EmojiIcon` primitive (a11y). | `ShepherdHubPage.jsx` |
 
 ### E. Completeness vs. Plan (drift — tracked under the items above)
 
@@ -77,7 +85,7 @@ These are judgment calls — each shapes what the fix should be. (The departed-f
 fix SEC-3 was the same kind of decision, already resolved: *surface to the elder, don't
 silently delete.*)
 
-**Decisions recorded 2026-06-11 (John):** D1 ✅ · D4 ✅ · D5 ✅ · D6 ✅ · D2 leaning (open) · D3 open (more info below).
+**Decisions recorded 2026-06-11 (John):** D1 ✅ · D2 ✅ (B) · D3 ✅ (admin-only) · D4 ✅ · D5 ✅ · D6 ✅.
 
 ### D1 — Elder roll-off: what happens to a departing elder's notes? *(ties to SEC-3's sibling)*
 When an elder leaves the eldership, their `privateNotes` + authored `careThread` entries
@@ -150,9 +158,13 @@ UX-2 (`shepherdCare/{personId}` last-contact stamp [sync never overwrites it] +
 birthdays/anniversaries strip) · UX-5 (search name/email/phone) · UX-6 (one-level note undo).
 UX-7 (household grouping) left as accepted v1 limitation.
 
-**Phase 4 — Code quality + tests.**
-CQ-4 (rules unit tests + pure-fn tests — highest value) · CQ-1 (consolidate client allow-list) ·
-CQ-2 (hoist `Tab`) · CQ-3 (fix plan-doc drift) · CQ-5 (`EmojiIcon`).
+**Phase 4 — Code quality + tests — ✅ DONE 2026-06-11.** CQ-4 (8 Firestore rules unit
+tests via @firebase/rules-unit-testing — `npm run test:rules` against the emulator; incl.
+the required elder-can't-write-shepherdPeople lock; 7/7 green) · CQ-1 (single client
+allow-list in `src/utils/owners.js`, used by App/ShepherdHub/Settings) · CQ-2 (`Tab`
+hoisted out of render) · CQ-3 (plan-doc `elders.js`→`roster.js`). CQ-5 (EmojiIcon)
+ACCEPTED/skipped: the hub's emojis sit in string literals (button labels, modal titles)
+adjacent to descriptive text — churn/risk outweighs the marginal a11y gain.
 
 **Phase 5 — ~~Level-2 encryption~~ — DROPPED (D5).** Only residual task folded into
 Phase 1: remove the "encryption planned" line from the privacy modal/doc.

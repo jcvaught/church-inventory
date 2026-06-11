@@ -4,6 +4,30 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-11 — Shepherd Hub quality + rules tests (audit Phase 4) → AUDIT CLOSED
+
+Final phase of the Fable 5 Shepherd Hub audit (`docs/SHEPHERD-HUB-AUDIT-2026-06-11.md`).
+
+- **CQ-4 (rules tests):** added `@firebase/rules-unit-testing` + `functions/test/rules/`
+  + an `npm run test:rules` script (boots the Firestore emulator via `emulators:exec`).
+  Seven tests, all green, lock in the Shepherd privacy guarantees: **an elder cannot write
+  a person doc (the contact-info/medical lock — John's explicit ask)**, non-elder denial,
+  per-elder note privacy, careThread `authorUid` pinning, audit admin-read-only + immutability,
+  the SEC-2 `email_verified` admin gate, and the shepherdCare stamp. Kept in a subdir so the
+  emulator-less `test:unit` glob doesn't pick them up.
+- **CQ-1:** the owner allow-list literal is now a single client constant
+  `src/utils/owners.js` (`OWNER_EMAILS`/`isOwnerEmail`), used by `App.jsx`, `ShepherdHubPage.jsx`,
+  and `SettingsPage.jsx` (the `functions/index.js` `OWNER_EMAILS` + `firestore.rules` copies
+  stay — they can't import app code — with cross-reference comments).
+- **CQ-2:** `Tab` hoisted out of the ShepherdHubPage render.
+- **CQ-3:** plan-doc drift fixed (`functions/lib/elders.js` → `roster.js`).
+- **CQ-5 (EmojiIcon):** accepted/skipped — the hub's emojis live in string literals (button
+  labels, modal titles) next to descriptive text; churn/risk outweighs the marginal a11y gain.
+
+**Audit closed:** all Critical/High/Medium resolved across Phases 0–6. Accepted: UX-7
+(household grouping), CQ-5, SEC-7 (Level-2 encryption, D5). Build + lint clean; `test:unit`
+5/5, `test:rules` 7/7.
+
 ## 2026-06-11 — Shepherd Hub UX (audit Phase 3, UX-1…6)
 
 - **UX-2 (last-contact loop):** new top-level `churches/{id}/shepherdCare/{personId}` doc

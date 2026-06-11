@@ -18,11 +18,21 @@ import { db } from '../../firebase.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
 import { exportShepherdPeopleCSV } from '../../utils/csv.js';
+import { isOwnerEmail } from '../../utils/owners.js';
 
 const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
-// Only non-elder allowed into the hub (admin side) — mirrors firestore.rules
-// isShepherdAdmin() + functions OWNER_EMAILS.
-const SHEPHERD_ADMIN_EMAILS = ['jcvaught@gmail.com', 'jvaught@fxcc.org'];
+// View-toggle pill (CQ-2: hoisted out of the page render so it isn't recreated
+// every render). `view`/`setView` are passed in.
+function Tab({ id, label, view, setView }) {
+  return (
+    <button onClick={() => setView(id)} style={{
+      padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
+      fontSize: 13, fontWeight: 700, fontFamily: f1,
+      background: view === id ? B.teal : B.white, color: view === id ? B.white : B.textMid,
+      boxShadow: view === id ? 'none' : `inset 0 0 0 1px ${B.sand}`,
+    }}>{label}</button>
+  );
+}
 
 // Append a row to the shepherd audit log. Best-effort — never block the UI.
 async function logShepherdAudit(action, person, userProfile, detail) {
@@ -124,7 +134,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [exportingNotes, setExportingNotes] = useState(false);
   const [exportMsg, setExportMsg] = useState(null);
-  const isAdmin = SHEPHERD_ADMIN_EMAILS.includes((userProfile?.email || '').toLowerCase());
+  const isAdmin = isOwnerEmail(userProfile?.email);
 
   // Let an elder download their own private notes (e.g. before rolling off the
   // eldership — their notes are purged when an admin removes them). Server-side
@@ -308,15 +318,6 @@ export function ShepherdHubPage({ userProfile, isElder }) {
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: B.textLight, fontFamily: f2 }}>Loading Shepherd Hub…</div>;
   if (err) return <div style={{ padding: 24, color: B.red, fontFamily: f2 }}>{err}</div>;
 
-  const Tab = ({ id, label }) => (
-    <button onClick={() => setView(id)} style={{
-      padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
-      fontSize: 13, fontWeight: 700, fontFamily: f1,
-      background: view === id ? B.teal : B.white, color: view === id ? B.white : B.textMid,
-      boxShadow: view === id ? 'none' : `inset 0 0 0 1px ${B.sand}`,
-    }}>{label}</button>
-  );
-
   return (
     <div style={{ fontFamily: f2 }}>
       {/* Header */}
@@ -360,10 +361,10 @@ export function ShepherdHubPage({ userProfile, isElder }) {
 
       {/* View toggle */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Tab id="flock" label={myKey ? 'My Flock' : `${activeElder ? activeElder.name + "'s" : ''} Flock`} />
-        <Tab id="all" label="All Congregation" />
-        <Tab id="worklist" label={`Needs Reassignment${coverage.orphaned ? ` (${coverage.orphaned})` : ''}`} />
-        {myDeparted.length > 0 && <Tab id="departed" label={`No longer in PCO (${myDeparted.length})`} />}
+        <Tab id="flock" label={myKey ? 'My Flock' : `${activeElder ? activeElder.name + "'s" : ''} Flock`} view={view} setView={setView} />
+        <Tab id="all" label="All Congregation" view={view} setView={setView} />
+        <Tab id="worklist" label={`Needs Reassignment${coverage.orphaned ? ` (${coverage.orphaned})` : ''}`} view={view} setView={setView} />
+        {myDeparted.length > 0 && <Tab id="departed" label={`No longer in PCO (${myDeparted.length})`} view={view} setView={setView} />}
         {view === 'flock' && activeElder?.sabbatical && (
           <span style={chip(B.goldLight, '#96750E')}>On sabbatical</span>
         )}

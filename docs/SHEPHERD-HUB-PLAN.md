@@ -114,7 +114,7 @@ normalization):** Coffman, Reynolds, Renner, Kerr, Palmer, Baither, Beckner.
   (nightly) + `refreshShepherdPeople` (on-demand) pull people + contact + photo +
   medical_notes + pastoral fields, normalize, write the admin-locked elder-indexed cache.
 - **P2 — gate:** ✅ **DONE 2026-06-10.** `elder` custom claim via `claimElderRole`
-  (email allow-list `functions/lib/elders.js`); `scripts/set-elder-claims.cjs` for
+  (email allow-list resolved via the roster in `functions/lib/roster.js`); `scripts/set-elder-claims.cjs` for
   immediate force-sync/revoke; `isElder()` Firestore rules on the shepherd cache;
   MFA via Google Workspace 2SV (Firebase-level MFA deferred — would need Identity
   Platform). Client wires `isElder` in `useAuth` (FXCC-gated). Elders auto-grant on
