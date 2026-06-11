@@ -8,9 +8,9 @@
 // "My Flock" = people whose elderKeys contains the logged-in elder's key.
 // Admins have no flock of their own, so they get a "View as [elder]" picker to
 // preview any elder's flock (and demo the hub before elders log in).
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  collection, getDocs, getDoc, query, orderBy, doc, setDoc, addDoc, deleteDoc, serverTimestamp,
+  collection, getDocs, getDoc, query, where, orderBy, doc, setDoc, addDoc, deleteDoc, serverTimestamp,
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import * as Sentry from '@sentry/react';
@@ -48,6 +48,17 @@ function fmtTime(ts) {
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+// Match a search query against name, email, or phone (UX-5) — elders often look
+// someone up from a missed call or an email, not just by name.
+function personMatches(p, q) {
+  if (!q) return true;
+  if ((p.name || '').toLowerCase().includes(q)) return true;
+  if ((p.emails || []).some(e => (e.address || '').toLowerCase().includes(q))) return true;
+  const digits = q.replace(/\D/g, '');
+  if (digits && (p.phones || []).some(ph => (ph.number || '').replace(/\D/g, '').includes(digits))) return true;
+  return false;
+}
+
 // Client-side text-file download (used for an elder's "Export my notes").
 function downloadText(filename, text) {
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
@@ -73,8 +84,11 @@ function StatusBadge({ status }) {
 export function ShepherdHubPage({ userProfile, isElder }) {
   const [people, setPeople] = useState([]);
   const [roster, setRoster] = useState({ elders: [], former: [] });
+  const [syncInfo, setSyncInfo] = useState(null);   // config/shepherdSync (freshness + collisions)
+  const [fullyLoaded, setFullyLoaded] = useState(false); // false during the flock-first paint
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
+  const [visibleCount, setVisibleCount] = useState(100); // render cap (UX-1)
 
   const [view, setView] = useState('flock');        // 'flock' | 'all'
   const [viewAsKey, setViewAsKey] = useState(null); // admin: which elder's flock to preview
@@ -118,33 +132,48 @@ export function ShepherdHubPage({ userProfile, isElder }) {
   const myEmail = (userProfile?.email || '').trim().toLowerCase();
   const myUid = userProfile?.uid;
 
-  // Load roster + the full congregation cache once.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const base = `churches/${SHEPHERD_CHURCH_ID}`;
-        // Read the single roster doc directly — NOT getDocs(collection('config')),
-        // which is a list over the whole config collection and is denied (config
-        // docs have per-doc rules with no collection list permission).
-        const [rosterSnap, peopleSnap] = await Promise.all([
-          getDoc(doc(db, `${base}/config/shepherdRoster`)),
-          getDocs(query(collection(db, `${base}/shepherdPeople`), orderBy('name'))),
-        ]);
-        if (cancelled) return;
-        const r = rosterSnap.exists() ? rosterSnap.data() : { elders: [], former: [] };
-        setRoster({ elders: r.elders || [], former: r.former || [] });
-        setPeople(peopleSnap.docs.map(d => ({ _id: d.id, ...d.data() })));
-      } catch (e) {
-        if (cancelled) return;
-        setErr(e?.message || 'Failed to load Shepherd Hub.');
-        Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'load' } });
-      } finally {
-        if (!cancelled) setLoading(false);
+  // Load roster + sync status + congregation cache. Flock-first (UX-1): an elder
+  // sees their own flock almost instantly (a small array-contains query — no
+  // composite index since we don't orderBy), then the full congregation streams
+  // in behind it for the All / worklist / departed views and the coverage counts.
+  // Reusable so "Save & re-sync" can refetch (UX-4). React 18 makes a post-unmount
+  // setState a no-op, so no cancelled guard is needed.
+  const load = useCallback(async () => {
+    setErr(null); setFullyLoaded(false);
+    try {
+      const base = `churches/${SHEPHERD_CHURCH_ID}`;
+      // Read single docs directly — NOT a list over the config collection (denied).
+      const [rosterSnap, syncSnap] = await Promise.all([
+        getDoc(doc(db, `${base}/config/shepherdRoster`)),
+        getDoc(doc(db, `${base}/config/shepherdSync`)).catch(() => null),
+      ]);
+      const r = rosterSnap.exists() ? rosterSnap.data() : { elders: [], former: [] };
+      setRoster({ elders: r.elders || [], former: r.former || [] });
+      if (syncSnap && syncSnap.exists()) setSyncInfo(syncSnap.data());
+      const myRow = (r.elders || []).find(e => (e.emails || []).some(em => String(em).toLowerCase() === myEmail));
+      const key = myRow?.key || null;
+      if (key) {
+        const flockSnap = await getDocs(query(collection(db, `${base}/shepherdPeople`), where('elderKeys', 'array-contains', key)));
+        setPeople(flockSnap.docs.map(d => ({ _id: d.id, ...d.data() })));
+        setLoading(false); // paint the flock now
       }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+      const allSnap = await getDocs(query(collection(db, `${base}/shepherdPeople`), orderBy('name')));
+      setPeople(allSnap.docs.map(d => ({ _id: d.id, ...d.data() })));
+      setFullyLoaded(true);
+    } catch (e) {
+      setErr(e?.message || 'Failed to load Shepherd Hub.');
+      Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'load' } });
+    } finally {
+      setLoading(false);
+    }
+  }, [myEmail]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Reset the render cap whenever the visible set changes (UX-1). Depends on
+  // viewAsKey (state, declared above) rather than the derived activeKey to avoid
+  // a TDZ on the dep array, which React evaluates during render.
+  useEffect(() => { setVisibleCount(100); }, [view, search, statusFilter, assignFilter, sortBy, viewAsKey]);
 
   // The logged-in elder's own key (null for a non-elder admin).
   const myKey = useMemo(() => {
@@ -170,7 +199,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
       // hides departed people entirely so they never pollute the active roster.
       if (view === 'departed') {
         if (!p.removedFromPco || !(p.pastoralStakeholderUids || []).includes(myUid)) return false;
-        if (q && !(p.name || '').toLowerCase().includes(q)) return false;
+        if (!personMatches(p, q)) return false;
         return true;
       }
       if (p.removedFromPco) return false;
@@ -185,7 +214,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
         if (assignFilter === 'unassigned' && p.hasAssignment) return false;
         if (assignFilter === 'orphaned' && !p.orphaned) return false;
       }
-      if (q && !(p.name || '').toLowerCase().includes(q)) return false;
+      if (!personMatches(p, q)) return false;
       return true;
     });
     // Sort key. 'last' groups families together (last name, then first as
@@ -219,6 +248,30 @@ export function ShepherdHubPage({ userProfile, isElder }) {
     [people, myUid]
   );
 
+  // Upcoming birthdays/anniversaries in the active flock within the next week
+  // (UX-3) — the data is already synced; this just surfaces it where an elder
+  // will act on it. Year-agnostic: compares month/day against the next 7 days.
+  const flockUpcoming = useMemo(() => {
+    if (!activeKey) return [];
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const out = [];
+    const consider = (p, dateStr, icon, label) => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr || '');
+      if (!m) return;
+      const mo = +m[2] - 1, da = +m[3];
+      let next = new Date(today.getFullYear(), mo, da);
+      if (next < today) next = new Date(today.getFullYear() + 1, mo, da);
+      const days = Math.round((next - today) / 86400000);
+      if (days <= 6) out.push({ key: `${p._id}-${label}`, name: p.name, icon, when: next, days });
+    };
+    people.forEach(p => {
+      if (p.removedFromPco || p.status !== 'active' || !(p.elderKeys || []).includes(activeKey)) return;
+      consider(p, p.birthdate, '🎂', 'b');
+      consider(p, p.anniversary, '💍', 'a');
+    });
+    return out.sort((a, b) => a.days - b.days);
+  }, [people, activeKey]);
+
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: B.textLight, fontFamily: f2 }}>Loading Shepherd Hub…</div>;
   if (err) return <div style={{ padding: 24, color: B.red, fontFamily: f2 }}>{err}</div>;
 
@@ -239,6 +292,8 @@ export function ShepherdHubPage({ userProfile, isElder }) {
           <h2 style={{ fontFamily: f1, fontSize: 22, fontWeight: 800, color: B.navy, margin: 0 }}>🐑 Shepherd Hub</h2>
           <p style={{ margin: '4px 0 0', color: B.textLight, fontSize: 13 }}>
             {coverage.active} active · {coverage.assigned} shepherded · {coverage.orphaned} need reassignment
+            {syncInfo?.lastSyncAt && <> · <span title="Last Planning Center sync">updated {fmtTime(syncInfo.lastSyncAt)}</span></>}
+            {!fullyLoaded && <> · <span style={{ color: B.teal }}>loading congregation…</span></>}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -264,6 +319,12 @@ export function ShepherdHubPage({ userProfile, isElder }) {
         </div>
       )}
 
+      {isAdmin && syncInfo?.collisions?.length > 0 && (
+        <div style={{ background: B.goldLight, border: '1px solid #E7C66B', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13, color: '#7A5E0A' }}>
+          ⚠ {syncInfo.collisions.length} Planning Center assignment{syncInfo.collisions.length > 1 ? 's' : ''} could match more than one elder — review in Planning Center: {syncInfo.collisions.slice(0, 6).join(', ')}{syncInfo.collisions.length > 6 ? '…' : ''}
+        </div>
+      )}
+
       {/* View toggle */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
         <Tab id="flock" label={myKey ? 'My Flock' : `${activeElder ? activeElder.name + "'s" : ''} Flock`} />
@@ -277,7 +338,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name…" style={{ ...inp, flex: '1 1 220px', maxWidth: 360 }} />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, email, or phone…" style={{ ...inp, flex: '1 1 220px', maxWidth: 360 }} />
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width: 'auto' }}>
           <option value="active">Active only</option>
           <option value="inactive">Inactive only</option>
@@ -309,6 +370,15 @@ export function ShepherdHubPage({ userProfile, isElder }) {
         </div>
       )}
 
+      {view === 'flock' && flockUpcoming.length > 0 && (
+        <div style={{ background: B.tealPale, border: `1px solid ${B.teal}33`, borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 13, color: B.textMid }}>
+          <strong style={{ fontFamily: f1, color: B.navy }}>This week in your flock:</strong>{' '}
+          {flockUpcoming.map((u, i) => (
+            <span key={u.key}>{i > 0 ? ' · ' : ''}{u.icon} {u.name} ({u.when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })})</span>
+          ))}
+        </div>
+      )}
+
       {/* Results */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
         <div style={{ fontSize: 12, color: B.textLight, fontFamily: f1, fontWeight: 600 }}>{filtered.length} {filtered.length === 1 ? 'person' : 'people'}</div>
@@ -328,7 +398,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
         >⬇ Export CSV</button>
       </div>
       <div style={{ display: 'grid', gap: 8 }}>
-        {filtered.map(p => (
+        {filtered.slice(0, visibleCount).map(p => (
           <button key={p._id} onClick={() => setSelected(p)} style={{
             display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer',
             background: B.white, border: `1px solid ${B.sand}`, borderRadius: 12, padding: '10px 14px', width: '100%',
@@ -351,6 +421,13 @@ export function ShepherdHubPage({ userProfile, isElder }) {
         ))}
         {filtered.length === 0 && <div style={{ padding: 32, textAlign: 'center', color: B.textLight }}>No one matches these filters.</div>}
       </div>
+      {filtered.length > visibleCount && (
+        <div style={{ textAlign: 'center', marginTop: 12 }}>
+          <button onClick={() => setVisibleCount(c => c + 100)} style={{ ...btnS, padding: '8px 20px' }}>
+            Show more ({filtered.length - visibleCount} more)
+          </button>
+        </div>
+      )}
 
       {selected && <PersonDetail
         person={selected} elderName={elderName} userProfile={userProfile} isElder={isElder}
@@ -359,7 +436,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
         onPatch={patchPerson}
         onClose={() => setSelected(null)} />}
 
-      {showRoster && <RosterManager roster={roster} onClose={() => setShowRoster(false)} onSaved={setRoster} />}
+      {showRoster && <RosterManager roster={roster} onClose={() => setShowRoster(false)} onSaved={setRoster} onResynced={load} />}
       {showPrivacy && <PrivacyModal onClose={() => setShowPrivacy(false)} />}
     </div>
   );
@@ -414,7 +491,7 @@ function PrivacyModal({ onClose }) {
 // Admin-only editor for config/shepherdRoster — the single source feeding the
 // claim grant + the sync's name-matching. Changes to match patterns / active
 // flags re-classify people only on the next sync (offer "Save & re-sync").
-function RosterManager({ roster, onClose, onSaved }) {
+function RosterManager({ roster, onClose, onSaved, onResynced }) {
   const toRow = (e) => ({
     key: e.key, name: e.name || '', surname: e.surname || '',
     emailsStr: (e.emails || []).join(', '), matchStr: (e.match || []).join(', '),
@@ -489,6 +566,7 @@ function RosterManager({ roster, onClose, onSaved }) {
       }
       if (resync) {
         await httpsCallable(getFunctions(), 'refreshShepherdPeople')();
+        onResynced?.(); // UX-4: refetch people + sync freshness after the re-sync
       }
       onClose();
     } catch (e) {
@@ -719,6 +797,7 @@ function NotesSection({ person, userProfile }) {
   const [privateText, setPrivateText] = useState('');
   const [privateSaved, setPrivateSaved] = useState('');
   const [savingPrivate, setSavingPrivate] = useState(false);
+  const [undoText, setUndoText] = useState(null); // UX-6: one-level undo of the last save/delete
   const [thread, setThread] = useState([]);
   const [draft, setDraft] = useState('');
   const [posting, setPosting] = useState(false);
@@ -744,12 +823,14 @@ function NotesSection({ person, userProfile }) {
   }, [person._id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function savePrivate() {
+    const prior = privateSaved; // capture for one-level undo (UX-6)
     setSavingPrivate(true);
     try {
       await setDoc(doc(db, `${base}/privateNotes/${userProfile.uid}`), {
         text: privateText, authorName: userProfile.name || null, updatedAt: serverTimestamp(),
       });
       setPrivateSaved(privateText);
+      setUndoText(prior !== privateText ? prior : null);
       logShepherdAudit('edit_private_note', person, userProfile);
     } catch (e) {
       Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'notes-save-private' } });
@@ -757,16 +838,26 @@ function NotesSection({ person, userProfile }) {
   }
 
   async function deletePrivate() {
+    const prior = privateSaved; // capture for one-level undo (UX-6)
     setSavingPrivate(true);
     try {
       // Delete the doc outright (not just blank the text) so a departed person
       // with no remaining pastoral data gets cleaned up by the next sync.
       await deleteDoc(doc(db, `${base}/privateNotes/${userProfile.uid}`));
       setPrivateText(''); setPrivateSaved('');
+      setUndoText(prior || null);
       logShepherdAudit('delete_private_note', person, userProfile);
     } catch (e) {
       Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'notes-del-private' } });
     } finally { setSavingPrivate(false); }
+  }
+
+  // Restore the pre-save/-delete text into the editor (not yet persisted — the
+  // elder re-saves to commit). One level, cleared once used.
+  function undoNote() {
+    if (undoText == null) return;
+    setPrivateText(undoText);
+    setUndoText(null);
   }
 
   async function postEntry() {
@@ -804,6 +895,9 @@ function NotesSection({ person, userProfile }) {
       <textarea value={privateText} onChange={e => setPrivateText(e.target.value)} rows={3} placeholder={loaded ? 'Your private note about this person…' : 'Loading…'} disabled={!loaded}
         style={{ ...inp, resize: 'vertical', minHeight: 70 }} />
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6 }}>
+        {undoText != null && (
+          <button onClick={undoNote} disabled={savingPrivate} style={{ ...btnS, padding: '8px 16px', marginRight: 'auto', opacity: savingPrivate ? 0.5 : 1 }}>↩ Undo</button>
+        )}
         {privateSaved.trim() && (
           <button onClick={deletePrivate} disabled={savingPrivate} style={{ ...btnS, padding: '8px 16px', color: B.red, opacity: savingPrivate ? 0.5 : 1 }}>
             Delete note
