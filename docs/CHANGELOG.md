@@ -4,6 +4,24 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-11 — Suppress transient Firestore listener errors from Sentry
+
+Two overnight Sentry alerts (`FirebaseError: deadline-exceeded`, `FirebaseError:
+internal`, both iOS Safari, `handled=yes`, `mechanism=auto.core.capture_console`,
+empty user context) traced to `onSnapshot` listeners hitting transport blips when a
+mobile tab is backgrounded/network drops. The SDK auto-reconnects and re-delivers
+the snapshot, so there's no broken feature — but `handleErr`'s `console.error` was
+paging Sentry via captureConsole. Added a `ctx.listener` flag (passed by all 21
+realtime subscription error callbacks) and a `TRANSIENT_LISTENER_CODES` set
+(`deadline-exceeded`, `unavailable`, `cancelled`, `aborted`, `internal`, `unknown`)
+in `useFirestore.handleErr`: on the listener path these log at `console.warn` (below
+captureConsole's `error` threshold) and skip `captureException` + `setError`.
+`internal`/`unknown` are treated as transient ONLY on the listener path — writes and
+callables still report in full, since there those codes can mean a real bug.
+Missing-index detection (`failed-precondition`) is unaffected. Build + lint clean.
+
+---
+
 ## 2026-06-11 — Hide non-domain test account (jcvaught@gmail.com) everywhere
 
 `excludeTestAccounts` only matched the `@churchopshub.com` E2E domain, so John's
