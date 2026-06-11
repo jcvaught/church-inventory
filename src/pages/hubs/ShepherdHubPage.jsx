@@ -48,6 +48,29 @@ function fmtTime(ts) {
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+// Firestore Timestamp | millis | Date | null → epoch ms (0 = never), for sort + display.
+function careMs(ts) {
+  if (ts == null) return 0;
+  if (typeof ts === 'number') return ts;
+  if (typeof ts.toMillis === 'function') return ts.toMillis();
+  if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+  const n = new Date(ts).getTime();
+  return Number.isNaN(n) ? 0 : n;
+}
+
+// Compact "how long ago" for the last-contact stamp (UX-2).
+function relativeTime(ts) {
+  const ms = careMs(ts);
+  if (!ms) return null;
+  const days = Math.floor((Date.now() - ms) / 86400000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days}d ago`;
+  if (days < 31) return `${Math.floor(days / 7)}w ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
+
 // Match a search query against name, email, or phone (UX-5) — elders often look
 // someone up from a missed call or an email, not just by name.
 function personMatches(p, q) {
@@ -157,8 +180,13 @@ export function ShepherdHubPage({ userProfile, isElder }) {
         setPeople(flockSnap.docs.map(d => ({ _id: d.id, ...d.data() })));
         setLoading(false); // paint the flock now
       }
-      const allSnap = await getDocs(query(collection(db, `${base}/shepherdPeople`), orderBy('name')));
-      setPeople(allSnap.docs.map(d => ({ _id: d.id, ...d.data() })));
+      const [allSnap, careSnap] = await Promise.all([
+        getDocs(query(collection(db, `${base}/shepherdPeople`), orderBy('name'))),
+        getDocs(collection(db, `${base}/shepherdCare`)).catch(() => ({ forEach: () => {} })),
+      ]);
+      const careMap = {};
+      careSnap.forEach(d => { careMap[d.id] = d.data().lastCareAt || null; });
+      setPeople(allSnap.docs.map(d => ({ _id: d.id, ...d.data(), lastCareAt: careMap[d.id] || null })));
       setFullyLoaded(true);
     } catch (e) {
       setErr(e?.message || 'Failed to load Shepherd Hub.');
@@ -222,9 +250,14 @@ export function ShepherdHubPage({ userProfile, isElder }) {
     // full name when the split first/last fields are missing.
     const lastOf = (p) => (p.lastName || (p.name || '').trim().split(/\s+/).slice(-1)[0] || '').toLowerCase();
     const firstOf = (p) => (p.firstName || p.name || '').toLowerCase();
-    result.sort(sortBy === 'last'
-      ? (a, b) => lastOf(a).localeCompare(lastOf(b)) || firstOf(a).localeCompare(firstOf(b))
-      : (a, b) => firstOf(a).localeCompare(firstOf(b)) || lastOf(a).localeCompare(lastOf(b)));
+    if (sortBy === 'stale') {
+      // Needs-attention first: never-contacted (0), then oldest contact (UX-2).
+      result.sort((a, b) => careMs(a.lastCareAt) - careMs(b.lastCareAt) || firstOf(a).localeCompare(firstOf(b)));
+    } else {
+      result.sort(sortBy === 'last'
+        ? (a, b) => lastOf(a).localeCompare(lastOf(b)) || firstOf(a).localeCompare(firstOf(b))
+        : (a, b) => firstOf(a).localeCompare(firstOf(b)) || lastOf(a).localeCompare(lastOf(b)));
+    }
     return result;
   }, [people, view, activeKey, statusFilter, assignFilter, search, sortBy, myUid]);
 
@@ -347,6 +380,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
         <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ ...inp, width: 'auto' }} aria-label="Sort by">
           <option value="first">Sort: First name</option>
           <option value="last">Sort: Last name</option>
+          <option value="stale">Sort: Needs attention</option>
         </select>
         {view === 'all' && (
           <select value={assignFilter} onChange={e => setAssignFilter(e.target.value)} style={{ ...inp, width: 'auto' }}>
@@ -411,6 +445,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
                 <StatusBadge status={p.status} />
                 {p.removedFromPco && <span style={chip(B.goldLight, '#96750E')}>No longer in PCO</span>}
                 {p.orphaned && <span style={chip('#FEF2F2', B.red)}>Orphaned</span>}
+                {p.lastCareAt && <span title="Last care-thread contact">· touched {relativeTime(p.lastCareAt)}</span>}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 200 }}>
@@ -794,6 +829,7 @@ function AssignmentEditor({ person, activeElders, onClose, onSaved }) {
 // Private note (owner-only) + shared care thread for one person.
 function NotesSection({ person, userProfile }) {
   const base = `churches/${SHEPHERD_CHURCH_ID}/shepherdPeople/${person._id}`;
+  const CARE_BASE = `churches/${SHEPHERD_CHURCH_ID}/shepherdCare`;
   const [privateText, setPrivateText] = useState('');
   const [privateSaved, setPrivateSaved] = useState('');
   const [savingPrivate, setSavingPrivate] = useState(false);
@@ -870,6 +906,8 @@ function NotesSection({ person, userProfile }) {
       });
       setThread(t => [...t, { _id: ref.id, text, authorUid: userProfile.uid, authorName: userProfile.name, createdAt: new Date() }]);
       setDraft('');
+      // UX-2: stamp last-contact (separate doc the sync never overwrites).
+      await setDoc(doc(db, `${CARE_BASE}/${person._id}`), { lastCareAt: serverTimestamp(), lastCareByName: userProfile.name || null }, { merge: true });
       logShepherdAudit('append_care', person, userProfile);
     } catch (e) {
       Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'notes-post-care' } });
@@ -879,7 +917,11 @@ function NotesSection({ person, userProfile }) {
   async function deleteEntry(entry) {
     try {
       await deleteDoc(doc(db, `${base}/careThread/${entry._id}`));
-      setThread(t => t.filter(x => x._id !== entry._id));
+      const remaining = thread.filter(x => x._id !== entry._id);
+      setThread(remaining);
+      // UX-2: recompute last-contact from the remaining thread (or clear it).
+      const maxMs = remaining.reduce((mx, e) => Math.max(mx, careMs(e.createdAt)), 0);
+      await setDoc(doc(db, `${CARE_BASE}/${person._id}`), { lastCareAt: maxMs ? new Date(maxMs) : null }, { merge: true });
       logShepherdAudit('delete_care', person, userProfile);
     } catch (e) {
       Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'notes-del-care' } });

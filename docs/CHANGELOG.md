@@ -4,6 +4,28 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-11 — Shepherd Hub UX (audit Phase 3, UX-1…6)
+
+- **UX-2 (last-contact loop):** new top-level `churches/{id}/shepherdCare/{personId}` doc
+  holds `lastCareAt`, written client-side when an elder posts/removes a care-thread entry.
+  Kept SEPARATE from the person doc so the nightly full-overwrite sync never clobbers it
+  (rules: elder read/write, admin read). The list shows "touched Nmo ago" and a new
+  **"Sort: Needs attention"** option puts never-/least-recently-contacted first.
+- **UX-1 (perf):** flock-first load — a small `array-contains` query paints the elder's
+  flock instantly (no composite index, no orderBy), then the full congregation streams in
+  behind it — plus a **100-row render cap** with "Show more" so the ~4k-person list stops
+  rendering thousands of DOM nodes.
+- **UX-4:** header shows "updated {lastSyncAt}" + a "loading congregation…" hint during the
+  flock-first phase; admins see a **collisions** note (the ROB-5 ambiguous assignments);
+  **Save & re-sync now refetches** the page instead of leaving stale data.
+- **UX-3:** "This week in your flock" strip — upcoming birthdays/anniversaries (already
+  synced) surfaced in the flock view.
+- **UX-5:** search matches **email + phone**, not just name.
+- **UX-6:** one-level **Undo** after a private-note save/delete.
+
+`firestore.rules` deployed (shepherdCare block). Frontend otherwise. Build + lint clean.
+UX-7 (household grouping) left as an accepted v1 limitation.
+
 ## 2026-06-11 — Shepherd Hub robustness (audit Phase 2, ROB-1…6)
 
 - **ROB-1:** `setElderAssignment` now writes the cache doc with `set(..., {merge:true})`

@@ -435,6 +435,16 @@ service cloud.firestore {
       allow update, delete: if isElder() && resource.data.authorUid == request.auth.uid;
     }
 
+    // ── Last-contact stamp (UX-2): a tiny per-person doc holding `lastCareAt`,
+    //    written by an elder when they post/remove a care-thread entry. Kept in
+    //    a SEPARATE top-level collection (not on the shepherdPeople doc) so the
+    //    nightly full-overwrite sync never clobbers it. Non-sensitive (a
+    //    timestamp), so any elder may write it. ─────────────────────────────────
+    match /churches/{churchId}/shepherdCare/{personId} {
+      allow read:  if isElder() || isShepherdAdmin();
+      allow write: if isElder();
+    }
+
     // ── Shepherd audit log — every note view/edit + reassignment. Append-only;
     //    every elder/admin WRITES, but only the admin READS (SEC-6, 2026-06-11):
     //    elder-readable rows leaked which people each elder kept private notes on

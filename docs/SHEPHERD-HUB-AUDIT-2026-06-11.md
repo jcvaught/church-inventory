@@ -43,12 +43,12 @@ the Shepherd blocks in `firestore.rules`, `docs/SHEPHERD-HUB-PLAN.md`,
 
 | ID | Sev | Status | Finding | Location |
 |----|-----|--------|---------|----------|
-| UX-1 | 🟠 High | ⬜ | Loads **all ~4,000** `shepherdPeople` and renders every filtered row as a DOM node — will jank on elders' iPads. Query the flock first (`array-contains` on elder key), lazy-load the rest, cap/paginate rendering. | `ShepherdHubPage.jsx` load + list |
-| UX-2 | 🟡 Medium | ⬜ | No "last contacted" / follow-up loop — the hub answers "who's in my flock" but not "who needs me next." Stamp `lastCareAt` on care-thread post; show "last touched"; offer stalest-first sort. *(Highest-leverage UX change.)* | `ShepherdHubPage.jsx` |
-| UX-3 | 🟡 Medium | ⬜ | `birthdate`/`anniversary` are synced but only shown inside the modal. Add an "upcoming this week in your flock" strip. | `ShepherdHubPage.jsx` |
-| UX-4 | 🟡 Medium | ⬜ | No sync-freshness indicator; after "Save & re-sync" the page never refetches people (admin sees stale classifications until a manual reload). Read `config/shepherdSync.lastSyncAt`; refetch on re-sync completion. | `ShepherdHubPage.jsx` |
-| UX-5 | 🟢 Low | ⬜ | Search matches name only — elders can't look up a phone/email fragment from a missed call. Extend the predicate. | `ShepherdHubPage.jsx` |
-| UX-6 | 🟢 Low | 🟡 | Private note was a single overwrite-blob with no recovery. A **Delete note** action was added 2026-06-11 (for the departed-PCO cleanup path), but there's still no one-level undo on accidental overwrite. | `ShepherdHubPage.jsx` NotesSection |
+| UX-1 | 🟠 High | ✅ 2026-06-11 | Loads **all ~4,000** `shepherdPeople` and renders every filtered row as a DOM node — will jank on elders' iPads. Query the flock first (`array-contains` on elder key), lazy-load the rest, cap/paginate rendering. | `ShepherdHubPage.jsx` load + list |
+| UX-2 | 🟡 Medium | ✅ 2026-06-11 | No "last contacted" / follow-up loop — the hub answers "who's in my flock" but not "who needs me next." Stamp `lastCareAt` on care-thread post; show "last touched"; offer stalest-first sort. *(Highest-leverage UX change.)* | `ShepherdHubPage.jsx` |
+| UX-3 | 🟡 Medium | ✅ 2026-06-11 | `birthdate`/`anniversary` are synced but only shown inside the modal. Add an "upcoming this week in your flock" strip. | `ShepherdHubPage.jsx` |
+| UX-4 | 🟡 Medium | ✅ 2026-06-11 | No sync-freshness indicator; after "Save & re-sync" the page never refetches people (admin sees stale classifications until a manual reload). Read `config/shepherdSync.lastSyncAt`; refetch on re-sync completion. | `ShepherdHubPage.jsx` |
+| UX-5 | 🟢 Low | ✅ 2026-06-11 | Search matches name only — elders can't look up a phone/email fragment from a missed call. Extend the predicate. | `ShepherdHubPage.jsx` |
+| UX-6 | 🟢 Low | ✅ 2026-06-11 | Private note was a single overwrite-blob with no recovery. A **Delete note** action was added 2026-06-11 (for the departed-PCO cleanup path), but there's still no one-level undo on accidental overwrite. | `ShepherdHubPage.jsx` NotesSection |
 | UX-7 | 🟢 Low | ⬜ | No household grouping (PCO households aren't synced); sort-by-last-name is the only family proxy. Fine for v1. | sync + UI |
 
 ### D. Code Quality & Maintainability
@@ -143,10 +143,12 @@ SEC-6 (restrict `shepherdAudit` reads to admin — *pending D3*).
 ROB-1 (`set` merge) · ROB-2 (field id from `fieldDefs`) · ROB-6 (block empty roster) ·
 ROB-4 (paginate field defs) · ROB-3 (sync mutex, 15-min TTL) · ROB-5 (surface normalizer collisions in the sync summary).
 
-**Phase 3 — UX & pastoral.**
-UX-1 (flock-first load + render cap — do first; also unblocks scale) ·
-UX-4 (sync freshness + refetch after re-sync) · UX-2 (`lastCareAt` + stalest-first) ·
-UX-3 (birthdays strip) · UX-5 (search phone/email) · UX-6 (note undo).
+**Phase 3 — UX & pastoral — ✅ DONE 2026-06-11.** UX-1 (flock-first load + 100-row
+render cap) · UX-4 (sync-freshness line + collisions note + refetch after re-sync) ·
+UX-2 (`shepherdCare/{personId}` last-contact stamp [sync never overwrites it] +
+"Needs attention" stalest-first sort + "touched Nmo ago" on rows) · UX-3 (this-week
+birthdays/anniversaries strip) · UX-5 (search name/email/phone) · UX-6 (one-level note undo).
+UX-7 (household grouping) left as accepted v1 limitation.
 
 **Phase 4 — Code quality + tests.**
 CQ-4 (rules unit tests + pure-fn tests — highest value) · CQ-1 (consolidate client allow-list) ·
