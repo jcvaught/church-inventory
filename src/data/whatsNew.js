@@ -4,6 +4,12 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-06-12',
+    tag: 'Improved',
+    title: 'Phone numbers format themselves',
+    body: "When you add or edit a person in the People Access Hub, phone numbers now format automatically as you type — just enter the digits and they turn into (555) 555-5555. Existing numbers display the same way throughout the hub.",
+  },
+  {
     date: '2026-06-07',
     tag: 'New',
     title: 'What needs attention this week',
