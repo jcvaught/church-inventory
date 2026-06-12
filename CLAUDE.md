@@ -144,6 +144,7 @@ src/
 │   ├── print.js               ← printLabel, printInventory
 │   ├── imageResize.js         ← resizeImageForUpload
 │   ├── roleHelpers.js         ← canManageMinistry, canManageItem, canManageSupply
+│   ├── phone.js               ← formatPhone(value) — US phone formatter → (555) 555-5555; progressive (as-you-type) + display. Applied to People Access contacts, Maintenance vendors, public item-request form (input + display). NOT for users.phone (E.164 for Twilio SMS) or shepherdPeople (read-only PCO). One-time normalizer: scripts/backfill-phone-format.cjs
 │   └── constants.js           ← ITEM_STATUS, RES_STATUS, TICKET_STATUS, ACCESS_RECORD_TYPE string enums
 └── data/
     ├── referenceData.js       ← Static reference inventory (not auto-seeded; reference only)
