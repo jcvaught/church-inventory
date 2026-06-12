@@ -7,7 +7,7 @@ export const WHATS_NEW = [
     date: '2026-06-12',
     tag: 'Improved',
     title: 'Phone numbers format themselves',
-    body: "When you add or edit a person in the People Access Hub, phone numbers now format automatically as you type — just enter the digits and they turn into (555) 555-5555. Existing numbers display the same way throughout the hub.",
+    body: "Phone numbers now format automatically as you type — just enter the digits and they turn into (555) 555-5555. This works wherever you enter a number: People Access contacts, Maintenance Hub vendors, and the public item-request form. Numbers already on file display the same tidy way.",
   },
   {
     date: '2026-06-07',

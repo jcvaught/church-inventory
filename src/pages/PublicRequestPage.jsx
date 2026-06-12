@@ -5,6 +5,7 @@ import { B, f1, f2, inp, btnP } from '../components/brand/tokens.js';
 import { FF } from '../components/primitives/FF.jsx';
 import { FullLogo } from '../components/brand/Logo.jsx';
 import { SEO } from '../components/SEO.jsx';
+import { formatPhone } from '../utils/phone.js';
 
 export function PublicRequestPage({ churchId, churchName }) {
   const seoTitle = churchName ? `Submit a Request | ${churchName}` : 'Submit an Item Request | ChurchOpsHub';
@@ -94,7 +95,7 @@ export function PublicRequestPage({ churchId, churchName }) {
               <input style={inp} type="email" value={form.email} onChange={e=>setForm({...form, email:e.target.value})} placeholder="you@example.com"/>
             </FF>
             <FF label="Phone (optional)">
-              <input style={inp} type="tel" value={form.phone} onChange={e=>setForm({...form, phone:e.target.value})} placeholder="555-555-5555"/>
+              <input style={inp} type="tel" value={form.phone} onChange={e=>setForm({...form, phone:formatPhone(e.target.value)})} placeholder="555-555-5555"/>
             </FF>
           </div>
           <FF label="What item do you need?" required>

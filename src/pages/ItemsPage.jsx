@@ -16,6 +16,7 @@ import { exportItemsCSV } from '../utils/csv.js';
 import { localDateStr } from '../utils/date.js';
 import { canManageItem } from '../utils/roleHelpers.js';
 import { ITEM_STATUS } from '../utils/constants.js';
+import { formatPhone } from '../utils/phone.js';
 // qrcode imported dynamically in the QR-generation effect below — keeps it out of the main bundle.
 
 function generateId(description, existingIds) {
@@ -655,7 +656,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
                   <div style={{ fontSize:12, color:B.textMid, marginTop:4 }}>
                     From: <strong>{req.name}</strong>
                     {req.email && <> · {req.email}</>}
-                    {req.phone && <> · {req.phone}</>}
+                    {req.phone && <> · {formatPhone(req.phone)}</>}
                     {req.dateNeeded && <> · Needed by: {req.dateNeeded}</>}
                     {req.urgency && req.urgency !== 'Low' && (
                       <span style={{ marginLeft:6, padding:"1px 8px", borderRadius:20, background:req.urgency==='High'?B.redPale:B.goldLight, color:req.urgency==='High'?B.red:B.navy, fontWeight:600, fontSize:11 }}>{req.urgency}</span>
