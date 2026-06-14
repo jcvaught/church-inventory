@@ -4,6 +4,12 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-14 — Jobs Hub: morning empty-job alert
+
+New scheduled Cloud Function `sendEmptyJobMorningAlert` (hourly cron, gated to each church's local **7am**). For churches with the Jobs hub active and `config/settings.emptyJobAlertEnabled === true`, it emails **all admins** a list of any job scheduled for *today* that is still `status: 'open'` with `signupCount === 0` — a morning heads-up to recruit before the shift. Days where every job already has a signup are skipped. Mirrors the `sendWeeklyComplianceDigest` skeleton (per-church tz gate, hub gate, opt-in flag, Brevo to admins); registered in `SCHEDULED_JOB_REGISTRY` (hourly heartbeat). Admin opt-in toggle added under a new **Daily Job Alerts** block in Settings → Church Settings (`emptyJobAlertEnabled`, jobs-hub gated). Enabled for FXCC (recipients: John, Nancy, Jill). Motivated by JOB-1425 (June 13) which went 0/4 after all 3 signups withdrew the evening of June 10 with no heads-up.
+
+---
+
 ## 2026-06-11 — Shepherd Hub quality + rules tests (audit Phase 4) → AUDIT CLOSED
 
 Final phase of the Fable 5 Shepherd Hub audit (`docs/SHEPHERD-HUB-AUDIT-2026-06-11.md`).

@@ -2088,6 +2088,83 @@ ${personBlocks.join('\n')}
   return { processed };
 }));
 
+// ── sendEmptyJobMorningAlert ──────────────────────────────────────────────
+// Hourly; fires at each church's local 7am. For churches with the Jobs hub
+// active and config/settings.emptyJobAlertEnabled === true, emails all admins
+// a list of jobs scheduled for TODAY (church-local) that are still open and
+// have ZERO signups — a morning heads-up to recruit before the shift. Empty
+// alerts (every job today has at least one signup) are skipped.
+exports.sendEmptyJobMorningAlert = onSchedule({ schedule: '0 * * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendEmptyJobMorningAlert', async () => {
+  if (!emailConfigured()) { console.warn('sendEmptyJobMorningAlert: Brevo not configured, skipping.'); return; }
+  const db = getFirestore();
+  const tzCache = {};
+
+  const churchSnap = await db.collection('churches').get();
+  if (churchSnap.empty) return;
+
+  let processed = 0;
+  for (const churchDoc of churchSnap.docs) {
+    const churchId = churchDoc.id;
+
+    let settings;
+    try { settings = (await db.doc(`churches/${churchId}/config/settings`).get()).data() || {}; }
+    catch (err) { console.error('sendEmptyJobMorningAlert: settings read failed', { churchId, err: err.message }); continue; }
+    if (settings.emptyJobAlertEnabled !== true) continue;
+
+    const parts = localPartsFor(await getChurchTimeZone(db, churchId, tzCache));
+    if (parts.hour !== 7) continue; // church-local 7am only
+
+    let sub;
+    try { sub = (await db.doc(`churches/${churchId}/config/subscription`).get()).data() || {}; }
+    catch { continue; }
+    if (!subHasHub(sub, 'jobs')) continue;
+
+    const todayStr = parts.ymd;
+
+    // Single-field equality on scheduledDate (auto-indexed); status + signup
+    // filtering happens in-memory since today's set is small.
+    let jobSnap;
+    try {
+      jobSnap = await db.collection(`churches/${churchId}/jobListings`)
+        .where('scheduledDate', '==', todayStr)
+        .get();
+    } catch (err) { console.error('sendEmptyJobMorningAlert: jobs read failed', { churchId, err: err.message }); Sentry.captureException(err); continue; }
+    if (jobSnap.empty) continue;
+
+    const emptyJobs = jobSnap.docs
+      .map(d => d.data())
+      .filter(j => j.status === 'open' && (j.signupCount || 0) === 0)
+      .sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
+    if (emptyJobs.length === 0) continue;
+
+    const adminsSnap = await db.collection('users').where('churchId', '==', churchId).get();
+    const admins = adminsSnap.docs.map(d => d.data())
+      .filter(a => a.role === 'admin' && a.active !== false && a.email);
+    if (admins.length === 0) continue;
+
+    const churchName = churchDoc.data()?.churchName || settings.churchName || 'your church';
+    const rows = emptyJobs.map(j => {
+      const when = j.scheduledTime ? formatTimeRange(j.scheduledTime, j.scheduledEndTime) : 'time TBD';
+      const where = j.location ? ` — ${escapeHtml(j.location)}` : '';
+      const spots = j.spotsTotal || 1;
+      return `<li style="margin-bottom:4px"><strong>${escapeHtml(j.title || 'Untitled job')}</strong> — ${escapeHtml(when)}${where} <span style="color:#DC2626">(0 of ${spots} filled)</span></li>`;
+    }).join('');
+
+    const n = emptyJobs.length;
+    const subject = `${churchName}: ${n} job${n === 1 ? '' : 's'} today with no one signed up`;
+    const html = `<p>These job${n === 1 ? ' is' : 's are'} scheduled for <strong>today</strong> at <strong>${escapeHtml(churchName)}</strong> with <strong>no one signed up</strong> yet:</p>
+<ul style="padding-left:20px;margin:8px 0">${rows}</ul>
+<p style="margin-top:18px"><a href="https://churchopshub.com">Open ChurchOpsHub</a> → Jobs to recruit volunteers.</p>
+<p style="font-size:12px;color:#888">You're an admin getting the morning empty-job alert. Turn it off any time in Settings → Church Settings.</p>`;
+    const text = `${n} job${n === 1 ? '' : 's'} scheduled today at ${churchName} with no one signed up:\n\n${emptyJobs.map(j => `• ${j.title || 'Untitled job'} — ${j.scheduledTime ? formatTimeRange(j.scheduledTime, j.scheduledEndTime) : 'time TBD'}${j.location ? ' — ' + j.location : ''} (0 of ${j.spotsTotal || 1} filled)`).join('\n')}\n\nOpen churchopshub.com → Jobs to recruit volunteers.\n`;
+
+    const results = await Promise.allSettled(admins.map(a => sendEmailSafe({ to: a.email, from: FROM, subject, html, text })));
+    results.forEach((r) => { if (r.status === 'rejected') { console.error('sendEmptyJobMorningAlert: email failed', { churchId, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
+    processed += results.filter(r => r.status === 'fulfilled').length;
+  }
+  return { processed };
+}));
+
 // ═══ AI "What Needs Attention This Week" digest ════════════════════════════
 // Reads across every hub's existing signals (overdue work, expiring
 // compliance, low stock, unfilled shifts, contractor schedule/payments) and
@@ -3657,6 +3734,7 @@ const SCHEDULED_JOB_REGISTRY = [
   { name: 'sendWeeklyAttentionDigest',     cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendJobReminders',              cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendNewJobsDigest',             cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
+  { name: 'sendEmptyJobMorningAlert',      cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'closePastJobs',                 cadence: 'daily',  maxRunMs:   5 * 60 * 1000 },
   { name: 'generateRecurringTemplateTasks', cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },
   { name: 'syncShepherdPeople',            cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },

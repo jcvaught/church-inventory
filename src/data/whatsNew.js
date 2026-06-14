@@ -4,6 +4,12 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-06-14',
+    tag: 'New',
+    title: 'Morning alert for empty jobs',
+    body: "Admins can now get a 7am email heads-up if any job scheduled for that day still has no one signed up — so you have time to recruit before the shift. Turn it on under Settings → Church Settings → Daily Job Alerts. It only emails on days that actually need attention.",
+  },
+  {
     date: '2026-06-12',
     tag: 'Improved',
     title: 'Phone numbers format themselves',

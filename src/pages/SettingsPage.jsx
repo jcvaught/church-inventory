@@ -759,6 +759,21 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                 </label>
               )}
             </div>
+
+          {hasJobsHub && (
+            <div style={{ marginTop:22, paddingTop:18, borderTop:'1px solid '+B.sand }}>
+              <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Daily Job Alerts</div>
+              <div style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:12 }}>
+                Emailed to admins at 7am (your church's timezone). Sent only on days that need attention.
+              </div>
+              <label style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', fontSize:14, fontFamily:f2, color:B.textDark }}>
+                <input type="checkbox" style={{ marginTop:3 }}
+                  checked={settings?.emptyJobAlertEnabled === true}
+                  onChange={(e) => updateSettings({ emptyJobAlertEnabled: e.target.checked })} />
+                <span><strong>Empty job alert</strong> — a morning heads-up listing any jobs scheduled for that day that still have no one signed up.</span>
+              </label>
+            </div>
+          )}
         </div>
       )}
 
