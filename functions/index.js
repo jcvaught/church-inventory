@@ -2092,8 +2092,9 @@ ${personBlocks.join('\n')}
 // Hourly; fires at each church's local 7am. For churches with the Jobs hub
 // active and config/settings.emptyJobAlertEnabled === true, emails all admins
 // a list of jobs scheduled for TODAY (church-local) that are still open and
-// have ZERO signups — a morning heads-up to recruit before the shift. Empty
-// alerts (every job today has at least one signup) are skipped.
+// NOT fully staffed (signupCount < spotsTotal) — empty or partially filled —
+// a morning heads-up to recruit before the shift. Skipped when every job today
+// is already full.
 exports.sendEmptyJobMorningAlert = onSchedule({ schedule: '0 * * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendEmptyJobMorningAlert', async () => {
   if (!emailConfigured()) { console.warn('sendEmptyJobMorningAlert: Brevo not configured, skipping.'); return; }
   const db = getFirestore();
@@ -2131,11 +2132,12 @@ exports.sendEmptyJobMorningAlert = onSchedule({ schedule: '0 * * * *', timeZone:
     } catch (err) { console.error('sendEmptyJobMorningAlert: jobs read failed', { churchId, err: err.message }); Sentry.captureException(err); continue; }
     if (jobSnap.empty) continue;
 
-    const emptyJobs = jobSnap.docs
+    // Any open job that isn't fully staffed — empty (0) or partially filled.
+    const shortJobs = jobSnap.docs
       .map(d => d.data())
-      .filter(j => j.status === 'open' && (j.signupCount || 0) === 0)
+      .filter(j => j.status === 'open' && (j.signupCount || 0) < (j.spotsTotal || 1))
       .sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
-    if (emptyJobs.length === 0) continue;
+    if (shortJobs.length === 0) continue;
 
     const adminsSnap = await db.collection('users').where('churchId', '==', churchId).get();
     const admins = adminsSnap.docs.map(d => d.data())
@@ -2143,20 +2145,23 @@ exports.sendEmptyJobMorningAlert = onSchedule({ schedule: '0 * * * *', timeZone:
     if (admins.length === 0) continue;
 
     const churchName = churchDoc.data()?.churchName || settings.churchName || 'your church';
-    const rows = emptyJobs.map(j => {
+    const emptyCount = shortJobs.filter(j => (j.signupCount || 0) === 0).length;
+    const rows = shortJobs.map(j => {
       const when = j.scheduledTime ? formatTimeRange(j.scheduledTime, j.scheduledEndTime) : 'time TBD';
       const where = j.location ? ` — ${escapeHtml(j.location)}` : '';
       const spots = j.spotsTotal || 1;
-      return `<li style="margin-bottom:4px"><strong>${escapeHtml(j.title || 'Untitled job')}</strong> — ${escapeHtml(when)}${where} <span style="color:#DC2626">(0 of ${spots} filled)</span></li>`;
+      const filled = j.signupCount || 0;
+      // Red for nobody yet, amber for partially staffed.
+      return `<li style="margin-bottom:4px"><strong>${escapeHtml(j.title || 'Untitled job')}</strong> — ${escapeHtml(when)}${where} <span style="color:${filled === 0 ? '#DC2626' : '#B45309'}">(${filled} of ${spots} filled)</span></li>`;
     }).join('');
 
-    const n = emptyJobs.length;
-    const subject = `${churchName}: ${n} job${n === 1 ? '' : 's'} today with no one signed up`;
-    const html = `<p>These job${n === 1 ? ' is' : 's are'} scheduled for <strong>today</strong> at <strong>${escapeHtml(churchName)}</strong> with <strong>no one signed up</strong> yet:</p>
+    const n = shortJobs.length;
+    const subject = `${churchName}: ${n} job${n === 1 ? '' : 's'} today still need${n === 1 ? 's' : ''} volunteers${emptyCount > 0 ? ` (${emptyCount} with no one signed up)` : ''}`;
+    const html = `<p>These job${n === 1 ? ' is' : 's are'} scheduled for <strong>today</strong> at <strong>${escapeHtml(churchName)}</strong> and <strong>${n === 1 ? "isn't" : "aren't"} fully staffed</strong> yet:</p>
 <ul style="padding-left:20px;margin:8px 0">${rows}</ul>
 <p style="margin-top:18px"><a href="https://churchopshub.com">Open ChurchOpsHub</a> → Jobs to recruit volunteers.</p>
-<p style="font-size:12px;color:#888">You're an admin getting the morning empty-job alert. Turn it off any time in Settings → Church Settings.</p>`;
-    const text = `${n} job${n === 1 ? '' : 's'} scheduled today at ${churchName} with no one signed up:\n\n${emptyJobs.map(j => `• ${j.title || 'Untitled job'} — ${j.scheduledTime ? formatTimeRange(j.scheduledTime, j.scheduledEndTime) : 'time TBD'}${j.location ? ' — ' + j.location : ''} (0 of ${j.spotsTotal || 1} filled)`).join('\n')}\n\nOpen churchopshub.com → Jobs to recruit volunteers.\n`;
+<p style="font-size:12px;color:#888">You're an admin getting the morning job-staffing alert. Turn it off any time in Settings → Church Settings.</p>`;
+    const text = `${n} job${n === 1 ? '' : 's'} scheduled today at ${churchName} ${n === 1 ? "isn't" : "aren't"} fully staffed yet:\n\n${shortJobs.map(j => `• ${j.title || 'Untitled job'} — ${j.scheduledTime ? formatTimeRange(j.scheduledTime, j.scheduledEndTime) : 'time TBD'}${j.location ? ' — ' + j.location : ''} (${j.signupCount || 0} of ${j.spotsTotal || 1} filled)`).join('\n')}\n\nOpen churchopshub.com → Jobs to recruit volunteers.\n`;
 
     const results = await Promise.allSettled(admins.map(a => sendEmailSafe({ to: a.email, from: FROM, subject, html, text })));
     results.forEach((r) => { if (r.status === 'rejected') { console.error('sendEmptyJobMorningAlert: email failed', { churchId, reason: r.reason?.message }); Sentry.captureException(r.reason); } });

@@ -770,7 +770,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                 <input type="checkbox" style={{ marginTop:3 }}
                   checked={settings?.emptyJobAlertEnabled === true}
                   onChange={(e) => updateSettings({ emptyJobAlertEnabled: e.target.checked })} />
-                <span><strong>Empty job alert</strong> — a morning heads-up listing any jobs scheduled for that day that still have no one signed up.</span>
+                <span><strong>Understaffed job alert</strong> — a morning heads-up listing any jobs scheduled for that day that aren't fully staffed yet (empty or only partly filled).</span>
               </label>
             </div>
           )}

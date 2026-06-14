@@ -6,8 +6,8 @@ export const WHATS_NEW = [
   {
     date: '2026-06-14',
     tag: 'New',
-    title: 'Morning alert for empty jobs',
-    body: "Admins can now get a 7am email heads-up if any job scheduled for that day still has no one signed up — so you have time to recruit before the shift. Turn it on under Settings → Church Settings → Daily Job Alerts. It only emails on days that actually need attention.",
+    title: 'Morning alert for understaffed jobs',
+    body: "Admins can now get a 7am email heads-up if any job scheduled for that day isn't fully staffed yet — whether it has nobody signed up or just a few of the spots filled — so you have time to recruit before the shift. Turn it on under Settings → Church Settings → Daily Job Alerts. It only emails on days that actually need attention.",
   },
   {
     date: '2026-06-12',
