@@ -456,7 +456,7 @@ The fix isn't "buy better spreadsheets" or "be more disciplined about updating t
 - **Role-based access** — the children's ministry director sees their team, the facilities manager sees their tickets, the office manager sees everything, the average volunteer sees only what they need. No sharing-permissions juggling, no accidental overwrites.
 - **Compliance reporting** — at any moment, you can answer "are we covered for this Sunday?" with current data, not a Tuesday-night reconciliation across six tabs.
 
-The cost-benefit math is straightforward. A 200-member church running operations through spreadsheets spends 150–300 hours a year on coordination overhead and carries unquantified compliance exposure. An integrated platform that handles inventory, maintenance, coordination, accountability, people access, tasks, and jobs costs roughly $29/month for the full feature set. The cost of the platform is significantly lower than the cost of one part-time coordinator hour per week.
+The cost-benefit math is straightforward. A 200-member church running operations through spreadsheets spends 150–300 hours a year on coordination overhead and carries unquantified compliance exposure. An integrated platform that handles inventory, maintenance, coordination, accountability, people access, tasks, and jobs costs a flat $15/month for the full feature set. The cost of the platform is significantly lower than the cost of one part-time coordinator hour per week.
 
 ## The Migration Question
 
@@ -1792,13 +1792,13 @@ The limitation for small churches: eSPACE starts at $60+/mo with required onboar
 
 **ChurchOpsHub** was built to fill exactly this gap for smaller churches. The core inventory and supplies system is completely free — no time limit, no credit card required. You get equipment tracking with checkout/return, photo documentation, QR code labels, supply quantity tracking, reservations, and a full activity log at no cost.
 
-For churches that need more operational depth, paid hubs extend the platform:
+For churches that need more operational depth, one flat plan ($15/mo or $150/yr) adds every paid feature — no per-hub à la carte:
 
-- **Maintenance Hub ($7/mo):** Kanban-style repair tickets, vendor directory, overdue alerts, photo documentation, and recurring maintenance scheduling
-- **Accountability Hub ($5/mo):** Physical asset audits by location, chain of custody timelines, and insurance-ready CSV export
-- **People Access Hub ($7/mo):** Background check tracking, key assignment records, certifications, and custom compliance milestones with expiry alerts
-- **Tasks Hub ($7/mo):** Kanban task board for admin workflows — assignees, visibility controls, checklists, and recurrence
-- **Insights Hub ($7/mo):** Utilization trends, ministry breakdowns, depreciation tracking, and seasonal analysis
+- **Maintenance:** Kanban-style repair tickets, vendor directory, overdue alerts, photo documentation, and recurring maintenance scheduling
+- **Accountability:** Physical asset audits by location, chain of custody timelines, and insurance-ready CSV export
+- **People Access:** Background check tracking, key assignment records, certifications, and custom compliance milestones with expiry alerts
+- **Tasks:** Kanban task board for admin workflows — assignees, visibility controls, checklists, and recurrence
+- **Insights:** Utilization trends, ministry breakdowns, depreciation tracking, and seasonal analysis
 
 ChurchOpsHub is a flat $15/mo — a fraction of the base price of eSPACE, with features eSPACE doesn't offer (compliance tracking, supply management, task management).
 

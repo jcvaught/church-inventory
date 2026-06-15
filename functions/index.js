@@ -1407,10 +1407,10 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
     const warnSubject = 'Your ChurchOpsHub trial ends in 7 days';
     const warnHtml = `<p>Hi ${escapeHtml(firstName)},</p>
 <p>Your 90-day free trial of all ChurchOpsHub hubs ends on <strong>${escapeHtml(trialEndDisplay)}</strong> — just 7 days away.</p>
-<p>After the trial, we'll automatically keep your two most-used hubs active for free. To keep all hubs, upgrade to the <strong>All-In plan ($29/mo)</strong> from Settings → Subscription.</p>
+<p>After the trial, we'll automatically keep your two most-used hubs active for free. To keep every feature, upgrade to the <strong>ChurchOpsHub plan ($15/mo or $150/yr)</strong> from Settings → Subscription.</p>
 <p><a href="https://churchopshub.com" style="color:#0D9488;font-weight:600">Log in to ChurchOpsHub</a> to review your hubs before the trial ends.</p>
 <p>— John Vaught<br><span style="font-size:13px;color:#666">ChurchOpsHub</span></p>`;
-    const warnText = `Hi ${firstName},\n\nYour 90-day free trial ends on ${trialEndDisplay} — just 7 days away.\n\nAfter the trial, we'll automatically keep your two most-used hubs active for free. To keep all hubs, upgrade to the All-In plan ($29/mo) from Settings → Subscription.\n\nLog in at churchopshub.com to review your hubs.\n\n— John Vaught\nChurchOpsHub`;
+    const warnText = `Hi ${firstName},\n\nYour 90-day free trial ends on ${trialEndDisplay} — just 7 days away.\n\nAfter the trial, we'll automatically keep your two most-used hubs active for free. To keep every feature, upgrade to the ChurchOpsHub plan ($15/mo or $150/yr) from Settings → Subscription.\n\nLog in at churchopshub.com to review your hubs.\n\n— John Vaught\nChurchOpsHub`;
 
     try {
       await sendEmailSafe({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject: warnSubject, html: warnHtml, text: warnText });
