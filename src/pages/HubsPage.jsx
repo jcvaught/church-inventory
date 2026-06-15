@@ -268,7 +268,7 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
                   ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: hub.color + '18', color: hub.color }}>Elders</span>
                   : active
                     ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: hub.color + '18', color: hub.color }}>Active</span>
-                    : <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: B.warmGray, color: B.textLight }}>{hub.price}</span>
+                    : <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: B.warmGray, color: B.textLight }}>🔒 Locked</span>
                 }
               </div>
 
@@ -277,25 +277,25 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
               <div style={{ fontSize: 13, color: B.textMid, fontFamily: f2, lineHeight: 1.5, marginBottom: 16 }}>{hub.desc}</div>
 
               <div style={{ fontSize: 13, fontWeight: 600, fontFamily: f1, color: active ? hub.color : B.textLight }}>
-                {isSpecial ? 'Open →' : active ? (canSee ? 'Open →' : 'No access') : `Upgrade for ${hub.price} →`}
+                {isSpecial ? 'Open →' : active ? (canSee ? 'Open →' : 'No access') : 'Unlock with ChurchOpsHub →'}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* All-In Bundle callout — admin/manager only; volunteers don't choose plans */}
+      {/* Plan callout — admin/manager only; volunteers don't choose plans */}
       {!volunteerMode && <div style={{ marginTop: 28, padding: 20, background: `linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 100%)`, borderRadius: 16, color: B.white }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16, fontFamily: f1, marginBottom: 4 }}>✨ All-In Bundle</div>
+            <div style={{ fontWeight: 700, fontSize: 16, fontFamily: f1, marginBottom: 4 }}>✨ Unlock everything — one plan</div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', fontFamily: f2 }}>
-              All 7 hubs for $29/mo — save over 40% vs. buying individually.
+              Every paid feature + unlimited team members for $15/mo (or $150/yr). Inventory stays free.
             </div>
           </div>
           <button onClick={() => { onGoToSettings?.(); }}
             style={{ ...btnP, background: B.gold, color: B.navy, padding: '9px 18px', fontSize: 13, cursor: 'pointer' }}>
-            View Plans
+            View Plan
           </button>
         </div>
       </div>}

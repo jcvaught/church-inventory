@@ -213,23 +213,18 @@ Full collection schemas and Firestore rules summary: `docs/DATA_MODEL.md`. Quick
 
 `Available` | `Checked Out` | `In Use` | `Under Repair` | `Disposed`
 
-## Business Model — Hub-Based Monetization
+## Business Model — Flat Pricing (2026-06-15)
 
-**"The stuff is free, what you do with the stuff is paid."** Inventory Hub is forever free (10 users included). Paid hubs:
+**"The stuff is free, what you do with the stuff is paid."** The 8-hub à-la-carte matrix (+ $29 All-In bundle + Team seat tiers) was collapsed into **one flat plan** on 2026-06-15:
 
-| Hub | Price |
-|-----|-------|
-| Team Hub | $9/mo (25 users) or $19/mo (unlimited) |
-| Insights Hub | $7/mo |
-| Maintenance Hub | $7/mo |
-| Coordination Hub | $7/mo |
-| Accountability Hub | $5/mo |
-| People Access Hub | $7/mo |
-| Tasks Hub | $7/mo |
-| Job Hub | $7/mo |
-| All-In Bundle | $29/mo (all hubs) |
+| Tier | Users | What | Price |
+|------|-------|------|-------|
+| **Free** | 10 | Inventory + Supplies + Reservations + Activity Log (forever) | $0 |
+| **ChurchOpsHub** | Unlimited | Every paid hub (Maintenance, Insights, Coordination, Accountability, People Access, Tasks, Jobs) | **$15/mo** or **$150/yr** |
 
-New churches get a 90-day free trial of all paid hubs. Feature gating via `useSubscription` + `UpgradeGate`. See `docs/BUSINESS_MODEL.md` for subscription doc schema, grandfathering, feature gating details, and per-user hub access rules.
+- `plan: 'pro'` is the flat plan; client `hasHub()` + server `subHasHub()` short-circuit `plan==='pro'||'all_in'` → all hubs. Stripe: `pro_monthly` `price_1TiekxF12bDL8YA7j1uH1X1i`, `pro_annual` `price_1TiekyF12bDL8YA7Z0BTmiHD` (product `prod_Ui4uQaH7X8iO9O`).
+- Legacy per-hub/`all_in`/team price IDs are retired but kept mapped in `functions/index.js` for historical webhook resolution. 0 paying churches at cutover → no payer migration. `grandfathered:true` (FXCC + e2e-test-church) still overrides everything.
+- 90-day trial of all paid features unchanged. Feature gating via `useSubscription` + `UpgradeGate`. `allowedHubs[]` is decoupled from billing (per-user access only). See `docs/BUSINESS_MODEL.md` for the full schema, Stripe IDs, grandfathering, and gating details.
 
 ## Project History
 

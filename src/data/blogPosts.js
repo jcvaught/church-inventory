@@ -635,7 +635,7 @@ We build ChurchOpsHub, so consider this paragraph accordingly.
 
 ChurchOpsHub is an operations platform for small-to-mid-sized churches. Its Jobs Hub handles much of the scheduling and communication weight that otherwise eats coordinator time: volunteers self-sign-up for open slots, accept assignments on their phones, request swaps from a substitute pool without going through the coordinator, and get automated email + SMS reminders. The coordinator's view shows who's signed up, who's on the waitlist, who hasn't responded — without the personal-text-thread overhead.
 
-The People Access Hub tracks background checks, certifications, and expirations, so the coordinator doesn't have to manually remember who's compliant for which roles. The Tasks Hub handles the recurring non-volunteer ops work (orientation packets, training schedules, recognition gifts). Inventory is free; the paid hubs cost $7/month each, or $29/month for the All-In bundle.
+The People Access Hub tracks background checks, certifications, and expirations, so the coordinator doesn't have to manually remember who's compliant for which roles. The Tasks Hub handles the recurring non-volunteer ops work (orientation packets, training schedules, recognition gifts). Inventory is free; everything else is included in one flat $15/month plan ($150/year), with unlimited team members.
 
 The platform doesn't replace the role. It replaces the parts of the role that don't need a human (reminders, swap-coordination, status tracking), so the coordinator can focus on the parts that do (recruiting conversations, recognition, boundary management, leadership reporting).
 
@@ -799,7 +799,7 @@ If you build it well, the question stops being "is the schedule working?" and st
 
 ChurchOpsHub is the Run-Your-Church operations platform we build, with hubs for the operations a small-to-mid-sized church actually runs — Inventory, Tasks, Jobs, People Access, Coordination, and more. The Jobs Hub specifically handles volunteer scheduling: volunteers self-sign-up for open slots, accept assignments on their phones, request swaps without going through an admin, and get automated reminders by email and SMS. There's a waitlist with auto-promotion when someone cancels — the recovery problem solved structurally rather than depending on a coordinator at 9 PM on Saturday. If your volunteers are also handling church equipment, the [Equipment Accountability piece](/blog/church-volunteer-equipment-accountability) covers the related side of this.
 
-Inventory is free with no time limit. The Jobs Hub is $7/month per church (or part of the $29/month All-In bundle). New churches get a 90-day free trial on every paid hub.
+Inventory is free with no time limit. The Jobs Hub is included in the flat $15/month ChurchOpsHub plan ($150/year), along with every other paid feature. New churches get a 90-day free trial of all paid features.
 
 ## The Bottom Line
 
@@ -1800,7 +1800,7 @@ For churches that need more operational depth, paid hubs extend the platform:
 - **Tasks Hub ($7/mo):** Kanban task board for admin workflows — assignees, visibility controls, checklists, and recurrence
 - **Insights Hub ($7/mo):** Utilization trends, ministry breakdowns, depreciation tracking, and seasonal analysis
 
-The all-in bundle is $29/mo — less than half the base price of eSPACE, with features eSPACE doesn't offer (compliance tracking, supply management, task management).
+ChurchOpsHub is a flat $15/mo — a fraction of the base price of eSPACE, with features eSPACE doesn't offer (compliance tracking, supply management, task management).
 
 ## How to Pick the Right Combination
 
@@ -2619,7 +2619,7 @@ What it does:
 - **Tasks Hub** — general-purpose Kanban for staff work, with assignees, due dates, recurring templates, ICS export.
 - **Job Hub** — teen-friendly volunteer job board with compliance + waiver gating, signup roster, attendance tracking, swap requests.
 
-Pricing: free Inventory + paid hubs at $5–$9/month each, or $29/month for the all-in bundle. New churches get a 90-day free trial of all paid hubs.
+Pricing: free Inventory + one flat $15/month plan ($150/year) for every paid feature, with unlimited team members. New churches get a 90-day free trial of all paid features.
 
 **Where ChurchOpsHub shines:** any church that has more than ~$10K of physical equipment, runs a facilities operation, has a volunteer program with compliance requirements, or has gotten tired of running operations from a Google Drive folder.
 
@@ -2651,7 +2651,7 @@ Here's the practical version. None of these are mandatory — they're starting p
 
 **Giving + ChMS:** Tithely's Church Suite tier or Planning Center (popular alternative — $14/month per module, very modular). Pushpay is usually overkill at this size unless you're growing fast toward multi-site.
 
-**Operations:** ChurchOpsHub All-In Bundle ($29/month). At this scale, you're almost certainly running enough operational complexity (multiple ministries, multiple buildings or rooms, volunteer compliance requirements) that the bundle is cheaper than picking hubs individually.
+**Operations:** ChurchOpsHub ($15/month flat). At this scale, you're almost certainly running enough operational complexity (multiple ministries, multiple buildings or rooms, volunteer compliance requirements) that a single flat operations plan pays for itself quickly.
 
 **Total monthly software spend:** $100–$250 (plus giving transaction fees).
 
@@ -2659,7 +2659,7 @@ Here's the practical version. None of these are mandatory — they're starting p
 
 **Giving + ChMS:** Pushpay + CCB is the dominant choice at this size for good reason. Enterprise giving infrastructure, capital-campaign tooling, and a serious ChMS in one suite. Expect $300–$700+/month all in.
 
-**Operations:** ChurchOpsHub All-In Bundle ($29/month). The price of operations software does not need to scale with church size — a 2,000-member church and a 200-member church have roughly the same operations needs (more volume, similar structure). Spending $29/month on operations alongside $500/month on giving + ChMS is the right ratio.
+**Operations:** ChurchOpsHub ($15/month flat). The price of operations software does not need to scale with church size — a 2,000-member church and a 200-member church have roughly the same operations needs (more volume, similar structure). Spending $15/month on operations alongside $500/month on giving + ChMS is the right ratio.
 
 **Total monthly software spend:** $350–$750 (plus giving transaction fees).
 

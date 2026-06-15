@@ -12,14 +12,13 @@ const FREE_FEATURES = [
 ];
 
 const HUBS = [
-  { icon: '🔧', name: 'Maintenance Hub', price: '$7/mo', desc: 'Kanban-style repair tickets, vendor directory, photo documentation, and overdue tracking.' },
-  { icon: '📊', name: 'Insights Hub', price: '$7/mo', desc: 'Utilization charts, ministry breakdowns, seasonal trends, and depreciation tracking.' },
-  { icon: '🤝', name: 'Coordination Hub', price: '$7/mo', desc: 'Checkout bundles, bulk reservations, and email notifications for your team.' },
-  { icon: '✅', name: 'Accountability Hub', price: '$5/mo', desc: 'Physical audits by location, chain of custody timelines, and insurance-ready CSV exports.' },
-  { icon: '✅', name: 'Tasks Hub', price: '$7/mo', desc: 'Kanban task board for church admin — assign tasks, set visibility (private or shared), and track progress.' },
-  { icon: '🔑', name: 'People Access Hub', price: '$7/mo', desc: 'Track background checks, key assignments, certifications, and custom compliance milestones.' },
-  { icon: '💼', name: 'Job Hub', price: '$7/mo', desc: 'Post jobs for teens and volunteers, manage signups, and send announcements — all in one place.' },
-  { icon: '👤', name: 'Team Hub', price: '$9–$19/mo', desc: 'Expand beyond 10 members with role-based hub access and ministry assignments.' },
+  { icon: '🔧', name: 'Maintenance', desc: 'Kanban-style repair tickets, vendor directory, photo documentation, and overdue tracking.' },
+  { icon: '📊', name: 'Insights', desc: 'Utilization charts, ministry breakdowns, seasonal trends, and depreciation tracking.' },
+  { icon: '🤝', name: 'Coordination', desc: 'Checkout bundles, bulk reservations, and email notifications for your team.' },
+  { icon: '✅', name: 'Accountability', desc: 'Physical audits by location, chain of custody timelines, and insurance-ready CSV exports.' },
+  { icon: '✅', name: 'Tasks', desc: 'Kanban task board for church admin — assign tasks, set visibility (private or shared), and track progress.' },
+  { icon: '🔑', name: 'People Access', desc: 'Track background checks, key assignments, certifications, and custom compliance milestones.' },
+  { icon: '💼', name: 'Jobs & Shifts', desc: 'Post jobs for teens and volunteers, manage signups, and send announcements — all in one place.' },
 ];
 
 const STEPS = [
@@ -29,7 +28,6 @@ const STEPS = [
 ];
 
 export function LandingPage({ onGetStarted }) {
-  const [showHubs, setShowHubs] = useState(false);
   const [w, setW] = useState(window.innerWidth);
 
   useEffect(() => {
@@ -228,7 +226,7 @@ export function LandingPage({ onGetStarted }) {
               Unlock more when you're ready
             </h2>
             <p style={{ fontSize: 17, color: B.textMid, margin: 0, maxWidth: 500, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
-              Optional paid hubs extend ChurchOpsHub with specialized tools for your team's growing needs.
+              One plan includes every feature below — plus unlimited team members.
             </p>
           </div>
           <div style={{
@@ -246,7 +244,7 @@ export function LandingPage({ onGetStarted }) {
                   <div style={{
                     fontFamily: f1, fontSize: 12, fontWeight: 700, color: B.teal,
                     background: B.tealPale, padding: '4px 11px', borderRadius: 100,
-                  }}>{h.price}</div>
+                  }}>Included</div>
                 </div>
                 <div style={{ fontFamily: f1, fontWeight: 700, fontSize: 15, color: B.navy, marginBottom: 8 }}>{h.name}</div>
                 <div style={{ fontSize: 13, color: B.textMid, lineHeight: 1.65 }}>{h.desc}</div>
@@ -263,7 +261,7 @@ export function LandingPage({ onGetStarted }) {
             Simple, honest pricing
           </h2>
           <p style={{ fontSize: 17, color: B.textMid, margin: '0 0 16px', lineHeight: 1.6 }}>
-            Start free. Add what you need. Bundle everything and save.
+            Inventory is free forever. Everything else is one simple plan — no per-hub math.
           </p>
           <div style={{ display: 'inline-block', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '10px 20px', marginBottom: 40 }}>
             <span style={{ fontSize: 14, color: '#166534', fontFamily: f1, fontWeight: 600 }}>
@@ -297,7 +295,7 @@ export function LandingPage({ onGetStarted }) {
               </button>
             </div>
 
-            {/* All-In card */}
+            {/* ChurchOpsHub paid plan card */}
             <div style={{
               background: B.navy, borderRadius: 20, padding: mob ? '32px 24px' : '40px 32px',
               textAlign: 'left', position: 'relative', overflow: 'hidden',
@@ -310,13 +308,13 @@ export function LandingPage({ onGetStarted }) {
               }}>
                 BEST VALUE
               </div>
-              <div style={{ fontFamily: f1, fontWeight: 700, fontSize: 18, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>All-In Bundle</div>
+              <div style={{ fontFamily: f1, fontWeight: 700, fontSize: 18, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>ChurchOpsHub</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 6 }}>
-                <span style={{ fontFamily: f1, fontWeight: 800, fontSize: 48, color: '#fff', lineHeight: 1 }}>$29</span>
+                <span style={{ fontFamily: f1, fontWeight: 800, fontSize: 48, color: '#fff', lineHeight: 1 }}>$15</span>
                 <span style={{ fontSize: 16, color: 'rgba(255,255,255,0.45)', fontFamily: f1 }}>/mo</span>
               </div>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 28, fontFamily: f1 }}>Unlimited users · Cancel anytime</div>
-              {['All 7 feature hubs included', 'Unlimited team members', 'Maintenance & ticketing', 'Insights & analytics', 'Coordination & scheduling', 'Accountability & audits', 'People Access & compliance', 'Kanban task board', 'Job board & announcements'].map(item => (
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 28, fontFamily: f1 }}>or $150/yr · Unlimited users · Cancel anytime</div>
+              {['Every paid feature included', 'Unlimited team members', 'Tasks & maintenance board', 'Contractor hours & timesheets', 'Jobs & volunteer shifts', 'People Access & compliance', 'Insights & analytics', 'Accountability & audits'].map(item => (
                 <div key={item} style={{ display: 'flex', alignItems: 'center', marginBottom: 10, fontSize: 14, color: 'rgba(255,255,255,0.75)' }}>
                   {check(true)}{item}
                 </div>
@@ -328,45 +326,14 @@ export function LandingPage({ onGetStarted }) {
                 Get Started
               </button>
               <p style={{ textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.3)', margin: '14px 0 0', fontFamily: f1 }}>
-                7 hubs separately: 6 × $7 + $5 = <strong style={{ color: 'rgba(255,255,255,0.55)' }}>$47/mo</strong> → bundle saves <strong style={{ color: 'rgba(255,255,255,0.55)' }}>$18/mo</strong>
+                One flat price. No per-hub add-ons, no seat tiers.
               </p>
             </div>
           </div>
 
-          {/* Individual hub pricing toggle */}
-          <button
-            onClick={() => setShowHubs(v => !v)}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: B.teal, fontFamily: f1, fontSize: 14, fontWeight: 600,
-              padding: '10px 0', display: 'inline-flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            <span style={{ fontSize: 11 }}>{showHubs ? '▲' : '▼'}</span>
-            {showHubs ? 'Hide' : 'See'} individual hub pricing
-          </button>
-
-          {showHubs && (
-            <div style={{
-              marginTop: 16,
-              display: 'grid',
-              gridTemplateColumns: wide ? 'repeat(3,1fr)' : mid ? 'repeat(2,1fr)' : '1fr',
-              gap: 12, textAlign: 'left',
-            }}>
-              {HUBS.map(h => (
-                <div key={h.name} style={{
-                  background: B.white, borderRadius: 14, padding: '18px 20px',
-                  border: `1px solid ${B.sand}`,
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <div style={{ fontFamily: f1, fontWeight: 700, fontSize: 14, color: B.navy }}>{h.name}</div>
-                    <div style={{ fontFamily: f1, fontSize: 13, fontWeight: 700, color: B.teal }}>{h.price}</div>
-                  </div>
-                  <div style={{ fontSize: 12, color: B.textMid, lineHeight: 1.6 }}>{h.desc}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          <p style={{ fontSize: 13, color: B.textLight, margin: '4px 0 0', fontFamily: f1 }}>
+            Already paying for a single tool like eSPACE or UpKeep? ChurchOpsHub does more for a fraction of the price.
+          </p>
         </div>
       </section>
 

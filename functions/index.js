@@ -371,7 +371,15 @@ const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
 // Run: firebase functions:config:set is no longer used in v2.
 // Instead set secrets: firebase functions:secrets:set STRIPE_SECRET_KEY
 // And put price IDs directly here (they are not sensitive).
+// The single flat "ChurchOpsHub" plan (2026-06-15 pricing flatten): $15/mo or
+// $150/yr unlocks every paid hub + unlimited users. `pro` is the new checkout
+// path. The legacy per-hub / team / all_in ids below are kept ONLY so existing
+// webhooks resolve (no church is on them); they are no longer offered for purchase.
+const PRO_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'tasks', 'people_access', 'jobs'];
 const PRICE_IDS = {
+  pro_monthly:    'price_1TiekxF12bDL8YA7j1uH1X1i',  // $15/mo
+  pro_annual:     'price_1TiekyF12bDL8YA7Z0BTmiHD',  // $150/yr
+  // ── legacy (retired, retained for webhook resolution only) ──
   maintenance:    'price_1TB2E2F12bDL8YA7Tw4VreQc',
   insights:       'price_1TB2E6F12bDL8YA734z4Q64M',
   coordination:   'price_1TB2E2F12bDL8YA7a0VFGB6C',
@@ -386,6 +394,8 @@ const PRICE_IDS = {
 
 function getPriceConfig(priceId) {
   const map = {
+    [PRICE_IDS.pro_monthly]:    { type: 'pro',    plan: 'pro', maxUsers: 9999, hubs: PRO_HUBS },
+    [PRICE_IDS.pro_annual]:     { type: 'pro',    plan: 'pro', maxUsers: 9999, hubs: PRO_HUBS },
     [PRICE_IDS.maintenance]:    { type: 'hub',    hub: 'maintenance' },
     [PRICE_IDS.insights]:       { type: 'hub',    hub: 'insights' },
     [PRICE_IDS.coordination]:   { type: 'hub',    hub: 'coordination' },
@@ -770,10 +780,13 @@ exports.stripeWebhook = onRequest(
         } else if (config.type === 'team') {
           update.plan = config.plan;
           update.maxUsers = config.maxUsers;
-        } else if (config.type === 'all_in') {
+        } else if (config.type === 'all_in' || config.type === 'pro') {
           update.plan = config.plan;
           update.maxUsers = config.maxUsers;
           update.hubs = config.hubs;
+          // A church subscribing exits any trial state — pin freeHubsSelected so
+          // hasHub stops reading the trial branch.
+          update.freeHubsSelected = config.hubs;
         }
 
         await db.doc(`churches/${churchId}/config/subscription`).set(update, { merge: true });
@@ -807,10 +820,11 @@ exports.stripeWebhook = onRequest(
         } else if (config?.type === 'team') {
           update.plan = 'free';
           update.maxUsers = 10;
-        } else if (config?.type === 'all_in') {
+        } else if (config?.type === 'all_in' || config?.type === 'pro') {
           update.plan = 'free';
           update.maxUsers = 10;
           update.hubs = [];
+          update.freeHubsSelected = [];
         }
 
         await db.doc(`churches/${churchId}/config/subscription`).set(update, { merge: true });
@@ -1045,7 +1059,7 @@ exports.icsCalendarFeed = onRequest({ cors: true, invoker: 'public' }, async (re
 function subHasHub(sub, hubName) {
   if (!sub) return false;
   if (sub.grandfathered) return true;
-  if (sub.plan === 'all_in') return true;
+  if (sub.plan === 'all_in' || sub.plan === 'pro') return true;
   // Active trial: freeHubsSelected is null while trial is running
   if (sub.freeHubsSelected === null && sub.trialEndsAt && new Date(sub.trialEndsAt) > new Date()) {
     return (sub.trialHubs || []).includes(hubName);

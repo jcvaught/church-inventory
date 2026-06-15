@@ -4,6 +4,12 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-06-15',
+    tag: 'Improved',
+    title: 'Simpler pricing — one plan, $15/mo',
+    body: "We replaced the old per-hub pricing and bundle with one simple plan. Inventory, supplies, and reservations stay free forever for up to 10 people. Everything else — maintenance, tasks, jobs & shifts, people access, insights, and accountability — is now included in a single ChurchOpsHub plan: $15/month or $150/year, with unlimited team members. No more picking hubs à la carte. Your 90-day free trial of all paid features is unchanged.",
+  },
+  {
     date: '2026-06-14',
     tag: 'New',
     title: 'Morning alert for understaffed jobs',
