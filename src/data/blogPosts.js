@@ -1,5 +1,133 @@
 export const BLOG_POSTS = [
   {
+    slug: 'wedding-funeral-logistics-checklist-small-church',
+    title: 'Wedding & Funeral Logistics Checklist for Small Churches',
+    description: 'Weddings and funerals are the two highest-stakes events a small church hosts — and they often land on a single overworked volunteer. Here is a reusable, run-it-from-the-page logistics checklist covering room prep, setup, AV, supplies, volunteer roles, cleanup, and who-owns-what handoffs.',
+    date: '2026-06-16',
+    keywords: 'church wedding checklist, church funeral logistics, church event setup checklist, wedding logistics small church, funeral planning checklist church, church facilities event prep, volunteer coordinator wedding funeral',
+    related: ['vbs-supply-planning-checklist', 'church-workday-planning', 'volunteer-coordinator-role-guide'],
+    content: `
+## Why These Two Events Deserve Their Own Checklist
+
+Most of what a church hosts is recurring and forgiving. If the coffee runs out before the second service, someone makes more. If a folding table is in the wrong room for a fellowship lunch, you move it. The stakes are low and everyone knows the rhythm.
+
+Weddings and funerals are the opposite. They happen rarely, the emotional stakes are at their absolute peak, and there is no second take. A microphone that cuts out during vows, a sanctuary that still has last Sunday's banners up for a funeral, a family arriving to a locked building — these are not "we'll fix it next time" problems. They are the kind of failure a family remembers for years.
+
+And here is the trap most small churches fall into: these events are *rare*, so no one has the muscle memory. The volunteer who set up the last funeral has forgotten the details, or has moved away, or was the pastor's spouse who is grieving this time. The knowledge lives in one head, and that head is not always available.
+
+The fix is the same fix that works for [VBS supply planning](/blog/vbs-supply-planning-checklist) and a [church workday](/blog/church-workday-planning): get the plan out of one person's memory and onto a reusable checklist that any competent volunteer can run. This post is that checklist. Print it, adapt it to your building, and use it every time.
+
+## Start With the One-Page Event Brief
+
+Before any setup task, fill out a single sheet that becomes the source of truth for everyone involved. Every other section below references this brief.
+
+- **Event type and date.** Wedding or funeral. Date, arrival time, ceremony start, expected end, departure time.
+- **The family contact.** One name and phone number — the person who speaks for the family. Not a committee. One person.
+- **The officiant.** Who is leading, and are they from your church or visiting? A visiting officiant needs a walkthrough of your AV and your building.
+- **Head count.** Best estimate for the ceremony and for any reception or meal afterward. This drives chairs, parking, and supplies.
+- **Rooms in use.** Sanctuary, fellowship hall, bride's room or family gathering room, nursery, kitchen, restrooms.
+- **The church owner.** The single staff member or lead volunteer who owns this event end to end. Everything routes through them.
+
+The brief is the handoff document. When the person who normally runs these events is unavailable, the brief is what lets someone else step in without re-interviewing the family.
+
+## Facility and Room Prep
+
+Walk the building the day before, brief in hand. The goal is that when the family and guests arrive, every space they will touch is clean, unlocked, climate-controlled, and set the way it needs to be.
+
+### Sanctuary
+
+- Reset the room from the most recent service. A funeral should not have the previous Sunday's sermon-series banner or VBS leftovers in view. A wedding should not have a half-deflated balloon from the youth event.
+- Vacuum, wipe pew tops, clear hymnals or chair-back clutter the family does not want.
+- Confirm heating or cooling is set and will be comfortable at full capacity — a packed room runs ten degrees warmer than an empty one. Set the thermostat hours ahead, not at arrival.
+- Reserve the front rows for family. Mark them with ribbon, reserved cards, or printed signs.
+
+### Family / Bride's Room
+
+Both events need a private space away from guests — a bride and party getting ready, or a grieving family gathering before they walk in. Stock it: tissues, water, a mirror, chairs, a clothing rack or hooks, trash can, and good lighting. Confirm it is clean and the door locks.
+
+### Restrooms, Entrances, and Parking
+
+- Restrooms stocked and clean: paper, soap, hand towels, plunger accessible.
+- Every door the guests will use is unlocked at the right time, and someone owns locking up at the end.
+- Parking plan for a larger-than-Sunday crowd. For a funeral, reserve close spots for the family and any procession vehicles. For a wedding, plan for guests arriving in a tight window.
+- Exterior and entry signage so guests who have never been to your building know where to go.
+
+## Equipment and Furniture Setup
+
+This is where a written, building-specific list pays off, because furniture is the most common thing that gets forgotten until an hour before. Tie the counts to the head count on your brief.
+
+- **Seating.** Confirm pew or chair capacity against the expected head count. Stage extra folding chairs for overflow, and decide *before* the event where they go so you are not carrying chairs in during the prelude.
+- **Tables.** Guest book table, memorial or photo display table (funeral), gift and card table (wedding), sign-in table. Each needs a location on the brief and a linen if you use them.
+- **Reception or meal furniture.** Round or banquet tables and chairs for the fellowship hall, set and counted the day before. This is a natural moment to pull from your tracked inventory rather than guessing — the same discipline behind a [working church facilities operation](/blog/church-facilities-management-guide).
+- **Staging items.** Kneeler, unity candle stand, easels for photos or flower sprays, a podium or lectern, a small table for communion elements if used.
+
+Tag every borrowed or shared item to the event so it gets returned, not absorbed into a closet. If your church tracks equipment in an inventory system, reserve the items for the event date so another ministry does not pull the projector or the coffee urns the same weekend.
+
+## Audio / Visual Needs
+
+AV is the highest-risk category because its failures are public and unrecoverable. Test everything the day before *and* do a final check 45 minutes before guests arrive. Never trust that "it worked last Sunday."
+
+- **Microphones.** A lapel or handheld for the officiant, plus a second mic for readers, eulogists, or vows. Fresh batteries in every wireless unit — not "probably still good" batteries. Have spares on hand.
+- **Music playback.** Confirm how music is coming in: live musicians, a playlist on a device, or streamed. Test the actual files or stream, at volume, through the actual room speakers. Know who starts and stops each track.
+- **Recording or livestream.** Many families want a recording, and funeral guests who cannot travel may watch remotely. Confirm whether this is expected, assign someone to run it, and test the upload or stream end to end.
+- **Projection.** Slides for a wedding program, or a memorial photo loop for a funeral. Load the file, advance through every slide, and confirm it displays on the room screen, not just the laptop.
+- **A printed AV cue sheet.** One page: what plays or projects, when, and who triggers it. The person running AV should never be improvising during the ceremony.
+
+## Supplies Checklist
+
+Stock these the day before and stage them where they will be used. Running to a store mid-event is not an option.
+
+- **Programs and printed materials.** Order of service, bulletins, or memorial folders. Print a comfortable surplus — running out in front of guests looks careless. Stage them at the entrance with a greeter assigned.
+- **Candles.** Unity or memorial candles, plus lighters or matches and a check that you are not violating any fire-code or open-flame restriction in your space.
+- **Guest book, pens, and a memorial or gift table setup.**
+- **Communion elements**, if the service includes communion — elements, trays, a covering cloth, and a plan for who prepares and who serves.
+- **Flowers and floral logistics.** Where deliveries go, who receives them, where arrangements sit, and who clears them afterward (and who they go home with).
+- **Reception or meal supplies.** Food, beverages, serving ware, linens, coffee service, ice, trash bags. Funerals frequently include a meal for the family — confirm whether your church or a hospitality team is providing it.
+- **First aid and comfort items.** Tissues throughout (especially funerals), water, basic first aid, and a fan or two for a warm crowded room.
+
+## Volunteer Roles and Coordination
+
+The single biggest predictor of a smooth event is that every role has a name next to it on the brief — not "someone will handle that." Borrow the [project-lead model from workday planning](/blog/church-workday-planning): one owner per area, each accountable for their piece. For a small church, one person may cover two roles, but every role is still explicitly assigned.
+
+- **Event owner / coordinator.** The single point of contact who holds the brief and makes calls in the moment. This is the [volunteer coordinator role](/blog/volunteer-coordinator-role-guide) at its most concentrated.
+- **Greeters and ushers.** Hand out programs, seat guests, escort family to reserved rows, direct people to restrooms and parking.
+- **AV operator.** Runs the cue sheet — mics, music, projection, recording.
+- **Hospitality lead.** Owns the reception or meal: setup, serving, replenishing, and the timeline for when food appears.
+- **Setup and teardown crew.** Physically sets the rooms beforehand and resets them after.
+- **Facilities point person.** Unlocks doors, manages climate, and locks up at the end.
+
+Hold a fifteen-minute huddle before guests arrive. Walk the brief, confirm every role knows their cue, and identify the one person everyone goes to with questions. A short huddle prevents the mid-ceremony scramble where three volunteers all assume someone else was handling the candles.
+
+## Cleanup and Teardown
+
+Cleanup is part of the event, not an afterthought — and it is where exhausted volunteers cut corners that cost you on Sunday morning. Make it a checklist, not a vibe.
+
+- Strip and store linens; return tables and chairs to their normal configuration and storage location.
+- Clear floral arrangements per the family's wishes — confirm in advance who takes them home.
+- Collect and store reusable staging items (easels, candle stands, podium) where they belong, and check returned borrowed gear back in.
+- Kitchen reset: dishes done, surfaces wiped, trash and food waste removed, refrigerator cleared of leftovers that are not staying.
+- Vacuum and reset the sanctuary for the next service. A funeral on Saturday cannot leave the room unusable for Sunday worship.
+- Final building walk: lights off, thermostat reset, all doors locked, lost-and-found items collected.
+
+## The Who-Owns-What Handoffs
+
+Most event failures are not skill failures — they are handoff failures. Two volunteers each assumed the other had the candles, the flowers, the locking up. The brief solves this by making ownership explicit. Three handoffs are worth calling out because they are the ones most often dropped:
+
+1. **Family requests to execution.** What the family asked for has to land on the brief and get assigned to a named person. A request made in a phone call three weeks ago that lives only in the pastor's memory is a request that does not happen.
+2. **Setup crew to event-day team.** The people who set the rooms the day before are often not the people running the event. The brief plus a quick day-of walkthrough transfers the state of every room so nothing is assumed.
+3. **Event end to facilities.** When the last guest leaves, someone specific owns the teardown checklist and the final lock-up. "We'll get it tomorrow" is how a church discovers a melted candle on a linen Sunday morning.
+
+When ownership is written down, the question "who has this?" has an answer before anyone has to ask it.
+
+## Build It Once, Reuse It Every Time
+
+The reason a checklist beats memory is that these events are rare enough that no one stays fluent. The first time you run a wedding or funeral from a written brief and checklist, it feels like extra paperwork. By the third time, the coordinator hands the brief to a new volunteer and the event runs without them hovering over every step.
+
+Keep the master checklist somewhere the whole team can reach it, not in one person's inbox. Churches that already track facilities, supplies, and volunteer assignments in a shared system — the way ChurchOpsHub's hubs handle inventory reservations, tasks, and volunteer roles — can turn this checklist into a reusable event template: reserve the rooms and gear, assign the roles, and check off setup tasks against the same list every time. However you store it, the principle holds: capture it once so the next coordinator, on the hardest day a family will ever have at your church, is not starting from a blank page.
+    `.trim(),
+  },
+
+  {
     slug: 'setting-up-qr-asset-labels-in-your-church',
     title: 'Setting Up QR Asset Labels in Your Church',
     description: "A label you scan with your phone turns every piece of church equipment into a living record — its location, condition, maintenance history, and who's responsible. Here's a practical, start-to-finish guide to setting up QR asset labels: what to buy, how to number things, what each label should link to, where to stick them, and how to roll it out one ministry area at a time.",
