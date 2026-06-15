@@ -6,6 +6,12 @@ export const WHATS_NEW = [
   {
     date: '2026-06-15',
     tag: 'Improved',
+    title: 'Get text reminders for your shifts',
+    body: "Want a text the morning of a job you signed up for? Add your phone number under Settings and turn on text reminders — you'll get a heads-up before your shift, and you can also opt in to a daily text when new jobs are posted. New sign-in and join pages now point this out so nobody misses it.",
+  },
+  {
+    date: '2026-06-15',
+    tag: 'Improved',
     title: 'Simpler pricing — one plan, $15/mo',
     body: "We replaced the old per-hub pricing and bundle with one simple plan. Inventory, supplies, and reservations stay free forever for up to 10 people. Everything else — maintenance, tasks, jobs & shifts, people access, insights, and accountability — is now included in a single ChurchOpsHub plan: $15/month or $150/year, with unlimited team members. No more picking hubs à la carte. Your 90-day free trial of all paid features is unchanged.",
   },
