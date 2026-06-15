@@ -26,9 +26,10 @@ Live products (created 2026-06-15 via API):
 | Monthly | `price_1TiekxF12bDL8YA7j1uH1X1i` | `pro_monthly` | $15/mo |
 | Annual | `price_1TiekyF12bDL8YA7Z0BTmiHD` | `pro_annual` | $150/yr |
 
-Legacy per-hub / team / `all_in` Stripe products are **retired** (no longer offered for purchase) but
-left active in Stripe + mapped in `functions/index.js` `PRICE_IDS`/`getPriceConfig` so any historical
-webhook still resolves. No church was ever on a paid Stripe subscription at cutover (verified 2026-06-15:
+Legacy per-hub / team / `all_in` Stripe products were **archived** (`active:false`) in Stripe on 2026-06-15
+(only `prod_Ui4uQaH7X8iO9O` ChurchOpsHub stays active). Their price IDs remain mapped in `functions/index.js`
+`PRICE_IDS`/`getPriceConfig` so any historical webhook still resolves — `getPriceConfig` is a local map
+lookup (no Stripe call), and archived products/prices still resolve via the API regardless. No church was ever on a paid Stripe subscription at cutover (verified 2026-06-15:
 0 live subs across all churches), so there were **no payers to migrate or grandfather**.
 
 ## Subscription Doc
