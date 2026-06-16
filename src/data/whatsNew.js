@@ -4,6 +4,12 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-06-16',
+    tag: 'Fixed',
+    title: 'Smoother sign-in from invite links',
+    body: "If you already have an account and click a church invite link again, you'll now go straight to the sign-in form (with your email filled in) instead of getting stuck on the 'Join Your Church' page. Just enter your password — or use 'Forgot password?' if you need it.",
+  },
+  {
     date: '2026-06-15',
     tag: 'Improved',
     title: 'Get text reminders for your shifts',
