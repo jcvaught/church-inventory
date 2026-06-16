@@ -280,7 +280,7 @@ export function useAuth() {
         ? 'Password should be at least 6 characters.'
         : err.message;
       setError(msg);
-      return { success: false, error: msg };
+      return { success: false, error: msg, code: err.code };
     }
   }, []);
 
@@ -346,7 +346,7 @@ export function useAuth() {
         ? 'Password should be at least 6 characters.'
         : err.message;
       setError(msg);
-      return { success: false, error: msg };
+      return { success: false, error: msg, code: err.code };
     }
   }, []);
 
