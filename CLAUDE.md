@@ -33,6 +33,17 @@ npm run test:rules # Firestore RULES unit tests via @firebase/rules-unit-testing
                   # per-elder note privacy, audit admin-read-only + immutability, careThread
                   # author pinning, SEC-2 email_verified admin gate). Add Shepherd rule
                   # assertions here, NOT to test:unit (that glob runs without an emulator).
+npm run test:handlers # Cloud Functions HANDLER integration tests — boots firestore+auth
+                  # emulators (needs Java) and runs functions/test/handlers/*.test.mjs against
+                  # the real exported handlers from index.js. Uses node --test (this repo's
+                  # runner — NOT vitest; `.run(req)` is a firebase-functions wrapper method).
+                  # Each test seeds a UNIQUE churchId so the shared emulator needs no global
+                  # wipe. External HTTP is stubbed at its boundary: Brevo/Twilio/PCO/Claude via
+                  # global.fetch; Stripe via the require cache (real signature crypto kept,
+                  # only API resource calls stubbed) — see functions/test/handlers/setup.mjs.
+                  # Currently covers the money paths (stripeWebhook lifecycle + signature
+                  # gating + idempotency; createCheckoutSession/createPortalSession auth+admin
+                  # gating, price config, redirect allow-listing). 23 assertions, all green.
 ```
 
 ### Local sandbox — Firebase Emulator Suite (2026-06-07)
