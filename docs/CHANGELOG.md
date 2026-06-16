@@ -4,6 +4,16 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-16 — Invite link: existing members bounced to sign-in instead of dead-ending on "Join"
+
+Fix for the recurring **Lisa Bosley** "it's doing the weird thing again and wanting me to sign in" report. Root cause was **not** the Google-popup header issue from 2026-05-28 (verified: prod serves all four `vercel.json` allowances correctly, and Lisa is an **email/password** account, not Google). Her Firestore profile + Auth account are fully healthy (`active`, role manager, `allowedHubs:['jobs','maintenance']`, churchId correct; token still refreshing). The actual bug: an `?invite=` link forces `AuthScreen` into **register mode** (`App.jsx` line ~95, `useState(inviteData ? "register" : initialMode)`) — correct for brand-new members, but an *existing* member re-clicking the invite (when their session isn't active in that browser/device) lands on the **"Join Your Church" / Create Account** form. Submitting hits `auth/email-already-in-use` and dead-ends — which the user reads as "it keeps making me sign in."
+
+- **`src/App.jsx` `handleRegister`:** when `register()` returns `code === 'auth/email-already-in-use'`, auto-switch `mode → "login"` (email already populated in `form`) and show "You already have an account — please sign in with your password below." Converts the dead-end into the right action. New members still register normally; the existing "Back to sign in" button stays as a manual fallback.
+- **`src/useAuth.js`:** `register` (and `createChurch`) now return `code: err.code` on failure so the component can branch on the Firebase error code, not just the display string.
+- Verified the symptom against prod with Playwright (invite URL renders "Join Your Church", not a sign-in form). Build clean (verify-prod-bundle ✓). **Immediate unblock for Lisa:** go to `churchopshub.com` (no invite query string) → sign in with email + password (Forgot password? if needed) — no popup, no register trap.
+
+---
+
 ## 2026-06-15 — Pricing flatten: one $15/mo plan (Work-Unification Phase 5, shipped standalone ahead of the migration)
 
 Collapsed the 8-hub à-la-carte matrix (+ $29 All-In bundle + $9/$19 Team seat tiers) into a single flat **ChurchOpsHub** plan: **$15/mo or $150/yr**, unlimited team members, all paid hubs. Inventory + Supplies + Reservations stay free forever (10-user cap). Plan §7 of `WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md`; decoupled from the `workItems` migration and shipped on its own because a live-data check found **0 paying Stripe subscriptions across all churches** — so no payer migration/grandfathering was needed.

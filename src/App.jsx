@@ -148,6 +148,15 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
     setBusy(true);
     const res = await register({ firstName:form.firstName, lastName:form.lastName, email:form.email, password:form.password, churchCode:form.churchCode, allowedHubs: inviteData?.hubs ?? null });
     if (res?.success) { try { sessionStorage.removeItem('coh_invite'); } catch { /* ignore */ } }
+    // Existing members routinely re-click an invite link to get back in. An
+    // invite forces register mode (line ~95), so an already-registered email
+    // dead-ends on "email already in use" — read by the user as "it keeps
+    // making me sign in / the weird thing" (Lisa Bosley, recurring). Bounce
+    // them straight to the sign-in form (email already in `form`) instead.
+    else if (res?.code === 'auth/email-already-in-use') {
+      setMode("login");
+      setError("You already have an account — please sign in with your password below.");
+    }
     setBusy(false);
   }
   async function handleGoogleRegister(e) {
