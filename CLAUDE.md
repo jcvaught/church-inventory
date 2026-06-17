@@ -41,9 +41,16 @@ npm run test:handlers # Cloud Functions HANDLER integration tests — boots fire
                   # wipe. External HTTP is stubbed at its boundary: Brevo/Twilio/PCO/Claude via
                   # global.fetch; Stripe via the require cache (real signature crypto kept,
                   # only API resource calls stubbed) — see functions/test/handlers/setup.mjs.
-                  # Currently covers the money paths (stripeWebhook lifecycle + signature
-                  # gating + idempotency; createCheckoutSession/createPortalSession auth+admin
-                  # gating, price config, redirect allow-listing). 23 assertions, all green.
+                  # Covers: money paths (stripeWebhook lifecycle + signature gating +
+                  # idempotency; createCheckoutSession/createPortalSession auth+admin gating,
+                  # price config, redirect allow-listing); Jobs Hub roster transactions
+                  # (jobSignUp capacity/compliance/waiver + waitlist, jobWithdraw + inline
+                  # promotion, promoteFromWaitlist oldest-first); twilioInbound HELP/INFO/STOP/
+                  # START + real signature gating (signed via the twilio lib's own helper).
+                  # 47 assertions, all green. NOT yet covered: the hourly scheduled sends
+                  # (sendJobReminders/weekly digests) — they gate on the live wall-clock hour
+                  # via localPartsFor(new Date()) with no time-injection seam, so deterministic
+                  # recipient-selection tests need a small `now`-injection refactor first.
 ```
 
 ### Local sandbox — Firebase Emulator Suite (2026-06-07)

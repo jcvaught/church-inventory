@@ -60,13 +60,23 @@ export function mockRes() {
     body: undefined,
     finished: false,
     headers: {},
+    contentType: undefined,
     status(c) { this.statusCode = c; return this; },
+    type(t) { this.contentType = t; this.headers['content-type'] = t; return this; },
     send(b) { this.body = b; this.finished = true; return this; },
     sendStatus(c) { this.statusCode = c; this.body = String(c); this.finished = true; return this; },
     json(o) { this.body = o; this.finished = true; return this; },
     set(k, v) { this.headers[k] = v; return this; },
     setHeader(k, v) { this.headers[k] = v; return this; },
+    getHeader(k) { return this.headers[k]; },
     end(b) { if (b !== undefined) this.body = b; this.finished = true; return this; },
+    // Minimal EventEmitter surface: the firebase-functions onRequest wrapper for
+    // cors-configured handlers attaches res.on('finish', cleanup). We never emit.
+    on() { return this; },
+    once() { return this; },
+    emit() { return false; },
+    removeListener() { return this; },
+    addListener() { return this; },
   };
 }
 
