@@ -4,6 +4,16 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-17 — Work-Unification Phase 2 CUTOVER executed: FXCC live on `workItems`
+
+Flipped FXCC's Tasks + Maintenance read/write path from the legacy `tasks` / `maintenanceTickets` collections to the unified `workItems` collection. Executed per `docs/WORK-UNIFICATION-PHASE2-CUTOVER-RUNBOOK.md` (ad-hoc window, owner-approved, after the backfill was rehearsed against a real FXCC copy in the emulator).
+
+- **Part A (dark):** merged `phase2-readpath` → `main` (flag-gated read-path code, dark); deployed the 4 flag-aware CFs (`sendTaskDueReminders`, `getAttentionDigest`, `icsCalendarFeed`, `generateRecurringTemplateTasks`) + re-probed invoker IAM (intact: ics 400, attention 401 JSON); deployed `firestore:rules` (`featureFlags` + `workItems` rules); confirmed `workItems.dueDate` COLLECTION_GROUP index READY; ran the prod backfill (`migrate-work-unification.cjs --execute --prod`) → 117 work items (76 task + 41 maintenance) + 11 comments; `--verify` clean (76/76 · 41/41 · 0 orphans · 0 mismatches).
+- **Part B (window, ~3 min):** raised the maintenance banner (`appConfig/banner`); final re-migrate (0 written — nothing changed since backfill); `--verify` exit 0 = GO; flipped `config/featureFlags.workItemsEnabled = true` for FXCC via `set-work-flag.cjs --on --prod`; data-layer smoke (117 workItems → 76 task / 41 maintenance / 0 untyped, prefixes ok, collectionGroup `dueDate` query serves rows); dropped the banner.
+- **Rollback (instant, no deploy):** `node scripts/set-work-flag.cjs --church=6cksNI9Uv8h0jXptdTESnXTXFgF3-church --off --prod` — legacy collections were never modified.
+- **Tooling fix found during the rehearsal:** `export-tenant-to-emulator.cjs` was double-pushing every non-root doc (2× export); fixed.
+- **Still pending (Part C):** legacy `tasks`/`maintenanceTickets` kept read-only as the rollback hatch for one week; after a clean week, delete them + strip the flag/legacy branches from `useFirestore.js` and the 4 CFs. Other churches have no data (0/0) and stay flag-off. **Phase 3 (Jobs) is a separate later window** (UI unification, not a data migration).
+
 ## 2026-06-17 — Sentry disabled in test runs (error-path tests were shipping to production)
 
 A Sentry "production" issue (JAVASCRIPT-REACT-19, *"No signatures found matching the expected signature for payload"*) turned out to be the **handler test suite**, not real traffic: the `stripeWebhook` test deliberately feeds a bad signature, and the captured exception was shipping to the live Sentry project tagged `environment=production`. Root cause: `Sentry.init` in `functions/index.js` gated `environment` only on `FUNCTIONS_EMULATOR` (unset when handler tests run via `node --test` under `emulators:exec`) and stayed **enabled** during tests.
