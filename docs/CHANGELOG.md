@@ -4,6 +4,18 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-17 — Foundation F2 (People model): resolver minimal slice
+
+Built the F2 `PersonRef` + resolver layer (`docs/PLATFORM-FOUNDATIONS-2026-06-06.md` §Foundation 2). The two backing stores stay as they are (`users` for auth, `accessPeople` for tracked people) — this adds the shared reference shape + a pure resolver so features stop hand-rolling "is this a user or a tracked person?" logic.
+
+- **`src/lib/people.js`** (new, pure/zero-import so it loads in both Vite and `node --test`): `PersonRef = {kind:'user'|'tracked', id, displayName}`; `makeRef`/`refKey`; `getPerson(ref, ctx)` and `listPeople(ctx)` resolve already-subscribed `users`/`accessPeople`/`accessRecords` arrays into a uniform `Person` (`roles` Set, `linkedUserId`, `linkedTrackedId`, `hourlyRate`, `contact`, `complianceStatus`). **The `accessPerson.userId` link is canonical** — a linked user+tracked pair collapses into ONE Person (user-keyed), so a contractor-who's-also-a-user is never double-counted. `complianceStatusForTracked` + `isEligibleFor` mirror the People Access expiry windows, exported as shared constants (`EXPIRY_CRITICAL_DAYS=7`, `EXPIRY_WARNING_DAYS=30`).
+- **`functions/test/people-resolver.test.mjs`** (new, runs under `npm run test:unit`): 10 tests — link collapse, role union, contractor rate, compliance classification, `listPeople` dedup, and a **parity suite** that pins `isEligibleFor` to a verbatim copy of the server's `isAccessEligible` (`functions/index.js:3038`) so the client resolver and the Cloud Functions eligibility rule can't drift. The server stays its own commonjs copy (can't import the ESM lib).
+- **First consumer wired:** `PeopleAccessPage.getExpiryStatus` now delegates to the shared `expiryStatus(expiryDate, today)` — removed the hand-rolled `in7`/`in30` window math, the first drift copy retired. Build + lint (0 errors) + full unit suite (15) green.
+
+Remaining F2 work (deferred until a consumer needs it): wire Settings compliance cards, the Timesheet contractor list, the Readiness view's `requirementStatusForPerson`, work-assignment `assigneeRefs[]`, and search through the resolver. See `docs/backlog.md`.
+
+---
+
 ## 2026-06-17 — Work-Unification Phase 2 CUTOVER executed: FXCC live on `workItems`
 
 Flipped FXCC's Tasks + Maintenance read/write path from the legacy `tasks` / `maintenanceTickets` collections to the unified `workItems` collection. Executed per `docs/WORK-UNIFICATION-PHASE2-CUTOVER-RUNBOOK.md` (ad-hoc window, owner-approved, after the backfill was rehearsed against a real FXCC copy in the emulator).

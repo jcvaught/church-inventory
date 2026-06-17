@@ -175,6 +175,8 @@ src/
 │   ├── roleHelpers.js         ← canManageMinistry, canManageItem, canManageSupply
 │   ├── phone.js               ← formatPhone(value) — US phone formatter → (555) 555-5555; progressive (as-you-type) + display. Applied to People Access contacts, Maintenance vendors, public item-request form (input + display). NOT for users.phone (E.164 for Twilio SMS) or shepherdPeople (read-only PCO). One-time normalizer: scripts/backfill-phone-format.cjs
 │   └── constants.js           ← ITEM_STATUS, RES_STATUS, TICKET_STATUS, ACCESS_RECORD_TYPE string enums
+├── lib/
+│   └── people.js              ← **Foundation F2 — the People model.** Pure, zero-import resolver that unifies `users` (auth) + `accessPeople` (People Access tracked people) into one uniform `Person`, collapsing the canonical `accessPerson.userId` link so a contractor-who's-also-a-user is never double-counted. Exports `PersonRef`/`makeRef`/`refKey`, `getPerson(ref, ctx)`, `listPeople(ctx)`, `isEligibleFor`, `complianceStatusForTracked`, and the shared expiry windows (`expiryStatus`, `EXPIRY_CRITICAL_DAYS=7`, `EXPIRY_WARNING_DAYS=30`). Operates on already-subscribed arrays (does NOT fetch). **Server twin = `functions/index.js` `isAccessEligible`** (commonjs, can't import this ESM lib); the two are pinned together by the parity suite in `functions/test/people-resolver.test.mjs`. Consume this instead of re-deriving expiry/link/role logic. See `docs/PLATFORM-FOUNDATIONS-2026-06-06.md` §Foundation 2.
 └── data/
     ├── referenceData.js       ← Static reference inventory (not auto-seeded; reference only)
     ├── blogPosts.js           ← Blog post data: slug, title, description, date, keywords, content (markdown string)

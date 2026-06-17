@@ -9,6 +9,7 @@ import { EmojiIcon } from '../../components/primitives/EmojiIcon.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { exportAccessRecordsCSV } from '../../utils/csv.js';
 import { localDateStr } from '../../utils/date.js';
+import { expiryStatus } from '../../lib/people.js';
 import { formatPhone } from '../../utils/phone.js';
 import { Timesheet } from './Timesheet.jsx';
 
@@ -82,19 +83,10 @@ export function PeopleAccessPage({ store, userProfile }) {
   const customRequirements = settings?.peopleAccessRequirements || [];
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const in7 = new Date(today); in7.setDate(in7.getDate() + 7);
-  const in30 = new Date(today); in30.setDate(in30.getDate() + 30);
 
-  function getExpiryStatus(expiryDate) {
-    if (!expiryDate) return null;
-    // Parse YYYY-MM-DD as local date (not UTC) to avoid timezone-shift false positives
-    const [y, m, day] = expiryDate.split('-').map(Number);
-    const d = new Date(y, m - 1, day);
-    if (d < today) return 'expired';
-    if (d <= in7) return 'critical';
-    if (d <= in30) return 'warning';
-    return 'ok';
-  }
+  // Shared with the F2 resolver (src/lib/people.js) so the expiry windows can't
+  // drift between this hub and the unified Person model.
+  const getExpiryStatus = (expiryDate) => expiryStatus(expiryDate, today);
 
   function expiryColor(status) {
     if (status === 'expired' || status === 'critical') return B.red;

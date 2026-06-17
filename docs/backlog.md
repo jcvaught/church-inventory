@@ -12,7 +12,7 @@ Plan: `docs/WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md`. Decision (#7): **T
 - **Phase 5** (pricing flatten to $15/mo) — ✅ SHIPPED standalone 2026-06-15 (0 payers → no grandfathering).
 
 ## Platform foundations (architecture spec'd; build-order phased)
-- **F2 Unified People model** — resolver unifying users + tracked people + contractors + volunteers.
+- **F2 Unified People model** — resolver unifying users + tracked people + contractors + volunteers. **Minimal slice SHIPPED 2026-06-17:** pure resolver `src/lib/people.js` (`PersonRef` + `getPerson`/`listPeople`/`isEligibleFor`/`complianceStatusForTracked`, collapses the `accessPerson.userId` link, shared expiry constants); 10 unit tests incl. server-parity (`functions/test/people-resolver.test.mjs`); first consumer wired (`PeopleAccessPage.getExpiryStatus` now delegates to the shared `expiryStatus`). **Remaining:** wire more consumers as they need it (Settings "My Compliance" / Team badges, Timesheet contractor list, Readiness view's hand-rolled `requirementStatusForPerson`, work-assignment `assigneeRefs[]`, search); the server's `isAccessEligible` stays its own commonjs copy (pinned by the parity test).
 - **F4 Attention engine** — canonical `AttentionItem` + collectors + shared thresholds.
 - **F5 Scheduled-occurrences feed** — canonical `Occurrence` + `getOccurrences()`; kill duplicate recurrence impls.
 - **F6 Search index** — `SearchableEntity` adapters + global palette (basic palette shipped; needs Work model first).
