@@ -25,6 +25,7 @@ const require = Module.createRequire(import.meta.url);
 // emulators:exec sets FIRESTORE_EMULATOR_HOST / FIREBASE_AUTH_EMULATOR_HOST /
 // GCLOUD_PROJECT; we backfill a project id and the secrets the handlers read
 // via defineSecret().value() (which resolves from process.env at runtime).
+process.env.NODE_ENV = 'test'; // keep Sentry disabled (index.js gates on this)
 process.env.GCLOUD_PROJECT = process.env.GCLOUD_PROJECT || 'demo-coh-functions';
 process.env.GOOGLE_CLOUD_PROJECT = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
 process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || 'sk_test_dummy';

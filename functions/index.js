@@ -26,10 +26,20 @@ async function getShepherdRoster(db) {
 }
 const Sentry = require('@sentry/node');
 
+// Disable Sentry under any test run so deliberately-exercised error paths don't
+// ship to the live project. node --test handler tests run under emulators:exec
+// (FIRESTORE_EMULATOR_HOST set, never present in real production); vitest sets
+// NODE_ENV=test/VITEST. Real Cloud Functions have none of these.
+const isTest = process.env.NODE_ENV === 'test'
+  || !!process.env.VITEST
+  || !!process.env.FIRESTORE_EMULATOR_HOST;
 Sentry.init({
   dsn: 'https://92a9eb2a55b9544dd9e673291f57eff8@o4511040580091904.ingest.us.sentry.io/4511040584089600',
   tracesSampleRate: 0.1,
-  environment: process.env.FUNCTIONS_EMULATOR ? 'development' : 'production',
+  enabled: !isTest,
+  environment: isTest
+    ? 'test'
+    : (process.env.FUNCTIONS_EMULATOR ? 'development' : 'production'),
 });
 
 // wrapCall(name, handler): wraps an onCall handler so unexpected errors are
