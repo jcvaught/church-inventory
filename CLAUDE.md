@@ -27,11 +27,18 @@ npm run lint:fix  # ESLint with auto-fix
 npm run analyze   # Build + open bundle size visualizer in browser (dist/bundle-stats.html)
 npm run test:e2e  # Playwright E2E suite against prod (~80s, requires E2E_MEMBER_B_EMAIL env)
 npm run test:unit # Pure-logic unit tests (node --test functions/test/*.test.mjs) — no emulator
-npm run test:rules # Firestore RULES unit tests via @firebase/rules-unit-testing — boots the
-                  # Firestore emulator (needs Java) and runs functions/test/rules/*.test.mjs.
-                  # Covers the Shepherd Hub privacy guarantees (contact-info write-lock,
-                  # per-elder note privacy, audit admin-read-only + immutability, careThread
-                  # author pinning, SEC-2 email_verified admin gate). Add Shepherd rule
+npm run test:rules # Firestore + Storage RULES tests via @firebase/rules-unit-testing — boots the
+                  # Firestore + Storage emulators (needs Java; runs --test-concurrency=1 so the
+                  # files don't race on the shared emulator via clearFirestore) and runs
+                  # functions/test/rules/*.test.mjs (29 tests). Covers: Shepherd Hub privacy
+                  # (shepherd-rules.test.mjs — contact-info write-lock, per-elder note privacy,
+                  # audit admin-read-only + immutability, careThread author pinning, SEC-2
+                  # email_verified gate); the CORE multi-tenant model (core-collections.test.mjs
+                  # — member/admin/manager gradations, cross-tenant isolation, activityLog
+                  # immutability, task private-visibility, workItems maintenance-vs-task create
+                  # split, Jobs Hub roster read-gating + CF-only writes, no-self-escalation user
+                  # rules, webhook-only subscription doc); and Storage (storage.test.mjs — tenant
+                  # isolation, active-account + image-only + 5MB upload gates). Add rule
                   # assertions here, NOT to test:unit (that glob runs without an emulator).
 npm run test:handlers # Cloud Functions HANDLER integration tests — boots firestore+auth
                   # emulators (needs Java) and runs functions/test/handlers/*.test.mjs against
