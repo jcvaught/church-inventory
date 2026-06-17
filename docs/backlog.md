@@ -3,7 +3,13 @@
 This is the canonical list of **open** work. Update it here (not scattered across the many plan/audit docs). Detailed specs live in the linked docs; this file is the index.
 
 ## Keystone migration (unblocks most else)
-- **Work-Unification Phases 2–5** — merge Tasks + Maintenance + Jobs into one `workItems` collection; migrate via idempotent Admin SDK scripts in maintenance windows; flip UI read path; retire convert-features. Phases 0–1 shipped. (`docs/WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md`)
+Plan: `docs/WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md`. Decision (#7): **TWO collections** — `workItems` (tasks+maintenance merged) + jobs stays its own collection, so Phase 3 is a UI unification, not a data migration.
+- **Phase 0** (shared board/recurrence primitives) — on `phase0` branch (not merged).
+- **Phase 1** (contractor hours + Timesheet, `timeEntries`, `personType`/`hourlyRate`) — ✅ SHIPPED & live.
+- **Phase 2** (`workItems` migration) — steps 1–2 DONE but **UNMERGED on `phase2-readpath`**: dark, flag-gated read-path abstraction (`scripts/set-work-flag.cjs`), CF read/write sites routed, `workItems.type` immutable, prod→emulator copy tooling. `main` has **0** `workItems` refs in `src/`. ⚠️ Branch is ~2wk stale and diverging (conflicts coming in App.jsx/useFirestore.js/SettingsPage/HubsPage from the pricing flatten + Shepherd + invite fix). **Next: rebase/merge current main into the branch → prod backfill → Thursday-evening flip** (§8.5 cutover; Tasks first).
+- **Phase 3** (fold Jobs in) — not started; UI/nav unification + "convert" → spawn-linked-shift (NOT a data migration).
+- **Phase 4** (UI convergence: one "Work" area, six views; delete convert-features + duplicate board engines) — not started.
+- **Phase 5** (pricing flatten to $15/mo) — ✅ SHIPPED standalone 2026-06-15 (0 payers → no grandfathering).
 
 ## Platform foundations (architecture spec'd; build-order phased)
 - **F2 Unified People model** — resolver unifying users + tracked people + contractors + volunteers.
