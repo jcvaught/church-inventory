@@ -1,5 +1,103 @@
 export const BLOG_POSTS = [
   {
+    slug: 'volunteer-role-handoff-knowledge-transfer-church',
+    title: 'How to Hand Off a Volunteer Role Without Losing Everything in Their Head',
+    description: "When a long-serving volunteer steps down, most of what they knew leaves with them — the vendor contacts, the closet combinations, the unwritten rules. Here is a practical handoff playbook for capturing that knowledge before it walks out the door, so the next volunteer inherits a role instead of starting from scratch.",
+    date: '2026-06-17',
+    keywords: 'church volunteer handoff, volunteer role transition church, church volunteer turnover, knowledge transfer church ministry, replacing a church volunteer, church volunteer succession, volunteer coordinator handoff, documenting church volunteer roles',
+    related: ['volunteer-coordinator-role-guide', 'church-volunteer-scheduling-system-that-lasts', 'church-facilities-management-guide'],
+    content: `
+## The Knowledge That Walks Out the Door
+
+Every church has at least one of them: the volunteer who has run the same ministry for so long that nobody else actually knows how it works. She knows which vendor to call when the coffee maker dies, the combination to the supply closet, that the fellowship-hall thermostat lies by four degrees, and which families to never seat together at the funeral lunch. None of it is written down. All of it lives in one head.
+
+Then one Sunday she announces she's moving to be near the grandkids, or her health changes, or she's simply done after fifteen years — and the church discovers, usually too late, that it wasn't losing a volunteer. It was losing a database.
+
+This is one of the most expensive and least-discussed failures in church operations. A role that took a decade to master gets handed to a new volunteer with a shrug and a "you'll figure it out." The new person reinvents systems that already existed, repeats mistakes that were solved years ago, and often burns out or quits inside a year because the role felt impossible — not because it was, but because they inherited none of the accumulated knowledge that made it manageable.
+
+The good news: the fix is almost entirely a matter of process, not personality. You can capture what's in someone's head, but only if you start before they're gone. This is the handoff playbook.
+
+## Start Before You Need It
+
+The single biggest mistake is treating a handoff as an event that happens at the end. By the time a volunteer gives notice, you're in salvage mode — racing to extract years of knowledge in a two-week window while they're mentally already gone.
+
+The better model is continuous. Every volunteer in a load-bearing role should be maintaining a living record of how their role actually works, updated as they go, stored somewhere the church can reach without them. Think of it as the difference between a will written calmly in advance and one scribbled in a hospital hallway.
+
+You won't get every volunteer to do this voluntarily, and that's fine. Prioritize. The roles that most need a documented handoff are the ones where:
+
+- **One person is the only one who knows how it's done** (a [single point of failure](/blog/volunteer-coordinator-role-guide) — if they vanished tomorrow, the ministry stalls).
+- **The role touches money, keys, vendors, or safety** — anything where a gap creates real risk, not just inconvenience.
+- **The knowledge is genuinely accumulated**, not obvious. Anyone can refill the bulletin tray. Not everyone knows the AV booth's startup quirks or the unwritten order of the Christmas Eve service.
+
+Map those roles first. For each one, the goal is a handoff document that a competent stranger could pick up and run with.
+
+## What Actually Needs to Be Captured
+
+When people sit down to document a role, they tend to write down the obvious procedures and miss the things that actually make the role hard — the contacts, the access, and the unwritten rules. Use these five buckets to make sure nothing important stays trapped in someone's memory.
+
+### 1. The Recurring Rhythm
+
+What happens, when, and in what order. The weekly tasks, the monthly tasks, the once-a-year scramble. Write it as a calendar, not a wish list: "First Sunday of the month, restock the communion supplies; order more when the wafer box is down to one sleeve." Specifics beat principles. A new volunteer needs to know *when* and *how much*, not just *what*.
+
+### 2. The Contacts
+
+This is the bucket most often lost, and the most painful to rebuild. Every vendor, every repair company, every "I always call Dave at the print shop." Names, phone numbers, account numbers, and — critically — *why* this contact and not another. "We use Riverside Linens because they deliver Saturday morning and bill the church monthly" tells the next person not just who to call but what relationship they're inheriting.
+
+### 3. The Access
+
+Keys, codes, logins, closet combinations, the WiFi password for the kids' wing, who has the master key, and which door doesn't lock unless you lift it. Access knowledge is also a security issue: when a volunteer leaves, the church should know exactly what they could get into so it can be reassigned or changed. If your church tracks key and access assignments in a shared system, a departure becomes a checklist instead of a guessing game.
+
+### 4. The Stuff
+
+Where the supplies live, what equipment the role depends on, and what condition it's in. This is where a real [inventory and facilities record](/blog/church-facilities-management-guide) earns its keep. If the AV cart, the coffee urns, and the folding-table count all live in a shared system rather than one person's memory, the new volunteer inherits an accurate picture instead of opening closets to find out what they have. "We own three projectors; one's been broken since spring" is exactly the kind of detail that otherwise gets rediscovered the hard way, mid-event.
+
+### 5. The Unwritten Rules
+
+The judgment calls and institutional memory that never make it into a procedure. Which families have history. Why the youth room got moved. The fire-code reason the back hallway has to stay clear. The reason the 8 AM service does communion differently. These are the hardest to extract because the person holding them doesn't think of them as knowledge — to them it's just "how things are." Ask directly: "What would surprise someone new? What do you wish someone had told you?"
+
+## Run the Handoff as an Overlap, Not a Drop-Off
+
+A document is necessary but not sufficient. The strongest handoffs include a period where the outgoing and incoming volunteers serve *together* — long enough to cover at least one full cycle of the role.
+
+For a weekly role, two or three weeks of shadowing. For something seasonal, the new person should ideally watch the outgoing one run the event once before doing it themselves. The overlap is where the unwritten rules surface naturally, because they come up in context: "Oh — and this is the part where you have to remind the band to start the prelude, they always forget."
+
+Structure the overlap so it actually transfers ownership rather than just letting the new person watch:
+
+1. **Watch.** The new volunteer observes the full cycle and takes notes against the handoff document, flagging anything that's wrong, outdated, or missing.
+2. **Do, with a spotter.** The new volunteer runs it while the outgoing one stays available to catch problems. This is where confidence is built.
+3. **Run solo, with backup on call.** The new person owns it; the outgoing volunteer is reachable for questions but not present. Set an explicit end date for this so it doesn't become a permanent crutch — or a permanent unpaid obligation for someone trying to step away.
+
+If a clean overlap isn't possible — the volunteer is leaving abruptly, or has already gone — the handoff document carries more weight, which is exactly why building it continuously rather than at the exit matters so much.
+
+## Make the Role Smaller Than One Heroic Person
+
+A handoff also exposes whether a role is even reasonable. If documenting it reveals that one volunteer was quietly doing the work of three, the answer isn't to find a more heroic replacement — it's to break the role into pieces before you hand it off.
+
+This connects directly to [building a volunteer system that lasts](/blog/church-volunteer-scheduling-system-that-lasts). A role that depends on one irreplaceable person is fragile by design. The handoff is the moment to ask: does all of this need to live with one volunteer, or can the scheduling piece, the supply piece, and the vendor piece be split among a small team? Distributed roles survive turnover. Hero roles don't — they just transfer the burnout to the next person and reset the clock.
+
+When the [volunteer coordinator](/blog/volunteer-coordinator-role-guide) treats every major handoff as a chance to redesign the role rather than just refill it, the ministry gets sturdier with each transition instead of more brittle.
+
+## Where the Knowledge Should Live
+
+The recurring theme in every failed handoff is the same: the knowledge lived in a place the church couldn't reach. An inbox. A personal phone. A spiral notebook that left with the volunteer. A "system" that was really just one person's habits.
+
+The fix is to put the durable parts of a role somewhere shared and church-owned by default:
+
+- **Procedures and unwritten rules** in a shared document the whole team can open, not one person's files.
+- **Contacts and vendors** in a shared list, so a departure doesn't mean rebuilding the rolodex.
+- **Keys, access, and equipment** in a tracked record, so the church always knows what it owns and who can reach it. Tools like ChurchOpsHub keep inventory, facilities, key assignments, and volunteer roles in one shared place precisely so this knowledge belongs to the church, not to whoever happens to be holding the role this year.
+
+You don't need software to start — a shared folder and a disciplined habit beat the status quo at most churches. The point isn't the tool. The point is that the moment a volunteer's knowledge gets written into a place the church controls, that knowledge stops being a liability waiting to walk out the door and becomes an asset the next person inherits.
+
+## The Handoff Is the Health Check
+
+Here's the quiet payoff. A church that can hand off any volunteer role smoothly is, almost by definition, a church whose operations are healthy. The discipline that makes handoffs easy — documented rhythms, shared contacts, tracked access, distributed roles — is the same discipline that prevents burnout, survives surprises, and lets the church absorb the inevitable life changes of the people who serve it.
+
+So don't wait for the resignation. Pick your most irreplaceable volunteer, sit down with them this month, and start filling the five buckets. The best time to capture what's in their head was the day they started. The second-best time is before they tell you they're leaving.
+    `.trim(),
+  },
+
+  {
     slug: 'wedding-funeral-logistics-checklist-small-church',
     title: 'Wedding & Funeral Logistics Checklist for Small Churches',
     description: 'Weddings and funerals are the two highest-stakes events a small church hosts — and they often land on a single overworked volunteer. Here is a reusable, run-it-from-the-page logistics checklist covering room prep, setup, AV, supplies, volunteer roles, cleanup, and who-owns-what handoffs.',
@@ -633,7 +731,7 @@ A coordinator is appointed. They want to help. They're competent. In their first
 
 The thing that prevents this isn't more discipline or better organization. It's clarity, in advance, about what's inside the role and what isn't. A coordinator with a written list of their actual responsibilities can decline scope creep with confidence. A coordinator without one absorbs everything and resents nothing in particular but everything in general.
 
-So the most important investment when establishing this role isn't training or tools. It's writing down what the job is.
+So the most important investment when establishing this role isn't training or tools. It's writing down what the job is. (That same written record is what makes the role survivable when the coordinator eventually steps down — see [how to hand off a volunteer role](/blog/volunteer-role-handoff-knowledge-transfer-church) without losing everything in their head.)
 
 ## The Seven Core Responsibilities
 
@@ -815,7 +913,7 @@ Volunteer X texts you Saturday at 9 PM: can't make it tomorrow. Now what? In mos
 
 **5. The system has no exit plan.**
 
-The current admin retires, moves, or just steps back. They hand off "the system" — which turns out to be three Google Sheets, a Trello board nobody else has access to, an email distribution list, and a head full of information about which volunteers can be relied on and which need three reminders. The next person inherits a black box. They give up after two weeks and start over. The cycle repeats.
+The current admin retires, moves, or just steps back. They hand off "the system" — which turns out to be three Google Sheets, a Trello board nobody else has access to, an email distribution list, and a head full of information about which volunteers can be relied on and which need three reminders. The next person inherits a black box. They give up after two weeks and start over. The cycle repeats. (Avoiding exactly this is the whole point of running a deliberate [volunteer role handoff](/blog/volunteer-role-handoff-knowledge-transfer-church) before the person leaves, not after.)
 
 ## The Principles of a System That Lasts
 
