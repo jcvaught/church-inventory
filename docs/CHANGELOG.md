@@ -4,6 +4,16 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-17 — Sentry disabled in test runs (error-path tests were shipping to production)
+
+A Sentry "production" issue (JAVASCRIPT-REACT-19, *"No signatures found matching the expected signature for payload"*) turned out to be the **handler test suite**, not real traffic: the `stripeWebhook` test deliberately feeds a bad signature, and the captured exception was shipping to the live Sentry project tagged `environment=production`. Root cause: `Sentry.init` in `functions/index.js` gated `environment` only on `FUNCTIONS_EMULATOR` (unset when handler tests run via `node --test` under `emulators:exec`) and stayed **enabled** during tests.
+
+- **`functions/index.js`:** added `const isTest = NODE_ENV==='test' || VITEST || FIRESTORE_EMULATOR_HOST` → `Sentry.init({ enabled: !isTest, environment: isTest ? 'test' : (FUNCTIONS_EMULATOR ? 'development' : 'production') })`. `FIRESTORE_EMULATOR_HOST` is the reliable signal here (set by `emulators:exec`, never present in real Cloud Functions). `enabled:false` makes every existing `Sentry.captureException` a silent no-op, so nothing else changed.
+- **`functions/test/handlers/setup.mjs`:** sets `process.env.NODE_ENV = 'test'` before importing `index.js` (belt-and-suspenders, matches the file's existing "env before import" convention).
+- No-op in real production (`isTest` is false there), so no redeploy required. Verified `npm run test:handlers` still **47/47**. (Court Climber got the same guard the same day.)
+
+---
+
 ## 2026-06-16 — Invite link: existing members bounced to sign-in instead of dead-ending on "Join"
 
 Fix for the recurring **Lisa Bosley** "it's doing the weird thing again and wanting me to sign in" report. Root cause was **not** the Google-popup header issue from 2026-05-28 (verified: prod serves all four `vercel.json` allowances correctly, and Lisa is an **email/password** account, not Google). Her Firestore profile + Auth account are fully healthy (`active`, role manager, `allowedHubs:['jobs','maintenance']`, churchId correct; token still refreshing). The actual bug: an `?invite=` link forces `AuthScreen` into **register mode** (`App.jsx` line ~95, `useState(inviteData ? "register" : initialMode)`) — correct for brand-new members, but an *existing* member re-clicking the invite (when their session isn't active in that browser/device) lands on the **"Join Your Church" / Create Account** form. Submitting hits `auth/email-already-in-use` and dead-ends — which the user reads as "it keeps making me sign in."
