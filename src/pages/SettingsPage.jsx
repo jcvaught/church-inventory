@@ -8,6 +8,7 @@ import { Spinner } from '../components/primitives/Spinner.jsx';
 import { useConfirm } from '../components/primitives/ConfirmDialog.jsx';
 import { UndoToast } from '../components/primitives/UndoToast.jsx';
 import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
+import { getPerson, makeRef, expiryStatus } from '../lib/people.js';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, getDocs, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { enablePush, pushSupported } from '../utils/push.js';
@@ -418,27 +419,20 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const ACCESS_TYPE_LABELS = { background_check: 'Background Check', key_assignment: 'Key / Fob', certification: 'Certification', custom: 'Custom' };
   const ACCESS_TYPE_ICONS = { background_check: '🔍', key_assignment: '🔑', certification: '🎓', custom: '✅' };
 
-  function accessExpiryStatus(expiryDate) {
-    if (!expiryDate) return null;
-    const [y, m, d] = expiryDate.split('-').map(Number);
-    const date = new Date(y, m - 1, d);
-    const now = new Date(); now.setHours(0, 0, 0, 0);
-    const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
-    if (date < now) return 'expired';
-    if (date <= in30) return 'warning';
-    return 'ok';
-  }
+  // F2 resolver context — already-subscribed arrays. getPerson collapses the
+  // users↔accessPeople link (accessPerson.userId) so we don't re-hand-roll
+  // "is this user a tracked person?" / its compliance windows here.
+  const peopleCtx = { users, accessPeople, accessRecords };
 
+  // 🔴 if any compliance record has lapsed, 🟡 if any expires within 30 days.
+  // (complianceStatus.expiringSoon = critical[≤7d] ∪ warning[≤30d], not expired.)
   function getUserComplianceBadge(userId) {
-    const person = (accessPeople || []).find(p => p.userId === userId && p.active);
-    if (!person) return null;
-    const recs = (accessRecords || []).filter(r => r.personId === person._docId);
-    const now = new Date(); now.setHours(0, 0, 0, 0);
-    const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
-    const hasExpired = recs.some(r => { if (!r.expiryDate) return false; const [y,m,d] = r.expiryDate.split('-').map(Number); return new Date(y,m-1,d) < now; });
-    const hasWarning = recs.some(r => { if (!r.expiryDate) return false; const [y,m,d] = r.expiryDate.split('-').map(Number); const dt = new Date(y,m-1,d); return dt >= now && dt <= in30; });
-    if (hasExpired) return '🔴';
-    if (hasWarning) return '🟡';
+    const person = getPerson(makeRef('user', userId), peopleCtx);
+    if (!person || person.active === false) return null;
+    const cs = person.complianceStatus;
+    if (!cs) return null;
+    if (cs.expired.length > 0) return '🔴';
+    if (cs.expiringSoon.length > 0) return '🟡';
     return null;
   }
   const listCard = (key, title, icon) => {
@@ -661,10 +655,10 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
 
       {/* My Compliance — visible if this user is linked to an accessPerson */}
       {(() => {
-        const myPerson = (accessPeople || []).find(p => p.userId === userProfile.uid);
-        if (!myPerson) return null;
+        const me = getPerson(makeRef('user', userProfile.uid), peopleCtx);
+        if (!me || !me.linkedTrackedId) return null;
         const myRecords = (accessRecords || [])
-          .filter(r => r.personId === myPerson._docId)
+          .filter(r => r.personId === me.linkedTrackedId)
           .sort((a, b) => (b.completedDate || '').localeCompare(a.completedDate || ''));
         return (
           <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>
@@ -674,7 +668,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             ) : (
               <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                 {myRecords.map(r => {
-                  const es = accessExpiryStatus(r.expiryDate);
+                  const es = expiryStatus(r.expiryDate);
+                  const expiringSoon = es === 'warning' || es === 'critical';
                   return (
                     <div key={r._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:10, background:B.warmGray }}>
                       <EmojiIcon emoji={ACCESS_TYPE_ICONS[r.type] || '✅'} decorative style={{ fontSize:18 }} />
@@ -688,10 +683,10 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                         <div style={{ fontSize:12, color:B.textMid }}>
                           Completed {r.completedDate}
                           {r.expiryDate && (
-                            <span style={{ color: es === 'expired' ? B.red : es === 'warning' ? '#92400E' : B.textMid }}>
+                            <span style={{ color: es === 'expired' ? B.red : expiringSoon ? '#92400E' : B.textMid }}>
                               {' '}· Expires {r.expiryDate}
                               {es === 'expired' && <> <EmojiIcon emoji="🔴" label="Expired" /></>}
-                              {es === 'warning' && <> <EmojiIcon emoji="🟡" label="Expires within 30 days" /></>}
+                              {expiringSoon && <> <EmojiIcon emoji="🟡" label="Expires within 30 days" /></>}
                             </span>
                           )}
                           {r.type === 'key_assignment' && !r.returnedDate && <span style={{ color:B.gold }}> · Key not returned</span>}
