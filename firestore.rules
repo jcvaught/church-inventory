@@ -130,6 +130,17 @@ service cloud.firestore {
       allow write: if isChurchAdmin(churchId);
     }
 
+    // ── Feature flags — members read; admins+managers write (Work-unification
+    //    Phase 2). Holds `workItemsEnabled`, the per-church read-path switch
+    //    between the legacy tasks/maintenanceTickets collections and the unified
+    //    workItems collection. Members must read it so useFirestore can pick the
+    //    right subscription; flipping it is an admin/manager action (instant
+    //    revert during a maintenance window). ─────────────────────────────────
+    match /churches/{churchId}/config/featureFlags {
+      allow read:           if isMember(churchId);
+      allow create, update, delete: if isChurchAdminOrManager(churchId);
+    }
+
     // ── Config/shepherdSync — Shepherd Hub sync status (last run, counts,
     //    per-elder load). Read = elder or admin; CF-only write (Admin SDK). ────
     match /churches/{churchId}/config/shepherdSync {
@@ -260,7 +271,11 @@ service cloud.firestore {
         || (request.resource.data.type == 'task' && request.resource.data.createdBy == request.auth.uid)
       );
       // update: maintenance is any member; tasks keep the visibility + immutability predicate.
-      allow update: if isMember(churchId) && (
+      // `type` is immutable — a doc cannot be moved between the task and maintenance
+      // rule regimes after creation (clients never change it; CFs use the Admin SDK).
+      allow update: if isMember(churchId)
+        && request.resource.data.type == resource.data.type
+        && (
         resource.data.type == 'maintenance'
         || (
           (

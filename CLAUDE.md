@@ -115,7 +115,7 @@ src/
 ├── useFirestore.js            ← All Firestore CRUD as a single hook (incl. maintenance)
 ├── firebase.js                ← Firebase app init; exports `db`, `auth`, `googleProvider`, `storage`
 ├── firebasePublic.js          ← Minimal init (firebase/app only, no Auth/Firestore/Storage); used by main.jsx when `?jobs=` is present so anonymous teen traffic never imports the authenticated SDKs (audit 2026-05-23 perf C-1)
-├── main.jsx                   ← React entry point; initializes Sentry (@sentry/react v10) with browserTracing + captureConsole({levels:['error']}) — defaults also catch window.onerror, unhandled rejections, and breadcrumbs. Routes `?jobs=` URLs to a minimal tree (firebasePublic + PublicJobsPage) BEFORE importing App.jsx — cut anonymous bundle from ~2 MB to ~480 KB raw
+├── main.jsx                   ← React entry point; initializes Sentry (@sentry/react v10) with browserTracing + captureConsole({levels:['error']}) — defaults also catch window.onerror, unhandled rejections, and breadcrumbs. **The DSN is gated on `import.meta.env.PROD`** so only DEPLOYED builds transmit — local dev servers (incl. `npm run dev:emulator`) init the SDK but send nothing, so local/sandbox errors can't fire prod alerts (2026-06-10). Routes `?jobs=` URLs to a minimal tree (firebasePublic + PublicJobsPage) BEFORE importing App.jsx — cut anonymous bundle from ~2 MB to ~480 KB raw
 ├── hooks/
 │   ├── useMobile.js           ← MobileCtx + useWindowWidth (breakpoint 768px)
 │   ├── useSubscription.js     ← Subscription state hook: hasHub(), canAddUser(), isTrialing()
