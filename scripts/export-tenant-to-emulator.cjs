@@ -74,8 +74,10 @@ async function dumpSubtree(db, docRef, out) {
   for (const col of subcols) {
     const docs = await col.get();
     for (const d of docs.docs) {
-      out.push({ path: d.ref.path, data: encode(d.data()) });
-      await dumpSubtree(db, d.ref, out); // recurse for deeper subcollections (comments live here)
+      // dumpSubtree pushes the doc itself (via the snap.exists check above) and
+      // then recurses into its subcollections — so it's the single push site.
+      // Do NOT also push here, or every non-root doc gets exported twice.
+      await dumpSubtree(db, d.ref, out);
     }
   }
 }
