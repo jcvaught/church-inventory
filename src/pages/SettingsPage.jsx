@@ -1,6 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { B, f1, f2, inp, btnP, btnS } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
+import { isOwnerEmail } from '../utils/owners.js';
 import { Modal } from '../components/primitives/Modal.jsx';
 import { FF } from '../components/primitives/FF.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
@@ -133,10 +134,10 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   }
 
   const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub', people_access: 'People Access Hub', tasks: 'Tasks Hub', jobs: 'Job Hub' };
-  const churchHubs = subscription?.grandfathered || subscription?.plan === 'all_in'
+  const churchHubs = subscription?.grandfathered || subscription?.plan === 'pro' || subscription?.plan === 'all_in'
     ? Object.keys(HUB_LABELS)
     : (subscription?.hubs || []);
-  const maxUsers = subscription?.grandfathered || subscription?.plan === 'team_unlimited' || subscription?.plan === 'all_in'
+  const maxUsers = subscription?.grandfathered || subscription?.plan === 'pro' || subscription?.plan === 'team_unlimited' || subscription?.plan === 'all_in'
     ? null
     : subscription?.plan === 'team_25' ? 25 : 10;
 
@@ -168,8 +169,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     }
   }, [churchHubs, inviteHubsInitialized]);
 
-  // NOTE: owner emails also defined in functions/index.js (OWNER_EMAILS) and firestore.rules. Keep in sync.
-  const isOwner = ['jcvaught@gmail.com', 'jvaught@fxcc.org'].includes(user?.email);
+  const isOwner = isOwnerEmail(user?.email);
 
   // Load the current global banner into the owner editor (owner only). The
   // snapshot reflects the owner's own saves; while typing (no save yet) no
@@ -346,7 +346,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const isAdmin = userProfile?.role === "admin";
   const isManager = userProfile?.role === "manager";
   const managedMinistries = userProfile?.managedMinistries || [];
-  const allHubsUnlocked = subscription?.plan === 'all_in' || subscription?.grandfathered;
+  const allHubsUnlocked = subscription?.plan === 'pro' || subscription?.plan === 'all_in' || subscription?.grandfathered;
   const hasJobsHub = (subscription?.hubs || []).includes('jobs') || allHubsUnlocked;
   const hasInsightsHub = (subscription?.hubs || []).includes('insights') || allHubsUnlocked;
   const hasPeopleHub = (subscription?.hubs || []).includes('people_access') || allHubsUnlocked;
@@ -464,7 +464,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
 
   const isTrialing = subscription?.freeHubsSelected === null && subscription?.trialEndsAt && new Date(subscription.trialEndsAt) > new Date();
   const trialDaysLeft = isTrialing ? Math.max(0, Math.ceil((new Date(subscription.trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24))) : 0;
-  const planLabel = !subscription ? 'Free' : isTrialing ? '90-Day Trial' : subscription.plan === 'free' ? 'Free' : subscription.plan === 'all_in' ? 'All-In' : subscription.plan === 'team_unlimited' ? 'Team Unlimited' : subscription.plan;
+  const planLabel = !subscription ? 'Free' : isTrialing ? '90-Day Trial' : subscription.plan === 'free' ? 'Free' : subscription.plan === 'pro' ? 'ChurchOpsHub' : subscription.plan === 'all_in' ? 'All-In' : subscription.plan === 'team_unlimited' ? 'Team Unlimited' : subscription.plan;
   const activeHubs = subscription?.grandfathered ? ['All hubs (grandfathered)'] : isTrialing ? (subscription.trialHubs || []) : (subscription?.hubs || []);
   const hasStripeCustomer = !!subscription?.stripeCustomerId;
 
@@ -759,6 +759,21 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                 </label>
               )}
             </div>
+
+          {hasJobsHub && (
+            <div style={{ marginTop:22, paddingTop:18, borderTop:'1px solid '+B.sand }}>
+              <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Daily Job Alerts</div>
+              <div style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:12 }}>
+                Emailed to admins at 7am (your church's timezone). Sent only on days that need attention.
+              </div>
+              <label style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', fontSize:14, fontFamily:f2, color:B.textDark }}>
+                <input type="checkbox" style={{ marginTop:3 }}
+                  checked={settings?.emptyJobAlertEnabled === true}
+                  onChange={(e) => updateSettings({ emptyJobAlertEnabled: e.target.checked })} />
+                <span><strong>Understaffed job alert</strong> — a morning heads-up listing any jobs scheduled for that day that aren't fully staffed yet (empty or only partly filled).</span>
+              </label>
+            </div>
+          )}
         </div>
       )}
 
@@ -836,7 +851,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                   {billingLoading ? "..." : "Manage Billing"}
                 </button>
               )}
-              {!subscription?.grandfathered && subscription?.plan !== 'all_in' && (
+              {!subscription?.grandfathered && subscription?.plan !== 'pro' && subscription?.plan !== 'all_in' && (
                 <button onClick={() => setShowUpgradeModal(true)} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>
                   Upgrade
                 </button>
@@ -1503,66 +1518,39 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           <>
             {billingError && <p style={{ color:B.red, fontSize:13, marginBottom:12 }}>{billingError}</p>}
 
-            {/* All-In Bundle */}
-            <div style={{ background:B.navy, borderRadius:14, padding:"20px 22px", marginBottom:16 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
-                <div style={{ fontFamily:f1, fontWeight:700, fontSize:15, color:"#fff" }}>All-In Bundle</div>
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <span style={{ background:B.gold, color:B.navy, fontFamily:f1, fontWeight:800, fontSize:10, padding:"3px 10px", borderRadius:100, letterSpacing:1 }}>BEST VALUE</span>
-                  <span style={{ fontFamily:f1, fontWeight:700, fontSize:15, color:B.tealLight }}>$29/mo</span>
-                </div>
-              </div>
-              <p style={{ color:"rgba(255,255,255,0.65)", fontSize:13, margin:"0 0 14px", lineHeight:1.5 }}>
-                All 7 hubs + unlimited team members. Save even more vs. buying individually.
+            {/* The single ChurchOpsHub plan */}
+            <div style={{ background:B.navy, borderRadius:14, padding:"22px 22px 24px", marginBottom:8 }}>
+              <div style={{ fontFamily:f1, fontWeight:700, fontSize:16, color:"#fff", marginBottom:6 }}>ChurchOpsHub</div>
+              <p style={{ color:"rgba(255,255,255,0.65)", fontSize:13, margin:"0 0 16px", lineHeight:1.5 }}>
+                Everything beyond inventory — tasks &amp; maintenance, contractor hours, job &amp; volunteer shifts, people access &amp; compliance, insights, and accountability. <strong style={{ color:"#fff" }}>Unlimited team members.</strong>
               </p>
-              <button onClick={() => handleCheckout('all_in')} style={{ ...btnP, width:"100%", background:B.teal, fontSize:13 }}>
-                Subscribe — $29/mo
-              </button>
-            </div>
-
-            {/* Individual hubs */}
-            <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:10 }}>Individual Hubs</div>
-            {[
-              { key:'maintenance',    label:'Maintenance Hub',    price:'$7/mo',  desc:'Repair tickets, vendor directory, photo docs.' },
-              { key:'insights',       label:'Insights Hub',       price:'$7/mo',  desc:'Utilization charts, ministry & financial analytics.' },
-              { key:'coordination',   label:'Coordination Hub',   price:'$7/mo',  desc:'Checkout bundles & email notifications.' },
-              { key:'accountability', label:'Accountability Hub', price:'$5/mo',  desc:'Physical audits, chain of custody, insurance export.' },
-              { key:'tasks',          label:'Tasks Hub',          price:'$7/mo',  desc:'Kanban task board for general church admin tasks.' },
-              { key:'jobs',           label:'Job Hub',            price:'$7/mo',  desc:'Teen job board with signups and announcements.' },
-              { key:'people_access',  label:'People Access Hub',  price:'$7/mo',  desc:'Background checks, key assignments, certifications.' },
-            ].filter(h => !(subscription?.hubs || []).includes(h.key) && subscription?.plan !== 'all_in' && !subscription?.grandfathered)
-             .map(h => (
-              <div key={h.key} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px", borderRadius:10, border:"1px solid "+B.sand, marginBottom:8, gap:12, flexWrap:"wrap" }}>
-                <div>
-                  <div style={{ fontFamily:f1, fontWeight:700, fontSize:14, color:B.navy }}>{h.label} <span style={{ color:B.teal, fontWeight:700 }}>{h.price}</span></div>
-                  <div style={{ fontSize:12, color:B.textMid, marginTop:2 }}>{h.desc}</div>
+              <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+                {/* Monthly */}
+                <div style={{ flex:"1 1 180px", background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"16px 18px", border:"1px solid rgba(255,255,255,0.12)" }}>
+                  <div style={{ display:"flex", alignItems:"baseline", gap:4, marginBottom:12 }}>
+                    <span style={{ fontFamily:f1, fontWeight:800, fontSize:26, color:"#fff" }}>$15</span>
+                    <span style={{ fontSize:13, color:"rgba(255,255,255,0.55)" }}>/mo</span>
+                  </div>
+                  <button onClick={() => handleCheckout('pro_monthly')} style={{ ...btnP, width:"100%", background:B.teal, fontSize:13 }}>
+                    Subscribe monthly
+                  </button>
                 </div>
-                <button onClick={() => handleCheckout(h.key)} style={{ ...btnP, padding:"7px 16px", fontSize:12, whiteSpace:"nowrap" }}>Subscribe</button>
+                {/* Annual */}
+                <div style={{ flex:"1 1 180px", background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"16px 18px", border:`1px solid ${B.gold}`, position:"relative" }}>
+                  <span style={{ position:"absolute", top:-9, right:14, background:B.gold, color:B.navy, fontFamily:f1, fontWeight:800, fontSize:10, padding:"3px 10px", borderRadius:100, letterSpacing:1 }}>2 MONTHS FREE</span>
+                  <div style={{ display:"flex", alignItems:"baseline", gap:4, marginBottom:12 }}>
+                    <span style={{ fontFamily:f1, fontWeight:800, fontSize:26, color:"#fff" }}>$150</span>
+                    <span style={{ fontSize:13, color:"rgba(255,255,255,0.55)" }}>/yr</span>
+                  </div>
+                  <button onClick={() => handleCheckout('pro_annual')} style={{ ...btnP, width:"100%", background:B.gold, color:B.navy, fontSize:13 }}>
+                    Subscribe yearly
+                  </button>
+                </div>
               </div>
-            ))}
-
-            {/* Team plans */}
-            {subscription?.plan !== 'team_unlimited' && subscription?.plan !== 'all_in' && !subscription?.grandfathered && (
-              <>
-                <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, margin:"14px 0 10px" }}>Team Plans</div>
-                {subscription?.plan !== 'team_25' && (
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px", borderRadius:10, border:"1px solid "+B.sand, marginBottom:8, gap:12, flexWrap:"wrap" }}>
-                    <div>
-                      <div style={{ fontFamily:f1, fontWeight:700, fontSize:14, color:B.navy }}>Team Hub (25 users) <span style={{ color:B.teal, fontWeight:700 }}>$9/mo</span></div>
-                      <div style={{ fontSize:12, color:B.textMid, marginTop:2 }}>Expand beyond 10 members with role-based hub access.</div>
-                    </div>
-                    <button onClick={() => handleCheckout('team_25')} style={{ ...btnP, padding:"7px 16px", fontSize:12, whiteSpace:"nowrap" }}>Subscribe</button>
-                  </div>
-                )}
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px", borderRadius:10, border:"1px solid "+B.sand, marginBottom:8, gap:12, flexWrap:"wrap" }}>
-                  <div>
-                    <div style={{ fontFamily:f1, fontWeight:700, fontSize:14, color:B.navy }}>Team Hub (unlimited) <span style={{ color:B.teal, fontWeight:700 }}>$19/mo</span></div>
-                    <div style={{ fontSize:12, color:B.textMid, marginTop:2 }}>Unlimited team members, full role-based access control.</div>
-                  </div>
-                  <button onClick={() => handleCheckout('team_unlimited')} style={{ ...btnP, padding:"7px 16px", fontSize:12, whiteSpace:"nowrap" }}>Subscribe</button>
-                </div>
-              </>
-            )}
+            </div>
+            <p style={{ color:B.textLight, fontSize:12, textAlign:"center", margin:"0" }}>
+              Inventory, supplies &amp; reservations stay free. Cancel anytime.
+            </p>
           </>
         )}
       </Modal>

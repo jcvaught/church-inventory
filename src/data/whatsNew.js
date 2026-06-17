@@ -4,6 +4,36 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-06-16',
+    tag: 'Fixed',
+    title: 'Smoother sign-in from invite links',
+    body: "If you already have an account and click a church invite link again, you'll now go straight to the sign-in form (with your email filled in) instead of getting stuck on the 'Join Your Church' page. Just enter your password — or use 'Forgot password?' if you need it.",
+  },
+  {
+    date: '2026-06-15',
+    tag: 'Improved',
+    title: 'Get text reminders for your shifts',
+    body: "Want a text the morning of a job you signed up for? Add your phone number under Settings and turn on text reminders — you'll get a heads-up before your shift, and you can also opt in to a daily text when new jobs are posted. New sign-in and join pages now point this out so nobody misses it.",
+  },
+  {
+    date: '2026-06-15',
+    tag: 'Improved',
+    title: 'Simpler pricing — one plan, $15/mo',
+    body: "We replaced the old per-hub pricing and bundle with one simple plan. Inventory, supplies, and reservations stay free forever for up to 10 people. Everything else — maintenance, tasks, jobs & shifts, people access, insights, and accountability — is now included in a single ChurchOpsHub plan: $15/month or $150/year, with unlimited team members. No more picking hubs à la carte. Your 90-day free trial of all paid features is unchanged.",
+  },
+  {
+    date: '2026-06-14',
+    tag: 'New',
+    title: 'Morning alert for understaffed jobs',
+    body: "Admins can now get a 7am email heads-up if any job scheduled for that day isn't fully staffed yet — whether it has nobody signed up or just a few of the spots filled — so you have time to recruit before the shift. Turn it on under Settings → Church Settings → Daily Job Alerts. It only emails on days that actually need attention.",
+  },
+  {
+    date: '2026-06-12',
+    tag: 'Improved',
+    title: 'Phone numbers format themselves',
+    body: "Phone numbers now format automatically as you type — just enter the digits and they turn into (555) 555-5555. This works wherever you enter a number: People Access contacts, Maintenance Hub vendors, and the public item-request form. Numbers already on file display the same tidy way.",
+  },
+  {
     date: '2026-06-07',
     tag: 'New',
     title: 'What needs attention this week',

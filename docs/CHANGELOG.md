@@ -4,6 +4,386 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-17 — Sentry disabled in test runs (error-path tests were shipping to production)
+
+A Sentry "production" issue (JAVASCRIPT-REACT-19, *"No signatures found matching the expected signature for payload"*) turned out to be the **handler test suite**, not real traffic: the `stripeWebhook` test deliberately feeds a bad signature, and the captured exception was shipping to the live Sentry project tagged `environment=production`. Root cause: `Sentry.init` in `functions/index.js` gated `environment` only on `FUNCTIONS_EMULATOR` (unset when handler tests run via `node --test` under `emulators:exec`) and stayed **enabled** during tests.
+
+- **`functions/index.js`:** added `const isTest = NODE_ENV==='test' || VITEST || FIRESTORE_EMULATOR_HOST` → `Sentry.init({ enabled: !isTest, environment: isTest ? 'test' : (FUNCTIONS_EMULATOR ? 'development' : 'production') })`. `FIRESTORE_EMULATOR_HOST` is the reliable signal here (set by `emulators:exec`, never present in real Cloud Functions). `enabled:false` makes every existing `Sentry.captureException` a silent no-op, so nothing else changed.
+- **`functions/test/handlers/setup.mjs`:** sets `process.env.NODE_ENV = 'test'` before importing `index.js` (belt-and-suspenders, matches the file's existing "env before import" convention).
+- No-op in real production (`isTest` is false there), so no redeploy required. Verified `npm run test:handlers` still **47/47**. (Court Climber got the same guard the same day.)
+
+---
+
+## 2026-06-16 — Invite link: existing members bounced to sign-in instead of dead-ending on "Join"
+
+Fix for the recurring **Lisa Bosley** "it's doing the weird thing again and wanting me to sign in" report. Root cause was **not** the Google-popup header issue from 2026-05-28 (verified: prod serves all four `vercel.json` allowances correctly, and Lisa is an **email/password** account, not Google). Her Firestore profile + Auth account are fully healthy (`active`, role manager, `allowedHubs:['jobs','maintenance']`, churchId correct; token still refreshing). The actual bug: an `?invite=` link forces `AuthScreen` into **register mode** (`App.jsx` line ~95, `useState(inviteData ? "register" : initialMode)`) — correct for brand-new members, but an *existing* member re-clicking the invite (when their session isn't active in that browser/device) lands on the **"Join Your Church" / Create Account** form. Submitting hits `auth/email-already-in-use` and dead-ends — which the user reads as "it keeps making me sign in."
+
+- **`src/App.jsx` `handleRegister`:** when `register()` returns `code === 'auth/email-already-in-use'`, auto-switch `mode → "login"` (email already populated in `form`) and show "You already have an account — please sign in with your password below." Converts the dead-end into the right action. New members still register normally; the existing "Back to sign in" button stays as a manual fallback.
+- **`src/useAuth.js`:** `register` (and `createChurch`) now return `code: err.code` on failure so the component can branch on the Firebase error code, not just the display string.
+- Verified the symptom against prod with Playwright (invite URL renders "Join Your Church", not a sign-in form). Build clean (verify-prod-bundle ✓). **Immediate unblock for Lisa:** go to `churchopshub.com` (no invite query string) → sign in with email + password (Forgot password? if needed) — no popup, no register trap.
+
+---
+
+## 2026-06-15 — Pricing flatten: one $15/mo plan (Work-Unification Phase 5, shipped standalone ahead of the migration)
+
+Collapsed the 8-hub à-la-carte matrix (+ $29 All-In bundle + $9/$19 Team seat tiers) into a single flat **ChurchOpsHub** plan: **$15/mo or $150/yr**, unlimited team members, all paid hubs. Inventory + Supplies + Reservations stay free forever (10-user cap). Plan §7 of `WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md`; decoupled from the `workItems` migration and shipped on its own because a live-data check found **0 paying Stripe subscriptions across all churches** — so no payer migration/grandfathering was needed.
+
+- **Stripe (live, created via API 2026-06-15):** product `prod_Ui4uQaH7X8iO9O`; prices `pro_monthly` `price_1TiekxF12bDL8YA7j1uH1X1i` ($15/mo) + `pro_annual` `price_1TiekyF12bDL8YA7Z0BTmiHD` ($150/yr). Legacy per-hub/team/`all_in` products archived in Stripe (`active:false`, 2026-06-15) but price IDs kept mapped for historical webhook resolution; no longer offered.
+- **functions/index.js:** `PRICE_IDS` + `getPriceConfig` add `pro_monthly`/`pro_annual` → `{type:'pro', plan:'pro', maxUsers:9999, hubs:<all>}`; webhook subscribe/cancel handle `type:'pro'` (subscribe sets plan/hubs/maxUsers + pins `freeHubsSelected`; cancel → free/10/[]); `subHasHub()` short-circuits `plan==='pro'`. `PRO_HUBS` constant.
+- **Client:** `useSubscription.hasHub()` + `canAddUser()` recognize `plan:'pro'`. `UpgradeGate` always checks out `pro_monthly` and shows the flat-plan framing (removed unused `hubPrice` prop). `SettingsPage` Upgrade modal replaced (All-In + per-hub + team lists → one monthly/annual card); plan-aware derived values (`churchHubs`/`maxUsers`/`allHubsUnlocked`/`planLabel`) + Upgrade-button visibility updated. `HubsPage` per-hub price badges → "🔒 Locked"/"Unlock with ChurchOpsHub"; bundle callout → single-plan callout.
+- **Marketing/help copy:** `LandingPage` pricing section (Free / $15 ChurchOpsHub, dropped the per-hub toggle + $47-vs-$29 math), HUBS teaser ("Included"), removed Team Hub feature row + `showHubs` state. `HelpPage` per-hub badges → "Included in plan", Team section reframed, cost/cancel FAQs rewritten (JSON-LD + accordion). 6 blog-post price claims updated ($29/$7 → $15 flat). `whatsNew.js` entry. `BUSINESS_MODEL.md` + CLAUDE.md rewritten.
+- lint 0-err, build clean (verify-prod-bundle ✓). On branch `pricing-flatten`. **Deploy steps:** `firebase deploy --only functions` (PRICE_IDS/webhook/subHasHub), set the Stripe webhook to deliver `checkout.session.completed`/`customer.subscription.*` (already wired), Vercel auto-deploys frontend on merge. Probe `createCheckoutSession` invoker IAM post-deploy (onCall strip risk).
+
+---
+
+## 2026-06-14 — Jobs Hub: morning empty-job alert
+
+New scheduled Cloud Function `sendEmptyJobMorningAlert` (hourly cron, gated to each church's local **7am**). For churches with the Jobs hub active and `config/settings.emptyJobAlertEnabled === true`, it emails **all admins** a list of any job scheduled for *today* that is still `status: 'open'` and not fully staffed (`signupCount < spotsTotal` — empty or partially filled; the email shows "X of N filled", red when 0 and amber when partial) — a morning heads-up to recruit before the shift. Days where every job is already full are skipped. (Widened from zero-signup-only to under-filled on 2026-06-14 at John's request, same day.) Mirrors the `sendWeeklyComplianceDigest` skeleton (per-church tz gate, hub gate, opt-in flag, Brevo to admins); registered in `SCHEDULED_JOB_REGISTRY` (hourly heartbeat). Admin opt-in toggle added under a new **Daily Job Alerts** block in Settings → Church Settings (`emptyJobAlertEnabled`, jobs-hub gated). Enabled for FXCC (recipients: John, Nancy, Jill). Motivated by JOB-1425 (June 13) which went 0/4 after all 3 signups withdrew the evening of June 10 with no heads-up.
+
+---
+
+## 2026-06-11 — Shepherd Hub quality + rules tests (audit Phase 4) → AUDIT CLOSED
+
+Final phase of the Fable 5 Shepherd Hub audit (`docs/SHEPHERD-HUB-AUDIT-2026-06-11.md`).
+
+- **CQ-4 (rules tests):** added `@firebase/rules-unit-testing` + `functions/test/rules/`
+  + an `npm run test:rules` script (boots the Firestore emulator via `emulators:exec`).
+  Seven tests, all green, lock in the Shepherd privacy guarantees: **an elder cannot write
+  a person doc (the contact-info/medical lock — John's explicit ask)**, non-elder denial,
+  per-elder note privacy, careThread `authorUid` pinning, audit admin-read-only + immutability,
+  the SEC-2 `email_verified` admin gate, and the shepherdCare stamp. Kept in a subdir so the
+  emulator-less `test:unit` glob doesn't pick them up.
+- **CQ-1:** the owner allow-list literal is now a single client constant
+  `src/utils/owners.js` (`OWNER_EMAILS`/`isOwnerEmail`), used by `App.jsx`, `ShepherdHubPage.jsx`,
+  and `SettingsPage.jsx` (the `functions/index.js` `OWNER_EMAILS` + `firestore.rules` copies
+  stay — they can't import app code — with cross-reference comments).
+- **CQ-2:** `Tab` hoisted out of the ShepherdHubPage render.
+- **CQ-3:** plan-doc drift fixed (`functions/lib/elders.js` → `roster.js`).
+- **CQ-5 (EmojiIcon):** accepted/skipped — the hub's emojis live in string literals (button
+  labels, modal titles) next to descriptive text; churn/risk outweighs the marginal a11y gain.
+
+**Audit closed:** all Critical/High/Medium resolved across Phases 0–6. Accepted: UX-7
+(household grouping), CQ-5, SEC-7 (Level-2 encryption, D5). Build + lint clean; `test:unit`
+5/5, `test:rules` 7/7.
+
+## 2026-06-11 — Shepherd Hub UX (audit Phase 3, UX-1…6)
+
+- **UX-2 (last-contact loop):** new top-level `churches/{id}/shepherdCare/{personId}` doc
+  holds `lastCareAt`, written client-side when an elder posts/removes a care-thread entry.
+  Kept SEPARATE from the person doc so the nightly full-overwrite sync never clobbers it
+  (rules: elder read/write, admin read). The list shows "touched Nmo ago" and a new
+  **"Sort: Needs attention"** option puts never-/least-recently-contacted first.
+- **UX-1 (perf):** flock-first load — a small `array-contains` query paints the elder's
+  flock instantly (no composite index, no orderBy), then the full congregation streams in
+  behind it — plus a **100-row render cap** with "Show more" so the ~4k-person list stops
+  rendering thousands of DOM nodes.
+- **UX-4:** header shows "updated {lastSyncAt}" + a "loading congregation…" hint during the
+  flock-first phase; admins see a **collisions** note (the ROB-5 ambiguous assignments);
+  **Save & re-sync now refetches** the page instead of leaving stale data.
+- **UX-3:** "This week in your flock" strip — upcoming birthdays/anniversaries (already
+  synced) surfaced in the flock view.
+- **UX-5:** search matches **email + phone**, not just name.
+- **UX-6:** one-level **Undo** after a private-note save/delete.
+
+`firestore.rules` deployed (shepherdCare block). Frontend otherwise. Build + lint clean.
+UX-7 (household grouping) left as an accepted v1 limitation.
+
+## 2026-06-11 — Shepherd Hub robustness (audit Phase 2, ROB-1…6)
+
+- **ROB-1:** `setElderAssignment` now writes the cache doc with `set(..., {merge:true})`
+  instead of `update()` — a missing cache doc no longer throws `NOT_FOUND` and leaves
+  PCO/cache divergent until the nightly sync. `pastoral` is written as a nested map (not
+  a dotted key) so merge deep-merges and the other `pastoral.*` fields survive.
+- **ROB-2:** the Elder Assigned write-back resolves the PCO field id from the
+  sync-stored `config/shepherdSync.fieldDefs.elderAssigned.id` (constant `'261343'` is
+  now only a fallback), so a PCO field recreate can't strand the write-back on a dead id.
+- **ROB-3:** `syncShepherdPeople` takes a lightweight mutex on `config/shepherdSync`
+  (`syncRunning`/`syncLockAt`/`syncLockSource`, released in the summary write) so the
+  nightly run and a manual "Save & re-sync" can't overlap. A lock older than a 15-min TTL
+  is force-broken, so a crashed run can never permanently block syncing.
+- **ROB-4:** `resolveFieldDefs` now pages through ALL PCO field definitions (follows
+  `links.next`) — "Elder Assigned" can't fall off page 1 and trip the missing-field abort.
+- **ROB-5:** the dirty-value normalizer keeps first-match-wins (intentional typo
+  leniency), but now flags values that could map to 2+ different elders (`ambiguous`),
+  collected into `config/shepherdSync.collisions` for a human to disambiguate.
+- **ROB-6:** RosterManager blocks saving an empty roster (which would otherwise restore
+  the baked-in `DEFAULT_ROSTER` on the next sync).
+
+`syncShepherdPeople`/`refreshShepherdPeople`/`setElderAssignment` deployed; onCall
+invoker bindings re-probed healthy. Normalizer mapping + ambiguity unit-checked. Build +
+lint clean. New `config/shepherdSync` fields: `syncRunning`, `syncLockAt`,
+`syncLockSource`, `collisions`.
+
+## 2026-06-11 — Shepherd Hub: elder roll-off note retention (audit Phase 6 / D1)
+
+When an elder leaves the eldership their private notes used to be un-deletable through
+the UI (rules require the author), so a departed elder's notes lingered. Implemented the
+D1 decision (**purge, with a chance to export first**):
+
+- **`purgeElderShepherdNotes`** (onCall, admin-only + verified email): resolves the
+  departing elder's uid(s) from their roster email(s) and deletes `privateNotes/{uid}`
+  across every `shepherdPeople` doc via a collectionGroup sweep. Shared **care-thread
+  entries are kept** (pastoral history). Writes a `purge_elder_notes` audit row.
+- **RosterManager** detects removed elders **by email** (not key/surname — so renaming an
+  elder never looks like a removal and never triggers a purge) and shows a **warning +
+  Cancel modal before** the removal commits ("…permanently deletes their private notes…
+  make sure they've exported first. Remove & delete notes / Cancel").
+- **`exportMyShepherdNotes`** (onCall, elder-only) + a **"⬇ Export my notes"** header
+  button: a departing elder downloads all their own notes (server-side gather, no client
+  collectionGroup index) as a text file before being removed. Audited as `export_my_notes`.
+
+Both callables deployed + invoker-probed healthy (401 JSON). Build + lint clean. Closes the
+elder-roll-off retention item left open by the 2026-06-11 departed-from-PCO fix (SEC-3).
+
+## 2026-06-11 — Shepherd Hub security + privacy hardening (audit Phases 0–1)
+
+Executed Phases 0–1 of `docs/SHEPHERD-HUB-AUDIT-2026-06-11.md` (Fable 5 findings).
+
+- **SEC-1 (Critical, live):** `claimElderRole` granted `elder: true` on email match alone
+  — no `emailVerified` check — so anyone could register an unclaimed rostered elder
+  email via email/password (Firebase doesn't prove ownership at signup) and read the
+  whole congregation cache incl. medical notes. Now requires `userRecord.emailVerified
+  === true` (Google sign-ins are always verified; email/password elders verify once).
+  Returns `{unverified:true}` for a rostered-but-unverified caller. **All 8 rostered
+  elders had no Auth account yet — the entire roster was squattable; now closed.**
+- **SEC-2 (High):** added `email_verified == true` to `isShepherdAdmin()` (firestore.rules)
+  and an `emailVerified` requirement to the `OWNER_EMAILS` paths in `refreshShepherdPeople`
+  + `setElderAssignment`.
+- **SEC-6:** `shepherdAudit` reads restricted to `isShepherdAdmin()` only (was elder-readable,
+  which leaked which people each elder kept private notes on). Writes unchanged.
+- **SEC-5:** Export CSV is now audited (`logShepherdAudit('export_csv', …)`); privacy promise
+  reworded to allow contact-list exports but forbid notes/medical/full-directory exports.
+- **SEC-4:** privacy modal + `SHEPHERD-HUB-PRIVACY.md` reworded — "everything is logged" →
+  honest "what the app records / only the admin can read that log" (D2=B); audit stays
+  best-effort client logging.
+- **SEC-7:** Level-2 note encryption shelved (D5, accepted risk); removed the "encryption is
+  planned" line from the modal + doc so the promise stays honest.
+
+Decisions D1 (elder roll-off purge + warning modal + owner "Export my notes"), D2 (B), D3
+(admin-only audit reads), D4, D5, D6 (minimal — no Google-provider requirement) recorded in
+the audit doc. Rules + `claimElderRole`/`refreshShepherdPeople`/`setElderAssignment` deployed;
+all three `onCall` invoker bindings re-probed healthy (401 JSON). Build + lint clean.
+
+## 2026-06-11 — Shepherd Hub: surface departed-from-PCO people to their note-owners (no silent note loss)
+
+Previously the nightly `syncShepherdPeople` hard-deleted any `shepherdPeople` doc no
+longer in PCO — but Firestore doesn't cascade, so the person's `privateNotes/` +
+`careThread/` subcollections orphaned invisibly forever (Fable 5 Shepherd-Hub audit,
+HIGH #3). Reworked so an elder is told a person left PCO and can decide what to do
+with their notes.
+
+**Sync (`functions/lib/shepherd.js`):** new `pastoralStakeholders(personRef)` helper
+(private-note owner uids — the doc id IS the owner uid — plus care-thread author
+uids). The departure pass now: archives a departed person *with* pastoral data
+(`removedFromPco: true` + `removedAt` [stamped once] + `pastoralStakeholderUids`)
+instead of deleting; deletes outright only when there's no pastoral data. Archived
+docs keep their old generation, so they're re-evaluated every run — once an elder
+clears their notes the person is cleaned up on the next sync; a reappearing person is
+rewritten by the upsert loop (full set drops the removed\* fields). The >50% safety
+valve now counts only *new* departures (`freshlyStale`) so the standing archive
+backlog never trips it. Added `archived` to the sync summary.
+
+**UI (`ShepherdHubPage.jsx`):** departed people are hidden from My Flock / All
+Congregation / Needs Reassignment and from the coverage counts. A new **"No longer in
+PCO (n)"** tab appears only for the logged-in elder and lists exactly the departed
+people *they* hold notes on (`pastoralStakeholderUids.includes(myUid)`, independent of
+admin "view as"). The person detail shows an amber "⚠ No longer in Planning Center
+(removed {date})" banner and hides the PCO reassign editor. `NotesSection` gained a
+**Delete note** action that removes the `privateNotes` doc outright (not just blanks
+the text) so the cleanup path can fire. No new Firestore index (client-side filter
+over the already-loaded cache). Build + lint clean.
+
+## 2026-06-11 — Suppress transient Firestore listener errors from Sentry
+
+Two overnight Sentry alerts (`FirebaseError: deadline-exceeded`, `FirebaseError:
+internal`, both iOS Safari, `handled=yes`, `mechanism=auto.core.capture_console`,
+empty user context) traced to `onSnapshot` listeners hitting transport blips when a
+mobile tab is backgrounded/network drops. The SDK auto-reconnects and re-delivers
+the snapshot, so there's no broken feature — but `handleErr`'s `console.error` was
+paging Sentry via captureConsole. Added a `ctx.listener` flag (passed by all 21
+realtime subscription error callbacks) and a `TRANSIENT_LISTENER_CODES` set
+(`deadline-exceeded`, `unavailable`, `cancelled`, `aborted`, `internal`, `unknown`)
+in `useFirestore.handleErr`: on the listener path these log at `console.warn` (below
+captureConsole's `error` threshold) and skip `captureException` + `setError`.
+`internal`/`unknown` are treated as transient ONLY on the listener path — writes and
+callables still report in full, since there those codes can mean a real bug.
+Missing-index detection (`failed-precondition`) is unaffected. Build + lint clean.
+
+---
+
+## 2026-06-11 — Hide non-domain test account (jcvaught@gmail.com) everywhere
+
+`excludeTestAccounts` only matched the `@churchopshub.com` E2E domain, so John's
+secondary "Member A Test" account (`jcvaught@gmail.com`, jobs-only, in the FXCC
+church) slipped into member-facing pickers and the billable seat count. Added a
+`TEST_EMAILS` allowlist to `src/utils/testAccounts.js` and OR'd it into
+`isTestAccount`. Since the filter runs once at the store level (`useFirestore.js:156`),
+the account now drops out of every picker and the seat count at once. Retired from
+the E2E suite 2026-05-26, so nothing depends on its visibility. Add future stray
+non-domain test emails to the set.
+
+---
+
+## 2026-06-11 — Maintenance Hub: assignee picker respects hub access
+
+The Maintenance ticket assignee picker (and the "All assignees" filter dropdown)
+listed **every** active church member, ignoring `allowedHubs`. Teens scoped to the
+Jobs Hub only (`allowedHubs: ['jobs']`) showed up as assignable maintenance workers.
+Added a `maintenanceHubUsers` memo in `MaintenancePage` mirroring the Tasks Hub
+pattern (`TasksPage.taskHubUsers`): admins always qualify, `allowedHubs == null`
+means full access, otherwise the user must include `'maintenance'`. Both
+`AssigneeSelect` call sites now receive the scoped list; the filter dropdown uses
+`filterableAssignees`, which adds back any deactivated/out-of-hub user already on an
+existing ticket so historical assignments stay filterable. The by-uid email lookup
+for already-assigned users stays church-wide (correct). Build + lint clean.
+
+## 2026-06-10 — Shepherd Hub: First/Last name sort toggle
+
+Added a **Sort** dropdown beside the status filter in `ShepherdHubPage` (`sortBy`
+state, `'first' | 'last'`). "Last name" groups families together (surname, then
+first name as tiebreak); falls back to the last token of the full `name` when the
+split `firstName`/`lastName` fields are absent. Sort is applied in the `filtered`
+memo, so it flows through to **Export CSV** too. Works across all three views +
+search/status filters. Frontend-only; build + lint clean.
+
+---
+
+## 2026-06-10 — Hub provisioning: roster-driven Shepherd-only elders + leaner signup default
+
+Tightened what a new member lands in, ahead of onboarding the FXCC elders as the
+first Shepherd Hub pilot users.
+
+- **Elders land Shepherd-only, roster-driven (no leak-able link).** `claimElderRole`
+  (`functions/index.js`) now, on the *first* grant of the `elder` claim (the claim
+  transitions false→true), also sets `allowedHubs: []` on the user doc — so a new
+  elder sees only the Shepherd Hub, nothing else. The roster (`config/shepherdRoster`)
+  is the single gate: a non-rostered email never reaches this branch, so there's no
+  separate "Shepherd invite" URL to mint or leak. Empty `allowedHubs` does **not**
+  grant Shepherd access — that stays gated on the `elder` claim at three layers
+  (claim grant, `App.jsx:677` UI, `firestore.rules:21`). Guarded to only touch an
+  un-customized account (`allowedHubs` null = legacy all-access, or the plain
+  `['jobs']` signup default), so promoting an existing member to elder never strips
+  hubs an admin deliberately gave them; hubs added later via Settings → Team Members
+  stick (the claim no longer changes on later sign-ins → early return). Deployed +
+  invoker-probed (401 JSON, IAM intact).
+- **Bare signup default `['jobs','maintenance']` → `['jobs']`** (`useAuth.js`
+  `DEFAULT_MEMBER_HUBS`). A plain church-code signup (no hub-scoped invite) no longer
+  auto-lands in Maintenance, and `['jobs']` makes them a volunteer (`isVolunteerOnly`)
+  → jobs-first shell, never sees inventory. Admins (role override) and hub-scoped
+  invites are unaffected. Teen onboarding = a Jobs-only invite (check only Job Hub).
+  Build + lint clean (0 errors).
+
+---
+
+## 2026-06-10 — Shepherd Hub: per-elder flock CSV export
+
+**Export CSV** button on the results header (`ShepherdHubPage`) downloads the
+currently-shown list via `exportShepherdPeopleCSV` (`src/utils/csv.js`) — so each
+elder exports their own flock, and John exports any elder's via "View as." Filename
+is context-aware (`flock-<elder>` / `congregation` / `needs-reassignment` + date).
+**Contact fields only** (name, email, phone, address, status, membership, assigned
+elder[s]) — deliberately no medical notes or pastoral notes, keeping the export
+consistent with the elders' privacy promise. Frontend-only; build + lint clean.
+
+---
+
+## 2026-06-10 — Shepherd Hub: moved from a top-level tab into the Hubs grid
+
+Per owner preference (thinks of it as a hub; role-gated fits; declutters the top
+nav; could graduate into a paid hub later). It's now a **special non-subscription
+card** in `HubsPage` (`HUB_DEFS` key `shepherd`, `special:true`): no price, an
+"Elders" badge, bypasses `UpgradeGate`/`hasHub`, opens straight in. The card +
+active view only render when `canSeeShepherd` (FXCC && (isElder || John)) — passed
+from App.jsx along with `isElder`. Removed the standalone `shepherd` top-level
+tab + its eager import; `ShepherdHubPage` is now a lazy chunk off the main bundle.
+Access boundary unchanged (rules still enforce elder/John). Build + lint clean.
+
+---
+
+## 2026-06-10 — Shepherd Hub Phase 4: privacy/confidentiality doc
+
+Plain-language privacy promise for the elders, surfaced via an always-available
+**🔒 Privacy** link in the Shepherd Hub header → `PrivacyModal` (in
+`ShepherdHubPage.jsx`); repo copy at `docs/SHEPHERD-HUB-PRIVACY.md` (keep in
+sync). Covers: read-only PCO source + the one write-back; who sees what (private
+note = only you, shared thread = elders, directory/medical = elders + John); the
+honest Level-1 limit (rules + audit but not yet end-to-end encrypted — Level-2
+planned); audit logging; elder responsibilities; access lifecycle. Frontend-only.
+**Shepherd Hub P1–P4 now complete; only the Level-2 note-encryption fast-follow remains.**
+
+---
+
+## 2026-06-10 — Shepherd Hub Phase 3: the hub UI (full #3 + roster management)
+
+The elders' working surface. FXCC-only; gated to `isElder || FXCC admin` as a
+standalone top-level **Shepherd** tab (not a paid hub). `src/pages/hubs/ShepherdHubPage.jsx`.
+
+- **Roster → Firestore config (foundation):** elder roster moved out of hardcoded
+  files into `config/shepherdRoster` (`functions/lib/roster.js`: DEFAULT_ROSTER +
+  buildNormalizer + rosterElderEmails). Single source for the claim grant, the
+  sync's name-matching, and the roster UI. `shepherd.js` + `claimElderRole` +
+  `set-elder-claims.cjs` all read it (DEFAULT fallback). Parity re-verified.
+- **Read-only directory + "View as elder":** My Flock / All Congregation /
+  Needs Reassignment views; name search + status/assignment filters; person
+  detail (contact, pastoral fields incl. strengths/gifts, medical notes, elder
+  chips); coverage strip. Admins (no flock) get a **View as [elder]** picker to
+  preview any elder's flock before elders log in.
+- **Pastoral notes + audit:** private note (owner-uid only) + shared care thread
+  (any elder, author-owned) as subcollections with their own rules; `shepherdAudit`
+  append-only log of views/edits/reassigns. `logShepherdAudit` helper.
+- **Elder Assigned editor + PCO write-back:** `setElderAssignment` callable
+  (authorizes via the `req.auth.token.elder` claim or FXCC admin) writes a CLEAN
+  canonical value ("Surname"/"Surname/Surname") via `setPcoElderAssignment`
+  (find/create FieldDatum 261343 → PATCH/POST → read-back verify), recomputes the
+  derived index, updates the cache doc, and audits. Multi-select editor in the
+  person detail. **This is also the orphan-cleanup mechanism.**
+- **Orphaned worklist:** the "Needs Reassignment" tab surfaces the ~140 active
+  people assigned only to former elders, one click into the reassign editor.
+- **Roster-management UI (admin):** `RosterManager` edits `config/shepherdRoster`
+  — add/remove/edit elders (name, surname, sign-in emails, PCO match patterns,
+  active/sabbatical) + former-elder list. "Save & re-sync" applies match/active
+  changes immediately via `refreshShepherdPeople`.
+- **Rules:** all Shepherd reads/writes gated to `isElder()` or **`isShepherdAdmin()`**
+  — the latter is John's email only (`OWNER_EMAILS`), NOT any church admin
+  (pastoral data is need-to-know; tightened 2026-06-10). UI tab + `setElderAssignment`
+  / `refreshShepherdPeople` callables mirror this (elders via claim, else
+  John-only). Verified: another FXCC admin is denied; John + elders allowed.
+- **Verified live:** directory queries; notes privacy (owner-only, no forging,
+  non-elder locked out); **full write-back through the live callable** (Watkins →
+  Watkins/Reiman landed in PCO + cache + audit, then restored); admin roster
+  write allowed / non-admin denied. Build + lint clean throughout.
+
+---
+
+## 2026-06-10 — Shepherd Hub Phase 2: elder custom-claim gate
+
+The access gate for Shepherd Hub. Elder status is a **server-set custom auth claim** (`elder: true`), not a Firestore-doc role. No hub UI yet (P3).
+
+- **`functions/lib/elders.js`** (NEW): the `ELDER_EMAILS` allow-list (single source of truth) — all 8 FXCC elders sign in via `@fxcc.org` Google Workspace (Steve Watkins has two addresses, both listed). `isElderEmail(email)` compares lowercased.
+- **`claimElderRole`** (onCall): self-correcting grant/revoke. Looks up the caller's email; sets `elder:true` if allow-listed, clears it otherwise (preserving any other claims). Removing an email + redeploy revokes on that elder's next sign-in; `scripts/set-elder-claims.cjs` does it immediately. Provider-agnostic (keys off the verified email).
+- **Client (`src/useAuth.js`):** on sign-in, **FXCC members only** (gated on `churchId === SHEPHERD_CHURCH_ID` so no other church hits the callable) invoke `claimElderRole`, force-refresh the ID token when the claim changed (so rules see it), and expose `isElder` from the hook. Reset on sign-out.
+- **Rules:** `isElder()` helper (`request.auth.token.elder == true`, no `get()`); `shepherdPeople` + `config/shepherdSync` reads relaxed from admin-only (P1 lock) to **`isElder() || isChurchAdmin`** (admin retained for support; Level-1 model already accepts admin readability of this PCO-sourced data). Writes still `false` (CF-only).
+- **`scripts/set-elder-claims.cjs`** (NEW): out-of-band force-sync — grants to allow-listed accounts that exist, revokes stale claims; dry-run by default, `--apply` to write. Reports elders with no Auth account yet (auto-grant on first sign-in).
+- **MFA:** enforced at the **Google Workspace** level (FXCC can require 2-step verification org-wide in the Workspace admin console) rather than in-app — Firebase-level MFA (TOTP/SMS second factor) would require the Identity Platform upgrade, deferred. The `claimElderRole` callable approach also deliberately avoids that upgrade (a `beforeSignIn` blocking function would have needed it).
+- **Verified:** `claimElderRole` IAM probe = 401 JSON (invoker intact). Allow-list script resolves all 8 (none have COH accounts yet → auto-grant pending). **End-to-end rule test:** a neutral non-FXCC, non-admin identity is `permission-denied` on `shepherdPeople` without the claim and **READ ALLOWED with `elder:true`** — isolating the claim as the boundary. Client build + lint clean.
+
+**Still needed before P3:** the 8 elders each sign into COH once (joins them to FXCC + auto-grants the claim). Pastoral: who covers Bingham's flock during sabbatical.
+
+---
+
+## 2026-06-10 — Shepherd Hub Phase 1: PCO → Firestore read-sync
+
+First build phase of **Shepherd Hub** (elders-only congregation view; full spec `docs/SHEPHERD-HUB-PLAN.md`). P1 is the read-only sync only — no UI, no pastoral notes, no elder auth-gate (P2/P3). FXCC-only for now (`SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church'`).
+
+- **`functions/lib/shepherd.js`** (NEW): pure PCO client + normalization + sync orchestrator (mirrors the `lib/ics.js` pattern; `index.js` injects `db`/`FieldValue`/secret values). Paginates `GET /people?include=field_data,emails,phone_numbers,addresses` (~40 pages), resolves the 6 pastoral field-definition ids **by name** (the nested `/field_definitions/{id}/field_data` route 404s), and writes a minimized, elder-indexed doc per person. Elder normalization (`CURRENT`/`PATTERNS`/`mapSegment`) ported verbatim from the `.scratch/pco-coverage.mjs` probe.
+- **Data model** `churches/{id}/shepherdPeople/{pcoPersonId}`: identity + status (`status`/`inactivatedAt` for the "no-longer-attends" filter) + emails/phones/addresses + `medicalNotes` + `pastoral{elderAssigned(raw), dateBaptized, growthGroupMember, discipleship, strengths[], gifts[]}` + derived `elderKeys[]`/`orphaned`/`hasAssignment` + `syncGeneration`. **Full congregation** stored (~3,993), not just the assigned. Plus a product-facing `config/shepherdSync` status doc (last run, counts, per-elder load, unmapped values, field-def map).
+- **Field-name reconciliation (vs. the spec's wishlist):** PCO has no single "Service Areas" field (the ministry selects are unpopulated → dropped); "Strengths & Gifts" is two `checkboxes` fields — **Strengths** and **Gifts, Interests, & Abilities** — which arrive as one FieldDatum row per checked value, so they're accumulated into `strengths[]`/`gifts[]`. The 4 single-value fields (Elder Assigned, Date Baptized, Growth Group Member, Discipleship) map 1:1.
+- **`syncShepherdPeople`** (onSchedule, nightly 2am Central, `withScheduledRun`, registered in `SCHEDULED_JOB_REGISTRY` daily/10min) + **`refreshShepherdPeople`** (onCall, on-demand; P1 gate = OWNER_EMAILS or FXCC admin). Both bind the `PCO_APP_ID`/`PCO_SECRET` secrets. Writes via `bulkWriter` (full overwrite, not merge — auto-drops retired fields); delete-missing pass on stale `syncGeneration` with a **>50%-of-prior abort valve** so a partial PCO fetch can't nuke the cache; hard guard that throws if the "Elder Assigned" field def is missing (schema-drift).
+- **Secrets:** `PCO_APP_ID`/`PCO_SECRET` set in Secret Manager (PAT from the gitignored `.scratch/pco.env`).
+- **Rules:** `shepherdPeople` + `config/shepherdSync` are **admin-read, no-client-write** (Admin SDK / CF only; tightens to an elder custom-claim in P2). Holds `medicalNotes` (Level-1 caveat per spec).
+- **Indexes:** 3 `shepherdPeople` COLLECTION composites — `elderKeys`(array-contains)+`name`, `status`+`name`, `hasAssignment`+`name`. `firebase deploy --only firestore:indexes` silently skipped all three (the documented foot-gun); created via `gcloud … --query-scope=COLLECTION`.
+- **Verified live (3 sync runs):** 3,993 stored · 981 assigned · 140 orphaned · 0 unmapped · per-elder load exactly matches the plan snapshot (Watkins 171, Reiman 154, Bingham 153, Boyd 97, Bell 89, Reed 89, Mills 62, Cesone 60). All 3 indexed queries serve (watkins flock 171; active 1,797; unassigned 3,012). Idempotent (`deleted:0` on re-run). Callable IAM probe = 401 JSON (invoker intact). Skipped fields (SOS, FSM, G6, all background-check/training fields, `passed_background_check`) confirmed never stored.
+
 ## 2026-06-10 — Gate Sentry DSN to deployed builds (stop local dev polluting prod Sentry)
 
 A `dev:emulator` click-through (work-unification flag-on validation) deliberately triggered errors and they fired a **prod** Sentry high-priority alert (issue JAVASCRIPT-REACT-14) — because `main.jsx` loaded the prod DSN even on local dev servers. The two events were sandbox-church errors (`churches/…IA7aWdAvbp…/workItems/task_…`, 0 users), not real prod failures.

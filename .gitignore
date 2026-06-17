@@ -34,3 +34,6 @@ firestore-debug.log
 ui-debug.log
 storage-debug.log
 auth-debug.log
+
+# local throwaway scripts (never committed)
+.scratch/

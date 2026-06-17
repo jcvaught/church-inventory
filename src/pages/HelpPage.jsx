@@ -171,8 +171,8 @@ export function HelpPage({ onBack }) {
     mainEntity: [
       { '@type': 'Question', name: 'Is my data isolated from other churches?',
         acceptedAnswer: { '@type': 'Answer', text: 'Yes. Every church\'s data is stored under a unique church ID in Firestore. Security rules prevent any cross-church access — even if someone knows your church code, they cannot read your data without being an authenticated member of your church.' } },
-      { '@type': 'Question', name: 'What happens if I cancel a paid hub?',
-        acceptedAnswer: { '@type': 'Answer', text: 'The hub remains active until the end of your current billing period. After that, the hub tab shows a locked state and your data is preserved — it\'s just inaccessible until you resubscribe.' } },
+      { '@type': 'Question', name: 'What happens if I cancel?',
+        acceptedAnswer: { '@type': 'Answer', text: 'Your plan stays active until the end of your current billing period. After that, the paid hubs show a locked state and your data is preserved — it\'s just inaccessible until you resubscribe. Your free Inventory, supplies, and reservations are unaffected.' } },
       { '@type': 'Question', name: 'Can I use ChurchOpsHub on mobile?',
         acceptedAnswer: { '@type': 'Answer', text: 'Yes. The app is a progressive web app (PWA) optimized for both desktop and mobile. On mobile, navigation moves to a bottom bar and modals slide up from the bottom. You can also install it to your home screen from your browser\'s share menu.' } },
       { '@type': 'Question', name: 'How do QR codes work?',
@@ -181,8 +181,8 @@ export function HelpPage({ onBack }) {
         acceptedAnswer: { '@type': 'Answer', text: 'There is no limit on items or supplies on any plan. Limits only apply to team member count: 10 on the free plan, 25 or unlimited on Team Hub plans.' } },
       { '@type': 'Question', name: 'Can I export my data?',
         acceptedAnswer: { '@type': 'Answer', text: 'Yes. Inventory, supplies, reservations, and the activity log all have CSV export options. The Accountability Hub also offers an insurance-ready CSV with financial fields.' } },
-      { '@type': 'Question', name: 'What is the All-In Bundle?',
-        acceptedAnswer: { '@type': 'Answer', text: 'The All-In Bundle ($29/mo) includes all 7 paid feature hubs — Maintenance, Insights, Coordination, Accountability, People Access, Tasks, and Job Hub — plus unlimited team members (the Team Hub $19/mo tier). Saves you $16/mo versus subscribing individually.' } },
+      { '@type': 'Question', name: 'How much does ChurchOpsHub cost?',
+        acceptedAnswer: { '@type': 'Answer', text: 'Inventory, supplies, and reservations are free forever for up to 10 team members. Everything else — Maintenance, Insights, Coordination, Accountability, People Access, Tasks, and Jobs — is included in one flat ChurchOpsHub plan: $15/month or $150/year, with unlimited team members. There are no per-hub add-ons or seat tiers. New churches get a 90-day free trial of all paid features.' } },
       { '@type': 'Question', name: 'How do I report a bug or request a feature?',
         acceptedAnswer: { '@type': 'Answer', text: 'Use the Suggest a Feature / Report a Bug button in Settings. Your feedback goes directly to us and is reviewed regularly.' } },
     ],
@@ -472,7 +472,7 @@ export function HelpPage({ onBack }) {
           {/* ──────────────────────────────────── */}
           {/* MAINTENANCE HUB                      */}
           {/* ──────────────────────────────────── */}
-          <Section id="maintenance" icon="🔧" title="Maintenance Hub" badge="$7/mo">
+          <Section id="maintenance" icon="🔧" title="Maintenance Hub" badge="Included in plan">
             <P>Track repairs, coordinate contractors, and document issues with photos and comments.</P>
 
             <Accordion title="Creating a ticket" defaultOpen>
@@ -524,7 +524,7 @@ export function HelpPage({ onBack }) {
           {/* ──────────────────────────────────── */}
           {/* INSIGHTS HUB                         */}
           {/* ──────────────────────────────────── */}
-          <Section id="insights" icon="📊" title="Insights Hub" badge="$7/mo">
+          <Section id="insights" icon="📊" title="Insights Hub" badge="Included in plan">
             <P>Understand how your inventory is actually used — utilization patterns, ministry breakdowns, seasonal trends, and financial depreciation.</P>
 
             <Accordion title="Item Utilization" defaultOpen>
@@ -566,7 +566,7 @@ export function HelpPage({ onBack }) {
           {/* ──────────────────────────────────── */}
           {/* COORDINATION HUB                     */}
           {/* ──────────────────────────────────── */}
-          <Section id="coordination" icon="🤝" title="Coordination Hub" badge="$7/mo">
+          <Section id="coordination" icon="🤝" title="Coordination Hub" badge="Included in plan">
             <P>Streamline event prep with checkout bundles and automatic email notifications.</P>
 
             <Accordion title="Checkout bundles" defaultOpen>
@@ -597,7 +597,7 @@ export function HelpPage({ onBack }) {
           {/* ──────────────────────────────────── */}
           {/* ACCOUNTABILITY HUB                   */}
           {/* ──────────────────────────────────── */}
-          <Section id="accountability" icon="✅" title="Accountability Hub" badge="$5/mo">
+          <Section id="accountability" icon="✅" title="Accountability Hub" badge="Included in plan">
             <P>Run physical inventory audits, track chain of custody, and export insurance-ready reports.</P>
 
             <Accordion title="Running an audit" defaultOpen>
@@ -622,7 +622,7 @@ export function HelpPage({ onBack }) {
           {/* ──────────────────────────────────── */}
           {/* PEOPLE ACCESS HUB                    */}
           {/* ──────────────────────────────────── */}
-          <Section id="people-access" icon="🔑" title="People Access Hub" badge="$7/mo">
+          <Section id="people-access" icon="🔑" title="People Access Hub" badge="Included in plan">
             <P>Track compliance milestones for the people who serve at your church — background checks, key and fob assignments, certifications (CPR, SafeGuarding, etc.), and any custom requirement you need to record.</P>
             <Note>People Access Hub is admin and manager only. Users with the <strong>User</strong> role cannot see this hub even if their <code>allowedHubs</code> includes it.</Note>
 
@@ -711,7 +711,7 @@ export function HelpPage({ onBack }) {
           {/* ──────────────────────────────────── */}
           {/* TASKS HUB                            */}
           {/* ──────────────────────────────────── */}
-          <Section id="tasks" icon="✅" title="Tasks Hub" badge="$7/mo">
+          <Section id="tasks" icon="✅" title="Tasks Hub" badge="Included in plan">
             <P>A general-purpose Kanban task board for church admin work — assign tasks, track progress, and control who sees what.</P>
 
             <Accordion title="Creating a task" defaultOpen>
@@ -795,7 +795,7 @@ export function HelpPage({ onBack }) {
           {/* ──────────────────────────────────── */}
           {/* JOB HUB                              */}
           {/* ──────────────────────────────────── */}
-          <Section id="jobs" icon="💼" title="Job Hub" badge="$7/mo">
+          <Section id="jobs" icon="💼" title="Job Hub" badge="Included in plan">
             <P>A job board where admins post jobs (setup, cleanup, childcare, events, etc.) and members sign up. Supports one-time and recurring series. Includes a Schedule view, Calendar view, and Announcement board.</P>
 
             <Accordion title="Posting a job" defaultOpen>
@@ -928,15 +928,15 @@ export function HelpPage({ onBack }) {
           {/* ──────────────────────────────────── */}
           {/* TEAM HUB                             */}
           {/* ──────────────────────────────────── */}
-          <Section id="team" icon="👤" title="Team Hub" badge="$9–$19/mo">
-            <P>Scale beyond the free 10-member limit and control exactly which hubs each person can access.</P>
+          <Section id="team" icon="👤" title="Team & Access" badge="Included in plan">
+            <P>The free Inventory tier includes up to 10 team members. The <strong>ChurchOpsHub plan ($15/mo or $150/yr)</strong> raises that to <strong>unlimited members</strong> and unlocks every paid feature — with full control over exactly which hubs each person can access.</P>
 
-            <Accordion title="Plans" defaultOpen>
+            <Accordion title="Team members" defaultOpen>
               <UL items={[
-                '$9/mo — up to 25 team members',
-                '$19/mo — unlimited team members',
+                'Free Inventory tier — up to 10 team members',
+                'ChurchOpsHub plan — unlimited team members',
               ]} />
-              <P>Both plans include full hub access controls per user.</P>
+              <P>Per-user hub access controls are available on every plan.</P>
             </Accordion>
 
             <Accordion title="Per-user hub access">
@@ -978,7 +978,7 @@ export function HelpPage({ onBack }) {
             <Accordion title="Subscription and billing">
               <P>Admins see a <strong>Subscription & Billing</strong> card in Settings. From there:</P>
               <UL items={[
-                'Upgrade — opens Stripe checkout to subscribe to a hub or plan',
+                'Upgrade — opens Stripe checkout to subscribe to the ChurchOpsHub plan ($15/mo or $150/yr)',
                 'Manage Billing — opens the Stripe portal to update payment, view invoices, or cancel',
               ]} />
               <P>Changes take effect immediately after payment. Cancellation takes effect at the end of the billing period.</P>
@@ -998,8 +998,8 @@ export function HelpPage({ onBack }) {
               <P>Yes. Every church's data is stored under a unique church ID in Firestore. Firestore security rules are scoped to prevent any cross-church access — even if someone knows your church code, they cannot read your data without being an authenticated member of your church.</P>
             </Accordion>
 
-            <Accordion title="What happens if I cancel a paid hub?">
-              <P>The hub remains active until the end of your current billing period. After that, the hub tab shows a locked state (🔒) and your data is preserved — it's just inaccessible until you resubscribe.</P>
+            <Accordion title="What happens if I cancel?">
+              <P>Your plan stays active until the end of your current billing period. After that, the paid hubs show a locked state (🔒) and your data is preserved — it's just inaccessible until you resubscribe. Your free Inventory, supplies, and reservations are unaffected.</P>
             </Accordion>
 
             <Accordion title="Can I use ChurchOpsHub on mobile?">
@@ -1018,8 +1018,8 @@ export function HelpPage({ onBack }) {
               <P>Yes. Inventory, supplies, reservations, and the activity log all have CSV export options. The Accountability Hub also offers an insurance-ready CSV with financial fields.</P>
             </Accordion>
 
-            <Accordion title="What is the All-In Bundle?">
-              <P>The All-In Bundle ($29/mo) includes all 7 paid feature hubs — Maintenance, Insights, Coordination, Accountability, People Access, Tasks, and Job Hub — plus unlimited team members (the Team Hub $19/mo tier). Saves you $16/mo versus subscribing individually.</P>
+            <Accordion title="How much does ChurchOpsHub cost?">
+              <P>Inventory, supplies, and reservations are <strong>free forever</strong> for up to 10 team members. Everything else — Maintenance, Insights, Coordination, Accountability, People Access, Tasks, and Jobs — is included in one flat <strong>ChurchOpsHub plan: $15/month or $150/year</strong>, with unlimited team members. No per-hub add-ons, no seat tiers. New churches get a 90-day free trial of all paid features.</P>
             </Accordion>
 
             <Accordion title="What if someone added something to the wrong list — items vs. supplies?">

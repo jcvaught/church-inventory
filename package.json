@@ -13,6 +13,8 @@
     "tenant:export": "node scripts/export-tenant-to-emulator.cjs",
     "tenant:import": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node scripts/export-tenant-to-emulator.cjs --import",
     "test:unit": "node --test functions/test/*.test.mjs",
+    "test:rules": "PATH=\"/opt/homebrew/opt/openjdk/bin:$PATH\" firebase emulators:exec --only firestore,storage --project demo-shepherd-rules \"node --test --test-concurrency=1 functions/test/rules/*.test.mjs\"",
+    "test:handlers": "PATH=\"/opt/homebrew/opt/openjdk/bin:$PATH\" firebase emulators:exec --only firestore,auth --project demo-coh-functions \"cd functions && node --test test/handlers/*.test.mjs\"",
     "build": "NODE_ENV=production rm -rf node_modules/.vite && vite build",
     "postbuild": "node scripts/prerender-blog.mjs && node scripts/prerender-static.mjs && node scripts/verify-prod-bundle.mjs",
     "preview": "vite preview",
@@ -39,6 +41,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
     "@eslint/js": "^9.39.4",
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@playwright/test": "^1.60.0",
     "@vitejs/plugin-react": "^4.2.1",
     "eslint": "^9.39.4",

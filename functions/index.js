@@ -8,12 +8,38 @@ const { getAuth } = require('firebase-admin/auth');
 const { getMessaging } = require('firebase-admin/messaging');
 const { jobEventLines, reservationEventLines, maintenanceEventLines, buildCalendar } = require('./lib/ics');
 const { calculateNextDue } = require('./lib/recurrence');
+const { syncShepherdPeople, setPcoElderAssignment } = require('./lib/shepherd');
+const { resolveRoster, isElderEmail, buildNormalizer } = require('./lib/roster');
+
+// Read the editable elder roster (config/shepherdRoster) for the Shepherd
+// church, falling back to the baked-in DEFAULT_ROSTER if the doc is
+// missing/malformed — so a bad config can never blank assignments or revoke
+// every elder. Used by the sync (name-matching) + claimElderRole (allow-list).
+async function getShepherdRoster(db) {
+  try {
+    const snap = await db.doc(`churches/${SHEPHERD_CHURCH_ID}/config/shepherdRoster`).get();
+    return resolveRoster(snap.exists ? snap.data() : null);
+  } catch (e) {
+    Sentry.captureException(e, { tags: { area: 'shepherd', fn: 'getShepherdRoster' } });
+    return resolveRoster(null);
+  }
+}
 const Sentry = require('@sentry/node');
 
+// Disable Sentry under any test run so deliberately-exercised error paths don't
+// ship to the live project. node --test handler tests run under emulators:exec
+// (FIRESTORE_EMULATOR_HOST set, never present in real production); vitest sets
+// NODE_ENV=test/VITEST. Real Cloud Functions have none of these.
+const isTest = process.env.NODE_ENV === 'test'
+  || !!process.env.VITEST
+  || !!process.env.FIRESTORE_EMULATOR_HOST;
 Sentry.init({
   dsn: 'https://92a9eb2a55b9544dd9e673291f57eff8@o4511040580091904.ingest.us.sentry.io/4511040584089600',
   tracesSampleRate: 0.1,
-  environment: process.env.FUNCTIONS_EMULATOR ? 'development' : 'production',
+  enabled: !isTest,
+  environment: isTest
+    ? 'test'
+    : (process.env.FUNCTIONS_EMULATOR ? 'development' : 'production'),
 });
 
 // wrapCall(name, handler): wraps an onCall handler so unexpected errors are
@@ -89,6 +115,17 @@ function formatTimeRange(start, end) {
 // IANA names only (e.g. 'America/New_York').
 const DEFAULT_CHURCH_TZ = 'America/Chicago';
 
+// Injectable clock (test seam). In production this is `new Date()`, so every
+// caller below is byte-for-byte unchanged; the handler tests override it via
+// exports._setClock to drive the per-church local-hour gates deterministically
+// (the scheduled sends all funnel their "what time is it locally" decision
+// through localPartsFor + utcYmdOffset). Reset with exports._resetClock.
+let _clock = () => new Date();
+function nowDate() { return _clock(); }
+// Test-only clock hooks (mirrors the _computeNextReview-style test exports).
+exports._setClock = (fn) => { _clock = fn; };
+exports._resetClock = () => { _clock = () => new Date(); };
+
 // Local wall-clock parts for an IANA timezone, using the toLocaleString idiom
 // used throughout this file. Returns { hour: 0-23, weekday: 0=Sun..6=Sat, ymd }.
 // Falls back to Central if the timezone string is malformed (toLocaleString
@@ -96,9 +133,9 @@ const DEFAULT_CHURCH_TZ = 'America/Chicago';
 function localPartsFor(timeZone) {
   let d;
   try {
-    d = new Date(new Date().toLocaleString('en-US', { timeZone: timeZone || DEFAULT_CHURCH_TZ }));
+    d = new Date(nowDate().toLocaleString('en-US', { timeZone: timeZone || DEFAULT_CHURCH_TZ }));
   } catch {
-    d = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_CHURCH_TZ }));
+    d = new Date(nowDate().toLocaleString('en-US', { timeZone: DEFAULT_CHURCH_TZ }));
   }
   const pad = n => String(n).padStart(2, '0');
   return {
@@ -126,7 +163,7 @@ async function getChurchTimeZone(db, churchId, cache) {
 // date-range floor/ceiling wide enough to cover "today" in every US timezone
 // when the precise per-church date check happens later (US zones span <1 day).
 function utcYmdOffset(deltaDays) {
-  const d = new Date(Date.now() + deltaDays * 86400000);
+  const d = new Date(nowDate().getTime() + deltaDays * 86400000);
   const pad = n => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
@@ -342,12 +379,28 @@ function validateRedirectUrl(url) {
 const STRIPE_SECRET_KEY     = defineSecret('STRIPE_SECRET_KEY');
 const STRIPE_WEBHOOK_SECRET = defineSecret('STRIPE_WEBHOOK_SECRET');
 const ANTHROPIC_API_KEY     = defineSecret('ANTHROPIC_API_KEY');
+// Planning Center People API token (Shepherd Hub read-sync). PCO_APP_ID is the
+// PAT's "Client ID"; PCO_SECRET is the token secret. Set via
+// `firebase functions:secrets:set PCO_APP_ID` / `PCO_SECRET`.
+const PCO_APP_ID = defineSecret('PCO_APP_ID');
+const PCO_SECRET = defineSecret('PCO_SECRET');
+
+// Shepherd Hub is FXCC-only for Phase 1 (see docs/SHEPHERD-HUB-PLAN.md).
+const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
 
 // ── Fill these in after creating products in the Stripe dashboard ──────────
 // Run: firebase functions:config:set is no longer used in v2.
 // Instead set secrets: firebase functions:secrets:set STRIPE_SECRET_KEY
 // And put price IDs directly here (they are not sensitive).
+// The single flat "ChurchOpsHub" plan (2026-06-15 pricing flatten): $15/mo or
+// $150/yr unlocks every paid hub + unlimited users. `pro` is the new checkout
+// path. The legacy per-hub / team / all_in ids below are kept ONLY so existing
+// webhooks resolve (no church is on them); they are no longer offered for purchase.
+const PRO_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'tasks', 'people_access', 'jobs'];
 const PRICE_IDS = {
+  pro_monthly:    'price_1TiekxF12bDL8YA7j1uH1X1i',  // $15/mo
+  pro_annual:     'price_1TiekyF12bDL8YA7Z0BTmiHD',  // $150/yr
+  // ── legacy (retired, retained for webhook resolution only) ──
   maintenance:    'price_1TB2E2F12bDL8YA7Tw4VreQc',
   insights:       'price_1TB2E6F12bDL8YA734z4Q64M',
   coordination:   'price_1TB2E2F12bDL8YA7a0VFGB6C',
@@ -362,6 +415,8 @@ const PRICE_IDS = {
 
 function getPriceConfig(priceId) {
   const map = {
+    [PRICE_IDS.pro_monthly]:    { type: 'pro',    plan: 'pro', maxUsers: 9999, hubs: PRO_HUBS },
+    [PRICE_IDS.pro_annual]:     { type: 'pro',    plan: 'pro', maxUsers: 9999, hubs: PRO_HUBS },
     [PRICE_IDS.maintenance]:    { type: 'hub',    hub: 'maintenance' },
     [PRICE_IDS.insights]:       { type: 'hub',    hub: 'insights' },
     [PRICE_IDS.coordination]:   { type: 'hub',    hub: 'coordination' },
@@ -746,10 +801,13 @@ exports.stripeWebhook = onRequest(
         } else if (config.type === 'team') {
           update.plan = config.plan;
           update.maxUsers = config.maxUsers;
-        } else if (config.type === 'all_in') {
+        } else if (config.type === 'all_in' || config.type === 'pro') {
           update.plan = config.plan;
           update.maxUsers = config.maxUsers;
           update.hubs = config.hubs;
+          // A church subscribing exits any trial state — pin freeHubsSelected so
+          // hasHub stops reading the trial branch.
+          update.freeHubsSelected = config.hubs;
         }
 
         await db.doc(`churches/${churchId}/config/subscription`).set(update, { merge: true });
@@ -783,10 +841,11 @@ exports.stripeWebhook = onRequest(
         } else if (config?.type === 'team') {
           update.plan = 'free';
           update.maxUsers = 10;
-        } else if (config?.type === 'all_in') {
+        } else if (config?.type === 'all_in' || config?.type === 'pro') {
           update.plan = 'free';
           update.maxUsers = 10;
           update.hubs = [];
+          update.freeHubsSelected = [];
         }
 
         await db.doc(`churches/${churchId}/config/subscription`).set(update, { merge: true });
@@ -1027,7 +1086,7 @@ exports.icsCalendarFeed = onRequest({ cors: true, invoker: 'public' }, async (re
 function subHasHub(sub, hubName) {
   if (!sub) return false;
   if (sub.grandfathered) return true;
-  if (sub.plan === 'all_in') return true;
+  if (sub.plan === 'all_in' || sub.plan === 'pro') return true;
   // Active trial: freeHubsSelected is null while trial is running
   if (sub.freeHubsSelected === null && sub.trialEndsAt && new Date(sub.trialEndsAt) > new Date()) {
     return (sub.trialHubs || []).includes(hubName);
@@ -1394,10 +1453,10 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
     const warnSubject = 'Your ChurchOpsHub trial ends in 7 days';
     const warnHtml = `<p>Hi ${escapeHtml(firstName)},</p>
 <p>Your 90-day free trial of all ChurchOpsHub hubs ends on <strong>${escapeHtml(trialEndDisplay)}</strong> — just 7 days away.</p>
-<p>After the trial, we'll automatically keep your two most-used hubs active for free. To keep all hubs, upgrade to the <strong>All-In plan ($29/mo)</strong> from Settings → Subscription.</p>
+<p>After the trial, we'll automatically keep your two most-used hubs active for free. To keep every feature, upgrade to the <strong>ChurchOpsHub plan ($15/mo or $150/yr)</strong> from Settings → Subscription.</p>
 <p><a href="https://churchopshub.com" style="color:#0D9488;font-weight:600">Log in to ChurchOpsHub</a> to review your hubs before the trial ends.</p>
 <p>— John Vaught<br><span style="font-size:13px;color:#666">ChurchOpsHub</span></p>`;
-    const warnText = `Hi ${firstName},\n\nYour 90-day free trial ends on ${trialEndDisplay} — just 7 days away.\n\nAfter the trial, we'll automatically keep your two most-used hubs active for free. To keep all hubs, upgrade to the All-In plan ($29/mo) from Settings → Subscription.\n\nLog in at churchopshub.com to review your hubs.\n\n— John Vaught\nChurchOpsHub`;
+    const warnText = `Hi ${firstName},\n\nYour 90-day free trial ends on ${trialEndDisplay} — just 7 days away.\n\nAfter the trial, we'll automatically keep your two most-used hubs active for free. To keep every feature, upgrade to the ChurchOpsHub plan ($15/mo or $150/yr) from Settings → Subscription.\n\nLog in at churchopshub.com to review your hubs.\n\n— John Vaught\nChurchOpsHub`;
 
     try {
       await sendEmailSafe({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject: warnSubject, html: warnHtml, text: warnText });
@@ -2108,6 +2167,88 @@ ${personBlocks.join('\n')}
 
     const results = await Promise.allSettled(admins.map(a => sendEmailSafe({ to: a.email, from: FROM, subject, html, text })));
     results.forEach((r) => { if (r.status === 'rejected') { console.error('sendWeeklyComplianceDigest: email failed', { churchId, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
+    processed += results.filter(r => r.status === 'fulfilled').length;
+  }
+  return { processed };
+}));
+
+// ── sendEmptyJobMorningAlert ──────────────────────────────────────────────
+// Hourly; fires at each church's local 7am. For churches with the Jobs hub
+// active and config/settings.emptyJobAlertEnabled === true, emails all admins
+// a list of jobs scheduled for TODAY (church-local) that are still open and
+// NOT fully staffed (signupCount < spotsTotal) — empty or partially filled —
+// a morning heads-up to recruit before the shift. Skipped when every job today
+// is already full.
+exports.sendEmptyJobMorningAlert = onSchedule({ schedule: '0 * * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendEmptyJobMorningAlert', async () => {
+  if (!emailConfigured()) { console.warn('sendEmptyJobMorningAlert: Brevo not configured, skipping.'); return; }
+  const db = getFirestore();
+  const tzCache = {};
+
+  const churchSnap = await db.collection('churches').get();
+  if (churchSnap.empty) return;
+
+  let processed = 0;
+  for (const churchDoc of churchSnap.docs) {
+    const churchId = churchDoc.id;
+
+    let settings;
+    try { settings = (await db.doc(`churches/${churchId}/config/settings`).get()).data() || {}; }
+    catch (err) { console.error('sendEmptyJobMorningAlert: settings read failed', { churchId, err: err.message }); continue; }
+    if (settings.emptyJobAlertEnabled !== true) continue;
+
+    const parts = localPartsFor(await getChurchTimeZone(db, churchId, tzCache));
+    if (parts.hour !== 7) continue; // church-local 7am only
+
+    let sub;
+    try { sub = (await db.doc(`churches/${churchId}/config/subscription`).get()).data() || {}; }
+    catch { continue; }
+    if (!subHasHub(sub, 'jobs')) continue;
+
+    const todayStr = parts.ymd;
+
+    // Single-field equality on scheduledDate (auto-indexed); status + signup
+    // filtering happens in-memory since today's set is small.
+    let jobSnap;
+    try {
+      jobSnap = await db.collection(`churches/${churchId}/jobListings`)
+        .where('scheduledDate', '==', todayStr)
+        .get();
+    } catch (err) { console.error('sendEmptyJobMorningAlert: jobs read failed', { churchId, err: err.message }); Sentry.captureException(err); continue; }
+    if (jobSnap.empty) continue;
+
+    // Any open job that isn't fully staffed — empty (0) or partially filled.
+    const shortJobs = jobSnap.docs
+      .map(d => d.data())
+      .filter(j => j.status === 'open' && (j.signupCount || 0) < (j.spotsTotal || 1))
+      .sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
+    if (shortJobs.length === 0) continue;
+
+    const adminsSnap = await db.collection('users').where('churchId', '==', churchId).get();
+    const admins = adminsSnap.docs.map(d => d.data())
+      .filter(a => a.role === 'admin' && a.active !== false && a.email);
+    if (admins.length === 0) continue;
+
+    const churchName = churchDoc.data()?.churchName || settings.churchName || 'your church';
+    const emptyCount = shortJobs.filter(j => (j.signupCount || 0) === 0).length;
+    const rows = shortJobs.map(j => {
+      const when = j.scheduledTime ? formatTimeRange(j.scheduledTime, j.scheduledEndTime) : 'time TBD';
+      const where = j.location ? ` — ${escapeHtml(j.location)}` : '';
+      const spots = j.spotsTotal || 1;
+      const filled = j.signupCount || 0;
+      // Red for nobody yet, amber for partially staffed.
+      return `<li style="margin-bottom:4px"><strong>${escapeHtml(j.title || 'Untitled job')}</strong> — ${escapeHtml(when)}${where} <span style="color:${filled === 0 ? '#DC2626' : '#B45309'}">(${filled} of ${spots} filled)</span></li>`;
+    }).join('');
+
+    const n = shortJobs.length;
+    const subject = `${churchName}: ${n} job${n === 1 ? '' : 's'} today still need${n === 1 ? 's' : ''} volunteers${emptyCount > 0 ? ` (${emptyCount} with no one signed up)` : ''}`;
+    const html = `<p>These job${n === 1 ? ' is' : 's are'} scheduled for <strong>today</strong> at <strong>${escapeHtml(churchName)}</strong> and <strong>${n === 1 ? "isn't" : "aren't"} fully staffed</strong> yet:</p>
+<ul style="padding-left:20px;margin:8px 0">${rows}</ul>
+<p style="margin-top:18px"><a href="https://churchopshub.com">Open ChurchOpsHub</a> → Jobs to recruit volunteers.</p>
+<p style="font-size:12px;color:#888">You're an admin getting the morning job-staffing alert. Turn it off any time in Settings → Church Settings.</p>`;
+    const text = `${n} job${n === 1 ? '' : 's'} scheduled today at ${churchName} ${n === 1 ? "isn't" : "aren't"} fully staffed yet:\n\n${shortJobs.map(j => `• ${j.title || 'Untitled job'} — ${j.scheduledTime ? formatTimeRange(j.scheduledTime, j.scheduledEndTime) : 'time TBD'}${j.location ? ' — ' + j.location : ''} (${j.signupCount || 0} of ${j.spotsTotal || 1} filled)`).join('\n')}\n\nOpen churchopshub.com → Jobs to recruit volunteers.\n`;
+
+    const results = await Promise.allSettled(admins.map(a => sendEmailSafe({ to: a.email, from: FROM, subject, html, text })));
+    results.forEach((r) => { if (r.status === 'rejected') { console.error('sendEmptyJobMorningAlert: email failed', { churchId, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
     processed += results.filter(r => r.status === 'fulfilled').length;
   }
   return { processed };
@@ -3409,6 +3550,271 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
   }
 }));
 
+// ── Shepherd Hub PCO read-sync (Phase 1) ──────────────────────────────────
+// Pulls the FXCC congregation from Planning Center into a minimized,
+// elder-indexed Firestore cache (churches/{id}/shepherdPeople + a
+// config/shepherdSync status doc). READ-ONLY against PCO. No UI / notes / elder
+// auth-gate yet — see docs/SHEPHERD-HUB-PLAN.md. Core logic in lib/shepherd.js.
+
+// Nightly at 2am Central. The returned summary lands in
+// scheduledJobRuns/syncShepherdPeople.lastSummary (via withScheduledRun).
+exports.syncShepherdPeople = onSchedule(
+  { schedule: '0 2 * * *', timeZone: 'America/Chicago', secrets: [PCO_APP_ID, PCO_SECRET] },
+  async () => withScheduledRun('syncShepherdPeople', async () => {
+    const db = getFirestore();
+    const roster = await getShepherdRoster(db);
+    return await syncShepherdPeople(db, FieldValue, {
+      churchId: SHEPHERD_CHURCH_ID,
+      appId: PCO_APP_ID.value(),
+      secret: PCO_SECRET.value(),
+      source: 'scheduled',
+      roster,
+    });
+  })
+);
+
+// On-demand "Refresh" callable. P1 gate: OWNER_EMAILS or FXCC admin (no elder
+// custom-claim exists until P2). Runs the same core sync.
+exports.refreshShepherdPeople = onCall(
+  { secrets: [PCO_APP_ID, PCO_SECRET], cors: true },
+  wrapCall('refreshShepherdPeople', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    const db = getFirestore();
+    const userRecord = await getAuth().getUser(req.auth.uid);
+    // John-only (OWNER_EMAILS) — drives the roster manager's "Save & re-sync".
+    // SEC-2: require a verified email (defense-in-depth alongside claimElderRole).
+    if (!OWNER_EMAILS.includes(userRecord.email) || userRecord.emailVerified !== true) {
+      throw new HttpsError('permission-denied', 'Not authorized.');
+    }
+    const roster = await getShepherdRoster(db);
+    return await syncShepherdPeople(db, FieldValue, {
+      churchId: SHEPHERD_CHURCH_ID,
+      appId: PCO_APP_ID.value(),
+      secret: PCO_SECRET.value(),
+      source: 'callable',
+      roster,
+    });
+  })
+);
+
+// ── claimElderRole (Shepherd Hub P2 gate) ─────────────────────────────────
+// Self-correcting elder custom-claim grant/revoke. The client calls this on
+// sign-in (FXCC users only) and force-refreshes its ID token if the claim
+// changed. Grants `elder: true` when the signed-in email is in the allow-list
+// (functions/lib/elders.js), revokes it otherwise — so removing an email +
+// redeploy revokes on the elder's next sign-in (immediate revoke via
+// scripts/set-elder-claims.cjs). Provider-agnostic (keys off the verified
+// email), so Google or email/password both work. Other custom claims preserved.
+exports.claimElderRole = onCall(
+  { cors: true },
+  wrapCall('claimElderRole', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    const db = getFirestore();
+    const userRecord = await getAuth().getUser(req.auth.uid);
+    const roster = await getShepherdRoster(db);
+    // SEC-1 (2026-06-11): require a VERIFIED email before granting the elder
+    // claim. Firebase email/password signup accepts any address without proving
+    // ownership, so without this an attacker could register an unclaimed rostered
+    // elder email and read the whole congregation cache (incl. medical notes).
+    // emailVerified IS that proof of ownership — Firebase mails the link to the
+    // real inbox. Google sign-ins are always verified, so real elders are
+    // unaffected; an email/password elder just verifies once. (D6: minimal — no
+    // provider/churchId gate.)
+    const rostered = isElderEmail(roster, userRecord.email);
+    const shouldBeElder = rostered && userRecord.emailVerified === true;
+    const isElder = userRecord.customClaims?.elder === true;
+    if (shouldBeElder === isElder) {
+      // Tell a rostered-but-unverified caller why they didn't get in, so the
+      // client can prompt them to verify their email.
+      return { elder: isElder, changed: false, ...(rostered && !userRecord.emailVerified ? { unverified: true } : {}) };
+    }
+    const claims = { ...(userRecord.customClaims || {}) };
+    if (shouldBeElder) claims.elder = true; else delete claims.elder;
+    await getAuth().setCustomUserClaims(req.auth.uid, claims);
+    // First-time elder grant (claim transitions false→true): scope the account
+    // to Shepherd-only (allowedHubs: []) so a new elder lands in just the
+    // Shepherd Hub, not the inventory/jobs shell. This is roster-driven — the
+    // roster is the single gate, so a non-rostered email never reaches here, and
+    // there's no leak-able "shepherd invite" link to mint. Guarded so we only
+    // touch an un-customized account (null = legacy all-access, or the plain
+    // ['jobs'] signup default): an existing member promoted to elder keeps any
+    // hub set an admin deliberately gave them. Hubs an admin adds later stick,
+    // because the claim no longer changes on subsequent sign-ins (early return
+    // above), so this block never runs twice for the same user.
+    if (shouldBeElder) {
+      const snap = await db.doc(`users/${req.auth.uid}`).get();
+      const cur = snap.exists ? snap.get('allowedHubs') : undefined;
+      const isUncustomized = cur == null
+        || (Array.isArray(cur) && cur.length === 1 && cur[0] === 'jobs');
+      if (isUncustomized) {
+        await db.doc(`users/${req.auth.uid}`).set({ allowedHubs: [] }, { merge: true });
+      }
+    }
+    return { elder: shouldBeElder, changed: true };
+  })
+);
+
+// ── setElderAssignment (Shepherd Hub P3) ──────────────────────────────────
+// The one write-back to PCO. An elder (or FXCC admin) reassigns who shepherds a
+// person; we write a CLEAN canonical value ("Surname" or "Surname/Surname")
+// back to the PCO Elder Assigned field, read it back to verify, then update the
+// Firestore cache + audit log. This is also the orphan-cleanup mechanism.
+exports.setElderAssignment = onCall(
+  { secrets: [PCO_APP_ID, PCO_SECRET], cors: true },
+  wrapCall('setElderAssignment', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    const db = getFirestore();
+    // Read the elder claim off the token (the canonical place — propagates from
+    // setCustomUserClaims on refresh; getUser().customClaims would miss it).
+    const isElder = req.auth.token?.elder === true;
+    const email = req.auth.token?.email || '';
+    const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
+    const c = callerSnap.exists ? callerSnap.data() : {};
+    // Shepherd Hub admin access is John-only (OWNER_EMAILS); elders authorize via
+    // their claim. Other church admins cannot reassign. SEC-2: the OWNER path
+    // also requires a verified email (the elder claim is already verified-gated
+    // by claimElderRole).
+    const emailVerified = req.auth.token?.email_verified === true;
+    if (!isElder && !(OWNER_EMAILS.includes(email) && emailVerified)) {
+      throw new HttpsError('permission-denied', 'Not authorized.');
+    }
+
+    const { personId, elderKeys } = req.data || {};
+    if (!personId || typeof personId !== 'string') throw new HttpsError('invalid-argument', 'personId required.');
+    if (!Array.isArray(elderKeys) || elderKeys.length === 0) throw new HttpsError('invalid-argument', 'Select at least one elder.');
+
+    const roster = await getShepherdRoster(db);
+    const byKey = Object.fromEntries((roster.elders || []).filter(e => e.active !== false).map(e => [e.key, e]));
+    const uniqueKeys = [...new Set(elderKeys)];
+    const chosen = uniqueKeys.map(k => byKey[k]);
+    if (chosen.some(e => !e)) throw new HttpsError('invalid-argument', 'Unknown or inactive elder key.');
+    // Canonical value: surnames joined by '/', in roster order for stability.
+    const ordered = (roster.elders || []).filter(e => uniqueKeys.includes(e.key));
+    const value = ordered.map(e => e.surname).join('/');
+
+    // ROB-2: use the sync-resolved Elder Assigned field id (config/shepherdSync)
+    // so a PCO field recreate doesn't strand the write-back on a dead id; falls
+    // back to setPcoElderAssignment's constant if fieldDefs isn't stored yet.
+    const syncSnap = await db.doc(`churches/${SHEPHERD_CHURCH_ID}/config/shepherdSync`).get();
+    const fieldId = syncSnap.exists ? syncSnap.get('fieldDefs.elderAssigned.id') : undefined;
+
+    // Write to PCO (find/create FieldDatum) + read-back verify.
+    const { value: written } = await setPcoElderAssignment(PCO_APP_ID.value(), PCO_SECRET.value(), personId, value, fieldId);
+
+    // Recompute the derived index + update the cache doc.
+    const norm = buildNormalizer(roster).normalize(written);
+    const ref = db.doc(`churches/${SHEPHERD_CHURCH_ID}/shepherdPeople/${personId}`);
+    const prevSnap = await ref.get();
+    const prev = prevSnap.exists ? prevSnap.data() : {};
+    // ROB-1: set+merge (not update) so a missing cache doc doesn't throw
+    // NOT_FOUND and leave PCO/cache divergent until the nightly sync. `pastoral`
+    // is written as a nested map (NOT a dotted key) because merge treats a
+    // dotted field name as a literal field — the nested map deep-merges, so the
+    // other pastoral.* fields are preserved.
+    await ref.set({
+      pastoral: { elderAssigned: written },
+      elderKeys: norm.elderKeys,
+      orphaned: norm.orphaned,
+      hasAssignment: norm.hasAssignment,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    // Audit.
+    await db.collection(`churches/${SHEPHERD_CHURCH_ID}/shepherdAudit`).add({
+      action: 'reassign',
+      personId,
+      personName: prev.name || null,
+      actorUid: req.auth.uid,
+      actorName: c.name || req.auth.token?.name || null,
+      actorEmail: email || null,
+      at: FieldValue.serverTimestamp(),
+      detail: { from: prev.pastoral?.elderAssigned || '', to: written },
+    });
+
+    return { ok: true, value: written, elderKeys: norm.elderKeys, orphaned: norm.orphaned, hasAssignment: norm.hasAssignment };
+  })
+);
+
+// ── exportMyShepherdNotes (Shepherd Hub P6 / D1) ──────────────────────────
+// Lets an elder download all of THEIR OWN private notes — used so a departing
+// elder can save them before the admin removes them (their notes are purged on
+// removal, see purgeElderShepherdNotes). Elder-only (the `elder` claim is itself
+// verified-gated by claimElderRole). The privateNotes doc id IS the owner uid.
+exports.exportMyShepherdNotes = onCall(
+  { cors: true },
+  wrapCall('exportMyShepherdNotes', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    if (req.auth.token?.elder !== true) throw new HttpsError('permission-denied', 'Elders only.');
+    const db = getFirestore();
+    const uid = req.auth.uid;
+    const prefix = `churches/${SHEPHERD_CHURCH_ID}/`;
+    const snap = await db.collectionGroup('privateNotes').get();
+    const mine = snap.docs.filter(d => d.id === uid && d.ref.path.startsWith(prefix));
+    if (!mine.length) return { notes: [] };
+    // Resolve each note's person name (parent.parent = the shepherdPeople doc).
+    const personRefs = mine.map(d => d.ref.parent.parent);
+    const persons = await db.getAll(...personRefs);
+    const notes = mine.map((d, i) => ({
+      personName: persons[i]?.exists ? (persons[i].get('name') || personRefs[i].id) : personRefs[i].id,
+      text: d.get('text') || '',
+      updatedAt: d.get('updatedAt')?.toMillis?.() || null,
+    }));
+    return { notes };
+  })
+);
+
+// ── purgeElderShepherdNotes (Shepherd Hub P6 / D1) ────────────────────────
+// When the admin removes an elder from the roster, permanently delete THAT
+// elder's private notes across every person. Admin-only (OWNER_EMAILS + verified
+// email). The caller passes the departing elder's roster email(s); we resolve
+// their uid(s) and delete `privateNotes/{uid}` everywhere. Shared care-thread
+// entries are deliberately KEPT (pastoral history, D1). The admin UI shows a
+// confirm modal first so the elder has a chance to export their own notes.
+exports.purgeElderShepherdNotes = onCall(
+  { cors: true },
+  wrapCall('purgeElderShepherdNotes', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    const email = req.auth.token?.email || '';
+    const emailVerified = req.auth.token?.email_verified === true;
+    if (!(OWNER_EMAILS.includes(email) && emailVerified)) {
+      throw new HttpsError('permission-denied', 'Not authorized.');
+    }
+    const { emails, elderName } = req.data || {};
+    if (!Array.isArray(emails) || emails.length === 0) {
+      throw new HttpsError('invalid-argument', 'emails required.');
+    }
+    const db = getFirestore();
+    // Resolve the departing elder's uid(s) from their roster email(s). A missing
+    // account just means no notes to purge.
+    const uids = new Set();
+    for (const em of emails) {
+      try { const u = await getAuth().getUserByEmail(String(em).toLowerCase()); uids.add(u.uid); }
+      catch (e) { if (e.code !== 'auth/user-not-found') throw e; }
+    }
+    let purged = 0;
+    if (uids.size) {
+      const prefix = `churches/${SHEPHERD_CHURCH_ID}/`;
+      const snap = await db.collectionGroup('privateNotes').get();
+      const targets = snap.docs.filter(d => uids.has(d.id) && d.ref.path.startsWith(prefix));
+      if (targets.length) {
+        const writer = db.bulkWriter();
+        targets.forEach(d => writer.delete(d.ref));
+        await writer.close();
+        purged = targets.length;
+      }
+    }
+    // Audit (admin-readable).
+    await db.collection(`churches/${SHEPHERD_CHURCH_ID}/shepherdAudit`).add({
+      action: 'purge_elder_notes',
+      actorUid: req.auth.uid,
+      actorEmail: email || null,
+      at: FieldValue.serverTimestamp(),
+      detail: { elderName: elderName || null, emails, purged, accounts: uids.size },
+    });
+    return { purged, accounts: uids.size };
+  })
+);
+
 // ── monitorScheduledJobs ──────────────────────────────────────────────────
 // Hourly dead-man's switch for every other scheduled job in this file. Reads
 // each expected `scheduledJobRuns/{name}` heartbeat doc (written by
@@ -3430,8 +3836,10 @@ const SCHEDULED_JOB_REGISTRY = [
   { name: 'sendWeeklyAttentionDigest',     cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendJobReminders',              cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendNewJobsDigest',             cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
+  { name: 'sendEmptyJobMorningAlert',      cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'closePastJobs',                 cadence: 'daily',  maxRunMs:   5 * 60 * 1000 },
   { name: 'generateRecurringTemplateTasks', cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },
+  { name: 'syncShepherdPeople',            cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },
 ];
 // Hourly gets a 2h grace beyond 1h; daily gets a 2h grace beyond 24h; weekly
 // gets a 24h grace beyond 7d (weekly retained for any future weekly job).

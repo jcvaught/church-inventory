@@ -169,6 +169,12 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://churchopshub.com/blog/setting-up-qr-asset-labels-in-your-church</loc>
+    <lastmod>2026-06-09</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://churchopshub.com/blog/volunteer-coordinator-burnout-warning-signs</loc>
     <lastmod>2026-06-09</lastmod>
     <changefreq>yearly</changefreq>
@@ -177,6 +183,18 @@
   <url>
     <loc>https://churchopshub.com/blog/quarterly-church-inventory-audit-checklist</loc>
     <lastmod>2026-06-11</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://churchopshub.com/blog/wedding-funeral-logistics-checklist-small-church</loc>
+    <lastmod>2026-06-16</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://churchopshub.com/blog/volunteer-role-handoff-knowledge-transfer-church</loc>
+    <lastmod>2026-06-17</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.7</priority>
   </url>

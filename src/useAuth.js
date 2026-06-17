@@ -22,11 +22,18 @@ import { auth, googleProvider, db } from './firebase.js';
 
 // Default hubs granted to a member who signs up with just the church code (no
 // hub-scoped invite). Previously this was "all hubs" (allowedHubs omitted),
-// which silently leaked new members into every hub's assignee/picker until an
-// admin restricted them. Now they start scoped: Job + Maintenance (Inventory is
-// the always-free base hub, available regardless of allowedHubs). Admins still
-// see everything (role override); hub-scoped invites still set their own hubs.
-const DEFAULT_MEMBER_HUBS = ['jobs', 'maintenance'];
+// then Job + Maintenance. Now scoped to Job only (2026-06-10): a plain
+// church-code signup should NOT auto-land in Maintenance/Inventory — least
+// privilege. ['jobs'] also makes the new member a volunteer (isVolunteerOnly),
+// so they get the jobs-first shell and never see inventory. Admins still see
+// everything (role override); hub-scoped invites still set their own hubs; an
+// admin grants more access per-member via Settings → Team Members → Edit Access.
+const DEFAULT_MEMBER_HUBS = ['jobs'];
+
+// Shepherd Hub is FXCC-only (P2). Only FXCC members invoke the elder-claim
+// grant on sign-in, so every other church's logins don't hit the callable.
+// Mirrors SHEPHERD_CHURCH_ID in functions/index.js — keep in sync.
+const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
 
 const DEFAULT_LOCATIONS = [
   "Sanctuary", "Sound Booth", "Media Room", "Church Office",
@@ -83,6 +90,10 @@ export function useAuth() {
   const [profileMissing, setProfileMissing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Shepherd Hub elder gate (P2): true iff the server-set `elder` custom claim
+  // is present on the signed-in token. Drives hub visibility in P3; Firestore
+  // rules enforce the real boundary regardless of this flag.
+  const [isElder, setIsElder] = useState(false);
 
   // Listen to auth state
   useEffect(() => {
@@ -93,8 +104,26 @@ export function useAuth() {
         try {
           const profileDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (profileDoc.exists()) {
-            setUserProfile({ id: firebaseUser.uid, uid: firebaseUser.uid, ...profileDoc.data() });
+            const profileData = profileDoc.data();
+            setUserProfile({ id: firebaseUser.uid, uid: firebaseUser.uid, ...profileData });
             setProfileMissing(false);
+            // Shepherd Hub elder gate (P2) — FXCC members only, so no other
+            // church's logins hit the callable. Grants/revokes the `elder`
+            // custom claim by email allow-list, then force-refreshes the ID
+            // token if it changed so Firestore rules see the new claim.
+            if (profileData.churchId === SHEPHERD_CHURCH_ID) {
+              try {
+                const claimFn = httpsCallable(getFunctions(), 'claimElderRole');
+                const res = await claimFn();
+                if (res.data?.changed) await firebaseUser.getIdToken(true);
+                setIsElder(!!res.data?.elder);
+              } catch (e) {
+                setIsElder(false);
+                Sentry.captureException(e, { tags: { flow: 'claimElderRole' } });
+              }
+            } else {
+              setIsElder(false);
+            }
           } else {
             // Authenticated but no Firestore profile — the half-signed-up
             // state. Surface to user + log to Sentry so we hear about
@@ -123,6 +152,7 @@ export function useAuth() {
         setUser(null);
         setUserProfile(null);
         setProfileMissing(false);
+        setIsElder(false);
       }
       setLoading(false);
     });
@@ -250,7 +280,7 @@ export function useAuth() {
         ? 'Password should be at least 6 characters.'
         : err.message;
       setError(msg);
-      return { success: false, error: msg };
+      return { success: false, error: msg, code: err.code };
     }
   }, []);
 
@@ -316,7 +346,7 @@ export function useAuth() {
         ? 'Password should be at least 6 characters.'
         : err.message;
       setError(msg);
-      return { success: false, error: msg };
+      return { success: false, error: msg, code: err.code };
     }
   }, []);
 
@@ -512,6 +542,7 @@ export function useAuth() {
   return {
     user,
     userProfile,
+    isElder,
     profileMissing,
     loading,
     error,

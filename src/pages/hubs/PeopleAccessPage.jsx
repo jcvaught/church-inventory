@@ -9,6 +9,7 @@ import { EmojiIcon } from '../../components/primitives/EmojiIcon.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { exportAccessRecordsCSV } from '../../utils/csv.js';
 import { localDateStr } from '../../utils/date.js';
+import { formatPhone } from '../../utils/phone.js';
 import { Timesheet } from './Timesheet.jsx';
 
 const TYPE_LABELS = {
@@ -198,7 +199,7 @@ export function PeopleAccessPage({ store, userProfile }) {
   function openEditPerson(person, e) {
     e?.stopPropagation();
     setPersonForm({
-      name: person.name || '', email: person.email || '', phone: person.phone || '',
+      name: person.name || '', email: person.email || '', phone: formatPhone(person.phone || ''),
       ministries: person.ministries || [], notes: person.notes || '',
       personType: person.personType || 'member',
       hourlyRate: person.hourlyRate != null ? String(person.hourlyRate) : '',
@@ -656,7 +657,7 @@ export function PeopleAccessPage({ store, userProfile }) {
                           </div>
                         )}
                         {person.email && <div style={{ fontSize: 12, color: B.textLight, fontFamily: f2 }}><EmojiIcon emoji="✉" label="Email" /> {person.email}</div>}
-                        {person.phone && <div style={{ fontSize: 12, color: B.textLight, fontFamily: f2 }}><EmojiIcon emoji="📞" label="Phone" /> {person.phone}</div>}
+                        {person.phone && <div style={{ fontSize: 12, color: B.textLight, fontFamily: f2 }}><EmojiIcon emoji="📞" label="Phone" /> {formatPhone(person.phone)}</div>}
                       </div>
                       {pStatus && (
                         <StatusDot
@@ -752,7 +753,7 @@ export function PeopleAccessPage({ store, userProfile }) {
                   </div>
                 )}
                 {detailPerson.email && <div style={{ fontSize: 13, color: B.textMid, fontFamily: f2 }}>✉ {detailPerson.email}</div>}
-                {detailPerson.phone && <div style={{ fontSize: 13, color: B.textMid, fontFamily: f2 }}>📞 {detailPerson.phone}</div>}
+                {detailPerson.phone && <div style={{ fontSize: 13, color: B.textMid, fontFamily: f2 }}>📞 {formatPhone(detailPerson.phone)}</div>}
                 {detailPerson.notes && <div style={{ fontSize: 13, color: B.textLight, fontFamily: f2, marginTop: 4 }}>{detailPerson.notes}</div>}
               </div>
               {canEdit && (
@@ -909,7 +910,7 @@ export function PeopleAccessPage({ store, userProfile }) {
                 placeholder="email@example.com" type="email" style={inp} />
             </FF>
             <FF label="Phone">
-              <input value={personForm.phone} onChange={e => setPersonForm(f => ({ ...f, phone: e.target.value }))}
+              <input value={personForm.phone} onChange={e => setPersonForm(f => ({ ...f, phone: formatPhone(e.target.value) }))}
                 placeholder="(555) 555-5555" type="tel" style={inp} />
             </FF>
             <FF label="Person Type">

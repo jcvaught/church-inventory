@@ -86,6 +86,24 @@ export function useFirestore(churchId) {
   useEffect(() => { workItemsEnabledRef.current = workItemsEnabled === true; }, [workItemsEnabled]);
 
   function handleErr(err, ctx = {}) {
+    // Transient real-time-listener errors (2026-06-11): Firestore onSnapshot
+    // subscriptions surface backend/transport blips — deadline-exceeded,
+    // unavailable, cancelled, aborted, and the generic internal/unknown — when
+    // a mobile tab is backgrounded (iOS Safari suspends its sockets) or the
+    // network briefly drops. The SDK auto-reconnects the listener on its own and
+    // re-delivers the snapshot, so there is no broken feature behind them; they
+    // were paging Sentry overnight purely via captureConsole. For the listener
+    // path (ctx.listener) log at warn — below captureConsole's 'error' threshold
+    // — and skip captureException + setError. `internal`/`unknown` are treated
+    // as transient ONLY here; on writes/callables they still report in full,
+    // since there they can signal a real bug.
+    const TRANSIENT_LISTENER_CODES = new Set([
+      'deadline-exceeded', 'unavailable', 'cancelled', 'aborted', 'internal', 'unknown',
+    ]);
+    if (ctx.listener && TRANSIENT_LISTENER_CODES.has(err?.code)) {
+      console.warn('[ChurchOpsHub] transient listener error (auto-recovers):', err?.code || err);
+      return;
+    }
     // Audit overnight 2026-05-12 / Error-resilience #1: this is the single
     // chokepoint for ~80 Firestore writes in this hook. Calling
     // captureException directly preserves the full error object so engineering
@@ -169,25 +187,25 @@ export function useFirestore(churchId) {
     unsubs.push(onSnapshot(doc(db, 'churches', churchId, 'config', 'main'), (snap) => {
       if (snap.exists()) setConfig(snap.data());
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Settings
     unsubs.push(onSnapshot(doc(db, 'churches', churchId, 'config', 'settings'), (snap) => {
       if (snap.exists()) setSettings(snap.data());
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Items
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'items'), (snap) => {
       setItems(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Supplies
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'supplies'), (snap) => {
       setSupplies(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Activity Log — capped at 100 most-recent entries to avoid unbounded
     // reads as churches age. Audit overnight 2026-05-12 / Perf #1:
@@ -201,14 +219,14 @@ export function useFirestore(churchId) {
         setActivityLog(logs);
         checkDone();
       },
-      (err) => { handleErr(err); checkDone(); }
+      (err) => { handleErr(err, { listener: true }); checkDone(); }
     ));
 
     // Reservations
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'reservations'), (snap) => {
       setReservations(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Maintenance Tickets (legacy collection — unified mode derives these from
     // the workItems subscription added below).
@@ -218,14 +236,14 @@ export function useFirestore(churchId) {
         tickets.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         setMaintenanceTickets(tickets);
         checkDone();
-      }, (err) => { handleErr(err); checkDone(); }));
+      }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
     }
 
     // Vendors
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'vendors'), (snap) => {
       setVendors(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Users — scoped to this church via query (real-time)
     unsubs.push(onSnapshot(query(collection(db, 'users'), where('churchId', '==', churchId)), (snap) => {
@@ -234,25 +252,25 @@ export function useFirestore(churchId) {
       // counts. Filtered at the single source so every consumer inherits it.
       setUsers(excludeTestAccounts(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Bundles
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'bundles'), (snap) => {
       setBundles(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Notification config
     unsubs.push(onSnapshot(doc(db, 'churches', churchId, 'config', 'notifications'), (snap) => {
       setNotificationConfig(snap.exists() ? snap.data() : {});
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Audits
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'audits'), (snap) => {
       setAudits(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Public Requests
     unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'publicRequests'), where('status', '==', 'pending')), (snap) => {
@@ -260,19 +278,19 @@ export function useFirestore(churchId) {
       reqs.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       setPublicRequests(reqs);
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Access People
     unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'accessPeople'), orderBy('name')), (snap) => {
       setAccessPeople(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Access Records
     unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'accessRecords'), orderBy('createdAt', 'desc')), (snap) => {
       setAccessRecords(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Time Entries (contractor / labor hours) — sorted newest-first; the
     // Timesheet view filters by person + date range client-side (church-scale
@@ -280,7 +298,7 @@ export function useFirestore(churchId) {
     unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'timeEntries'), orderBy('date', 'desc')), (snap) => {
       setTimeEntries(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Tasks (legacy collection — unified mode derives these from the workItems
     // subscription below).
@@ -290,7 +308,7 @@ export function useFirestore(churchId) {
         t.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         setTasks(t);
         checkDone();
-      }, (err) => { handleErr(err); checkDone(); }));
+      }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
     }
 
     // Work Items (unified Tasks + Maintenance — Work-unification Phase 2). One
@@ -307,7 +325,7 @@ export function useFirestore(churchId) {
         setTasks(t);
         setMaintenanceTickets(m);
         checkDone();
-      }, (err) => { handleErr(err); checkDone(); }));
+      }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
     }
 
     // Rooms/Spaces
@@ -316,7 +334,7 @@ export function useFirestore(churchId) {
       r.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setRooms(r);
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Job Listings — capped at 500 most-recently-created to avoid unbounded
     // reads as churches age (audit 2026-05-23 perf H-3). Mirrors the
@@ -332,7 +350,7 @@ export function useFirestore(churchId) {
         setJobListings(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
         checkDone();
       },
-      (err) => { handleErr(err); checkDone(); }
+      (err) => { handleErr(err, { listener: true }); checkDone(); }
     ));
 
     // Job Announcements
@@ -341,13 +359,13 @@ export function useFirestore(churchId) {
       ann.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
       setJobAnnouncements(ann);
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Task Templates
     unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'taskTemplates'), orderBy('name')), (snap) => {
       setTaskTemplates(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
-    }, (err) => { handleErr(err); checkDone(); }));
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     return () => unsubs.forEach(u => u());
   }, [churchId, workItemsEnabled]);

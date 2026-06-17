@@ -19,6 +19,7 @@ const AccountabilityPage = lazyWithRetry(() => import('./hubs/AccountabilityPage
 const PeopleAccessPage  = lazyWithRetry(() => import('./hubs/PeopleAccessPage.jsx').then(m => ({ default: m.PeopleAccessPage })), 'PeopleAccessPage');
 const TasksPage         = lazyWithRetry(() => import('./hubs/TasksPage.jsx').then(m => ({ default: m.TasksPage })), 'TasksPage');
 const JobsPage          = lazyWithRetry(() => import('./hubs/JobsPage.jsx').then(m => ({ default: m.JobsPage })), 'JobsPage');
+const ShepherdHubPage   = lazyWithRetry(() => import('./hubs/ShepherdHubPage.jsx').then(m => ({ default: m.ShepherdHubPage })), 'ShepherdHubPage');
 
 const HubLoadingFallback = () => (
   <div style={{ display:'flex', justifyContent:'center', alignItems:'center', padding:'80px 20px' }}>
@@ -83,6 +84,18 @@ const HUB_DEFS = [
     color: '#E85D04',
     desc: 'Post paid jobs for teens to sign up for — moving walls, resetting chairs, and more.',
   },
+  // Shepherd Hub is special-cased: NOT a paid/subscription hub (no price, no
+  // UpgradeGate). FXCC-only, gated to elders + John via the elder custom claim
+  // (see canSeeShepherd). Lives in the grid for consistency; could graduate into
+  // a real paid hub later.
+  {
+    key: 'shepherd',
+    label: 'Shepherd Hub',
+    icon: '🐑',
+    color: '#1B2A4A',
+    desc: "Elders' private view of the congregation from Planning Center — pastoral notes, care threads, and shepherding assignments.",
+    special: true,
+  },
 ];
 
 const UPGRADE_DESCRIPTIONS = {
@@ -109,7 +122,7 @@ const UPGRADE_PREVIEWS = {
   jobs: '/upgrade-previews/jobs.jpg',
 };
 
-function HubContent({ hubKey, store, userProfile, jobsInitialView }) {
+function HubContent({ hubKey, store, userProfile, jobsInitialView, isElder }) {
   let page = null;
   if (hubKey === 'insights') page = <InsightsPage store={store} userProfile={userProfile} />;
   else if (hubKey === 'maintenance') page = <MaintenancePage store={store} userProfile={userProfile} />;
@@ -118,6 +131,7 @@ function HubContent({ hubKey, store, userProfile, jobsInitialView }) {
   else if (hubKey === 'people_access') page = <PeopleAccessPage store={store} userProfile={userProfile} />;
   else if (hubKey === 'tasks') page = <TasksPage store={store} userProfile={userProfile} />;
   else if (hubKey === 'jobs') page = <JobsPage store={store} userProfile={userProfile} initialView={jobsInitialView} />;
+  else if (hubKey === 'shepherd') page = <ShepherdHubPage userProfile={userProfile} isElder={isElder} />;
   if (!page) return null;
   // key={hubKey} gives each hub a fresh boundary, so an error on one hub
   // doesn't stick when the user navigates to another.
@@ -128,7 +142,7 @@ function HubContent({ hubKey, store, userProfile, jobsInitialView }) {
   );
 }
 
-export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscriptionLoading, userCanSeeHub, onGoToSettings, jobsInitialView }) {
+export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscriptionLoading, userCanSeeHub, onGoToSettings, jobsInitialView, canSeeShepherd, isElder }) {
   const isMobile = useContext(MobileCtx);
   const def = HUB_DEFS.find(h => h.key === hubKey);
   const volunteerMode = isVolunteerOnly(userProfile);
@@ -153,6 +167,23 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
   if (hubKey && def) {
     const hubLabel = def.label;
     const hubHas = hasHub(hubKey);
+    // Shepherd is special-cased: no subscription / UpgradeGate. Render directly,
+    // gated on canSeeShepherd (elders + John; rules enforce the real boundary).
+    if (def.special) {
+      return (
+        <div>
+          <div style={{ marginBottom: 20 }}>
+            <button onClick={() => onOpenHub(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.teal, fontSize: 13, fontWeight: 600, fontFamily: f1, padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+              ← All Hubs
+            </button>
+          </div>
+          {canSeeShepherd
+            ? <HubContent hubKey={hubKey} store={store} userProfile={userProfile} isElder={isElder} />
+            : <div style={{ textAlign: 'center', padding: '60px 20px', color: B.textLight, fontFamily: f2 }}>This hub is for elders only.</div>}
+        </div>
+      );
+    }
     return (
       <div>
         {/* Breadcrumb */}
@@ -198,14 +229,17 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, opacity: subscriptionLoading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
         {HUB_DEFS.filter(hub => {
+          // Shepherd: only FXCC elders + John ever see the card.
+          if (hub.key === 'shepherd') return canSeeShepherd;
           if (hub.key === 'people_access' && userProfile?.role === 'user') return false;
           // Volunteers (jobs-only) shouldn't be confronted with 6 upgrade cards
           // for hubs they have no access to — show only their hub.
           if (volunteerMode && hub.key !== 'jobs') return false;
           return true;
         }).map(hub => {
-          const active = hasHub(hub.key);
-          const canSee = active && userCanSeeHub(hub.key);
+          const isSpecial = !!hub.special;
+          const active = isSpecial ? true : hasHub(hub.key);
+          const canSee = isSpecial ? true : (active && userCanSeeHub(hub.key));
           return (
             <div key={hub.key}
               onClick={() => onOpenHub(hub.key)}
@@ -230,9 +264,11 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
             >
               {/* Status badge */}
               <div style={{ position: 'absolute', top: 14, right: 14 }}>
-                {active
-                  ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: hub.color + '18', color: hub.color }}>Active</span>
-                  : <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: B.warmGray, color: B.textLight }}>{hub.price}</span>
+                {isSpecial
+                  ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: hub.color + '18', color: hub.color }}>Elders</span>
+                  : active
+                    ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: hub.color + '18', color: hub.color }}>Active</span>
+                    : <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: B.warmGray, color: B.textLight }}>🔒 Locked</span>
                 }
               </div>
 
@@ -241,25 +277,25 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
               <div style={{ fontSize: 13, color: B.textMid, fontFamily: f2, lineHeight: 1.5, marginBottom: 16 }}>{hub.desc}</div>
 
               <div style={{ fontSize: 13, fontWeight: 600, fontFamily: f1, color: active ? hub.color : B.textLight }}>
-                {active ? (canSee ? 'Open →' : 'No access') : `Upgrade for ${hub.price} →`}
+                {isSpecial ? 'Open →' : active ? (canSee ? 'Open →' : 'No access') : 'Unlock with ChurchOpsHub →'}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* All-In Bundle callout — admin/manager only; volunteers don't choose plans */}
+      {/* Plan callout — admin/manager only; volunteers don't choose plans */}
       {!volunteerMode && <div style={{ marginTop: 28, padding: 20, background: `linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 100%)`, borderRadius: 16, color: B.white }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16, fontFamily: f1, marginBottom: 4 }}>✨ All-In Bundle</div>
+            <div style={{ fontWeight: 700, fontSize: 16, fontFamily: f1, marginBottom: 4 }}>✨ Unlock everything — one plan</div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', fontFamily: f2 }}>
-              All 7 hubs for $29/mo — save over 40% vs. buying individually.
+              Every paid feature + unlimited team members for $15/mo (or $150/yr). Inventory stays free.
             </div>
           </div>
           <button onClick={() => { onGoToSettings?.(); }}
             style={{ ...btnP, background: B.gold, color: B.navy, padding: '9px 18px', fontSize: 13, cursor: 'pointer' }}>
-            View Plans
+            View Plan
           </button>
         </div>
       </div>}

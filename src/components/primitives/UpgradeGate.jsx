@@ -3,7 +3,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from '../../firebase.js';
 import { B, f1, f2 } from '../brand/tokens.js';
 
-export function UpgradeGate({ hubName, hubLabel, hubPrice, hubDescription, hasHub, previewSrc, previewAlt, children }) {
+export function UpgradeGate({ hubName, hubLabel, hubDescription, hasHub, previewSrc, previewAlt, children }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -25,7 +25,7 @@ export function UpgradeGate({ hubName, hubLabel, hubPrice, hubDescription, hasHu
       const fns = getFunctions(app);
       const createSession = httpsCallable(fns, 'createCheckoutSession');
       const { data } = await createSession({
-        item: hubName,
+        item: 'pro_monthly',
         successUrl: window.location.href,
         cancelUrl: window.location.href,
       });
@@ -60,7 +60,7 @@ export function UpgradeGate({ hubName, hubLabel, hubPrice, hubDescription, hasHu
         <div style={{ width: 64, height: 64, borderRadius: 16, background: B.goldLight, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: 28 }}>🔒</div>
         <h2 style={{ fontFamily: f1, fontSize: 22, fontWeight: 700, color: B.navy, margin: '0 0 8px' }}>{hubLabel}</h2>
         <p style={{ color: B.textMid, fontSize: 15, margin: '0 0 6px', fontFamily: f2 }}>{hubDescription}</p>
-        <p style={{ color: B.textLight, fontSize: 13, margin: '0 0 28px', fontFamily: f1 }}>Starting at <strong style={{ color: B.navy }}>{hubPrice}</strong>/month</p>
+        <p style={{ color: B.textLight, fontSize: 13, margin: '0 0 28px', fontFamily: f1 }}>Unlock this and every paid feature for <strong style={{ color: B.navy }}>$15/month</strong> — or $150/year. Unlimited team members.</p>
         {error && <p style={{ color: '#c0392b', fontSize: 13, margin: '0 0 16px', fontFamily: f2 }}>{error}</p>}
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button

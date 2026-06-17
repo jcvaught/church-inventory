@@ -14,6 +14,19 @@ service cloud.firestore {
     function isChurchAdmin(churchId)          { return isMember(churchId) && userIsAdmin(); }
     function isChurchAdminOrManager(churchId) { return isMember(churchId) && userIsAdminOrManager(); }
 
+    // Shepherd Hub (P2): elder status is a server-set custom auth claim
+    // (`elder: true`), granted by claimElderRole against the email allow-list —
+    // NOT a Firestore-doc role (those are raceable/readable). Baked into the
+    // signed token; this reads it directly with no get().
+    function isElder() { return request.auth != null && request.auth.token.elder == true; }
+    // Shepherd Hub admin access is restricted to John specifically (NOT any
+    // church admin) — pastoral data is need-to-know. Mirrors OWNER_EMAILS in
+    // functions/index.js. Elders get in via isElder(); this is the only
+    // non-elder who can read the hub.
+    // SEC-2 (2026-06-11): require a verified email so an unverified squat on one
+    // of these addresses can never satisfy the admin gate.
+    function isShepherdAdmin() { return request.auth != null && request.auth.token.email_verified == true && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org']; }
+
     // ── Jobs Hub access (audit H3 + M1, 2026-05-22) ──────────────────────────
     // jobsHubActive: the church's Jobs Hub subscription is active. Mirrors the
     //   server-side subHasHub() minus the trial-expiry time check (rules cannot
@@ -126,6 +139,22 @@ service cloud.firestore {
     match /churches/{churchId}/config/featureFlags {
       allow read:           if isMember(churchId);
       allow create, update, delete: if isChurchAdminOrManager(churchId);
+    }
+
+    // ── Config/shepherdSync — Shepherd Hub sync status (last run, counts,
+    //    per-elder load). Read = elder or admin; CF-only write (Admin SDK). ────
+    match /churches/{churchId}/config/shepherdSync {
+      allow read:  if isElder() || isShepherdAdmin();
+      allow write: if false;
+    }
+
+    // ── Config/shepherdRoster — editable elder roster (names, sign-in emails,
+    //    PCO match surnames, active/sabbatical). Drives the claim grant + the
+    //    sync's name-matching. Read = elder or admin; write = admin only (the
+    //    roster-management UI). ────────────────────────────────────────────────
+    match /churches/{churchId}/config/shepherdRoster {
+      allow read:  if isElder() || isShepherdAdmin();
+      allow write: if isShepherdAdmin();
     }
 
     // ── Items — members read + update (checkout/return); admins+mgrs create/delete ──
@@ -391,6 +420,55 @@ service cloud.firestore {
     match /churches/{churchId}/accessRecords/{docId} {
       allow read:  if isMember(churchId);
       allow write: if isChurchAdminOrManager(churchId);
+    }
+
+    // ── Shepherd Hub people cache ────────────────────────────────────────────
+    //    Cloud-Function-written mirror of Planning Center people. Read = elders
+    //    (custom claim) or church admin (P1 lock retained for support/debug —
+    //    the Level-1 privacy model already accepts admin readability of this
+    //    PCO-sourced data). NO client write (Admin SDK / sync CF only). Holds
+    //    sensitive pastoral data incl. medical_notes.
+    match /churches/{churchId}/shepherdPeople/{docId} {
+      allow read:  if isElder() || isShepherdAdmin();
+      allow write: if false;
+    }
+
+    // ── Private pastoral note — one per (person, elder); doc id = the elder's
+    //    uid. Only the owning elder may read or write it — private even from
+    //    other elders and from admins (Level 1: enforced by rules; Level 2
+    //    client-side encryption is the fast-follow). ─────────────────────────
+    match /churches/{churchId}/shepherdPeople/{personId}/privateNotes/{ownerUid} {
+      allow read, write: if isElder() && request.auth.uid == ownerUid;
+    }
+
+    // ── Shared care thread — any elder reads/appends; entries are author-owned
+    //    (author or, for cleanup, a church admin may edit/delete). Admins do not
+    //    read by default (elders-only space). ─────────────────────────────────
+    match /churches/{churchId}/shepherdPeople/{personId}/careThread/{entryId} {
+      allow read:   if isElder();
+      allow create: if isElder() && request.resource.data.authorUid == request.auth.uid;
+      allow update, delete: if isElder() && resource.data.authorUid == request.auth.uid;
+    }
+
+    // ── Last-contact stamp (UX-2): a tiny per-person doc holding `lastCareAt`,
+    //    written by an elder when they post/remove a care-thread entry. Kept in
+    //    a SEPARATE top-level collection (not on the shepherdPeople doc) so the
+    //    nightly full-overwrite sync never clobbers it. Non-sensitive (a
+    //    timestamp), so any elder may write it. ─────────────────────────────────
+    match /churches/{churchId}/shepherdCare/{personId} {
+      allow read:  if isElder() || isShepherdAdmin();
+      allow write: if isElder();
+    }
+
+    // ── Shepherd audit log — every note view/edit + reassignment. Append-only;
+    //    every elder/admin WRITES, but only the admin READS (SEC-6, 2026-06-11):
+    //    elder-readable rows leaked which people each elder kept private notes on
+    //    (personId+personName+actor), metadata about a note promised "only you".
+    //    Elders never needed to browse it — it's an accountability record. ──────
+    match /churches/{churchId}/shepherdAudit/{entryId} {
+      allow read:   if isShepherdAdmin();
+      allow create: if (isElder() || isShepherdAdmin()) && request.resource.data.actorUid == request.auth.uid;
+      allow update, delete: if false;
     }
 
     // ── Time Entries (contractor / labor hours) — payroll-sensitive, so

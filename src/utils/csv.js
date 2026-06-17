@@ -76,6 +76,34 @@ export function exportTasksCSV(tasks) {
   URL.revokeObjectURL(a.href);
 }
 
+// Shepherd Hub — contact/shepherding list for an elder's flock (or any filtered
+// view). Contact fields only by design — no medical notes, no pastoral notes
+// (keeps the export consistent with the elders' privacy promise). `elderName`
+// maps an elder key → display name; `label` seeds the filename.
+export function exportShepherdPeopleCSV(people, { elderName, label } = {}) {
+  const header = ['Name', 'Email', 'Phone', 'Address', 'Status', 'Membership', 'Assigned Elder(s)'].join(',');
+  const esc = (v) => {
+    const s = String(v ?? '');
+    return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const rows = (people || []).map(p => {
+    const emails = (p.emails || []).map(e => e.address).filter(Boolean).join('; ');
+    const phones = (p.phones || []).map(ph => ph.number).filter(Boolean).join('; ');
+    const ad = (p.addresses || [])[0];
+    const address = ad ? [ad.street, ad.city, ad.state, ad.zip].filter(Boolean).join(', ') : '';
+    const elders = (p.elderKeys || []).map(k => (elderName ? elderName(k) : k)).join('; ');
+    return [p.name, emails, phones, address, p.status, p.membership, elders].map(esc).join(',');
+  });
+  const csv = [header, ...rows].join('\n');
+  const safe = (label || 'shepherd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
+    download: `${safe}-${localDateStr(new Date())}.csv`,
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
 export function exportReservationsCSV(reservations) {
   const header = 'resourceType,resource,itemId,eventName,eventDate,returnDate,purpose,ministry,status,requestedByName,approvedByName,notes';
   const rows = reservations.map(r => {

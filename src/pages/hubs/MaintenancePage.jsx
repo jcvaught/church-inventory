@@ -14,6 +14,7 @@ import { useConfirm } from '../../components/primitives/ConfirmDialog.jsx';
 import { EmojiIcon } from '../../components/primitives/EmojiIcon.jsx';
 import { resizeImageForUpload } from '../../utils/imageResize.js';
 import { localDateStr, calculateNextDue } from '../../utils/date.js';
+import { formatPhone } from '../../utils/phone.js';
 import { STATUSES, PRIORITIES, RECURRENCE_OPTIONS, RECURRENCE_LABELS, statusColors, initials, assigneeColor, PriorityBadge } from '../../components/board/boardUI.jsx';
 import { BoardCalendar } from '../../components/board/BoardCalendar.jsx';
 import { CommentThread } from '../../components/comments/CommentThread.jsx';
@@ -236,6 +237,29 @@ export function MaintenancePage({ store, userProfile }) {
 
   const activeItems = items.filter(i => i.status !== 'Disposed');
   const maintenanceTags = settings?.maintenanceTags || [];
+
+  // ── Filter users to those with Maintenance Hub access ──
+  // Without this the assignee picker lists every church member — including
+  // teens who only have the Jobs Hub (allowedHubs:['jobs']). Admins always
+  // qualify; allowedHubs == null means "all hubs" (legacy/full-access users).
+  const maintenanceHubUsers = useMemo(() =>
+    (users || []).filter(u => {
+      if (u.active === false) return false;
+      if (u.role === 'admin') return true;
+      const allowed = u.allowedHubs;
+      if (allowed == null) return true;
+      return allowed.includes('maintenance');
+    }),
+  [users]);
+
+  // Assignees for the filter dropdown: maintenance-hub users, plus anyone
+  // already on an existing ticket (so historical assignments stay filterable).
+  const filterableAssignees = useMemo(() => {
+    const fromTickets = (maintenanceTickets || []).flatMap(t => t.assignees || []);
+    const seen = new Set(maintenanceHubUsers.map(u => u.id));
+    const extra = fromTickets.filter(a => a.uid && !seen.has(a.uid)).map(a => ({ id: a.uid, name: a.name }));
+    return [...maintenanceHubUsers, ...extra];
+  }, [maintenanceHubUsers, maintenanceTickets]);
 
   // ── State ──
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('maint_viewMode') || 'kanban');
@@ -823,12 +847,12 @@ export function MaintenancePage({ store, userProfile }) {
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:4 }}>
                       <div style={{ fontWeight:600, fontSize:14, color:B.navy }}>{v.name}</div>
                       {canOperate && <div style={{ display:'flex', gap:6, flexShrink:0, marginLeft:8 }}>
-                        <button onClick={() => { setVendorForm({ name:v.name||'', phone:v.phone||'', email:v.email||'', specialty:v.specialty||'', notes:v.notes||'' }); setShowEditVendor(v); }} style={{ border:'none', background:'none', cursor:'pointer', fontSize:13, color:B.textLight, padding:'2px 4px' }} title="Edit">✏️</button>
+                        <button onClick={() => { setVendorForm({ name:v.name||'', phone:formatPhone(v.phone||''), email:v.email||'', specialty:v.specialty||'', notes:v.notes||'' }); setShowEditVendor(v); }} style={{ border:'none', background:'none', cursor:'pointer', fontSize:13, color:B.textLight, padding:'2px 4px' }} title="Edit">✏️</button>
                         <button onClick={() => handleDeleteVendor(v)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:13, color:B.textLight, padding:'2px 4px' }} title="Delete">🗑️</button>
                       </div>}
                     </div>
                     {v.specialty && <div style={{ fontSize:12, color:B.teal, fontFamily:f1, marginBottom:4 }}>{v.specialty}</div>}
-                    {v.phone && <div style={{ fontSize:12, color:B.textMid }}><EmojiIcon emoji="📞" label="Phone" /> <a href={`tel:${v.phone.replace(/[^0-9+]/g, '')}`} style={{ color:B.teal, textDecoration:'none' }}>{v.phone}</a></div>}
+                    {v.phone && <div style={{ fontSize:12, color:B.textMid }}><EmojiIcon emoji="📞" label="Phone" /> <a href={`tel:${v.phone.replace(/[^0-9+]/g, '')}`} style={{ color:B.teal, textDecoration:'none' }}>{formatPhone(v.phone)}</a></div>}
                     {v.email && <div style={{ fontSize:12, color:B.textMid }}><EmojiIcon emoji="✉️" label="Email" /> <a href={`mailto:${v.email}`} style={{ color:B.teal, textDecoration:'none' }}>{v.email}</a></div>}
                     {v.notes && <div style={{ fontSize:11, color:B.textLight, marginTop:4 }}>{v.notes}</div>}
                   </div>
@@ -857,7 +881,7 @@ export function MaintenancePage({ store, userProfile }) {
         </select>
         <select style={{ ...inp, width:'auto', cursor:'pointer' }} value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}>
           <option value="">All assignees</option>
-          {users.filter(u => u.active !== false).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          {filterableAssignees.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
         <button
           type="button"
@@ -996,7 +1020,7 @@ export function MaintenancePage({ store, userProfile }) {
           <TagInput tags={ticketForm.tags} onChange={tags => setTicketForm(f => ({ ...f, tags }))} suggestions={maintenanceTags}/>
         </FF>
         <FF label="Assignees">
-          <AssigneeSelect assignees={ticketForm.assignees} onChange={assignees => setTicketForm(f => ({ ...f, assignees }))} users={users} currentUserId={userId} currentUserName={userName}/>
+          <AssigneeSelect assignees={ticketForm.assignees} onChange={assignees => setTicketForm(f => ({ ...f, assignees }))} users={maintenanceHubUsers} currentUserId={userId} currentUserName={userName}/>
         </FF>
         <FF label="Linked Equipment (optional)">
           <select style={{ ...inp, cursor:'pointer' }} value={ticketForm.linkedItemDocId} onChange={e => setTicketForm(f => ({ ...f, linkedItemDocId:e.target.value }))}>
@@ -1069,7 +1093,7 @@ export function MaintenancePage({ store, userProfile }) {
               <TagInput tags={detailEdits.tags || []} onChange={tags => setDetailEdits(d => ({ ...d, tags }))} suggestions={maintenanceTags}/>
             </FF>
             <FF label="Assignees">
-              <AssigneeSelect assignees={detailEdits.assignees || []} onChange={assignees => setDetailEdits(d => ({ ...d, assignees }))} users={users} currentUserId={userId} currentUserName={userName}/>
+              <AssigneeSelect assignees={detailEdits.assignees || []} onChange={assignees => setDetailEdits(d => ({ ...d, assignees }))} users={maintenanceHubUsers} currentUserId={userId} currentUserName={userName}/>
             </FF>
             <FF label="Linked Equipment">
               <select style={{ ...inp, cursor: canOperate ? 'pointer' : 'default' }} value={detailEdits.linkedItemDocId} onChange={e => setDetailEdits(d => ({ ...d, linkedItemDocId:e.target.value }))} disabled={!canOperate}>
@@ -1240,7 +1264,7 @@ export function MaintenancePage({ store, userProfile }) {
         </FF>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
           <FF label="Phone">
-            <input style={inp} value={vendorForm.phone} onChange={e => setVendorForm(f => ({ ...f, phone:e.target.value }))} placeholder="(555) 000-0000"/>
+            <input style={inp} value={vendorForm.phone} onChange={e => setVendorForm(f => ({ ...f, phone:formatPhone(e.target.value) }))} placeholder="(555) 000-0000"/>
           </FF>
           <FF label="Email">
             <input style={inp} type="email" value={vendorForm.email} onChange={e => setVendorForm(f => ({ ...f, email:e.target.value }))} placeholder="contact@vendor.com"/>
@@ -1290,7 +1314,7 @@ export function MaintenancePage({ store, userProfile }) {
         </FF>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
           <FF label="Phone">
-            <input style={inp} value={vendorForm.phone} onChange={e => setVendorForm(f => ({ ...f, phone:e.target.value }))} placeholder="(555) 000-0000"/>
+            <input style={inp} value={vendorForm.phone} onChange={e => setVendorForm(f => ({ ...f, phone:formatPhone(e.target.value) }))} placeholder="(555) 000-0000"/>
           </FF>
           <FF label="Email">
             <input style={inp} type="email" value={vendorForm.email} onChange={e => setVendorForm(f => ({ ...f, email:e.target.value }))} placeholder="contact@vendor.com"/>

@@ -29,7 +29,8 @@ export function useSubscription(churchId) {
   function hasHub(name) {
     if (!subscription) return false;
     if (subscription.grandfathered) return true;
-    if (subscription.plan === 'all_in') return true;
+    // Flat "ChurchOpsHub" plan ($15/mo or $150/yr) unlocks every paid hub.
+    if (subscription.plan === 'pro' || subscription.plan === 'all_in') return true;
     // Active 90-day trial — freeHubsSelected is null while trial is running
     if (subscription.freeHubsSelected === null && subscription.trialEndsAt && new Date(subscription.trialEndsAt) > new Date()) {
       return (subscription.trialHubs || []).includes(name);
@@ -42,7 +43,7 @@ export function useSubscription(churchId) {
   function canAddUser(currentUserCount) {
     if (!subscription) return currentUserCount < FREE_PLAN_MAX_USERS;
     if (subscription.grandfathered) return true;
-    if (subscription.plan === 'team_unlimited' || subscription.plan === 'all_in') return true;
+    if (subscription.plan === 'pro' || subscription.plan === 'team_unlimited' || subscription.plan === 'all_in') return true;
     return currentUserCount < (subscription.maxUsers || FREE_PLAN_MAX_USERS);
   }
 
