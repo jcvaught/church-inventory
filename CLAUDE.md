@@ -53,11 +53,13 @@ npm run test:handlers # Cloud Functions HANDLER integration tests — boots fire
                   # price config, redirect allow-listing); Jobs Hub roster transactions
                   # (jobSignUp capacity/compliance/waiver + waitlist, jobWithdraw + inline
                   # promotion, promoteFromWaitlist oldest-first); twilioInbound HELP/INFO/STOP/
-                  # START + real signature gating (signed via the twilio lib's own helper).
-                  # 47 assertions, all green. NOT yet covered: the hourly scheduled sends
-                  # (sendJobReminders/weekly digests) — they gate on the live wall-clock hour
-                  # via localPartsFor(new Date()) with no time-injection seam, so deterministic
-                  # recipient-selection tests need a small `now`-injection refactor first.
+                  # START + real signature gating (signed via the twilio lib's own helper);
+                  # and the hourly scheduled sends (scheduledSends.test.mjs — sendJobReminders
+                  # recipient selection + the church-local 8am gate + the per-channel
+                  # idempotency stamp). The scheduled sends are testable because index.js now
+                  # routes localPartsFor + utcYmdOffset through an injectable clock
+                  # (exports._setClock/_resetClock; production behaviour is unchanged —
+                  # _clock() === new Date()). 51 assertions, all green.
 ```
 
 ### Local sandbox — Firebase Emulator Suite (2026-06-07)

@@ -115,6 +115,17 @@ function formatTimeRange(start, end) {
 // IANA names only (e.g. 'America/New_York').
 const DEFAULT_CHURCH_TZ = 'America/Chicago';
 
+// Injectable clock (test seam). In production this is `new Date()`, so every
+// caller below is byte-for-byte unchanged; the handler tests override it via
+// exports._setClock to drive the per-church local-hour gates deterministically
+// (the scheduled sends all funnel their "what time is it locally" decision
+// through localPartsFor + utcYmdOffset). Reset with exports._resetClock.
+let _clock = () => new Date();
+function nowDate() { return _clock(); }
+// Test-only clock hooks (mirrors the _computeNextReview-style test exports).
+exports._setClock = (fn) => { _clock = fn; };
+exports._resetClock = () => { _clock = () => new Date(); };
+
 // Local wall-clock parts for an IANA timezone, using the toLocaleString idiom
 // used throughout this file. Returns { hour: 0-23, weekday: 0=Sun..6=Sat, ymd }.
 // Falls back to Central if the timezone string is malformed (toLocaleString
@@ -122,9 +133,9 @@ const DEFAULT_CHURCH_TZ = 'America/Chicago';
 function localPartsFor(timeZone) {
   let d;
   try {
-    d = new Date(new Date().toLocaleString('en-US', { timeZone: timeZone || DEFAULT_CHURCH_TZ }));
+    d = new Date(nowDate().toLocaleString('en-US', { timeZone: timeZone || DEFAULT_CHURCH_TZ }));
   } catch {
-    d = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_CHURCH_TZ }));
+    d = new Date(nowDate().toLocaleString('en-US', { timeZone: DEFAULT_CHURCH_TZ }));
   }
   const pad = n => String(n).padStart(2, '0');
   return {
@@ -152,7 +163,7 @@ async function getChurchTimeZone(db, churchId, cache) {
 // date-range floor/ceiling wide enough to cover "today" in every US timezone
 // when the precise per-church date check happens later (US zones span <1 day).
 function utcYmdOffset(deltaDays) {
-  const d = new Date(Date.now() + deltaDays * 86400000);
+  const d = new Date(nowDate().getTime() + deltaDays * 86400000);
   const pad = n => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
