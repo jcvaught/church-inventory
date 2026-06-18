@@ -1,6 +1,7 @@
 import { useState, useMemo, useContext } from 'react';
 import { B, f1, f2 } from '../components/brand/tokens.js';
-import { ITEM_STATUS, RES_STATUS } from '../utils/constants.js';
+import { ITEM_STATUS } from '../utils/constants.js';
+import { computeAttention } from '../lib/attention.js';
 import { Badge } from '../components/primitives/Badge.jsx';
 import { Stat } from '../components/primitives/Stat.jsx';
 import { MobileCtx, useBreakpoint } from '../hooks/useMobile.js';
@@ -45,12 +46,23 @@ export function Dashboard({ store, userProfile, canSeeJobHub }) {
   const isManager = userProfile?.role === "manager";
   const checkedOut = useMemo(() => activeItems.filter(i => i.status === ITEM_STATUS.CHECKED_OUT), [activeItems]);
   const displayedCheckouts = useMemo(() => myCheckouts ? checkedOut.filter(i => i.assignedTo === myName) : checkedOut, [myCheckouts, checkedOut, myName]);
-  const overdue = useMemo(() => checkedOut.filter(i => i.expectedReturn && i.expectedReturn < today), [checkedOut, today]);
-  const lowStock = useMemo(() => supplies.filter(c => c.quantity <= c.minQuantity), [supplies]);
-  const pendingRes = useMemo(() => reservations.filter(r => r.status === RES_STATUS.PENDING), [reservations]);
+  // F4: the "needs attention" membership (overdue / low-stock / pending) now comes
+  // from the shared attention collectors (src/lib/attention.js) — the SAME predicates
+  // the AI digest + weekly email use — instead of inline copies. Cards still render
+  // from the domain objects in source order, so the display is unchanged.
+  const attentionIds = useMemo(() => {
+    const byKind = {};
+    for (const a of computeAttention(
+      { todayStr: today, hasHub: () => true, items, supplies, reservations },
+      { kinds: ['item_overdue', 'low_stock', 'reservation_pending'] }
+    )) (byKind[a.kind] ||= new Set()).add(a.subjectRef);
+    return byKind;
+  }, [today, items, supplies, reservations]);
+  const overdue = useMemo(() => checkedOut.filter(i => attentionIds.item_overdue?.has(i._docId)), [checkedOut, attentionIds]);
+  const lowStock = useMemo(() => supplies.filter(c => attentionIds.low_stock?.has(c._docId)), [supplies, attentionIds]);
+  const pendingRes = useMemo(() => reservations.filter(r => attentionIds.reservation_pending?.has(r._docId)), [reservations, attentionIds]);
 
   const activityFiltered = useMemo(() => {
-    // eslint-disable-next-line react-hooks/purity
     const cutoff = activityRange === "all" ? null : new Date(Date.now() - activityRange * 86400000).toISOString();
     return cutoff ? activityLog.filter(l => l.timestamp >= cutoff) : activityLog;
   }, [activityRange, activityLog]);
