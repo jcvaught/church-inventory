@@ -2,7 +2,11 @@ import { useState, useMemo } from 'react';
 import { B, f1, btnS } from '../brand/tokens.js';
 import { EmojiIcon } from '../primitives/EmojiIcon.jsx';
 import { localDateStr } from '../../utils/date.js';
+import { monthMatrix, windowGroups } from '../../utils/calendarGrid.js';
 import { priorityColors } from './boardUI.jsx';
+
+// A work-board item is overdue when it's past and not in a terminal state.
+const boardIsOverdue = (item, todayStr, date) => date < todayStr && item.status !== 'Complete' && item.status !== 'Cancelled';
 
 // Shared month-grid + mobile-grouped-list calendar for the work boards. The
 // Tasks and Maintenance hubs each carried a character-identical copy of this
@@ -20,7 +24,7 @@ const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function DefaultChip({ item, date, todayStr, onItemClick }) {
   const pc = priorityColors[item.priority] || priorityColors.Medium;
-  const isOverdue = date < todayStr && item.status !== 'Complete' && item.status !== 'Cancelled';
+  const isOverdue = boardIsOverdue(item, todayStr, date);
   return (
     <div onClick={e => { e.stopPropagation(); onItemClick(item); }}
       style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 5px', borderRadius: 5, background: isOverdue ? '#FEE8E8' : pc.bg, borderLeft: '3px solid ' + pc.dot, cursor: 'pointer', marginBottom: 2, overflow: 'hidden' }}
@@ -56,16 +60,7 @@ export function BoardCalendar({ items, onItemClick, isMobile, noun = 'item', dat
   function nextMonth() { if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); } else setViewMonth(m => m + 1); setExpandedDay(null); }
   function goToday() { setViewYear(now.getFullYear()); setViewMonth(now.getMonth()); setExpandedDay(null); }
 
-  const calendarDays = useMemo(() => {
-    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
-    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-    const daysInPrev = new Date(viewYear, viewMonth, 0).getDate();
-    const days = [];
-    for (let i = firstDay - 1; i >= 0; i--) days.push({ date: new Date(viewYear, viewMonth - 1, daysInPrev - i), isCurrentMonth: false });
-    for (let d = 1; d <= daysInMonth; d++) days.push({ date: new Date(viewYear, viewMonth, d), isCurrentMonth: true });
-    while (days.length % 7 !== 0) { const last = days[days.length - 1].date; days.push({ date: new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1), isCurrentMonth: false }); }
-    return days;
-  }, [viewYear, viewMonth]);
+  const calendarDays = useMemo(() => monthMatrix(viewYear, viewMonth), [viewYear, viewMonth]);
 
   const todayStr = localDateStr(now);
   const chipFor = (item) => renderChip
@@ -74,17 +69,7 @@ export function BoardCalendar({ items, onItemClick, isMobile, noun = 'item', dat
 
   // Mobile: grouped vertical list
   if (isMobile) {
-    const weekEnd = new Date(now); weekEnd.setDate(now.getDate() + 7);
-    const monthEnd = new Date(now); monthEnd.setDate(now.getDate() + 30);
-    const weekEndStr = localDateStr(weekEnd);
-    const monthEndStr = localDateStr(monthEnd);
-    const withDue = items.filter(t => dateOf(t)).sort((a, b) => dateOf(a).localeCompare(dateOf(b)));
-    const groups = [
-      { label: 'Overdue', items: withDue.filter(t => dateOf(t) < todayStr && t.status !== 'Complete' && t.status !== 'Cancelled') },
-      { label: 'This Week', items: withDue.filter(t => dateOf(t) >= todayStr && dateOf(t) <= weekEndStr) },
-      { label: 'Next 30 Days', items: withDue.filter(t => dateOf(t) > weekEndStr && dateOf(t) <= monthEndStr) },
-      { label: 'Later', items: withDue.filter(t => dateOf(t) > monthEndStr) },
-    ];
+    const groups = windowGroups(items, { dateOf, todayStr, now, isOverdue: t => boardIsOverdue(t, todayStr, dateOf(t)) });
     return (
       <div>
         {groups.map(g => g.items.length > 0 && (
@@ -128,7 +113,7 @@ export function BoardCalendar({ items, onItemClick, isMobile, noun = 'item', dat
           const ds = localDateStr(day.date);
           const dayItems = itemsByDate.get(ds) || [];
           const isToday = ds === todayStr;
-          const hasOverdue = dayItems.some(t => ds < todayStr && t.status !== 'Complete' && t.status !== 'Cancelled');
+          const hasOverdue = dayItems.some(t => boardIsOverdue(t, todayStr, ds));
           const isExpanded = expandedDay === ds;
           const CHIP_LIMIT = 3;
           const visible = dayItems.slice(0, CHIP_LIMIT);

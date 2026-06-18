@@ -10,6 +10,7 @@ import { useConfirm } from '../../components/primitives/ConfirmDialog.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { isVolunteerOnly } from '../../utils/roleHelpers.js';
 import { localDateStr, generateRecurrenceDates } from '../../utils/date.js';
+import { monthMatrix, windowGroups } from '../../utils/calendarGrid.js';
 import { printJobRoster } from '../../utils/print.js';
 import { exportJobsICS } from '../../utils/ical.js';
 import { formatTimeRange } from '../../utils/time.js';
@@ -104,34 +105,15 @@ function JobCalendar({ jobs, onJobClick, isMobile, todayStr: todayStrProp }) {
     setViewYear(now.getFullYear()); setViewMonth(now.getMonth()); setExpandedDay(null);
   }
 
-  const calendarDays = useMemo(() => {
-    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
-    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-    const daysInPrev = new Date(viewYear, viewMonth, 0).getDate();
-    const days = [];
-    for (let i = firstDay - 1; i >= 0; i--) days.push({ date: new Date(viewYear, viewMonth - 1, daysInPrev - i), isCurrentMonth: false });
-    for (let d = 1; d <= daysInMonth; d++) days.push({ date: new Date(viewYear, viewMonth, d), isCurrentMonth: true });
-    while (days.length % 7 !== 0) { const last = days[days.length - 1].date; days.push({ date: new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1), isCurrentMonth: false }); }
-    return days;
-  }, [viewYear, viewMonth]);
+  const calendarDays = useMemo(() => monthMatrix(viewYear, viewMonth), [viewYear, viewMonth]);
 
-  // Mobile: grouped list — derive fresh 'now' so groups are correct after midnight
+  // Mobile: grouped list — derive fresh 'now' so groups are correct after midnight.
+  // A shift is overdue only while still open (a completed/cancelled past shift isn't).
   if (isMobile) {
-    const now = new Date();
-    const weekEnd = new Date(now); weekEnd.setDate(now.getDate() + 7);
-    const monthEnd = new Date(now); monthEnd.setDate(now.getDate() + 30);
-    const weekEndStr = localDateStr(weekEnd);
-    const monthEndStr = localDateStr(monthEnd);
-    const withDate = [...jobs].filter(j => j.scheduledDate).sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
-    const groups = [
-      { label:'Overdue', jobs: withDate.filter(j => j.scheduledDate < todayStr && j.status === 'open') },
-      { label:'This Week', jobs: withDate.filter(j => j.scheduledDate >= todayStr && j.scheduledDate <= weekEndStr) },
-      { label:'Next 30 Days', jobs: withDate.filter(j => j.scheduledDate > weekEndStr && j.scheduledDate <= monthEndStr) },
-      { label:'Later', jobs: withDate.filter(j => j.scheduledDate > monthEndStr) },
-    ];
+    const groups = windowGroups(jobs, { dateOf: j => j.scheduledDate, todayStr, now: new Date(), isOverdue: j => j.status === 'open' });
     return (
       <div>
-        {groups.map(g => g.jobs.length > 0 && (
+        {groups.map(g => g.items.length > 0 && (
           <div key={g.label} style={{ marginBottom:20 }}>
             <button
               type="button"
@@ -139,9 +121,9 @@ function JobCalendar({ jobs, onJobClick, isMobile, todayStr: todayStrProp }) {
               aria-expanded={!collapsedGroups[g.label]}
               style={{ background:'none', border:'none', cursor:'pointer', padding:0, marginBottom:8, display:'flex', alignItems:'center', gap:6, fontFamily:f1, fontWeight:700, fontSize:13, color:g.label==='Overdue' ? B.red : B.textMid, textTransform:'uppercase', letterSpacing:.8 }}>
               <span aria-hidden="true" style={{ fontSize:10, transition:'transform .15s', transform: collapsedGroups[g.label] ? 'rotate(-90deg)' : 'none' }}>▾</span>
-              {g.label} <span style={{ fontWeight:500, color:B.textLight, letterSpacing:0 }}>({g.jobs.length})</span>
+              {g.label} <span style={{ fontWeight:500, color:B.textLight, letterSpacing:0 }}>({g.items.length})</span>
             </button>
-            {!collapsedGroups[g.label] && g.jobs.map(j => {
+            {!collapsedGroups[g.label] && g.items.map(j => {
               const sc = JOB_STATUS_COLORS[j.status] || JOB_STATUS_COLORS.open;
               return (
                 <div key={j._docId}
