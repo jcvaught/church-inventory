@@ -8,7 +8,7 @@ import { Stat } from '../components/primitives/Stat.jsx';
 import { useConfirm } from '../components/primitives/ConfirmDialog.jsx';
 import { exportReservationsCSV } from '../utils/csv.js';
 import { ITEM_STATUS, RES_STATUS, RESOURCE_TYPE } from '../utils/constants.js';
-import { localDateStr, generateRecurrenceDates } from '../utils/date.js';
+import { localDateStr, generateRecurrenceDates, RECURRENCE_FREQS } from '../utils/date.js';
 import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
 
 export function ReservationsPage({ store, userProfile }) {
@@ -390,9 +390,7 @@ export function ReservationsPage({ store, userProfile }) {
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:12, fontWeight:600, color:B.textMid, marginBottom:6, fontFamily:f1 }}>Frequency</div>
                 <select style={{...inp, cursor:"pointer"}} value={recurrenceFreq} onChange={e=>setRecurrenceFreq(e.target.value)}>
-                  <option value="weekly">Weekly</option>
-                  <option value="biweekly">Every 2 weeks</option>
-                  <option value="monthly">Monthly</option>
+                  {RECURRENCE_FREQS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
                 </select>
               </div>
               <div style={{ flex:1 }}>

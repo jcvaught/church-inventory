@@ -4,6 +4,12 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-06-18',
+    tag: 'Improved',
+    title: 'More options for recurring reservations',
+    body: "When you set up a repeating reservation, you can now choose Quarterly or Annually in addition to Weekly, Every 2 weeks, and Monthly — matching the recurrence choices in Tasks, Maintenance, and Jobs.",
+  },
+  {
     date: '2026-06-16',
     tag: 'Fixed',
     title: 'Smoother sign-in from invite links',

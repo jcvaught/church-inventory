@@ -9,7 +9,7 @@ import { FF } from '../../components/primitives/FF.jsx';
 import { useConfirm } from '../../components/primitives/ConfirmDialog.jsx';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { isVolunteerOnly } from '../../utils/roleHelpers.js';
-import { localDateStr, generateRecurrenceDates } from '../../utils/date.js';
+import { localDateStr, generateRecurrenceDates, RECURRENCE_FREQS } from '../../utils/date.js';
 import { monthMatrix, windowGroups } from '../../utils/calendarGrid.js';
 import { printJobRoster } from '../../utils/print.js';
 import { exportJobsICS } from '../../utils/ical.js';
@@ -33,14 +33,6 @@ const JOB_STATUS_COLORS = {
 const emptyJob = () => ({ title: '', description: '', scheduledDate: '', scheduledTime: '', scheduledEndTime: '', location: '', spotsTotal: 1, pay: '', status: 'open', jobLead: null, requiresWaiver: false, waiverText: '', requiredAccessTypes: [] });
 
 const ACCESS_TYPE_LABELS = { background_check: 'Background Check', key_assignment: 'Key Assignment', certification: 'Certification', custom: 'Custom' };
-
-const RECURRENCE_OPTIONS = [
-  { v:'weekly', label:'Weekly' },
-  { v:'biweekly', label:'Every 2 Weeks' },
-  { v:'monthly', label:'Monthly' },
-  { v:'quarterly', label:'Quarterly' },
-  { v:'annually', label:'Annually' },
-];
 
 const emptyAnn = () => ({ title: '', body: '', expiresAt: '', pinned: false, repeatWeekly: false });
 
@@ -1808,7 +1800,7 @@ export function JobsPage({ store, userProfile, initialView }) {
                     <div style={{ flex: '1 1 140px' }}>
                       <FF label="Repeats">
                         <select style={{ ...inp, cursor: 'pointer' }} value={recurrenceFreq} onChange={e => setRecurrenceFreq(e.target.value)}>
-                          {RECURRENCE_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                          {RECURRENCE_FREQS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
                         </select>
                       </FF>
                     </div>

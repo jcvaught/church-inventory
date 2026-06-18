@@ -28,6 +28,19 @@ export function calculateNextDue(dueDate, recurrence) {
   return localDateStr(base);
 }
 
+// The canonical recurrence cadences — the ONE list of [value, label] pairs the
+// UI offers, and exactly the frequencies advanceOnce() above implements. Lives
+// here (next to the math) so the dropdown and the engine can't drift. Consumed
+// by the Tasks/Maintenance boards (via boardUI's RECURRENCE_OPTIONS, which
+// prepends a "None"), the Jobs composer, and the Reservations composer.
+export const RECURRENCE_FREQS = [
+  ['weekly', 'Weekly'],
+  ['biweekly', 'Every 2 weeks'],
+  ['monthly', 'Monthly'],
+  ['quarterly', 'Quarterly'],
+  ['annually', 'Annually'],
+];
+
 // Every occurrence from startDate through endDate inclusive (YYYY-MM-DD), capped.
 export function generateRecurrenceDates(startDate, freq, endDate, cap = 100) {
   if (!startDate || !freq || !endDate || endDate < startDate) return [];

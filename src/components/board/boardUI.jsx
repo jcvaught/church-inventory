@@ -5,10 +5,12 @@
 // change — extracting here is what lets a later phase converge the two boards.
 
 import { B, f1 } from '../brand/tokens.js';
+import { RECURRENCE_FREQS } from '../../utils/date.js';
 
 export const STATUSES = ['Backlog', 'Planning', 'In Progress', 'On Hold', 'Complete', 'Cancelled'];
 export const PRIORITIES = ['High', 'Medium', 'Low'];
-export const RECURRENCE_OPTIONS = [['', 'None'], ['weekly', 'Weekly'], ['biweekly', 'Every 2 weeks'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['annually', 'Annually']];
+// The work boards add a "None" choice in front of the canonical cadences.
+export const RECURRENCE_OPTIONS = [['', 'None'], ...RECURRENCE_FREQS];
 export const RECURRENCE_LABELS = { weekly: 'Weekly', biweekly: 'Every 2 wks', monthly: 'Monthly', quarterly: 'Quarterly', annually: 'Annually' };
 
 // Deterministic avatar color from a uid.
