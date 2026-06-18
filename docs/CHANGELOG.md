@@ -4,6 +4,17 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-18 — Foundation F4 (Attention engine): canonical contract + dashboard + digest
+
+Replaced the three ad-hoc "what needs attention" computations (Dashboard cards, the AI weekly digest, the emailed digest) with one canonical `AttentionItem` contract + pure per-domain collectors + a single shared thresholds config — the F4 no-drift goal (`docs/PLATFORM-FOUNDATIONS-2026-06-06.md` §Foundation 4). Plan + status: `docs/FOUNDATION-F4-PLAN-2026-06-18.md`.
+
+- **`src/lib/attention.js`** (new, pure ESM) — `AttentionItem = {id, kind, severity, title, link, dueDate?, count?, subjectRef?}` + 8 collectors (`item_overdue`, `work_overdue`, `cert_expiring`, `low_stock`, `warranty_expiring`, `shift_unfilled`, `reservation_pending`, `contractor_outstanding`) + `computeAttention` (hub-gated, severity-sorted) + `summarizeAttention`. **`src/lib/attention-thresholds.json`** (new) holds the F4-specific numeric windows as the ONE shared copy; the cert windows are NOT forked — they come from F2's `EXPIRY_CRITICAL_DAYS`/`EXPIRY_WARNING_DAYS` (F4 is F2's 2nd real consumer). JSON-import-with-attributes verified in both Vite and Node 22.
+- **`functions/lib/attention.js`** (new, CJS SERVER TWIN) — the deploy package can't reach `src/`, so it inlines the same collectors + thresholds, pinned to the client by a parity suite (same pattern as the F2 people-resolver twin). Exports `buildDigestSignals`, which derives the AI digest's grouped `{tasks, maintenance, compliance, inventory, shifts, contractor}` shape from the canonical collectors.
+- **`src/pages/Dashboard.jsx`** — the overdue-items / low-stock / pending-reservations cards now derive membership from `computeAttention()` instead of inline predicates. Cards still render from the domain objects in source order, so the display is unchanged (4000-case differential sweep: 0 hard mismatches; only the documented null-min low-stock normalization differs — a supply with no min threshold is no longer counted as "low").
+- **`functions/index.js` `gatherAttentionSignals`** — now a thin fetch + `buildDigestSignals` call; its inline overdue/expiring/low predicates + hardcoded `in7`/`in30`/`floor90` windows are gone. Pinned byte-identical to the legacy logic by a 2000-fixture differential test, so the Claude prompt input (and the digest output) does not change. Deployed `getAttentionDigest` + `sendWeeklyAttentionDigest`; invoker IAM re-probed on the callable (401 JSON = intact).
+- **Tests:** `functions/test/attention.test.mjs` — 18 cases (client collectors + client≡server parity over 1500 fixtures + thresholds/cert-window pins + the digest differential). `test:unit` 31/31. No user-visible change (that's the point — no `whatsNew.js` entry).
+- **Out of scope (deferred):** notification-center `notify()` wiring (lands with the F3 notification-center UI); new signal kinds (outstanding keys, etc.) added when a surface needs them.
+
 ## 2026-06-17 — Foundation F2 (People model): resolver minimal slice
 
 Built the F2 `PersonRef` + resolver layer (`docs/PLATFORM-FOUNDATIONS-2026-06-06.md` §Foundation 2). The two backing stores stay as they are (`users` for auth, `accessPeople` for tracked people) — this adds the shared reference shape + a pure resolver so features stop hand-rolling "is this a user or a tracked person?" logic.
