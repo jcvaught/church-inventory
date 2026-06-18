@@ -19,7 +19,7 @@ Plan: `docs/WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md`. Decision (#7): **T
 - (F3 notification/delivery layer: Tier A shipped.) Full spec: `docs/PLATFORM-FOUNDATIONS-2026-06-06.md`.
 
 ## Premium features (sequenced behind foundations)
-- **Event-day ops view** — ✅ **SHIPPED 2026-06-18** (`docs/EVENT-DAY-OPS-PLAN-2026-06-18.md`). Admin/manager top-level "Event Day" tab: a `getOccurrences` consumer that cross-sources one day into Serving-today (shifts + roster + per-volunteer `shiftReadiness` compliance badge), Rooms & reservations, and Due-today — each self-gating by hub. New `src/pages/EventDayPage.jsx` + `shiftReadiness()` in `src/lib/people.js`. **Deferred fast-follows:** F4 attention strip (unfilled-today / expired-comp-serving-today); print/run-sheet export; in-console editing (v1 is read/triage).
+- **Event-day ops view** — ✅ **SHIPPED 2026-06-18** (`docs/EVENT-DAY-OPS-PLAN-2026-06-18.md`). Admin/manager top-level "Event Day" tab: a `getOccurrences` consumer that cross-sources one day into Serving-today (shifts + roster + per-volunteer `shiftReadiness` compliance badge), Rooms & reservations, and Due-today — each self-gating by hub. New `src/pages/EventDayPage.jsx` + `shiftReadiness()` in `src/lib/people.js`. Day-scoped **attention strip** shipped same day (shifts-needing-volunteers / not-cleared / expiring-soon chips). **Deferred fast-follows:** print/run-sheet export; in-console editing (v1 is read/triage).
 - **Google Calendar two-way sync** — ICS feed exists; 2-way deferred (needs F5).
 - **AI "what needs attention this week" digest** — Claude (Haiku) over attention signals (needs F2/F3/F4).
 - **Compliance serving-readiness dashboard + expiry digests** (needs F4).

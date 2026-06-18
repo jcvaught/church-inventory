@@ -43,4 +43,8 @@ This is a **consumer** of the foundations, not new infrastructure: `getOccurrenc
 - [x] **Phase 2** — roster + compliance readiness (2026-06-18). Per-shift `getDocs` on `signups` (rule-allowed church-scoped path) → roster names + `Requires:` line. Per-volunteer badge (✅/⚠️/⛔) via the new `shiftReadiness()` in `src/lib/people.js` (built on the tested `isEligibleFor`/`expiryStatus`; 5 unit tests). test:unit 54/54. Browser-verified roster render; badge states unit-verified (the e2e tenant's all-`@churchopshub.com` accounts are excluded from `store.users` by `excludeTestAccounts`, so `getPerson` can't resolve them there → "Not cleared" is the correct conservative fallback — a test-tenant artifact, not a prod path).
 - [x] **Phase 3** — docs + final verify (2026-06-18). CHANGELOG, backlog → shipped, `whatsNew.js` (new console), CLAUDE.md (layout + tab key + `shiftReadiness`). Final build/lint/test green.
 
-**EVENT-DAY OPS v1 COMPLETE.** Deferred fast-follows (own backlog notes): F4 attention strip; print/run-sheet export; in-console editing.
+**EVENT-DAY OPS v1 COMPLETE.**
+
+- [x] **Fast-follow — attention strip** (2026-06-18). Day-scoped banner atop the console: chips for shifts-needing-volunteers / signed-up-but-not-cleared / cleared-but-expiring, derived from the same shifts+rosters+readiness the sections render (reuses F2 `shiftReadiness` + the unfilled predicate — NOT F4's church/week-scoped collectors, which answer a different question). Renders only when something needs attention. Browser-verified (unfilled chip fires); build + test:unit 54/54 clean.
+
+Remaining deferred fast-follows (own backlog notes): print/run-sheet export; in-console editing.

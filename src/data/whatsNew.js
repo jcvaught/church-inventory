@@ -7,7 +7,7 @@ export const WHATS_NEW = [
     date: '2026-06-18',
     tag: 'New',
     title: 'Event Day — your Sunday at a glance',
-    body: "Admins and managers have a new Event Day tab: pick a day (one tap for the upcoming Sunday) and see everything happening that day in one place — every shift with who's signed up and whether they're cleared to serve, the rooms reserved, and what's due. No more hopping between Jobs, Reservations, and your task board.",
+    body: "Admins and managers have a new Event Day tab: pick a day (one tap for the upcoming Sunday) and see everything happening that day in one place — every shift with who's signed up and whether they're cleared to serve, the rooms reserved, and what's due. A heads-up banner up top flags anything that needs attention — shifts still short on volunteers, or anyone signed up who isn't cleared. No more hopping between Jobs, Reservations, and your task board.",
   },
   {
     date: '2026-06-18',

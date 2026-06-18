@@ -94,6 +94,34 @@ export function EventDayPage({ store, userProfile, hasHub }) {
     return () => { cancelled = true; };
   }, [shiftOccs, jobById, churchId, showJobs]);
 
+  // Day-scoped attention strip. Derived from the SAME shifts + rosters +
+  // readiness the sections render below, so the banner can't disagree with the
+  // rows. (F4's collectors are church/this-week scoped — a different question —
+  // so the per-day flags reuse F2's shiftReadiness + the unfilled predicate.)
+  const flags = useMemo(() => {
+    const out = { unfilled: 0, notCleared: 0, expiring: 0 };
+    if (!showJobs) return out;
+    for (const o of shiftOccs) {
+      const job = jobById.get(o.sourceId) || {};
+      if ((job.signupCount || 0) < (job.spotsTotal || 1)) out.unfilled++;
+      const reqTypes = job.requiredAccessTypes || [];
+      if (!showCompliance || reqTypes.length === 0) continue;
+      for (const m of rostersByJob.get(o.sourceId) || []) {
+        const r = shiftReadiness(getPerson(makeRef('user', m.uid), peopleCtx), reqTypes, store.accessRecords, peopleCtx.today);
+        if (r?.level === 'blocked') out.notCleared++;
+        else if (r?.level === 'soon') out.expiring++;
+      }
+    }
+    return out;
+  }, [shiftOccs, jobById, rostersByJob, peopleCtx, store.accessRecords, showJobs, showCompliance]);
+
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const flagChips = [
+    flags.unfilled && { bg: '#FEF3E8', tx: '#9A5E10', text: flags.unfilled === 1 ? '1 shift needs volunteers' : `${flags.unfilled} shifts need volunteers` },
+    flags.notCleared && { bg: '#FEE8E8', tx: '#B42318', text: `${plural(flags.notCleared, 'volunteer', 'volunteers')} signed up but not cleared` },
+    flags.expiring && { bg: '#FEF3E8', tx: '#9A5E10', text: `${plural(flags.expiring, 'volunteer', 'volunteers')} cleared but expiring soon` },
+  ].filter(Boolean);
+
   const navBtn = { ...btnS, padding: '6px 12px', fontSize: 13 };
 
   return (
@@ -116,6 +144,16 @@ export function EventDayPage({ store, userProfile, hasHub }) {
           </div>
         </div>
       </div>
+
+      {flagChips.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+          {flagChips.map((c, i) => (
+            <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, fontFamily: f1, padding: '6px 12px', borderRadius: 999, background: c.bg, color: c.tx }}>
+              <EmojiIcon emoji="⚠️" label="" decorative /> {c.text}
+            </span>
+          ))}
+        </div>
+      )}
 
       {nothingAtAll && (
         <div style={{ textAlign: 'center', color: B.textLight, fontSize: 15, fontFamily: f2, padding: '48px 16px', background: B.white, border: '1px solid ' + B.sand, borderRadius: 12 }}>
