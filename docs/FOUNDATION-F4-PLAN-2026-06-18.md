@@ -83,7 +83,7 @@ Severity mapping preserves today's distinctions: overdue/expired → `critical`;
 
 ## Status
 
-- [ ] Phase A — client collectors + thresholds JSON + unit tests
+- [x] **Phase A** — client collectors + thresholds JSON + unit tests (2026-06-18). `src/lib/attention.js` (8 collectors + `computeAttention` + `summarizeAttention`), `src/lib/attention-thresholds.json` (shared numbers; cert windows reuse F2's `EXPIRY_*`), `functions/test/attention.test.mjs` (13 tests). JSON-import-with-attributes verified in both Node 22 (`test:unit` 27/27) and Vite (`build` clean). Added `item_overdue` kind (the Dashboard's overdue-checkout card, which the spec's kind list had missed). Canonical `low_stock` predicate requires `minQuantity != null` (normalizes a Dashboard micro-edge).
 - [ ] Phase B — Dashboard refactor (visual parity)
 - [ ] Phase C — server collectors + parity test + deploy
 - [ ] Phase D — docs
