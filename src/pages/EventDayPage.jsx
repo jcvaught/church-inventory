@@ -1,10 +1,22 @@
-import { useState, useMemo, useContext } from 'react';
+import { useState, useMemo, useContext, useEffect } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../firebase.js';
 import { B, f1, f2, btnS } from '../components/brand/tokens.js';
 import { localDateStr } from '../utils/date.js';
 import { formatTimeRange } from '../utils/time.js';
 import { getOccurrences } from '../lib/occurrences.js';
+import { getPerson, makeRef, shiftReadiness } from '../lib/people.js';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
+
+const ACCESS_TYPE_LABELS = { background_check: 'Background Check', key_assignment: 'Key Assignment', certification: 'Certification', custom: 'Custom' };
+
+// UI for each shiftReadiness level (the logic lives in src/lib/people.js).
+const READINESS = {
+  ok: { emoji: '✅', bg: '#DCFCE7', tx: '#166534', label: 'Cleared' },
+  soon: { emoji: '⚠️', bg: '#FEF3E8', tx: '#9A5E10', label: 'Expiring soon' },
+  blocked: { emoji: '⛔', bg: '#FEE8E8', tx: '#B42318', label: 'Not cleared' },
+};
 
 // Event-Day Ops view — a single-screen admin/manager console for one day,
 // cross-sourcing everything happening that day from the F5 getOccurrences
@@ -55,7 +67,32 @@ export function EventDayPage({ store, userProfile, hasHub }) {
 
   const showJobs = hasHub('jobs');
   const showDue = hasHub('tasks') || hasHub('maintenance');
+  const showCompliance = hasHub('people_access');
   const nothingAtAll = (!showJobs || shiftOccs.length === 0) && reservationOccs.length === 0 && (!showDue || dueOccs.length === 0);
+
+  // People resolver ctx for readiness (today = the viewed day, not the wall clock).
+  const peopleCtx = useMemo(() => ({
+    users: store.users, accessPeople: store.accessPeople, accessRecords: store.accessRecords, today: parseLocal(day),
+  }), [store.users, store.accessPeople, store.accessRecords, day]);
+
+  // Roster reads: one bounded getDocs per shift-with-signups on the viewed day.
+  // The tab is admin/manager-only, so canSeeJobRoster is always satisfied via the
+  // church-scoped path (a church-wide collectionGroup query is NOT rule-allowed).
+  const churchId = userProfile?.churchId;
+  const [rostersByJob, setRostersByJob] = useState(new Map());
+  useEffect(() => {
+    if (!churchId || !showJobs) { setRostersByJob(prev => (prev.size ? new Map() : prev)); return undefined; }
+    const fetchable = shiftOccs.map(o => jobById.get(o.sourceId)).filter(j => j && (j.signupCount || 0) > 0);
+    if (fetchable.length === 0) { setRostersByJob(prev => (prev.size ? new Map() : prev)); return undefined; }
+    let cancelled = false;
+    Promise.all(fetchable.map(async (j) => {
+      try {
+        const snap = await getDocs(collection(db, 'churches', churchId, 'jobListings', j._docId, 'signups'));
+        return [j._docId, snap.docs.map(d => ({ uid: d.id, name: d.data().name }))];
+      } catch { return [j._docId, null]; } // rule denial / network — skip
+    })).then(entries => { if (!cancelled) setRostersByJob(new Map(entries.filter(([, v]) => v !== null))); });
+    return () => { cancelled = true; };
+  }, [shiftOccs, jobById, churchId, showJobs]);
 
   const navBtn = { ...btnS, padding: '6px 12px', fontSize: 13 };
 
@@ -95,17 +132,50 @@ export function EventDayPage({ store, userProfile, hasHub }) {
             const filled = job.signupCount || 0;
             const total = job.spotsTotal || 1;
             const full = filled >= total;
+            const reqTypes = job.requiredAccessTypes || [];
+            const roster = rostersByJob.get(o.sourceId) || [];
             return (
-              <div key={o.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0', borderTop: '1px solid ' + B.sand }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: f1, fontWeight: 600, fontSize: 15, color: B.navy }}>{o.title}</div>
-                  <div style={{ fontSize: 13, color: B.textMid, marginTop: 2 }}>
-                    {o.startTime ? formatTimeRange(o.startTime, o.endTime) : 'All day'}{o.location ? ' · ' + o.location : ''}
+              <div key={o.id} style={{ padding: '12px 0', borderTop: '1px solid ' + B.sand }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: f1, fontWeight: 600, fontSize: 15, color: B.navy }}>{o.title}</div>
+                    <div style={{ fontSize: 13, color: B.textMid, marginTop: 2 }}>
+                      {o.startTime ? formatTimeRange(o.startTime, o.endTime) : 'All day'}{o.location ? ' · ' + o.location : ''}
+                    </div>
+                    {reqTypes.length > 0 && (
+                      <div style={{ fontSize: 12, color: B.textLight, marginTop: 3 }}>
+                        Requires: {reqTypes.map(t => ACCESS_TYPE_LABELS[t] || t).join(', ')}
+                      </div>
+                    )}
                   </div>
+                  {full
+                    ? statusPill(`${filled}/${total} full`, '#DCFCE7', '#166534')
+                    : statusPill(`${filled}/${total} · needs ${total - filled}`, '#FEF3E8', '#9A5E10')}
                 </div>
-                {full
-                  ? statusPill(`${filled}/${total} full`, '#DCFCE7', '#166534')
-                  : statusPill(`${filled}/${total} · needs ${total - filled}`, '#FEF3E8', '#9A5E10')}
+                {/* Roster */}
+                <div style={{ marginTop: 8, paddingLeft: 2 }}>
+                  {filled === 0 ? (
+                    <div style={{ fontSize: 13, color: B.textLight, fontStyle: 'italic' }}>No signups yet.</div>
+                  ) : roster.length === 0 ? (
+                    <div style={{ fontSize: 13, color: B.textLight }}>Loading roster…</div>
+                  ) : roster.map(m => {
+                    const readiness = showCompliance
+                      ? shiftReadiness(getPerson(makeRef('user', m.uid), peopleCtx), reqTypes, store.accessRecords, peopleCtx.today)
+                      : null;
+                    const rs = readiness && READINESS[readiness.level];
+                    return (
+                      <div key={m.uid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: B.textLight, flexShrink: 0 }} />
+                        <span style={{ fontSize: 14, color: B.textDark, fontFamily: f2, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name || 'Volunteer'}</span>
+                        {rs && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, fontFamily: f1, padding: '2px 8px', borderRadius: 999, background: rs.bg, color: rs.tx, whiteSpace: 'nowrap' }}>
+                            <EmojiIcon emoji={rs.emoji} label="" decorative /> {rs.label}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}

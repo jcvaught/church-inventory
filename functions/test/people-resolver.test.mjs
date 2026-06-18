@@ -16,6 +16,7 @@ import {
   getPerson,
   listPeople,
   isEligibleFor,
+  shiftReadiness,
   EXPIRY_CRITICAL_DAYS,
   EXPIRY_WARNING_DAYS,
 } from '../../src/lib/people.js';
@@ -23,6 +24,47 @@ import {
 // A fixed "today" so date math is deterministic regardless of when the suite runs.
 const TODAY = new Date(2026, 5, 17); // 2026-06-17 (month is 0-indexed)
 const ymd = (y, m, d) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+// ── shiftReadiness (Event-Day ops; built on isEligibleFor + expiryStatus) ────
+test('shiftReadiness — null when the shift has no requirements (no gate)', () => {
+  assert.equal(shiftReadiness({ linkedTrackedId: 'p1' }, [], [], TODAY), null);
+  assert.equal(shiftReadiness(null, undefined, [], TODAY), null);
+});
+
+test('shiftReadiness — blocked when unresolved/unlinked, missing, or expired', () => {
+  const reqs = ['background_check'];
+  assert.equal(shiftReadiness(null, reqs, [], TODAY).level, 'blocked');                     // unresolved person
+  assert.equal(shiftReadiness({ linkedTrackedId: null }, reqs, [], TODAY).level, 'blocked'); // no tracked record
+  const person = { linkedTrackedId: 'p1' };
+  assert.equal(shiftReadiness(person, reqs, [], TODAY).level, 'blocked');                    // no record of the type
+  const expired = [{ personId: 'p1', type: 'background_check', expiryDate: ymd(2025, 1, 1) }];
+  assert.equal(shiftReadiness(person, reqs, expired, TODAY).level, 'blocked');               // expired record
+});
+
+test('shiftReadiness — ok when eligible and nothing expiring', () => {
+  const person = { linkedTrackedId: 'p1' };
+  const recs = [{ personId: 'p1', type: 'background_check', expiryDate: ymd(2030, 1, 1) }];
+  assert.equal(shiftReadiness(person, ['background_check'], recs, TODAY).level, 'ok');
+  // a record with no expiry date never lapses → ok
+  assert.equal(shiftReadiness(person, ['background_check'], [{ personId: 'p1', type: 'background_check' }], TODAY).level, 'ok');
+});
+
+test('shiftReadiness — soon when a required record is inside the expiry window', () => {
+  const person = { linkedTrackedId: 'p1' };
+  const warn = [{ personId: 'p1', type: 'background_check', expiryDate: ymd(2026, 7, 1) }]; // ~14d out (within 30)
+  assert.equal(shiftReadiness(person, ['background_check'], warn, TODAY).level, 'soon');
+  // but a second, longer-dated record of the same type clears it back to ok
+  const alsoFresh = [...warn, { personId: 'p1', type: 'background_check', expiryDate: ymd(2030, 1, 1) }];
+  assert.equal(shiftReadiness(person, ['background_check'], alsoFresh, TODAY).level, 'ok');
+});
+
+test('shiftReadiness — multi-requirement: blocked if ANY type missing, soon if any valid-but-expiring', () => {
+  const person = { linkedTrackedId: 'p1' };
+  const recs = [{ personId: 'p1', type: 'background_check', expiryDate: ymd(2030, 1, 1) }];
+  assert.equal(shiftReadiness(person, ['background_check', 'certification'], recs, TODAY).level, 'blocked'); // cert missing
+  const both = [...recs, { personId: 'p1', type: 'certification', expiryDate: ymd(2026, 7, 1) }];
+  assert.equal(shiftReadiness(person, ['background_check', 'certification'], both, TODAY).level, 'soon'); // cert expiring
+});
 
 // ── PersonRef ────────────────────────────────────────────────────────────────
 test('refKey is stable and kind-scoped', () => {

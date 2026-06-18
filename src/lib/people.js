@@ -236,3 +236,24 @@ export function isEligibleFor(person, requiredTypes, accessRecords = [], today =
     myRecords.some(r => r.type === reqType && expiryStatus(r.expiryDate, today) !== 'expired')
   );
 }
+
+/**
+ * Per-shift compliance readiness for a resolved Person against a shift's
+ * `requiredAccessTypes`. Returns null when the shift has no requirements (no
+ * gate); otherwise `{ level: 'ok' | 'soon' | 'blocked' }`:
+ *   blocked — not eligible (missing, unlinked, or expired a required type)
+ *   soon    — eligible, but a required record is inside its expiry window
+ *   ok      — eligible and nothing expiring
+ * Built on isEligibleFor + expiryStatus so the "is this volunteer cleared to
+ * serve this shift?" question has one answer everywhere (Event-Day ops, etc.).
+ */
+export function shiftReadiness(person, requiredTypes, accessRecords = [], today = new Date()) {
+  if (!requiredTypes || requiredTypes.length === 0) return null;
+  if (!isEligibleFor(person, requiredTypes, accessRecords, today)) return { level: 'blocked' };
+  const myRecords = accessRecords.filter(r => r.personId === person.linkedTrackedId);
+  const soon = requiredTypes.some(t => {
+    const valid = myRecords.filter(r => r.type === t && expiryStatus(r.expiryDate, today) !== 'expired');
+    return valid.length > 0 && valid.every(r => ['warning', 'critical'].includes(expiryStatus(r.expiryDate, today)));
+  });
+  return { level: soon ? 'soon' : 'ok' };
+}
