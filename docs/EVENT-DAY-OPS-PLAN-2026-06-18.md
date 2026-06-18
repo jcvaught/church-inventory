@@ -39,6 +39,8 @@ This is a **consumer** of the foundations, not new infrastructure: `getOccurrenc
 
 ## Status
 
-- [ ] **Phase 1** — scaffold + tab + day nav + cross-source sections (summary).
-- [ ] **Phase 2** — roster + compliance readiness.
-- [ ] **Phase 3** — docs + final verify.
+- [x] **Phase 1** — scaffold + tab + day nav + cross-source sections (2026-06-18). `src/pages/EventDayPage.jsx` + the admin/manager "Event Day" tab (desktop + mobile, gated render branch). Day navigator (prev/next/Today/Sunday/date). Three sections from one `getOccurrences(range:{day,day})` call, each self-gated by `hasHub`. Browser-verified (tab gating, navigator, a posted shift surfaces, 0 console errors). Fixed a shorthand/non-shorthand `border` style-conflict warning found in verify.
+- [x] **Phase 2** — roster + compliance readiness (2026-06-18). Per-shift `getDocs` on `signups` (rule-allowed church-scoped path) → roster names + `Requires:` line. Per-volunteer badge (✅/⚠️/⛔) via the new `shiftReadiness()` in `src/lib/people.js` (built on the tested `isEligibleFor`/`expiryStatus`; 5 unit tests). test:unit 54/54. Browser-verified roster render; badge states unit-verified (the e2e tenant's all-`@churchopshub.com` accounts are excluded from `store.users` by `excludeTestAccounts`, so `getPerson` can't resolve them there → "Not cleared" is the correct conservative fallback — a test-tenant artifact, not a prod path).
+- [x] **Phase 3** — docs + final verify (2026-06-18). CHANGELOG, backlog → shipped, `whatsNew.js` (new console), CLAUDE.md (layout + tab key + `shiftReadiness`). Final build/lint/test green.
+
+**EVENT-DAY OPS v1 COMPLETE.** Deferred fast-follows (own backlog notes): F4 attention strip; print/run-sheet export; in-console editing.

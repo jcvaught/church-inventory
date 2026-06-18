@@ -5,6 +5,12 @@
 export const WHATS_NEW = [
   {
     date: '2026-06-18',
+    tag: 'New',
+    title: 'Event Day — your Sunday at a glance',
+    body: "Admins and managers have a new Event Day tab: pick a day (one tap for the upcoming Sunday) and see everything happening that day in one place — every shift with who's signed up and whether they're cleared to serve, the rooms reserved, and what's due. No more hopping between Jobs, Reservations, and your task board.",
+  },
+  {
+    date: '2026-06-18',
     tag: 'Improved',
     title: 'More options for recurring reservations',
     body: "When you set up a repeating reservation, you can now choose Quarterly or Annually in addition to Weekly, Every 2 weeks, and Monthly — matching the recurrence choices in Tasks, Maintenance, and Jobs.",
