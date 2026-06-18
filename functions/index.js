@@ -8,6 +8,7 @@ const { getAuth } = require('firebase-admin/auth');
 const { getMessaging } = require('firebase-admin/messaging');
 const { jobEventLines, reservationEventLines, maintenanceEventLines, buildCalendar } = require('./lib/ics');
 const { calculateNextDue } = require('./lib/recurrence');
+const { buildDigestSignals } = require('./lib/attention');
 const { syncShepherdPeople, setPcoElderAssignment } = require('./lib/shepherd');
 const { resolveRoster, isElderEmail, buildNormalizer } = require('./lib/roster');
 
@@ -2299,10 +2300,6 @@ async function callClaude({ system, user, maxTokens = 900 }) {
 // Collect this week's attention signals for one church. Each block is
 // hub-gated and contributes a compact summary + a few example strings.
 async function gatherAttentionSignals(db, churchId, todayStr) {
-  const in7 = ymdAddDays(todayStr, 7);
-  const in30 = ymdAddDays(todayStr, 30);
-  const floor90 = ymdAddDays(todayStr, -90);
-
   // Work-unification: when the church has flipped, tasks + maintenance both
   // live in `workItems` (split by type); otherwise read the legacy collections.
   const wiEnabled = await churchWorkItemsEnabled(db, churchId);
@@ -2317,78 +2314,26 @@ async function gatherAttentionSignals(db, churchId, todayStr) {
     db.collection(`churches/${churchId}/timeEntries`).get(),
     db.doc(`churches/${churchId}/config/subscription`).get(),
   ]);
-  const taskDocs = wiEnabled ? workItemsSnap.docs.filter(d => d.data().type === 'task') : legacyTasksSnap.docs;
-  const ticketDocs = wiEnabled ? workItemsSnap.docs.filter(d => d.data().type === 'maintenance') : legacyTicketsSnap.docs;
+  const withId = (snap) => (snap ? snap.docs.map(d => ({ _docId: d.id, ...d.data() })) : []);
+  const allWork = wiEnabled ? withId(workItemsSnap) : null;
+  const taskData = (wiEnabled ? allWork.filter(w => w.type === 'task') : withId(legacyTasksSnap)).map(w => ({ ...w, type: 'task' }));
+  const maintData = (wiEnabled ? allWork.filter(w => w.type === 'maintenance') : withId(legacyTicketsSnap)).map(w => ({ ...w, type: 'maintenance' }));
   const has = (h) => subHasHub(subSnap.data() || {}, h);
-  const sig = {};
 
-  if (has('tasks')) {
-    const open = taskDocs.map(d => d.data())
-      .filter(t => t.dueDate && t.status !== 'Complete' && t.status !== 'Cancelled' && t.dueDate <= in7);
-    if (open.length) sig.tasks = {
-      overdue: open.filter(t => t.dueDate < todayStr).length,
-      dueThisWeek: open.filter(t => t.dueDate >= todayStr).length,
-      examples: open.sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')).slice(0, 5)
-        .map(t => `${t.name || 'Task'} (due ${t.dueDate}${t.dueDate < todayStr ? ', OVERDUE' : ''})`),
-    };
-  }
-  if (has('maintenance')) {
-    const open = ticketDocs.map(d => d.data())
-      .filter(t => t.dueDate && t.status !== 'Complete' && t.status !== 'Cancelled' && t.dueDate <= in7);
-    if (open.length) sig.maintenance = {
-      overdue: open.filter(t => t.dueDate < todayStr).length,
-      dueThisWeek: open.filter(t => t.dueDate >= todayStr).length,
-      examples: open.sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')).slice(0, 5)
-        .map(t => `${t.name || 'Ticket'} (due ${t.dueDate}${t.dueDate < todayStr ? ', OVERDUE' : ''})`),
-    };
-  }
-  if (has('people_access')) {
-    const recs = recordsSnap.docs.map(d => d.data())
-      .filter(r => r.expiryDate && r.expiryDate >= floor90 && r.expiryDate <= in30);
-    if (recs.length) sig.compliance = {
-      expired: recs.filter(r => r.expiryDate < todayStr).length,
-      expiringSoon: recs.filter(r => r.expiryDate >= todayStr).length,
-      examples: recs.sort((a, b) => (a.expiryDate || '').localeCompare(b.expiryDate || '')).slice(0, 5)
-        .map(r => `${r.personName || 'Someone'} — ${r.type || 'record'} ${r.expiryDate < todayStr ? 'EXPIRED' : 'expires'} ${r.expiryDate}`),
-    };
-  }
-  // Inventory base (always on): low stock + warranty.
-  const lowSupplies = suppliesSnap.docs.map(d => d.data())
-    .filter(s => s.minQuantity != null && Number(s.quantity) <= Number(s.minQuantity));
-  const warrantyItems = itemsSnap.docs.map(d => d.data())
-    .filter(i => i.warrantyExpiry && i.status !== 'Disposed' && i.warrantyExpiry <= in30);
-  if (lowSupplies.length || warrantyItems.length) sig.inventory = {
-    lowStock: lowSupplies.length,
-    warrantyExpiring: warrantyItems.length,
-    examples: [
-      ...lowSupplies.slice(0, 4).map(s => `${s.description} low (${s.quantity}${s.unit ? ' ' + s.unit : ''} left)`),
-      ...warrantyItems.slice(0, 3).map(i => `${i.description} warranty ${i.warrantyExpiry < todayStr ? 'EXPIRED' : 'expires'} ${i.warrantyExpiry}`),
-    ],
-  };
-  if (has('jobs')) {
-    const unfilled = jobsSnap.docs.map(d => d.data())
-      .filter(j => j.status === 'open' && (Number(j.signupCount) || 0) < (Number(j.spotsTotal) || 1));
-    if (unfilled.length) sig.shifts = {
-      unfilled: unfilled.length,
-      examples: unfilled.sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || '')).slice(0, 5)
-        .map(j => `${j.title || 'Shift'} ${j.scheduledDate} — ${(Number(j.signupCount) || 0)}/${j.spotsTotal || 1} filled`),
-    };
-  }
-  if (has('people_access')) {
-    const entries = timeSnap.docs.map(d => d.data());
-    const upcoming = entries.filter(e => e.status === 'scheduled' && e.date >= todayStr)
-      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    const outstanding = entries.filter(e => e.status === 'approved');
-    const outstandingTotal = outstanding.reduce((s, e) => s + (Number(e.cost) || 0), 0);
-    const loggedThisWeek = entries.filter(e => e.status !== 'scheduled' && e.date >= ymdAddDays(todayStr, -7));
-    if (upcoming.length || outstandingTotal > 0 || loggedThisWeek.length) sig.contractor = {
-      upcoming: upcoming.length,
-      outstandingPayment: Math.round(outstandingTotal * 100) / 100,
-      hoursLoggedLast7d: Math.round(loggedThisWeek.reduce((s, e) => s + (Number(e.hours) || 0), 0) * 100) / 100,
-      examples: upcoming.slice(0, 4).map(e => `${e.personName || 'Contractor'} scheduled ${e.date}${e.estHours ? ` (~${e.estHours}h)` : ''}`),
-    };
-  }
-  return sig;
+  // F4: the grouping / thresholds / predicates live in the shared attention lib
+  // (functions/lib/attention.js — the server twin of src/lib/attention.js), so the
+  // digest can't drift from the dashboard. buildDigestSignals reproduces the exact
+  // legacy signal shape, pinned byte-for-byte by functions/test/attention.test.mjs.
+  return buildDigestSignals({
+    taskData,
+    maintData,
+    recordsData: withId(recordsSnap),
+    suppliesData: withId(suppliesSnap),
+    itemsData: withId(itemsSnap),
+    jobsData: withId(jobsSnap),
+    timeData: withId(timeSnap),
+    has,
+  }, todayStr);
 }
 
 // Build (or reuse) this week's digest payload for a church.

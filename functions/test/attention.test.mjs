@@ -3,9 +3,10 @@
 // (root package.json is type:module, so node loads the .js as ESM).
 //
 // Phase A: exercises every client collector + computeAttention ordering/gating.
-// The CLIENT≡SERVER parity suite (pinning functions/lib/attention.cjs to these
-// same fixtures) is added in Phase C alongside the server twin — same pattern as
-// the F2 people-resolver parity test.
+// Phase C: the CLIENT≡SERVER parity suite (bottom) pins functions/lib/attention.js
+// to the client module over a fixture battery, and pins the server's inlined
+// thresholds to the shared JSON + F2 EXPIRY_* — same pattern as the F2
+// people-resolver parity test.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,6 +19,10 @@ import {
   ymdAddDays,
   ATTENTION_KINDS,
 } from '../../src/lib/attention.js';
+
+import serverAttention from '../lib/attention.js'; // CJS server twin (default import = module.exports)
+import sharedThresholds from '../../src/lib/attention-thresholds.json' with { type: 'json' };
+import { EXPIRY_CRITICAL_DAYS, EXPIRY_WARNING_DAYS } from '../../src/lib/people.js';
 
 // A fixed "today" so all date math is deterministic regardless of run date.
 const TODAY = '2026-06-17';
@@ -183,4 +188,165 @@ test('every emitted kind is a declared ATTENTION_KIND', () => {
     timeEntries: [{ _docId: 'e1', status: 'approved', cost: 10, date: '2026-06-12' }],
   }));
   for (const it of out) assert.ok(ATTENTION_KINDS.includes(it.kind), `unknown kind ${it.kind}`);
+});
+
+// ── CLIENT ≡ SERVER parity (Phase C) ─────────────────────────────────────────
+
+test('PARITY — server inlined thresholds equal the shared JSON', () => {
+  assert.deepEqual(serverAttention.THRESHOLDS, sharedThresholds);
+});
+
+test('PARITY — server cert windows equal F2 people.js EXPIRY_* (no forked numbers)', () => {
+  assert.equal(serverAttention.EXPIRY_CRITICAL_DAYS, EXPIRY_CRITICAL_DAYS);
+  assert.equal(serverAttention.EXPIRY_WARNING_DAYS, EXPIRY_WARNING_DAYS);
+});
+
+test('PARITY — client and server computeAttention agree across a fixture battery', () => {
+  const statuses = ['Available', 'Checked Out', 'In Use', 'Disposed', 'Under Repair'];
+  const resStatuses = ['Pending', 'Approved', 'Denied', 'Returned', 'Cancelled'];
+  const teStatuses = ['scheduled', 'approved', 'paid', 'logged'];
+  const dates = ['2026-06-01', '2026-06-17', '2026-06-18', '2026-06-25', '2026-07-15', '2026-03-01', null];
+  const mins = [0, 3, 5, null, undefined];
+  const types = ['task', 'maintenance'];
+  const workStatuses = ['Backlog', 'In Progress', 'Complete', 'Cancelled', 'On Hold'];
+  const hubSets = [
+    () => true,
+    () => false,
+    (h) => h === 'tasks',
+    (h) => h === 'maintenance',
+    (h) => h === 'people_access',
+    (h) => h === 'jobs',
+    (h) => h !== 'people_access',
+  ];
+  const TODAY = '2026-06-18';
+
+  for (let t = 0; t < 1500; t++) {
+    const n = 1 + (t % 5);
+    const ctx = {
+      todayStr: TODAY,
+      hasHub: hubSets[t % hubSets.length],
+      items: Array.from({ length: n }, (_, i) => ({
+        _docId: `i${i}`, status: statuses[(t + i) % statuses.length],
+        expectedReturn: dates[(t * 2 + i) % dates.length],
+        warrantyExpiry: dates[(t * 3 + i) % dates.length], description: `Item${i}`,
+      })),
+      supplies: Array.from({ length: n }, (_, i) => ({
+        _docId: `s${i}`, quantity: (t + i) % 9, minQuantity: mins[(t + i) % mins.length], description: `Sup${i}`,
+      })),
+      reservations: Array.from({ length: n }, (_, i) => ({
+        _docId: `r${i}`, status: resStatuses[(t + i) % resStatuses.length], itemDesc: `Res${i}`, eventDate: dates[(t + i) % dates.length],
+      })),
+      workItems: Array.from({ length: n }, (_, i) => ({
+        _docId: `w${i}`, type: types[(t + i) % types.length], status: workStatuses[(t + i) % workStatuses.length],
+        dueDate: dates[(t * 2 + i) % dates.length], name: `Work${i}`,
+      })),
+      accessRecords: Array.from({ length: n }, (_, i) => ({
+        _docId: `ar${i}`, personId: `p${i}`, personName: `Person${i}`, type: 'certification',
+        expiryDate: dates[(t * 4 + i) % dates.length],
+      })),
+      jobListings: Array.from({ length: n }, (_, i) => ({
+        _docId: `j${i}`, status: i % 2 ? 'open' : 'completed', scheduledDate: dates[(t + i) % dates.length],
+        signupCount: (t + i) % 4, spotsTotal: 1 + ((t + i) % 4), title: `Job${i}`,
+      })),
+      timeEntries: Array.from({ length: n }, (_, i) => ({
+        _docId: `e${i}`, status: teStatuses[(t + i) % teStatuses.length], cost: (t + i) * 1.5, date: dates[(t + i) % dates.length], personName: `Con${i}`,
+      })),
+    };
+    assert.deepEqual(serverAttention.computeAttention(ctx), computeAttention(ctx), `mismatch at fixture ${t}`);
+  }
+});
+
+// ── buildDigestSignals ≡ legacy gatherAttentionSignals (Phase C) ─────────────
+// Verbatim copy of the pre-F4 grouped-signal logic from functions/index.js
+// gatherAttentionSignals. The differential test below proves the new collector-
+// backed buildDigestSignals produces a byte-identical `signals` object, so the
+// Claude prompt input (and therefore the AI digest + email) does not change.
+function legacyBuildDigestSignals(data, todayStr) {
+  const { taskData, maintData, recordsData, suppliesData, itemsData, jobsData, timeData, has } = data;
+  const in7 = ymdAddDays(todayStr, 7);
+  const in30 = ymdAddDays(todayStr, 30);
+  const floor90 = ymdAddDays(todayStr, -90);
+  const sig = {};
+  if (has('tasks')) {
+    const open = taskData.filter(t => t.dueDate && t.status !== 'Complete' && t.status !== 'Cancelled' && t.dueDate <= in7);
+    if (open.length) sig.tasks = {
+      overdue: open.filter(t => t.dueDate < todayStr).length,
+      dueThisWeek: open.filter(t => t.dueDate >= todayStr).length,
+      examples: open.sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')).slice(0, 5).map(t => `${t.name || 'Task'} (due ${t.dueDate}${t.dueDate < todayStr ? ', OVERDUE' : ''})`),
+    };
+  }
+  if (has('maintenance')) {
+    const open = maintData.filter(t => t.dueDate && t.status !== 'Complete' && t.status !== 'Cancelled' && t.dueDate <= in7);
+    if (open.length) sig.maintenance = {
+      overdue: open.filter(t => t.dueDate < todayStr).length,
+      dueThisWeek: open.filter(t => t.dueDate >= todayStr).length,
+      examples: open.sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')).slice(0, 5).map(t => `${t.name || 'Ticket'} (due ${t.dueDate}${t.dueDate < todayStr ? ', OVERDUE' : ''})`),
+    };
+  }
+  if (has('people_access')) {
+    const recs = recordsData.filter(r => r.expiryDate && r.expiryDate >= floor90 && r.expiryDate <= in30);
+    if (recs.length) sig.compliance = {
+      expired: recs.filter(r => r.expiryDate < todayStr).length,
+      expiringSoon: recs.filter(r => r.expiryDate >= todayStr).length,
+      examples: recs.sort((a, b) => (a.expiryDate || '').localeCompare(b.expiryDate || '')).slice(0, 5).map(r => `${r.personName || 'Someone'} — ${r.type || 'record'} ${r.expiryDate < todayStr ? 'EXPIRED' : 'expires'} ${r.expiryDate}`),
+    };
+  }
+  const lowSupplies = suppliesData.filter(s => s.minQuantity != null && Number(s.quantity) <= Number(s.minQuantity));
+  const warrantyItems = itemsData.filter(i => i.warrantyExpiry && i.status !== 'Disposed' && i.warrantyExpiry <= in30);
+  if (lowSupplies.length || warrantyItems.length) sig.inventory = {
+    lowStock: lowSupplies.length,
+    warrantyExpiring: warrantyItems.length,
+    examples: [
+      ...lowSupplies.slice(0, 4).map(s => `${s.description} low (${s.quantity}${s.unit ? ' ' + s.unit : ''} left)`),
+      ...warrantyItems.slice(0, 3).map(i => `${i.description} warranty ${i.warrantyExpiry < todayStr ? 'EXPIRED' : 'expires'} ${i.warrantyExpiry}`),
+    ],
+  };
+  if (has('jobs')) {
+    const unfilled = jobsData.filter(j => j.status === 'open' && (Number(j.signupCount) || 0) < (Number(j.spotsTotal) || 1));
+    if (unfilled.length) sig.shifts = {
+      unfilled: unfilled.length,
+      examples: unfilled.sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || '')).slice(0, 5).map(j => `${j.title || 'Shift'} ${j.scheduledDate} — ${(Number(j.signupCount) || 0)}/${j.spotsTotal || 1} filled`),
+    };
+  }
+  if (has('people_access')) {
+    const upcoming = timeData.filter(e => e.status === 'scheduled' && e.date >= todayStr).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const outstanding = timeData.filter(e => e.status === 'approved');
+    const outstandingTotal = outstanding.reduce((s, e) => s + (Number(e.cost) || 0), 0);
+    const loggedThisWeek = timeData.filter(e => e.status !== 'scheduled' && e.date >= ymdAddDays(todayStr, -7));
+    if (upcoming.length || outstandingTotal > 0 || loggedThisWeek.length) sig.contractor = {
+      upcoming: upcoming.length,
+      outstandingPayment: Math.round(outstandingTotal * 100) / 100,
+      hoursLoggedLast7d: Math.round(loggedThisWeek.reduce((s, e) => s + (Number(e.hours) || 0), 0) * 100) / 100,
+      examples: upcoming.slice(0, 4).map(e => `${e.personName || 'Contractor'} scheduled ${e.date}${e.estHours ? ` (~${e.estHours}h)` : ''}`),
+    };
+  }
+  return sig;
+}
+
+test('DIGEST PARITY — buildDigestSignals byte-identical to legacy gatherAttentionSignals', () => {
+  const TODAY = '2026-06-18';
+  const workStatuses = ['Backlog', 'In Progress', 'Complete', 'Cancelled', 'On Hold'];
+  const dates = ['2026-06-01', '2026-06-17', '2026-06-18', '2026-06-25', '2026-07-15', '2026-03-01', null];
+  const mins = [0, 3, 5, null, undefined];
+  const units = ['', 'boxes', 'lbs', undefined];
+  const teStatuses = ['scheduled', 'approved', 'paid', 'logged'];
+  const hubSets = [() => true, () => false, (h) => h === 'tasks', (h) => h === 'maintenance',
+    (h) => h === 'people_access', (h) => h === 'jobs', (h) => h !== 'people_access', (h) => h === 'tasks' || h === 'jobs'];
+
+  for (let t = 0; t < 2000; t++) {
+    const n = t % 7; // include n=0 (empty) cases
+    const has = hubSets[t % hubSets.length];
+    const data = {
+      has,
+      taskData: Array.from({ length: n }, (_, i) => ({ _docId: `t${i}`, type: 'task', name: `Task${i}`, status: workStatuses[(t + i) % workStatuses.length], dueDate: dates[(t * 2 + i) % dates.length] })),
+      maintData: Array.from({ length: n }, (_, i) => ({ _docId: `m${i}`, type: 'maintenance', name: `Tk${i}`, status: workStatuses[(t + i) % workStatuses.length], dueDate: dates[(t * 3 + i) % dates.length] })),
+      recordsData: Array.from({ length: n }, (_, i) => ({ _docId: `ar${i}`, personId: `p${i}`, personName: `Per${i}`, type: 'certification', expiryDate: dates[(t * 4 + i) % dates.length] })),
+      suppliesData: Array.from({ length: n }, (_, i) => ({ _docId: `s${i}`, description: `Sup${i}`, quantity: (t + i) % 9, minQuantity: mins[(t + i) % mins.length], unit: units[(t + i) % units.length] })),
+      itemsData: Array.from({ length: n }, (_, i) => ({ _docId: `it${i}`, description: `Itm${i}`, status: i % 4 === 0 ? 'Disposed' : 'Available', warrantyExpiry: dates[(t * 5 + i) % dates.length] })),
+      // jobsData is future-only by query contract (where scheduledDate >= today)
+      jobsData: Array.from({ length: n }, (_, i) => ({ _docId: `j${i}`, title: `Job${i}`, status: i % 2 ? 'open' : 'completed', scheduledDate: ['2026-06-18', '2026-06-25', '2026-07-15'][(t + i) % 3], signupCount: (t + i) % 4, spotsTotal: 1 + ((t + i) % 4) })),
+      timeData: Array.from({ length: n }, (_, i) => ({ _docId: `e${i}`, status: teStatuses[(t + i) % teStatuses.length], cost: (t + i) * 1.25, hours: (t + i) % 6, estHours: i % 2 ? (i + 1) : undefined, date: dates[(t + i) % dates.length], personName: `Con${i}` })),
+    };
+    assert.deepEqual(serverAttention.buildDigestSignals(data, TODAY), legacyBuildDigestSignals(data, TODAY), `digest signals mismatch at fixture ${t}`);
+  }
 });
