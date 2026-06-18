@@ -23,7 +23,7 @@ Plan: `docs/WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md`. Decision (#7): **T
 - **Google Calendar two-way sync** — ICS feed exists; 2-way deferred (needs F5).
 - **AI "what needs attention this week" digest** — Claude (Haiku) over attention signals (needs F2/F3/F4).
 - **Compliance serving-readiness dashboard + expiry digests** (needs F4).
-- **Generalized Planning Center People sync** — beyond FXCC-only Shepherd Hub (needs F2).
+- **Generalized Planning Center People sync** — beyond FXCC-only Shepherd Hub (needs F2). **PARKED 2026-06-18 pending shepherd feedback** — their real PCO usage shapes the two open forks: (1) per-church creds = paste a PCO Personal Access Token (reuses `shepherd.js` Basic-auth client, ~2-3d) vs full OAuth Connect button (~1-2wk); (2) sync scope = a selected PCO List vs entire active congregation vs active+membership filter. Lands synced people as `accessPeople` (read-only, names/email/phone/status only — no pastoral/medical), `pcoId`-keyed upsert + email auto-link to `users`. Reuse the `shepherd.js` PCO client / paging / >50%-stale safety valve.
 
 ## Smaller / standalone open
 - **SEO internal-link rewire** for volunteer-coordinator-role-guide post (push pos 22→page 1); re-verify 2026-06-23. (`docs/SEO-REFOCUS-2026-05-26.md`)
