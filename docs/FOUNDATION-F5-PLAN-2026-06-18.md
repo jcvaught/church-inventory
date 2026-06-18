@@ -93,7 +93,7 @@ functions/test/occurrences.test.mjs ← unit + parity suite (shared fixtures; cl
 
 ## Status
 
-- [ ] **Phase A** — contract + adapters + getOccurrences + VEVENT builder + unit tests.
-- [ ] **Phase B** — CJS twin + icsCalendarFeed refactor + parity/byte tests + deploy.
+- [x] **Phase A** — contract + adapters + getOccurrences + VEVENT builder + unit tests (2026-06-18). `src/lib/occurrences.js` (4 adapters + `getOccurrences` + `occurrenceToVEvent`/`buildCalendar`, pure ESM). `functions/test/occurrences.test.mjs` (12 tests) asserts the new VEVENT mapping reproduces the legacy `functions/lib/ics.js` per-type builders byte-for-byte. test:unit 43/43, build clean.
+- [x] **Phase B** — CJS twin + icsCalendarFeed refactor + parity tests + deploy (2026-06-18). `functions/lib/occurrences.js` (CJS twin). `icsCalendarFeed` rebuilt as fetch (same cutoff query) → adapt → `buildCalendar` (the 3 `ics.js` per-type builder call-sites removed; `ics.js` retained as the golden byte-parity reference for the test only). Parity test: client≡server `getOccurrences`/VEVENT/`buildCalendar` over shared fixtures (incl. includePay + range) **and** server twin ≡ legacy `ics.js`. test:unit 45/45. Deployed `icsCalendarFeed`; invoker IAM re-probed (no-param GET → 400 function-message, not GFE 403 = intact). No church has a `feedToken` set, so no live feed consumer exists today (byte-identical output anyway).
 - [ ] **Phase C** — client ICS exports + JobCalendar→BoardCalendar (+ windowing helper).
 - [ ] **Phase D** — cadence-enum unification + docs.

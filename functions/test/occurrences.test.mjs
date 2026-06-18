@@ -15,6 +15,7 @@ import {
 
 const require = createRequire(import.meta.url);
 const legacy = require('../lib/ics.js');
+const server = require('../lib/occurrences.js'); // CJS twin
 
 // ── Fixtures (non-terminal status; terminal-skip covered separately) ────────
 
@@ -153,4 +154,29 @@ test('Occurrence ids are stable and unique per source doc', () => {
   const ids = all.map(o => o.id);
   assert.equal(new Set(ids).size, ids.length);
   assert.ok(ids.includes('shift:j1') && ids.includes('reservation:r1') && ids.includes('work:t1') && ids.includes('maintenance_due:m1'));
+});
+
+// ── TWIN PARITY — client (src/lib) ≡ server (functions/lib) ──────────────────
+
+test('TWIN PARITY — adapters + getOccurrences + VEVENT agree exactly', () => {
+  const ctx = { reservations: RESERVATIONS, jobListings: JOBS, tasks: TASKS, maintenance: MAINTENANCE };
+  // getOccurrences output identical (incl. includePay variants)
+  assert.deepEqual(server.getOccurrences(ctx), getOccurrences(ctx));
+  assert.deepEqual(server.getOccurrences(ctx, { includePay: true }), getOccurrences(ctx, { includePay: true }));
+  assert.deepEqual(
+    server.getOccurrences(ctx, { sourceTypes: ['shift', 'work'], range: { start: '2026-07-01', end: '2026-07-21' } }),
+    getOccurrences(ctx, { sourceTypes: ['shift', 'work'], range: { start: '2026-07-01', end: '2026-07-21' } }),
+  );
+  // VEVENT + full-calendar byte-identical across both twins
+  const occs = getOccurrences(ctx, { includePay: true });
+  for (const o of occs) {
+    assert.deepEqual(server.occurrenceToVEvent(o), occurrenceToVEvent(o), `VEVENT mismatch for ${o.id}`);
+  }
+  assert.equal(server.buildCalendar('FXCC — Calendar', occs), buildCalendar('FXCC — Calendar', occs));
+});
+
+test('TWIN PARITY — server twin also matches the legacy ics.js builders', () => {
+  for (const job of JOBS) assert.deepEqual(server.occurrenceToVEvent(server.shiftsToOccurrences([job])[0]), legacy.jobEventLines(job));
+  for (const r of RESERVATIONS) assert.deepEqual(server.occurrenceToVEvent(server.reservationsToOccurrences([r])[0]), legacy.reservationEventLines(r));
+  for (const t of MAINTENANCE) assert.deepEqual(server.occurrenceToVEvent(server.maintenanceToOccurrences([t])[0]), legacy.maintenanceEventLines(t));
 });

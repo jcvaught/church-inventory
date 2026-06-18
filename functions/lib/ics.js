@@ -1,8 +1,12 @@
-// Server-side iCalendar (.ics) builder for the read-only calendar feed.
-// Mirrors the pure VEVENT logic in src/utils/ical.js (Cloud Functions can't
-// import from src/). No DOM — returns strings. All-day events use
-// DTEND = day+1 per the iCal spec; timed events fall back to +1h when no end
-// time is given. Keep the two files in sync if the event shape changes.
+// Server-side iCalendar (.ics) builder — the ORIGINAL per-type VEVENT builders.
+// As of F5 (2026-06-18) the icsCalendarFeed endpoint no longer calls these;
+// it routes through the canonical Occurrence adapters in functions/lib/
+// occurrences.js. This file is retained as the GOLDEN BYTE-PARITY REFERENCE:
+// functions/test/occurrences.test.mjs asserts the new Occurrence→VEVENT mapping
+// reproduces these builders exactly, so any drift in the new path is caught.
+// (Safe to delete once F5 is long-shipped and the test is frozen to literals.)
+// No DOM — returns strings. All-day events use DTEND = day+1 per the iCal spec;
+// timed events fall back to +1h when no end time is given.
 
 function escICS(str) {
   return (str || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');

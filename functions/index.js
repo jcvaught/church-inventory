@@ -6,7 +6,7 @@ const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 const { getMessaging } = require('firebase-admin/messaging');
-const { jobEventLines, reservationEventLines, maintenanceEventLines, buildCalendar } = require('./lib/ics');
+const { shiftsToOccurrences, reservationsToOccurrences, maintenanceToOccurrences, buildCalendar } = require('./lib/occurrences');
 const { calculateNextDue } = require('./lib/recurrence');
 const { buildDigestSignals } = require('./lib/attention');
 const { syncShepherdPeople, setPcoElderAssignment } = require('./lib/shepherd');
@@ -1032,26 +1032,21 @@ exports.icsCalendarFeed = onRequest({ cors: true, invoker: 'public' }, async (re
       return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
     })();
 
-    const blocks = [];
+    // Fetch each active type within the read window, then map every dated doc
+    // through the F5 canonical-Occurrence adapters (which apply the same
+    // terminal-status skips the old per-type builders did) → one VEVENT mapping.
+    const occurrences = [];
     if (activeTypes.includes('jobs')) {
       const snap = await db.collection(`churches/${churchId}/jobListings`)
         .where('scheduledDate', '>=', cutoff).limit(1000).get();
-      snap.docs.forEach(d => {
-        const job = { _docId: d.id, ...d.data() };
-        if (job.status === 'cancelled') return;
-        const ev = jobEventLines(job);
-        if (ev) blocks.push(ev);
-      });
+      const jobs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+      occurrences.push(...shiftsToOccurrences(jobs));
     }
     if (activeTypes.includes('reservations')) {
       const snap = await db.collection(`churches/${churchId}/reservations`)
         .where('eventDate', '>=', cutoff).limit(1000).get();
-      snap.docs.forEach(d => {
-        const res2 = { _docId: d.id, ...d.data() };
-        if (res2.status === 'denied') return;
-        const ev = reservationEventLines(res2);
-        if (ev) blocks.push(ev);
-      });
+      const reservations = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+      occurrences.push(...reservationsToOccurrences(reservations));
     }
     if (activeTypes.includes('maintenance')) {
       // Work-unification: read maintenance from the unified `workItems`
@@ -1060,18 +1055,14 @@ exports.icsCalendarFeed = onRequest({ cors: true, invoker: 'public' }, async (re
       const coll = wiEnabled ? 'workItems' : 'maintenanceTickets';
       const snap = await db.collection(`churches/${churchId}/${coll}`)
         .where('dueDate', '>=', cutoff).limit(1000).get();
-      snap.docs.forEach(d => {
-        const data = d.data();
-        if (wiEnabled && data.type !== 'maintenance') return;
-        const t = { _docId: d.id, ...data };
-        if (t.status === 'Complete' || t.status === 'Cancelled') return;
-        const ev = maintenanceEventLines(t);
-        if (ev) blocks.push(ev);
-      });
+      const tickets = snap.docs
+        .map(d => ({ _docId: d.id, ...d.data() }))
+        .filter(t => !wiEnabled || t.type === 'maintenance');
+      occurrences.push(...maintenanceToOccurrences(tickets));
     }
 
     const churchName = churchSnap.data()?.churchName || 'ChurchOpsHub';
-    const body = buildCalendar(`${churchName} — Calendar`, blocks);
+    const body = buildCalendar(`${churchName} — Calendar`, occurrences);
     _icsCache.set(cacheKey, { expiresAt: Date.now() + ICS_TTL_MS, body });
     res.set('Cache-Control', 'public, max-age=60');
     res.type('text/calendar').send(body);
