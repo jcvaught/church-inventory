@@ -13,6 +13,7 @@ import { LandingPage } from './pages/LandingPage.jsx';
 import { PublicRequestPage } from './pages/PublicRequestPage.jsx';
 import { Dashboard } from './pages/Dashboard.jsx';
 import { VolunteerHome } from './pages/VolunteerHome.jsx';
+import { EventDayPage } from './pages/EventDayPage.jsx';
 import { isVolunteerOnly } from './utils/roleHelpers.js';
 import { isOwnerEmail } from './utils/owners.js';
 import { ItemsPage } from './pages/ItemsPage.jsx';
@@ -693,6 +694,10 @@ function AppShell({ authHook }) {
   // get a 4-tab jobs-first shell; everyone else gets the standard 7-tab admin shell.
   // The "Hubs" key stays the same — for volunteers it just auto-routes into Jobs.
   const volunteerMode = isVolunteerOnly(userProfile);
+  // Event Day is an admin/manager ops console (not a paid hub) — it spans
+  // jobs/reservations/maintenance, with reservations on the free base, so it's
+  // useful to any admin/manager. Shown in the standard shell only.
+  const showEventDay = (userProfile?.role === 'admin' || userProfile?.role === 'manager') && !volunteerMode;
   // Shepherd Hub is FXCC-only and gated by the elder custom claim (rules enforce
   // the real boundary), plus John as admin. Not a paid hub — it appears as a
   // special non-subscription card inside HubsPage (not a top-level tab).
@@ -700,10 +705,10 @@ function AppShell({ authHook }) {
     && (isElder || isOwnerEmail(userProfile?.email)) && !volunteerMode;
   const mobileTabs = volunteerMode
     ? [["dashboard","Home","🏠"], ["hubs","Jobs","💼"], ["log","Activity","📋"], ["settings","Settings","⚙️"]]
-    : [["dashboard","Home","🏠"], ["inventory","Items","📦"], ["supplies","Stock","🧴"], ["reservations","Reserve","📅"], ["log","Log","📋"], ["hubs","Hubs","🔌"], ["settings","Settings","⚙️"]];
+    : [["dashboard","Home","🏠"], ...(showEventDay ? [["eventday","Event","🗓️"]] : []), ["inventory","Items","📦"], ["supplies","Stock","🧴"], ["reservations","Reserve","📅"], ["log","Log","📋"], ["hubs","Hubs","🔌"], ["settings","Settings","⚙️"]];
   const desktopTabs = volunteerMode
     ? [["dashboard","Home"], ["hubs","Jobs"], ["log","Activity"], ["settings","Settings"]]
-    : [["dashboard","Dashboard"], ["inventory","All Items"], ["supplies","Supplies"], ["reservations","Reservations"], ["log","Activity Log"], ["hubs","Hubs"], ["settings","Settings"]];
+    : [["dashboard","Dashboard"], ...(showEventDay ? [["eventday","Event Day"]] : []), ["inventory","All Items"], ["supplies","Supplies"], ["reservations","Reservations"], ["log","Activity Log"], ["hubs","Hubs"], ["settings","Settings"]];
 
   const canAdd = canAddUser((store.users || []).length);
 
@@ -828,6 +833,7 @@ function AppShell({ authHook }) {
         {tab === "dashboard" && (isVolunteerOnly(userProfile)
           ? <VolunteerHome store={store} userProfile={userProfile} onOpenJobs={(view) => { setJobsInitialView(view || null); openHub('jobs'); setTab('hubs'); }} />
           : <Dashboard store={store} userProfile={userProfile} canSeeJobHub={userCanSeeHub('jobs')} />)}
+        {tab === "eventday" && showEventDay && <EventDayPage store={store} userProfile={userProfile} hasHub={hasHub} />}
         {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} subscription={subscription} user={user} canAdd={canAdd} deleteAccount={deleteAccount} />}
         {tab === "inventory" && <ItemsPage store={store} userProfile={userProfile} initialItemId={initialItemId} scannedItemId={scannedItemId} onScannedItemConsumed={() => setScannedItemId(null)} />}
         {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
