@@ -16,9 +16,6 @@ import { VolunteerHome } from './pages/VolunteerHome.jsx';
 import { EventDayPage } from './pages/EventDayPage.jsx';
 import { isVolunteerOnly } from './utils/roleHelpers.js';
 import { isOwnerEmail } from './utils/owners.js';
-import { ItemsPage } from './pages/ItemsPage.jsx';
-import { SuppliesPage } from './pages/SuppliesPage.jsx';
-import { ReservationsPage } from './pages/ReservationsPage.jsx';
 import { ActivityLogPage } from './pages/ActivityLogPage.jsx';
 import { SettingsPage } from './pages/SettingsPage.jsx';
 import { BarcodeScanner } from './components/primitives/BarcodeScanner.jsx';
@@ -521,14 +518,25 @@ function AppShell({ authHook }) {
   const { subscription, loading: subscriptionLoading, hasHub, canAddUser, trialDaysRemaining } = useSubscription(userProfile.churchId);
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false);
   const [tab, setTab] = useState(() => {
-    if (new URLSearchParams(window.location.search).get('item')) return 'inventory';
+    // Inventory/Supplies/Reservations are now hubs, not tabs (2026-06-23) — a
+    // ?item= deep link and any pre-deploy lastTab pointing at one route to Hubs.
+    if (new URLSearchParams(window.location.search).get('item')) return 'hubs';
     const stored = localStorage.getItem('lastTab');
+    if (stored === 'inventory' || stored === 'supplies' || stored === 'reservations') return 'hubs';
     if (stored) return stored;
     // Volunteers (role:user with allowedHubs=['jobs']) land on Hubs, which
     // auto-routes into Jobs Hub via HubsPage. Everyone else gets Dashboard.
     return isVolunteerOnly(userProfile) ? 'hubs' : 'dashboard';
   });
-  const [hubKey, setHubKey] = useState(() => localStorage.getItem('lastHub') || null);
+  const [hubKey, setHubKey] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('item')) return 'inventory';
+    // Carry a returning user from a pre-deploy free tab straight into its hub.
+    const lt = localStorage.getItem('lastTab');
+    if (lt === 'inventory' || lt === 'supplies') return 'inventory';
+    if (lt === 'reservations') return 'reservations';
+    return localStorage.getItem('lastHub') || null;
+  });
   const [jobsInitialView, setJobsInitialView] = useState(null);
   useEffect(() => { localStorage.setItem('lastTab', tab); }, [tab]);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -641,7 +649,7 @@ function AppShell({ authHook }) {
   function dismissOnboarding(goToTab) {
     store.updateConfig({ onboardingComplete: true });
     setShowOnboarding(false);
-    if (goToTab) setTab(goToTab);
+    if (goToTab) navigateToTab(goToTab);
   }
 
   function handleScan(text) {
@@ -649,7 +657,8 @@ function AppShell({ authHook }) {
     try { const u = new URL(text); const p = u.searchParams.get('item'); if (p) itemId = p; } catch { /* URL parse failed — use raw text as itemId */ }
     setScannedItemId(itemId);
     setShowScanner(false);
-    setTab('inventory');
+    openHub('inventory');
+    setTab('hubs');
   }
 
   const tabBtn = (k) => ({
@@ -681,11 +690,27 @@ function AppShell({ authHook }) {
     setHubKey(key);
   }
 
+  // Inventory / Supplies / Reservations are hubs now, not tabs (2026-06-23).
+  // Translate any legacy tab target (notification + global-search links,
+  // onboarding) into hub navigation; everything else is still a real tab.
+  function navigateToTab(t) {
+    if (t === 'inventory' || t === 'supplies') {
+      localStorage.setItem('inventoryCategory', t === 'supplies' ? 'supplies' : 'items');
+      openHub('inventory');
+      setTab('hubs');
+    } else if (t === 'reservations') {
+      openHub('reservations');
+      setTab('hubs');
+    } else {
+      setTab(t);
+    }
+  }
+
   // Route a global-search result to its area.
   function handleSearchNav(nav) {
     if (!nav) return;
-    if (nav.kind === 'item') { setScannedItemId(nav.itemId); setTab('inventory'); }
-    else if (nav.kind === 'tab') { setTab(nav.tab); }
+    if (nav.kind === 'item') { setScannedItemId(nav.itemId); openHub('inventory'); setTab('hubs'); }
+    else if (nav.kind === 'tab') { navigateToTab(nav.tab); }
     else if (nav.kind === 'hub') { openHub(nav.hub); setTab('hubs'); }
     setMenuOpen(false);
   }
@@ -705,10 +730,10 @@ function AppShell({ authHook }) {
     && (isElder || isOwnerEmail(userProfile?.email)) && !volunteerMode;
   const mobileTabs = volunteerMode
     ? [["dashboard","Home","🏠"], ["hubs","Jobs","💼"], ["log","Activity","📋"], ["settings","Settings","⚙️"]]
-    : [["dashboard","Home","🏠"], ...(showEventDay ? [["eventday","Event","🗓️"]] : []), ["inventory","Items","📦"], ["supplies","Stock","🧴"], ["reservations","Reserve","📅"], ["log","Log","📋"], ["hubs","Hubs","🔌"], ["settings","Settings","⚙️"]];
+    : [["dashboard","Home","🏠"], ...(showEventDay ? [["eventday","Event","🗓️"]] : []), ["hubs","Hubs","🔌"], ["log","Log","📋"], ["settings","Settings","⚙️"]];
   const desktopTabs = volunteerMode
     ? [["dashboard","Home"], ["hubs","Jobs"], ["log","Activity"], ["settings","Settings"]]
-    : [["dashboard","Dashboard"], ...(showEventDay ? [["eventday","Event Day"]] : []), ["inventory","All Items"], ["supplies","Supplies"], ["reservations","Reservations"], ["log","Activity Log"], ["hubs","Hubs"], ["settings","Settings"]];
+    : [["dashboard","Dashboard"], ...(showEventDay ? [["eventday","Event Day"]] : []), ["hubs","Hubs"], ["log","Activity Log"], ["settings","Settings"]];
 
   const canAdd = canAddUser((store.users || []).length);
 
@@ -772,8 +797,7 @@ function AppShell({ authHook }) {
                 else{setTab(k);}
                 setMenuOpen(false);
               }} style={{ ...tabBtn(k), scrollSnapAlign:"start", flexShrink:0 }}>{v}
-                {k==="supplies"&&lowStock.length>0&&<span style={{ marginLeft:6, background:B.red, color:"#fff", borderRadius:10, padding:"1px 7px", fontSize:10, fontWeight:700 }}>{lowStock.length}</span>}
-                {k==="reservations"&&pendingRes.length>0&&<span style={{ marginLeft:6, background:B.gold, color:"#fff", borderRadius:10, padding:"1px 7px", fontSize:10, fontWeight:700 }}>{pendingRes.length}</span>}
+                {k==="hubs"&&(lowStock.length+pendingRes.length)>0&&<span style={{ marginLeft:6, background:B.gold, color:"#fff", borderRadius:10, padding:"1px 7px", fontSize:10, fontWeight:700 }}>{lowStock.length+pendingRes.length}</span>}
               </button>
             )}
           </div>}
@@ -835,9 +859,6 @@ function AppShell({ authHook }) {
           : <Dashboard store={store} userProfile={userProfile} canSeeJobHub={userCanSeeHub('jobs')} />)}
         {tab === "eventday" && showEventDay && <EventDayPage store={store} userProfile={userProfile} hasHub={hasHub} />}
         {tab === "settings" && <SettingsPage store={store} userProfile={userProfile} subscription={subscription} user={user} canAdd={canAdd} deleteAccount={deleteAccount} />}
-        {tab === "inventory" && <ItemsPage store={store} userProfile={userProfile} initialItemId={initialItemId} scannedItemId={scannedItemId} onScannedItemConsumed={() => setScannedItemId(null)} />}
-        {tab === "supplies" && <SuppliesPage store={store} userProfile={userProfile} />}
-        {tab === "reservations" && <ReservationsPage store={store} userProfile={userProfile} />}
         {tab === "log" && <ActivityLogPage store={store} userProfile={userProfile} />}
         {tab === "hubs" && (
           <HubsPage
@@ -852,6 +873,9 @@ function AppShell({ authHook }) {
             jobsInitialView={jobsInitialView}
             canSeeShepherd={canSeeShepherd}
             isElder={isElder}
+            initialItemId={initialItemId}
+            scannedItemId={scannedItemId}
+            onScannedItemConsumed={() => setScannedItemId(null)}
           />
         )}
       </div>
@@ -899,8 +923,7 @@ function AppShell({ authHook }) {
               style={{ flex:"1 1 0", minWidth:0, padding:"8px 2px 6px", border:"none", background:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:tab===k?B.teal:B.textLight, position:"relative" }}>
               <span style={{ fontSize:20 }} aria-hidden="true">{icon}</span>
               <span style={{ fontSize:10, fontWeight:700, fontFamily:f1, letterSpacing:.3 }}>{label}</span>
-              {k==="supplies"&&lowStock.length>0&&<span style={{ position:"absolute", top:4, right:"calc(50% - 16px)", background:B.red, color:"#fff", borderRadius:10, padding:"0 4px", fontSize:9, fontWeight:700, minWidth:14, textAlign:"center" }}>{lowStock.length}</span>}
-              {k==="reservations"&&pendingRes.length>0&&<span style={{ position:"absolute", top:4, right:"calc(50% - 16px)", background:B.gold, color:"#fff", borderRadius:10, padding:"0 4px", fontSize:9, fontWeight:700, minWidth:14, textAlign:"center" }}>{pendingRes.length}</span>}
+              {k==="hubs"&&(lowStock.length+pendingRes.length)>0&&<span style={{ position:"absolute", top:4, right:"calc(50% - 16px)", background:B.gold, color:"#fff", borderRadius:10, padding:"0 4px", fontSize:9, fontWeight:700, minWidth:14, textAlign:"center" }}>{lowStock.length+pendingRes.length}</span>}
             </button>
           ))}
         </div>

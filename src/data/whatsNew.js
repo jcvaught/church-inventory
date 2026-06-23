@@ -6,6 +6,12 @@ export const WHATS_NEW = [
   {
     date: '2026-06-23',
     tag: 'Improved',
+    title: 'Everything lives under Hubs now',
+    body: "Items, Supplies, and Reservations have moved from the top menu into the Hubs page, so all of your church's tools are in one consistent place. Open Hubs and you'll find them up top as included (free) cards: an Inventory Hub with an Items/Supplies toggle, and a Reservations Hub. Nothing about how they work changed — they're just easier to find alongside everything else. The top menu is now simpler: Dashboard, Event Day, Hubs, Activity Log, and Settings.",
+  },
+  {
+    date: '2026-06-23',
+    tag: 'Improved',
     title: 'Tasks and Maintenance, now in one Work board',
     body: "Tasks and Maintenance now live together under a single Work card in Hubs. Open it and flip between Tasks and Maintenance with one toggle — no more bouncing between two separate hubs. Everything works exactly as before (your numbers, assignees, comments, and recurring items are all intact); it's just one place now. If your access is limited to only one of them, nothing changes for you.",
   },

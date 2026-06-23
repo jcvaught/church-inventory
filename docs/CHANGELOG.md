@@ -4,6 +4,18 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-23 — Hub restructure: Inventory + Reservations become free hubs
+
+Navigation consistency pass (plan: `docs/HUB-RESTRUCTURE-PLAN-2026-06-23.md`). Items, Supplies, and Reservations moved out of top-level nav tabs into the Hubs grid as **free hub cards** (`HUB_DEFS` `free:true` — "Included" badge, no `UpgradeGate`, shown first). Done *before* the room-calendar build (`docs/ROOM-CALENDAR-PLAN-2026-06-23.md`) so that work lands in its final home (the Reservations Hub) and isn't moved twice.
+
+- **New `src/pages/InventoryPage.jsx`** — Items/Supplies segmented toggle container (mirrors `WorkPage`), `localStorage.inventoryCategory`, lazy-mounts `ItemsPage`/`SuppliesPage`, forces the Items sub-view on a `?item=`/scan deep link. `HubsPage` mounts it (key `inventory`); `ReservationsPage` mounts as the `reservations` hub.
+- **Top nav slimmed** to `Dashboard · Event Day · Hubs · Activity Log · Settings`. Low-stock + pending-reservation nudges consolidated into one aggregate badge on the Hubs tab.
+- **Free members no longer see locked/paid hub cards** — picker shows a paid card only when `hasHub(key) && userCanSeeHub(key)`; admins keep the "View Plan" upgrade callout. Free hubs always shown (except volunteer-only mode = jobs-only, preserved).
+- **Navigation migration** — `navigateToTab()` in `App.jsx` translates every legacy tab target (scan, global-search, notification `{kind:'tab',tab:'reservations'|'supplies'}` links, onboarding) into hub nav; `tab`/`hubKey` initializers migrate a pre-restructure `localStorage.lastTab` and the `?item=` deep link so returning users never hit a blank tab.
+- **Verified** via Firebase emulator + Playwright smoke (picker shows both free hubs as "Included"; Inventory toggle renders Items+Supplies seeded data; Reservations Hub renders seeded reservations; `?item=` routes into Inventory→Items + URL cleaned; 0 console errors). `npm run build` + `npm run lint` clean (0 errors). `e2e/a11y.spec.js` inventory/supplies tests repointed through the Inventory Hub. Docs: CLAUDE.md tab-keys + file layout, `whatsNew.js`.
+
+---
+
 ## 2026-06-23 — Post-0611 audit (Work-Unification · Foundations · Event-Day) + fixes
 
 Full audit of the 56-commit window since the Shepherd Hub audit (2026-06-11): the Tasks+Maintenance→`workItems` collapse, Foundations F2/F4/F5, and the Event-Day Ops console. Verdict **healthy** — no HIGH findings; the migration is correctly executed in every production read/write path (rules, indexes, tenant isolation, data-shape all clean). Tracker: `docs/AUDIT-POST-0611-2026-06-23.md`. All 7 findings (2 MED + 5 LOW) fixed in this commit:

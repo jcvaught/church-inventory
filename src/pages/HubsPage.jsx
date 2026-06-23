@@ -21,6 +21,10 @@ const WorkBoard         = lazyWithRetry(() => import('./hubs/WorkBoard.jsx').the
 const JobsPage          = lazyWithRetry(() => import('./hubs/JobsPage.jsx').then(m => ({ default: m.JobsPage })), 'JobsPage');
 const ShepherdHubPage   = lazyWithRetry(() => import('./hubs/ShepherdHubPage.jsx').then(m => ({ default: m.ShepherdHubPage })), 'ShepherdHubPage');
 const WorkPage          = lazyWithRetry(() => import('./WorkPage.jsx').then(m => ({ default: m.WorkPage })), 'WorkPage');
+// Free/core hubs — Inventory (Items + Supplies) and Reservations. Were top-level
+// tabs; folded into the hub grid for navigation consistency (2026-06-23).
+const InventoryPage     = lazyWithRetry(() => import('./InventoryPage.jsx').then(m => ({ default: m.InventoryPage })), 'InventoryPage');
+const ReservationsPage  = lazyWithRetry(() => import('./ReservationsPage.jsx').then(m => ({ default: m.ReservationsPage })), 'ReservationsPage');
 
 const HubLoadingFallback = () => (
   <div style={{ display:'flex', justifyContent:'center', alignItems:'center', padding:'80px 20px' }}>
@@ -29,6 +33,23 @@ const HubLoadingFallback = () => (
 );
 
 const HUB_DEFS = [
+  // ── Free / included hubs (no subscription, no UpgradeGate). Shown first. ──
+  {
+    key: 'inventory',
+    label: 'Inventory Hub',
+    icon: '📦',
+    color: '#2A7D6E',
+    desc: "Track your church's items and supplies — check-in/out, locations, and low-stock alerts.",
+    free: true,
+  },
+  {
+    key: 'reservations',
+    label: 'Reservations Hub',
+    icon: '📅',
+    color: '#0D9488',
+    desc: 'Reserve equipment and rooms — request, approve, and avoid double-bookings.',
+    free: true,
+  },
   {
     key: 'insights',
     label: 'Insights Hub',
@@ -136,9 +157,11 @@ const UPGRADE_PREVIEWS = {
   jobs: '/upgrade-previews/jobs.jpg',
 };
 
-function HubContent({ hubKey, store, userProfile, jobsInitialView, isElder, userCanSeeHub }) {
+function HubContent({ hubKey, store, userProfile, jobsInitialView, isElder, userCanSeeHub, initialItemId, scannedItemId, onScannedItemConsumed }) {
   let page = null;
-  if (hubKey === 'insights') page = <InsightsPage store={store} userProfile={userProfile} />;
+  if (hubKey === 'inventory') page = <InventoryPage store={store} userProfile={userProfile} initialItemId={initialItemId} scannedItemId={scannedItemId} onScannedItemConsumed={onScannedItemConsumed} />;
+  else if (hubKey === 'reservations') page = <ReservationsPage store={store} userProfile={userProfile} />;
+  else if (hubKey === 'insights') page = <InsightsPage store={store} userProfile={userProfile} />;
   else if (hubKey === 'work') page = <WorkPage store={store} userProfile={userProfile} userCanSeeHub={userCanSeeHub} />;
   else if (hubKey === 'maintenance') page = <WorkBoard store={store} userProfile={userProfile} type="maintenance" />;
   else if (hubKey === 'coordination') page = <CoordinationPage store={store} userProfile={userProfile} />;
@@ -157,7 +180,7 @@ function HubContent({ hubKey, store, userProfile, jobsInitialView, isElder, user
   );
 }
 
-export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscriptionLoading, userCanSeeHub, onGoToSettings, jobsInitialView, canSeeShepherd, isElder }) {
+export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscriptionLoading, userCanSeeHub, onGoToSettings, jobsInitialView, canSeeShepherd, isElder, initialItemId, scannedItemId, onScannedItemConsumed }) {
   const isMobile = useContext(MobileCtx);
   const def = HUB_DEFS.find(h => h.key === hubKey);
   const volunteerMode = isVolunteerOnly(userProfile);
@@ -201,6 +224,22 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
           {canSeeShepherd
             ? <HubContent hubKey={hubKey} store={store} userProfile={userProfile} isElder={isElder} />
             : <div style={{ textAlign: 'center', padding: '60px 20px', color: B.textLight, fontFamily: f2 }}>This hub is for elders only.</div>}
+        </div>
+      );
+    }
+    // Free/core hubs (Inventory, Reservations): no subscription, no UpgradeGate.
+    // Open to any member who can reach the picker — render directly.
+    if (def.free) {
+      return (
+        <div>
+          <div style={{ marginBottom: 20 }}>
+            <button onClick={() => onOpenHub(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.teal, fontSize: 13, fontWeight: 600, fontFamily: f1, padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+              ← All Hubs
+            </button>
+          </div>
+          <HubContent hubKey={hubKey} store={store} userProfile={userProfile}
+            initialItemId={initialItemId} scannedItemId={scannedItemId} onScannedItemConsumed={onScannedItemConsumed} />
         </div>
       );
     }
@@ -263,28 +302,33 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ margin: '0 0 4px', fontSize: isMobile ? 20 : 24, fontFamily: f1, color: B.navy }}>Hubs</h2>
         <p style={{ margin: 0, fontSize: 13, color: B.textLight, fontFamily: f2 }}>
-          Extend ChurchOpsHub with paid add-ons for your church's specific needs.
+          Everything your church runs on — your included tools, plus add-ons for your specific needs.
         </p>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, opacity: subscriptionLoading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
         {HUB_DEFS.filter(hub => {
           // Shepherd: only FXCC elders + John ever see the card.
           if (hub.key === 'shepherd') return canSeeShepherd;
+          // Volunteers (jobs-only) see only their hub — no inventory/upgrade cards.
+          if (volunteerMode) return hub.key === 'jobs';
+          // Free/core hubs (Inventory, Reservations) are always shown.
+          if (hub.free) return true;
           if (hub.key === 'people_access' && userProfile?.role === 'user') return false;
-          // Volunteers (jobs-only) shouldn't be confronted with 6 upgrade cards
-          // for hubs they have no access to — show only their hub.
-          if (volunteerMode && hub.key !== 'jobs') return false;
           // Work merge: show the synthetic "Work" card only when both categories
           // are usable, and hide the individual Tasks/Maintenance cards then.
           if (hub.key === 'work') return mergeWork;
           if ((hub.key === 'tasks' || hub.key === 'maintenance') && mergeWork) return false;
-          return true;
+          // Paid hubs: show only when the church has it AND the user may use it —
+          // locked/paywall cards are hidden from members who can't use them.
+          return hasHub(hub.key) && userCanSeeHub(hub.key);
         }).map(hub => {
           const isSpecial = !!hub.special;
+          const isFree = !!hub.free;
           // 'work' is a merged shell (no real subscription key): only shown when
           // both underlying hubs are usable, so it's always active + visible.
-          const active = isSpecial || hub.key === 'work' ? true : hasHub(hub.key);
-          const canSee = isSpecial || hub.key === 'work' ? true : (active && userCanSeeHub(hub.key));
+          // Free/core hubs are likewise always active + visible.
+          const active = isSpecial || isFree || hub.key === 'work' ? true : hasHub(hub.key);
+          const canSee = isSpecial || isFree || hub.key === 'work' ? true : (active && userCanSeeHub(hub.key));
           return (
             <div key={hub.key}
               onClick={() => onOpenHub(hub.key)}
@@ -309,11 +353,13 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
             >
               {/* Status badge */}
               <div style={{ position: 'absolute', top: 14, right: 14 }}>
-                {isSpecial
-                  ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: hub.color + '18', color: hub.color }}>Elders</span>
-                  : active
-                    ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: hub.color + '18', color: hub.color }}>Active</span>
-                    : <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: B.warmGray, color: B.textLight }}>🔒 Locked</span>
+                {isFree
+                  ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: hub.color + '18', color: hub.color }}>Included</span>
+                  : isSpecial
+                    ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: hub.color + '18', color: hub.color }}>Elders</span>
+                    : active
+                      ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: hub.color + '18', color: hub.color }}>Active</span>
+                      : <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: B.warmGray, color: B.textLight }}>🔒 Locked</span>
                 }
               </div>
 
@@ -333,7 +379,7 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
           only when something is still locked. A pro/all-in/grandfathered church
           already has every paid hub active (hasHub → true for all), so there's
           nothing to upsell — don't show "Unlock everything" to a full-plan church. */}
-      {!volunteerMode && HUB_DEFS.some(h => !h.special && !h.synthetic && !hasHub(h.key)) && <div style={{ marginTop: 28, padding: 20, background: `linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 100%)`, borderRadius: 16, color: B.white }}>
+      {!volunteerMode && HUB_DEFS.some(h => !h.special && !h.synthetic && !h.free && !hasHub(h.key)) && <div style={{ marginTop: 28, padding: 20, background: `linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 100%)`, borderRadius: 16, color: B.white }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, fontFamily: f1, marginBottom: 4 }}>✨ Unlock everything — one plan</div>

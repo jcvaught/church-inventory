@@ -56,24 +56,17 @@ test.describe('A11y — Phase 4 axe scan', () => {
   });
 
   test('inventory page has no Phase-4 axe violations', async ({ page }) => {
-    await page.goto('/');
-    const onboardingClose = page.getByRole('button', { name: /^×$|^close$/i }).first();
-    if (await onboardingClose.count() > 0) await onboardingClose.click().catch(() => {});
-    // The tab key is `inventory` but its label is "All Items" (App.jsx:612).
-    // The old `/^inventory$/i` regex used to match a defunct empty-state CTA
-    // that's since been removed; surfaced once the E2E suite moved to a
-    // clean tenant where no inventory exists.
-    await page.getByRole('button', { name: /^all items$/i }).first().click();
+    // Items + Supplies live under the Inventory Hub now (Items/Supplies toggle,
+    // 2026-06-23). openHub lands on the Items sub-view by default.
+    await openHub(page, 'Inventory Hub');
     await page.getByPlaceholder(/search by name/i).waitFor({ timeout: 15_000 });
     const result = await scan(page);
     expect(result.violations, JSON.stringify(result.violations, null, 2)).toEqual([]);
   });
 
   test('supplies page has no Phase-4 axe violations (sans StockBar contrast)', async ({ page }) => {
-    await page.goto('/');
-    const onboardingClose = page.getByRole('button', { name: /^×$|^close$/i }).first();
-    if (await onboardingClose.count() > 0) await onboardingClose.click().catch(() => {});
-    await page.getByRole('button', { name: /^supplies$/i }).first().click();
+    await openHub(page, 'Inventory Hub');
+    await page.getByRole('tab', { name: /^supplies$/i }).click();
     await page.getByRole('heading', { name: /supplies/i }).first().waitFor({ timeout: 15_000 });
     // StockBar uses a 6px gold sub-pixel fill — not a text contrast issue.
     const result = await scan(page, { disable: ['color-contrast'] });
