@@ -703,7 +703,7 @@ export function TasksPage({ store, userProfile }) {
     setCommentsLoading(true);
     setComments([]);
     const q = fsQuery(
-      collection(db, 'churches', churchId, 'tasks', showDetail._docId, 'comments'),
+      collection(db, 'churches', churchId, 'workItems', `task_${showDetail._docId}`, 'comments'),
       orderBy('createdAt', 'asc')
     );
     const unsub = onSnapshot(q, snap => {
@@ -719,7 +719,7 @@ export function TasksPage({ store, userProfile }) {
     setRemoteUpdate(null);
     const initialRef = { current: true };
     const unsub = onSnapshot(
-      doc(db, 'churches', churchId, 'tasks', showDetail._docId),
+      doc(db, 'churches', churchId, 'workItems', `task_${showDetail._docId}`),
       snap => {
         if (!snap.exists()) {
           if (initialRef.current) { initialRef.current = false; return; }
@@ -879,7 +879,7 @@ export function TasksPage({ store, userProfile }) {
 
   // ── Handlers ──
   async function createNextRecurringTask(source) {
-    const sourceRef = doc(db, 'churches', churchId, 'tasks', source._docId);
+    const sourceRef = doc(db, 'churches', churchId, 'workItems', `task_${source._docId}`);
     let shouldCreate = false;
     await runTransaction(db, async (t) => {
       const snap = await t.get(sourceRef);
@@ -1322,7 +1322,7 @@ export function TasksPage({ store, userProfile }) {
     const [moved] = reordered.splice(fromIdx, 1);
     reordered.splice(toIdx, 0, moved);
     const results = await Promise.allSettled(reordered.map((t, i) =>
-      updateDoc(doc(db, 'churches', churchId, 'tasks', t._docId), { sortOrder: i })
+      updateDoc(doc(db, 'churches', churchId, 'workItems', `task_${t._docId}`), { sortOrder: i })
     ));
     const failed = results.filter(r => r.status === 'rejected').length;
     if (failed > 0) flash(`Failed to reorder ${failed} of ${reordered.length} tasks — refresh to see correct order.`, true);

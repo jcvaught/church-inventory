@@ -324,7 +324,7 @@ export function MaintenancePage({ store, userProfile }) {
     setCommentsLoading(true);
     setComments([]);
     const q = fsQuery(
-      collection(db, 'churches', churchId, 'maintenanceTickets', showDetail._docId, 'comments'),
+      collection(db, 'churches', churchId, 'workItems', `mnt_${showDetail._docId}`, 'comments'),
       orderBy('createdAt', 'asc')
     );
     const unsub = onSnapshot(q, snap => {
