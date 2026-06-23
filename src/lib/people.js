@@ -132,6 +132,20 @@ function displayNameOf(user, tracked) {
   return (user && user.name) || (tracked && tracked.name) || (user && user.email) || (tracked && tracked.email) || '';
 }
 
+// KNOWN LIMITATION + OPEN QUESTION (2026-06-23): a uid can carry >1 tracked doc
+// (the accessPerson.userId link is NOT DB-enforced 1:1), and we do not yet know
+// whether one human is ever LEGITIMATELY two tracked people (e.g. a paid
+// contractor who is also a tracked volunteer). Until that product call is made we
+// do NOT enforce 1:1; instead the behaviour-gating fields aggregate across all
+// linkedTrackedIds: compliance (complianceStatus) + eligibility (isEligibleFor/
+// shiftReadiness), matching the server's Set-based isAccessEligible.
+// `tracked` here is the FIRST/representative doc, and the fields below
+// (roles, hourlyRate, personType-derived role, active, contact) are still derived
+// from it ALONE — display-only lossiness, currently latent (no multi-tracked data
+// exists). Do NOT "fix" these speculatively: `roles` would be the one clearly-
+// correct thing to union; hourlyRate/personType are genuinely ambiguous under
+// multi-tracking and need a product rule. Revisit with the open question +
+// real data. See docs/backlog.md "OPEN QUESTION" + AUDIT-POST-0611-2026-06-23.md.
 function buildPerson(user, tracked, accessRecords, today, accessPeople = []) {
   const roles = new Set();
   if (user) {
