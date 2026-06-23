@@ -122,6 +122,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
   const [visibleCount, setVisibleCount] = useState(100); // render cap (UX-1)
+  const [prevFilterKey, setPrevFilterKey] = useState(null); // tracks the filter set for the render-time cap reset below
 
   const [view, setView] = useState('flock');        // 'flock' | 'all'
   const [viewAsKey, setViewAsKey] = useState(null); // admin: which elder's flock to preview
@@ -208,10 +209,17 @@ export function ShepherdHubPage({ userProfile, isElder }) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Reset the render cap whenever the visible set changes (UX-1). Depends on
-  // viewAsKey (state, declared above) rather than the derived activeKey to avoid
-  // a TDZ on the dep array, which React evaluates during render.
-  useEffect(() => { setVisibleCount(100); }, [view, search, statusFilter, assignFilter, sortBy, viewAsKey]);
+  // Reset the render cap whenever the visible set changes (UX-1). Done during
+  // render — React's "adjust state when a value changes" pattern — rather than
+  // in an effect, so there's no synchronous setState-in-effect / extra paint.
+  // The `prevFilterKey` guard makes it converge (no render loop): once it's
+  // re-synced, the keys match and neither setter fires. Uses viewAsKey (state)
+  // not the derived activeKey to avoid a TDZ in the comparison.
+  const filterKey = `${view}|${search}|${statusFilter}|${assignFilter}|${sortBy}|${viewAsKey}`;
+  if (filterKey !== prevFilterKey) {
+    setPrevFilterKey(filterKey);
+    setVisibleCount(100);
+  }
 
   // The logged-in elder's own key (null for a non-elder admin).
   const myKey = useMemo(() => {

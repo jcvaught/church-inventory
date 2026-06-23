@@ -81,16 +81,25 @@ export function EventDayPage({ store, userProfile, hasHub }) {
   const churchId = userProfile?.churchId;
   const [rostersByJob, setRostersByJob] = useState(new Map());
   useEffect(() => {
-    if (!churchId || !showJobs) { setRostersByJob(prev => (prev.size ? new Map() : prev)); return undefined; }
-    const fetchable = shiftOccs.map(o => jobById.get(o.sourceId)).filter(j => j && (j.signupCount || 0) > 0);
-    if (fetchable.length === 0) { setRostersByJob(prev => (prev.size ? new Map() : prev)); return undefined; }
     let cancelled = false;
+    // `fetchable` is empty when the tab is hidden or no shift on the day has
+    // signups — Promise.all([]) then resolves to [] and clears the map below.
+    // Routing every update through the async .then keeps the lone setState out
+    // of the effect body (no synchronous cascade) while still clearing rosters.
+    const fetchable = (!churchId || !showJobs)
+      ? []
+      : shiftOccs.map(o => jobById.get(o.sourceId)).filter(j => j && (j.signupCount || 0) > 0);
     Promise.all(fetchable.map(async (j) => {
       try {
         const snap = await getDocs(collection(db, 'churches', churchId, 'jobListings', j._docId, 'signups'));
         return [j._docId, snap.docs.map(d => ({ uid: d.id, name: d.data().name }))];
       } catch { return [j._docId, null]; } // rule denial / network — skip
-    })).then(entries => { if (!cancelled) setRostersByJob(new Map(entries.filter(([, v]) => v !== null))); });
+    })).then(entries => {
+      if (cancelled) return;
+      const next = entries.filter(([, v]) => v !== null);
+      // Bail out of a re-render when it was already empty and stays empty.
+      setRostersByJob(prev => (prev.size === 0 && next.length === 0) ? prev : new Map(next));
+    });
     return () => { cancelled = true; };
   }, [shiftOccs, jobById, churchId, showJobs]);
 
