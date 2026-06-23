@@ -1,21 +1,18 @@
 // @ts-check
 import { test, expect } from '../firebase-fixtures.js';
 import {
-  workItemsEnabled, listCollection, getWorkItem, e2eTitle,
+  listCollection, getWorkItem, e2eTitle,
   purgeWorkItemsArtifacts, purgeE2EArtifacts, acceptConfirm, db, churchId,
 } from '../admin-helpers.js';
 
-// Work-unification Phase 2 — the coverage the main work-unification.spec.js
-// leaves out (the 2026-06-10 pre-flip review flagged these as gaps): the
-// unified-path COMMENTS round-trip, the cross-collection LINK-FIELD nulling,
+// Work-unification — the coverage the main work-unification.spec.js leaves out:
+// the unified-path COMMENTS round-trip, the cross-collection LINK-FIELD nulling,
 // and the → convert flows that create those links. All three exercise the
-// bare-id ↔ `task_`/`mnt_` prefix routing — the riskiest part of the flip.
+// bare-id ↔ `task_`/`mnt_` prefix routing on the `workItems` collection.
 //
-// DARK until the maintenance window: every test is GATED on the test church's
-// `config/featureFlags.workItemsEnabled` flag and SKIPS while it is off (the
-// current prod state), so the green suite is unaffected. To run them, flip the
-// e2e-test-church tenant on — `node scripts/set-work-flag.cjs --church=e2e-test-church --on --prod`
-// (or against the emulator with the flag set) — then `npm run test:e2e`.
+// Part C (2026-06-23) made `workItems` the only path, so these run
+// unconditionally. (NB: the → Ticket convert exercised here is slated for
+// removal in the Tasks+Maintenance UI merge — update this spec then.)
 test.describe('Work-unification — unified-path comments, links, converts', () => {
   test.afterEach(async () => {
     await purgeWorkItemsArtifacts();   // tasks/maintenanceTickets/workItems by [E2E] name (recursive → comments too)
@@ -55,8 +52,6 @@ test.describe('Work-unification — unified-path comments, links, converts', () 
 
   // ── A + B: comments land under workItems/{prefixed}/comments, not legacy ────
   test('unified comments: task + ticket comments write to workItems subcollections', async ({ page }) => {
-    test.skip(!(await workItemsEnabled()), 'workItems flag off (dark launch) — nothing to assert yet');
-
     // Task comment
     const taskName = e2eTitle(`WU comment task ${Date.now()}`);
     const task = await createTaskViaUI(page, taskName);
@@ -87,8 +82,6 @@ test.describe('Work-unification — unified-path comments, links, converts', () 
 
   // ── C + cross-collection nulling: → Ticket convert, then delete the task ────
   test('→ Ticket convert links both workItems docs; deleting the task nulls the ticket backref', async ({ page }) => {
-    test.skip(!(await workItemsEnabled()), 'workItems flag off (dark launch)');
-
     const taskName = e2eTitle(`WU link ${Date.now()}`);
     const task = await createTaskViaUI(page, taskName);
     const bareTask = task._docId.replace(/^task_/, '');
@@ -121,8 +114,6 @@ test.describe('Work-unification — unified-path comments, links, converts', () 
 
   // ── D: → Job convert links across the workItems ↔ jobListings boundary ──────
   test('→ Job convert links the workItems task to a jobListings job by bare id', async ({ page }) => {
-    test.skip(!(await workItemsEnabled()), 'workItems flag off (dark launch)');
-
     const taskName = e2eTitle(`WU job-link ${Date.now()}`);
     const task = await createTaskViaUI(page, taskName);
     const bareTask = task._docId.replace(/^task_/, '');

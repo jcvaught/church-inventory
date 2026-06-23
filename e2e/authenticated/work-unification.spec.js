@@ -1,52 +1,34 @@
 // @ts-check
 import { test, expect } from '../firebase-fixtures.js';
 import {
-  workItemsEnabled, listCollection, e2eTitle, purgeWorkItemsArtifacts,
+  listCollection, e2eTitle, purgeWorkItemsArtifacts,
 } from '../admin-helpers.js';
 
-// Work-unification Phase 2 — asserts the unified `workItems` read/write path.
+// Work-unification — asserts the unified `workItems` read/write path.
 //
-// DARK until the maintenance window: these tests are GATED on the test church's
-// `config/featureFlags.workItemsEnabled` flag and SKIP while it is off (the
-// current prod state), so the green suite is unaffected. After the Thursday
-// window flips the test church, the same specs prove (a) the backfill produced
-// a faithful mirror and (b) the live app reads from / writes to `workItems`.
-// To exercise them locally, flip the flag on the e2e-test-church tenant.
+// Part C (2026-06-23) made `workItems` the ONLY path: the `workItemsEnabled`
+// flag and the legacy `tasks`/`maintenanceTickets` collections are gone. These
+// specs now run unconditionally and prove the live app reads from / writes to
+// `workItems` (split by `type`), never the deleted legacy collections (which
+// `listCollection('tasks')` now returns as empty).
 test.describe('Work-unification — unified workItems path', () => {
   test.afterEach(async () => { await purgeWorkItemsArtifacts(); });
 
-  test('backfill mirror: every legacy task/ticket has a typed workItems twin', async () => {
-    test.skip(!(await workItemsEnabled()), 'workItems flag off (dark launch) — nothing to assert yet');
+  test('every workItems doc is typed; legacy collections stay empty', async () => {
 
     const [tasks, tickets, work] = await Promise.all([
       listCollection('tasks'), listCollection('maintenanceTickets'), listCollection('workItems'),
     ]);
-    const byId = new Map(work.map(w => [w._docId, w]));
 
-    // Superset invariant (survives post-flip creates): each legacy doc maps to a
-    // `task_<id>` / `mnt_<id>` workItems doc with the right type + identity field.
-    for (const t of tasks) {
-      const w = byId.get(`task_${t._docId}`);
-      expect(w, `task ${t.taskNumber || t._docId} has a workItems twin`).toBeTruthy();
-      expect(w.type).toBe('task');
-      expect(w.taskNumber).toBe(t.taskNumber);
-      expect(w.name).toBe(t.name);
-    }
-    for (const tk of tickets) {
-      const w = byId.get(`mnt_${tk._docId}`);
-      expect(w, `ticket ${tk.ticketNumber || tk._docId} has a workItems twin`).toBeTruthy();
-      expect(w.type).toBe('maintenance');
-      expect(w.ticketNumber).toBe(tk.ticketNumber);
-      expect(w.name).toBe(tk.name);
-    }
+    // Part C deleted the legacy collections — nothing reads or writes them now.
+    expect(tasks.length, 'legacy tasks collection is empty post-Part-C').toBe(0);
+    expect(tickets.length, 'legacy maintenanceTickets collection is empty post-Part-C').toBe(0);
 
     // Every workItems doc carries a valid discriminator (no untyped strays).
     for (const w of work) expect(['task', 'maintenance']).toContain(w.type);
   });
 
   test('read path: Tasks Hub board renders from workItems (task-type count)', async ({ page }) => {
-    test.skip(!(await workItemsEnabled()), 'workItems flag off (dark launch)');
-
     const expected = (await listCollection('workItems')).filter(w => w.type === 'task').length;
 
     await page.goto('/');
@@ -60,8 +42,6 @@ test.describe('Work-unification — unified workItems path', () => {
   });
 
   test('write path: a UI-created task lands in workItems (type:task), not legacy', async ({ page }) => {
-    test.skip(!(await workItemsEnabled()), 'workItems flag off (dark launch)');
-
     const name = e2eTitle(`WU create ${Date.now()}`);
 
     await page.goto('/');
