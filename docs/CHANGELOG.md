@@ -4,6 +4,15 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-23 — Work board engine dedup (v2) + Part C regression hotfix
+
+- **Engine dedup.** The two ~80%-duplicate board engines are now ONE parameterized component: `src/pages/hubs/TasksPage.jsx` → renamed **`WorkBoard.jsx`**, exporting `WorkBoard({ store, userProfile, type })`. **`MaintenancePage.jsx` (1333 lines) deleted.** `WorkPage` and the single-category `tasks`/`maintenance` routes in `HubsPage` all mount `<WorkBoard type=…>`. Net: one engine (147 KB chunk) replacing 131 KB + 76 KB.
+  - Type divergence is isolated to a small `isMaint` adapter at the top of `WorkBoard`: store-fn aliases (`addItem`/`updateItem`/`deleteItem`/`add|update|deleteItemComment`/`addItemTags`) — the maintenance store fns harmlessly ignore the extra trailing args the task fns consume — plus `numberField`/`docPrefix`/`hubKey`/`notifyType`/`tagSuggestions`/`canCreate`.
+  - Each category keeps its **exact** prior feature set (gated by `isMaint`): tasks → visibility/sharing, paste-import, templates, ministry, insights, bulk actions, saved views, drag-reorder/quick-add, →Job, @-mentions, CSV/ICS export, defaults. Maintenance → vendor directory + CRUD, linked equipment, estimated/actual cost, contractor scheduling, admin/manager-only create, operator-only field disabling.
+- **Convert-feature removed.** The task→maintenance `→ Ticket` convert (button + `handleCreateTicket` + modal) is gone — within one `workItems` collection it's a `type` flip, not a linked spawn. The `→ Job` convert stays (Jobs is still its own collection).
+- **Part C regression hotfix (shipped first, `e1169cd`).** Part C (`588b578`) deleted the legacy `tasks`/`maintenanceTickets` collections but 5 direct-collection refs in the two pages still pointed there — comment listeners (both pages), the task live-sync listener, `createNextRecurringTask`'s transaction, and the drag-reorder `sortOrder` write — silently broken in prod. Repointed to `workItems/{task_|mnt_}{id}`. The dedup removes that drift class (path logic now lives once).
+- **Tests.** `test:rules` 29/29; E2E `work-merge` (incl. a new maintenance-detail scoping test asserting vendor/cost/contractor render and visibility/→Job/→Ticket do **not**) + `work-unification` green against the real Firebase test tenant. The obsolete `→ Ticket` convert E2E was retired.
+
 ## 2026-06-23 — Tasks + Maintenance UI merge (one "Work" board) — v1
 
 The user-facing half of the Work unification: Tasks and Maintenance (already one `workItems` collection since Phase 2) now present as a single board.

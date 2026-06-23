@@ -11,8 +11,8 @@ import {
 // bare-id ↔ `task_`/`mnt_` prefix routing on the `workItems` collection.
 //
 // Part C (2026-06-23) made `workItems` the only path, so these run
-// unconditionally. (NB: the → Ticket convert exercised here is slated for
-// removal in the Tasks+Maintenance UI merge — update this spec then.)
+// unconditionally. (The → Ticket convert that used to be exercised here was
+// removed with the Tasks+Maintenance engine merge; only → Job remains.)
 test.describe('Work-unification — unified-path comments, links, converts', () => {
   test.afterEach(async () => {
     await purgeWorkItemsArtifacts();   // tasks/maintenanceTickets/workItems by [E2E] name (recursive → comments too)
@@ -80,37 +80,10 @@ test.describe('Work-unification — unified-path comments, links, converts', () 
     await expect.poll(async () => (await commentsOf(ticket._docId)).some((c) => c.text === ticketComment), { timeout: 15_000 }).toBe(true);
   });
 
-  // ── C + cross-collection nulling: → Ticket convert, then delete the task ────
-  test('→ Ticket convert links both workItems docs; deleting the task nulls the ticket backref', async ({ page }) => {
-    const taskName = e2eTitle(`WU link ${Date.now()}`);
-    const task = await createTaskViaUI(page, taskName);
-    const bareTask = task._docId.replace(/^task_/, '');
-
-    await openTasksHub(page);
-    await openCard(page, taskName);
-    await page.getByRole('button', { name: /^→ Ticket$/ }).click();
-    await page.getByRole('button', { name: /^Create Ticket$/ }).click();
-
-    // Task now carries a bare linkedTicketDocId; the ticket twin lives at
-    // workItems/mnt_<bare> with the reverse backref (also bare).
-    await expect.poll(async () => !!(await findWork((w) => w._docId === task._docId))?.linkedTicketDocId, { timeout: 15_000 }).toBe(true);
-    const linkedTask = await findWork((w) => w._docId === task._docId);
-    const bareTicket = linkedTask.linkedTicketDocId;
-    const ticket = await getWorkItem(`mnt_${bareTicket}`);
-    expect(ticket, 'converted ticket exists in workItems').toBeTruthy();
-    expect(ticket.type).toBe('maintenance');
-    expect(ticket.linkedTaskDocId).toBe(bareTask);
-
-    // Deleting the task must null the ticket's backref (deleteTask → ticketDocRef).
-    await openTasksHub(page);
-    await openCard(page, taskName);
-    await page.getByRole('button', { name: /^Delete$/ }).click();
-    await acceptConfirm(page, 'Delete');
-    await expect.poll(async () => {
-      const tk = await getWorkItem(`mnt_${bareTicket}`);
-      return tk && (tk.linkedTaskDocId === null || tk.linkedTaskDocId === undefined);
-    }, { timeout: 15_000 }).toBe(true);
-  });
+  // (The task→Ticket convert feature was removed with the Work board merge:
+  // tasks + maintenance share one collection, so "make this a ticket" is a type
+  // flip, not a linked spawn. Its E2E test was retired with it. The → Job
+  // convert below stays — Jobs is still a separate collection.)
 
   // ── D: → Job convert links across the workItems ↔ jobListings boundary ──────
   test('→ Job convert links the workItems task to a jobListings job by bare id', async ({ page }) => {

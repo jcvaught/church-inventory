@@ -13,11 +13,11 @@ import { isVolunteerOnly } from '../utils/roleHelpers.js';
 // free-tier inventory-only churches. Lazy-load each hub so the main bundle
 // drops by ~200 KB gzipped and TTI on mobile improves accordingly.
 const InsightsPage      = lazyWithRetry(() => import('./hubs/InsightsPage.jsx').then(m => ({ default: m.InsightsPage })), 'InsightsPage');
-const MaintenancePage   = lazyWithRetry(() => import('./hubs/MaintenancePage.jsx').then(m => ({ default: m.MaintenancePage })), 'MaintenancePage');
 const CoordinationPage  = lazyWithRetry(() => import('./hubs/CoordinationPage.jsx').then(m => ({ default: m.CoordinationPage })), 'CoordinationPage');
 const AccountabilityPage = lazyWithRetry(() => import('./hubs/AccountabilityPage.jsx').then(m => ({ default: m.AccountabilityPage })), 'AccountabilityPage');
 const PeopleAccessPage  = lazyWithRetry(() => import('./hubs/PeopleAccessPage.jsx').then(m => ({ default: m.PeopleAccessPage })), 'PeopleAccessPage');
-const TasksPage         = lazyWithRetry(() => import('./hubs/TasksPage.jsx').then(m => ({ default: m.TasksPage })), 'TasksPage');
+// Tasks and Maintenance are one engine now (WorkBoard), selected by `type`.
+const WorkBoard         = lazyWithRetry(() => import('./hubs/WorkBoard.jsx').then(m => ({ default: m.WorkBoard })), 'WorkBoard');
 const JobsPage          = lazyWithRetry(() => import('./hubs/JobsPage.jsx').then(m => ({ default: m.JobsPage })), 'JobsPage');
 const ShepherdHubPage   = lazyWithRetry(() => import('./hubs/ShepherdHubPage.jsx').then(m => ({ default: m.ShepherdHubPage })), 'ShepherdHubPage');
 const WorkPage          = lazyWithRetry(() => import('./WorkPage.jsx').then(m => ({ default: m.WorkPage })), 'WorkPage');
@@ -140,11 +140,11 @@ function HubContent({ hubKey, store, userProfile, jobsInitialView, isElder, user
   let page = null;
   if (hubKey === 'insights') page = <InsightsPage store={store} userProfile={userProfile} />;
   else if (hubKey === 'work') page = <WorkPage store={store} userProfile={userProfile} userCanSeeHub={userCanSeeHub} />;
-  else if (hubKey === 'maintenance') page = <MaintenancePage store={store} userProfile={userProfile} />;
+  else if (hubKey === 'maintenance') page = <WorkBoard store={store} userProfile={userProfile} type="maintenance" />;
   else if (hubKey === 'coordination') page = <CoordinationPage store={store} userProfile={userProfile} />;
   else if (hubKey === 'accountability') page = <AccountabilityPage store={store} userProfile={userProfile} />;
   else if (hubKey === 'people_access') page = <PeopleAccessPage store={store} userProfile={userProfile} />;
-  else if (hubKey === 'tasks') page = <TasksPage store={store} userProfile={userProfile} />;
+  else if (hubKey === 'tasks') page = <WorkBoard store={store} userProfile={userProfile} type="task" />;
   else if (hubKey === 'jobs') page = <JobsPage store={store} userProfile={userProfile} initialView={jobsInitialView} />;
   else if (hubKey === 'shepherd') page = <ShepherdHubPage userProfile={userProfile} isElder={isElder} />;
   if (!page) return null;

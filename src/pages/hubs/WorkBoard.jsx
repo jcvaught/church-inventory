@@ -17,6 +17,7 @@ import { resizeImageForUpload } from '../../utils/imageResize.js';
 import { exportTasksCSV } from '../../utils/csv.js';
 import { exportTasksICS } from '../../utils/ical.js';
 import { localDateStr, calculateNextDue } from '../../utils/date.js';
+import { formatPhone } from '../../utils/phone.js';
 import { STATUSES, PRIORITIES, RECURRENCE_OPTIONS, RECURRENCE_LABELS, priorityColors, statusColors, initials, assigneeColor, PriorityBadge } from '../../components/board/boardUI.jsx';
 import { BoardCalendar } from '../../components/board/BoardCalendar.jsx';
 import { CommentThread } from '../../components/comments/CommentThread.jsx';
@@ -126,7 +127,7 @@ const TaskCard = memo(function TaskCard({ task, onClick, onDragStart, onStatusCh
       onDragStart={!isMobile && onDragStart ? e => { e.dataTransfer.setData('taskDocId', task._docId); e.dataTransfer.effectAllowed = 'move'; } : undefined}
       onClick={() => onClick(task)}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(task); } }}
-      aria-label={`${task.taskNumber ? task.taskNumber + ': ' : ''}${task.name}${isOverdue ? ' (overdue)' : ''}`}
+      aria-label={`${(task.taskNumber || task.ticketNumber) ? (task.taskNumber || task.ticketNumber) + ': ' : ''}${task.name}${isOverdue ? ' (overdue)' : ''}`}
       style={{ background:B.white, borderRadius:12, padding:'14px 16px', border:'1px solid '+B.sand, cursor: !isMobile && onDragStart ? 'grab' : 'pointer', borderLeft:'4px solid '+sc.dot, boxShadow:'0 1px 3px rgba(27,42,74,0.06)', marginBottom:8, transition:'box-shadow 0.15s' }}
       onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 16px rgba(27,42,74,0.12)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 3px rgba(27,42,74,0.06)'}
@@ -579,10 +580,24 @@ function PastePanel({ pasteText, setPasteText, taskHubUsers, pasteSaving, pasteP
   );
 }
 
-const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', status:'Backlog', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], linkedItemDocId:null, linkedTicketDocId:null, estimatedHours:null, actualHours:null, ministry:'' });
+const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', status:'Backlog', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], linkedItemDocId:null, linkedTicketDocId:null, estimatedHours:null, actualHours:null, ministry:'', vendorId:'', estimatedCost:'' });
+const getEmptyVendor = () => ({ name:'', phone:'', email:'', specialty:'', notes:'' });
 
-export function TasksPage({ store, userProfile }) {
-  const { tasks, items, maintenanceTickets, users, settings, config, notificationConfig, loading, addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags, updateUser, taskTemplates, addTaskTemplate, deleteTaskTemplate, addJobListing, addTicket, deleteJobListing, deleteTicket } = store;
+// One board engine, two categories. `type` selects tasks vs maintenance: the
+// shared scaffold (views, cards, filters, comments, photos, checklist) is
+// identical; only the type-specific data surfaces differ (tasks: visibility/
+// sharing/ministry/templates/→Job; maintenance: vendors/linked-equipment/cost/
+// contractor). This replaced the old standalone MaintenancePage — see
+// docs/WORK-MERGE-TASKS-MAINTENANCE-PLAN-2026-06-23.md §4.
+export function WorkBoard({ store, userProfile, type = 'task' }) {
+  const isMaint = type === 'maintenance';
+  const {
+    tasks, items, maintenanceTickets, users, settings, config, notificationConfig, loading,
+    addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags,
+    updateUser, taskTemplates, addTaskTemplate, deleteTaskTemplate, addJobListing, deleteJobListing,
+    addTicket, updateTicket, deleteTicket, addTicketComment, updateTicketComment, deleteTicketComment, addMaintenanceTags,
+    vendors = [], addVendor, updateVendor, deleteVendor, accessPeople = [], timeEntries = [], addTimeEntry,
+  } = store;
   const isMobile = useContext(MobileCtx);
 
   const userId = userProfile?.id || userProfile?.uid;
@@ -591,38 +606,66 @@ export function TasksPage({ store, userProfile }) {
   const isAdmin = userProfile?.role === 'admin';
   const isManager = userProfile?.role === 'manager';
   const canOperate = isAdmin || isManager;
+  // Maintenance is admin/manager-create-only; tasks are any-member-create.
+  const canCreate = isMaint ? canOperate : true;
 
-  const taskTags = settings?.taskTags || [];
+  // ── Type-driven engine config (the only places the two categories diverge) ──
+  const hubKey = isMaint ? 'maintenance' : 'tasks';
+  const numberField = isMaint ? 'ticketNumber' : 'taskNumber';
+  const docPrefix = isMaint ? 'mnt_' : 'task_';
+  const noun = isMaint ? 'ticket' : 'task';
+  const Noun = isMaint ? 'Ticket' : 'Task';
+  const notifyType = isMaint ? 'ticket_assigned' : 'task_assigned';
+  const tagSuggestions = isMaint ? (settings?.maintenanceTags || []) : (settings?.taskTags || []);
+  // Store-fn adapters. The maintenance fns harmlessly ignore the extra trailing
+  // args (uid/name/number) that the task fns consume, so one call shape serves both.
+  const addItem = isMaint ? addTicket : addTask;
+  const updateItem = isMaint ? updateTicket : updateTask;
+  const deleteItem = isMaint ? deleteTicket : deleteTask;
+  const addItemComment = isMaint ? addTicketComment : addTaskComment;
+  const updateItemComment = isMaint ? updateTicketComment : updateTaskComment;
+  const deleteItemComment = isMaint ? deleteTicketComment : deleteTaskComment;
+  const addItemTags = isMaint ? addMaintenanceTags : addTaskTags;
 
-  // ── Filter users to those with Tasks Hub access ──
+  const taskTags = tagSuggestions;
+  const activeItems = (items || []).filter(i => i.status !== 'Disposed');
+
+  // ── Filter users to those with this category's hub access ──
   const taskHubUsers = useMemo(() =>
     (users || []).filter(u => {
       if (u.active === false) return false;
       if (u.role === 'admin') return true;
       const allowed = u.allowedHubs;
       if (allowed == null) return true;
-      return allowed.includes('tasks');
+      return allowed.includes(hubKey);
     }),
-  [users]);
+  [users, hubKey]);
 
   // Assignees for the filter dropdown: active users with Tasks Hub access, plus deactivated users
   // who appear on existing tasks (so tasks assigned to them remain filterable).
+  // The category's source list (tasks or maintenance tickets).
+  const rawItems = useMemo(() => isMaint ? (maintenanceTickets || []) : (tasks || []), [isMaint, maintenanceTickets, tasks]);
+
   const filterableAssignees = useMemo(() => {
-    const fromTasks = (tasks || []).flatMap(t => t.assignees || []);
+    const fromItems = rawItems.flatMap(t => t.assignees || []);
     const seen = new Set(taskHubUsers.map(u => u.id));
-    const extra = fromTasks.filter(a => !seen.has(a.uid)).map(a => ({ id: a.uid, name: a.name }));
+    const extra = fromItems.filter(a => a.uid && !seen.has(a.uid)).map(a => ({ id: a.uid, name: a.name }));
     return [...taskHubUsers, ...extra];
-  }, [taskHubUsers, tasks]);
+  }, [taskHubUsers, rawItems]);
 
   // ── Visibility filter — applied before any rendering ──
-  // Private/shared tasks are truly private: no admin override.
-  const visibleTasks = useMemo(() => (tasks || []).filter(t => {
-    if (t.visibility === 'team' || !t.visibility) return true;
-    if (t.createdBy === userId) return true;
-    if (t.assignees?.some(a => a.uid === userId)) return true;
-    if (t.visibility === 'shared' && t.sharedWith?.some(s => s.uid === userId)) return true;
-    return false;
-  }), [tasks, userId]);
+  // Tasks can be private/shared (truly private: no admin override). Maintenance
+  // tickets have no visibility model — every maintenance-hub user sees them all.
+  const visibleTasks = useMemo(() => {
+    if (isMaint) return rawItems;
+    return rawItems.filter(t => {
+      if (t.visibility === 'team' || !t.visibility) return true;
+      if (t.createdBy === userId) return true;
+      if (t.assignees?.some(a => a.uid === userId)) return true;
+      if (t.visibility === 'shared' && t.sharedWith?.some(s => s.uid === userId)) return true;
+      return false;
+    });
+  }, [rawItems, isMaint, userId]);
 
   // Declared early — referenced in the pruning useEffect below (TDZ guard per CLAUDE.md Known Pitfalls)
   const tasksByDocId = useMemo(() => {
@@ -684,12 +727,18 @@ export function TasksPage({ store, userProfile }) {
   const dragChecklistIdx = useRef(null);
   const isDirtyRef = useRef(false);
 
-  // Convert / cross-hub
+  // Convert / cross-hub (tasks → Job; Jobs stays a separate hub)
   const [showConvertToJobModal, setShowConvertToJobModal] = useState(false);
   const [convertJobForm, setConvertJobForm] = useState({ title:'', scheduledDate:'', location:'', spotsTotal:1 });
   const [convertJobSaving, setConvertJobSaving] = useState(false);
-  const [showCreateTicketModal, setShowCreateTicketModal] = useState(false);
-  const [createTicketSaving, setCreateTicketSaving] = useState(false);
+
+  // ── Maintenance-only state (vendors + contractor scheduling) ──
+  const [showVendors, setShowVendors] = useState(false);
+  const [showAddVendor, setShowAddVendor] = useState(false);
+  const [showEditVendor, setShowEditVendor] = useState(null); // vendor object being edited
+  const [vendorForm, setVendorForm] = useState(getEmptyVendor);
+  const [contractorModal, setContractorModal] = useState(false);
+  const [contractorForm, setContractorForm] = useState({ personId: '', date: '', hours: '' });
 
   // Comments
   const [comments, setComments] = useState([]);
@@ -703,7 +752,7 @@ export function TasksPage({ store, userProfile }) {
     setCommentsLoading(true);
     setComments([]);
     const q = fsQuery(
-      collection(db, 'churches', churchId, 'workItems', `task_${showDetail._docId}`, 'comments'),
+      collection(db, 'churches', churchId, 'workItems', `${docPrefix}${showDetail._docId}`, 'comments'),
       orderBy('createdAt', 'asc')
     );
     const unsub = onSnapshot(q, snap => {
@@ -719,12 +768,12 @@ export function TasksPage({ store, userProfile }) {
     setRemoteUpdate(null);
     const initialRef = { current: true };
     const unsub = onSnapshot(
-      doc(db, 'churches', churchId, 'workItems', `task_${showDetail._docId}`),
+      doc(db, 'churches', churchId, 'workItems', `${docPrefix}${showDetail._docId}`),
       snap => {
         if (!snap.exists()) {
           if (initialRef.current) { initialRef.current = false; return; }
           setShowDetail(null);
-          flash('This task was deleted by another user.', true);
+          flash(`This ${noun} was deleted by another user.`, true);
           return;
         }
         if (initialRef.current) { initialRef.current = false; return; } // skip first fire
@@ -824,11 +873,15 @@ export function TasksPage({ store, userProfile }) {
       sharedWith: task.sharedWith || [],
       notes: task.notes || '',
       checklist: task.checklist || [],
-      linkedItemDocId: task.linkedItemDocId || null,
+      linkedItemDocId: task.linkedItemDocId || (isMaint ? '' : null),
       linkedTicketDocId: task.linkedTicketDocId || null,
       estimatedHours: task.estimatedHours ?? null,
       actualHours: task.actualHours ?? null,
       ministry: task.ministry || '',
+      // Maintenance-only fields
+      vendorId: task.vendorId || '',
+      estimatedCost: task.estimatedCost != null ? String(task.estimatedCost) : '',
+      actualCost: task.actualCost != null ? String(task.actualCost) : '',
     };
   }
 
@@ -866,7 +919,7 @@ export function TasksPage({ store, userProfile }) {
     for (const file of files) {
       try {
         const resized = await resizeImageForUpload(file);
-        const sRef = storageRef(storage, `churches/${churchId}/tasks/${docId}/${Date.now()}_${file.name}`);
+        const sRef = storageRef(storage, `churches/${churchId}/${isMaint ? 'maintenance' : 'tasks'}/${docId}/${Date.now()}_${file.name}`);
         const snap = await uploadBytes(sRef, resized);
         urls.push(await getDownloadURL(snap.ref));
       } catch (err) {
@@ -879,7 +932,7 @@ export function TasksPage({ store, userProfile }) {
 
   // ── Handlers ──
   async function createNextRecurringTask(source) {
-    const sourceRef = doc(db, 'churches', churchId, 'workItems', `task_${source._docId}`);
+    const sourceRef = doc(db, 'churches', churchId, 'workItems', `${docPrefix}${source._docId}`);
     let shouldCreate = false;
     await runTransaction(db, async (t) => {
       const snap = await t.get(sourceRef);
@@ -889,24 +942,35 @@ export function TasksPage({ store, userProfile }) {
     });
     if (!shouldCreate) return;
     const nextDue = calculateNextDue(source.dueDate, source.recurrence);
+    const base = {
+      name: source.name,
+      description: source.description,
+      priority: source.priority,
+      tags: source.tags || [],
+      dueDate: nextDue,
+      recurrence: source.recurrence,
+      assignees: source.assignees || [],
+      checklist: (source.checklist || []).map(c => ({ ...c, done: false })),
+      notes: source.notes || null,
+      photos: [],
+      completedAt: null,
+    };
+    const payload = isMaint
+      ? { ...base,
+          linkedItemDocId: source.linkedItemDocId || null,
+          linkedItemId: source.linkedItemId || null,
+          linkedItemDescription: source.linkedItemDescription || null,
+          vendorId: source.vendorId || null,
+          vendorName: source.vendorName || null,
+          estimatedCost: source.estimatedCost ?? null,
+          actualCost: null }
+      : { ...base,
+          visibility: source.visibility || 'team',
+          sharedWith: source.visibility === 'shared' ? (source.sharedWith || []) : [] };
     try {
-      await addTask({
-        name: source.name,
-        description: source.description,
-        priority: source.priority,
-        tags: source.tags || [],
-        dueDate: nextDue,
-        recurrence: source.recurrence,
-        assignees: source.assignees || [],
-        checklist: (source.checklist || []).map(c => ({ ...c, done: false })),
-        notes: source.notes || null,
-        photos: [],
-        visibility: source.visibility || 'team',
-        sharedWith: source.visibility === 'shared' ? (source.sharedWith || []) : [],
-        completedAt: null,
-      }, userId, userName);
+      await addItem(payload, userId, userName);
     } catch (err) {
-      // Roll back the marker so the user can retry by completing the task again
+      // Roll back the marker so the user can retry by completing the item again
       await updateDoc(sourceRef, { nextRecurrenceCreatedAt: deleteField() });
       throw err;
     }
@@ -916,7 +980,7 @@ export function TasksPage({ store, userProfile }) {
     if (!taskForm.name.trim()) return;
     setSaving(true);
     try {
-      const docId = await addTask({
+      const base = {
         name: taskForm.name.trim(),
         description: taskForm.description.trim(),
         priority: taskForm.priority,
@@ -928,33 +992,49 @@ export function TasksPage({ store, userProfile }) {
         checklist: [],
         photos: [],
         notes: taskForm.notes || null,
-        visibility: taskForm.visibility || 'team',
-        sharedWith: taskForm.visibility === 'shared' ? taskForm.sharedWith : [],
         completedAt: null,
-        linkedItemDocId: taskForm.linkedItemDocId || null,
-        linkedTicketDocId: taskForm.linkedTicketDocId || null,
-      }, userId, userName);
+      };
+      let payload;
+      if (isMaint) {
+        const vendorName = taskForm.vendorId ? (vendors.find(v => v._docId === taskForm.vendorId)?.name || null) : null;
+        const linkedItem = activeItems.find(i => i._docId === taskForm.linkedItemDocId);
+        payload = { ...base,
+          linkedItemDocId: taskForm.linkedItemDocId || null,
+          linkedItemId: linkedItem?.itemId || null,
+          linkedItemDescription: linkedItem?.description || null,
+          vendorId: taskForm.vendorId || null,
+          vendorName,
+          estimatedCost: taskForm.estimatedCost ? Number(taskForm.estimatedCost) : null,
+          actualCost: null };
+      } else {
+        payload = { ...base,
+          visibility: taskForm.visibility || 'team',
+          sharedWith: taskForm.visibility === 'shared' ? taskForm.sharedWith : [],
+          linkedItemDocId: taskForm.linkedItemDocId || null,
+          linkedTicketDocId: taskForm.linkedTicketDocId || null };
+      }
+      const docId = await addItem(payload, userId, userName);
       if (photoFiles.length > 0 && docId) {
         try {
           const { urls, failed } = await uploadPhotos(docId, photoFiles);
-          if (urls.length > 0) await updateTask(docId, { photos: urls });
+          if (urls.length > 0) await updateItem(docId, { photos: urls });
           if (failed > 0) {
-            if (urls.length === 0) flash('Photo upload failed — task saved without photos.', true);
+            if (urls.length === 0) flash(`Photo upload failed — ${noun} saved without photos.`, true);
             else flash(`Uploaded ${urls.length} of ${urls.length + failed} photos; ${failed} failed.`, true);
           }
-        } catch { flash('Photo upload failed — task saved without photos.', true); }
+        } catch { flash(`Photo upload failed — ${noun} saved without photos.`, true); }
       }
-      if (canOperate && taskForm.tags.length > 0 && addTaskTags) {
-        await addTaskTags(taskForm.tags);
+      if ((isMaint || canOperate) && taskForm.tags.length > 0 && addItemTags) {
+        await addItemTags(taskForm.tags);
       }
       setShowAdd(false);
       setTaskForm(getEmptyTask());
       setPhotoFiles([]);
       photoPreviews.forEach(u => URL.revokeObjectURL(u));
       setPhotoPreviews([]);
-      flash('Task created!');
+      flash(`${Noun} created!`);
     } catch {
-      flash('Failed to create task. Please try again.', true);
+      flash(`Failed to create ${noun}. Please try again.`, true);
     } finally {
       setSaving(false);
     }
@@ -1016,15 +1096,43 @@ export function TasksPage({ store, userProfile }) {
     const isNowComplete = detailEdits.status === 'Complete';
     setSaving(true);
     try {
-      const updates = {
-        ...detailEdits,
+      const baseUpdates = {
+        name: detailEdits.name,
+        description: detailEdits.description,
+        status: detailEdits.status,
+        priority: detailEdits.priority,
+        tags: detailEdits.tags || [],
+        dueDate: detailEdits.dueDate || null,
         recurrence: detailEdits.recurrence || null,
-        sharedWith: detailEdits.visibility === 'shared' ? (detailEdits.sharedWith || []) : [],
+        assignees: detailEdits.assignees || [],
+        notes: detailEdits.notes || null,
         completedAt: isNowComplete && !wasComplete ? new Date().toISOString() : (isNowComplete ? showDetail.completedAt : null),
       };
-      await updateTask(showDetail._docId, updates, userId, userName, showDetail.taskNumber);
-      if (canOperate && detailEdits.tags?.length > 0 && addTaskTags) {
-        await addTaskTags(detailEdits.tags);
+      let updates;
+      if (isMaint) {
+        const vendorName = detailEdits.vendorId ? (vendors.find(v => v._docId === detailEdits.vendorId)?.name || null) : null;
+        const linkedItem = activeItems.find(i => i._docId === detailEdits.linkedItemDocId);
+        updates = { ...baseUpdates,
+          vendorId: detailEdits.vendorId || null,
+          vendorName,
+          linkedItemDocId: detailEdits.linkedItemDocId || null,
+          linkedItemId: linkedItem?.itemId || null,
+          linkedItemDescription: linkedItem?.description || null,
+          estimatedCost: detailEdits.estimatedCost ? Number(detailEdits.estimatedCost) : null,
+          actualCost: detailEdits.actualCost ? Number(detailEdits.actualCost) : null };
+      } else {
+        updates = { ...baseUpdates,
+          visibility: detailEdits.visibility,
+          sharedWith: detailEdits.visibility === 'shared' ? (detailEdits.sharedWith || []) : [],
+          ministry: detailEdits.ministry || '',
+          estimatedHours: detailEdits.estimatedHours ?? null,
+          actualHours: detailEdits.actualHours ?? null,
+          linkedItemDocId: detailEdits.linkedItemDocId || null,
+          linkedTicketDocId: detailEdits.linkedTicketDocId || null };
+      }
+      await updateItem(showDetail._docId, updates, userId, userName, showDetail[numberField]);
+      if ((isMaint || canOperate) && detailEdits.tags?.length > 0 && addItemTags) {
+        await addItemTags(detailEdits.tags);
       }
 
       // Email newly added assignees
@@ -1035,26 +1143,26 @@ export function TasksPage({ store, userProfile }) {
         for (const assignee of newlyAdded) {
           const assigneeUser = users.find(u => u.id === assignee.uid);
           if (!assigneeUser?.email) continue;
-          fn({ kind: 'task', toEmail: assigneeUser.email, toName: assignee.name, churchName: config?.churchName || '', ticketNumber: showDetail.taskNumber, ticketName: detailEdits.name, assignedBy: userName }).catch(err => { console.error('[ChurchOpsHub] CF sendTicketAssignedEmail failed', err); });
+          fn({ kind: isMaint ? 'maintenance' : 'task', toEmail: assigneeUser.email, toName: assignee.name, churchName: config?.churchName || '', ticketNumber: showDetail[numberField], ticketName: detailEdits.name, assignedBy: userName }).catch(err => { console.error('[ChurchOpsHub] CF sendTicketAssignedEmail failed', err); });
         }
       }
       // In-app + push for newly added assignees (independent of the email toggle)
       if (newlyAdded.length > 0) {
-        notify({ churchId, recipientUids: newlyAdded.map(a => a.uid), type: 'task_assigned', title: 'Task assigned to you', body: `${showDetail.taskNumber}: ${detailEdits.name || ''} — by ${userName}`, link: { kind: 'hub', hub: 'tasks' } });
+        notify({ churchId, recipientUids: newlyAdded.map(a => a.uid), type: notifyType, title: `${Noun} assigned to you`, body: `${showDetail[numberField]}: ${detailEdits.name || ''} — by ${userName}`, link: { kind: 'hub', hub: hubKey } });
       }
 
-      // Auto-create next recurring task on completion
+      // Auto-create next recurring item on completion
       if (isNowComplete && !wasComplete && detailEdits.recurrence) {
-        await createNextRecurringTask(detailEdits);
+        await createNextRecurringTask({ ...showDetail, ...updates });
       }
 
       setShowDetail(null);
       setDetailEdits({});
       setDetailSnapshot({});
       setDetailChecklistInput('');
-      flash(isNowComplete && !wasComplete && detailEdits.recurrence ? 'Task completed — next recurring task created!' : 'Task updated!');
+      flash(isNowComplete && !wasComplete && detailEdits.recurrence ? `${Noun} completed — next recurring ${noun} created!` : `${Noun} updated!`);
     } catch {
-      flash('Failed to update task. Please try again.', true);
+      flash(`Failed to update ${noun}. Please try again.`, true);
     } finally {
       setSaving(false);
     }
@@ -1065,10 +1173,11 @@ export function TasksPage({ store, userProfile }) {
     setPostingComment(true);
     try {
       const text = newComment.trim();
-      const mentions = taskHubUsers
+      // @-mentions are a tasks-only feature.
+      const mentions = isMaint ? [] : taskHubUsers
         .filter(u => u.id !== userId && text.includes('@' + u.name))
         .map(u => u.id);
-      await addTaskComment(showDetail._docId, text, userId, userName, mentions.length ? mentions : undefined);
+      await addItemComment(showDetail._docId, text, userId, userName, mentions.length ? mentions : undefined);
       if (mentions.length > 0 && notificationConfig?.enabled) {
         const fn = httpsCallable(getFunctions(), 'sendTaskMentionEmail');
         fn({ churchId, taskNumber: showDetail.taskNumber, taskName: showDetail.name || '', commentText: text, mentionedUids: mentions, commentAuthorName: userName }).catch(err => { console.error('[ChurchOpsHub] CF sendTaskMentionEmail failed', err); });
@@ -1084,7 +1193,7 @@ export function TasksPage({ store, userProfile }) {
   async function handleEditComment(commentId, text) {
     if (!showDetail?._docId || !text.trim()) return;
     try {
-      await updateTaskComment(showDetail._docId, commentId, text.trim());
+      await updateItemComment(showDetail._docId, commentId, text.trim());
     } catch { flash('Failed to update comment.', true); }
   }
 
@@ -1097,7 +1206,7 @@ export function TasksPage({ store, userProfile }) {
       danger: true,
     })) return;
     try {
-      await deleteTaskComment(showDetail._docId, commentId);
+      await deleteItemComment(showDetail._docId, commentId);
     } catch { flash('Failed to delete comment.', true); }
   }
 
@@ -1108,7 +1217,7 @@ export function TasksPage({ store, userProfile }) {
       const { urls: newUrls, failed } = await uploadPhotos(showDetail._docId, files);
       if (newUrls.length > 0) {
         const updatedPhotos = [...(showDetail.photos || []), ...newUrls];
-        await updateTask(showDetail._docId, { photos: updatedPhotos });
+        await updateItem(showDetail._docId, { photos: updatedPhotos });
         setShowDetail(prev => ({ ...prev, photos: updatedPhotos }));
       }
       if (failed > 0) {
@@ -1137,7 +1246,7 @@ export function TasksPage({ store, userProfile }) {
       if (photoUrl) {
         try { await deleteObject(storageRef(storage, photoUrl)); } catch { /* storage object may already be gone */ }
       }
-      await updateTask(showDetail._docId, { photos: updatedPhotos });
+      await updateItem(showDetail._docId, { photos: updatedPhotos });
       setShowDetail(prev => ({ ...prev, photos: updatedPhotos }));
     } catch {
       flash('Failed to remove photo.', true);
@@ -1175,19 +1284,19 @@ export function TasksPage({ store, userProfile }) {
     }
     const wasComplete = task.status === 'Complete';
     const isNowComplete = newStatus === 'Complete';
-    await updateTask(docId, {
+    await updateItem(docId, {
       status: newStatus,
       completedAt: isNowComplete && !wasComplete ? new Date().toISOString() : (isNowComplete ? task.completedAt : null),
-    }, userId, userName, task.taskNumber);
+    }, userId, userName, task[numberField]);
     if (isNowComplete && !wasComplete && task.recurrence) {
       await createNextRecurringTask(task);
-      flash('Task completed — next recurring task created!');
+      flash(`${Noun} completed — next recurring ${noun} created!`);
     }
   }
 
   async function handleChecklistUpdate(cl, prevCl) {
     try {
-      await updateTask(showDetail._docId, { checklist: cl });
+      await updateItem(showDetail._docId, { checklist: cl });
       setDetailSnapshot(s => ({ ...s, checklist: cl }));
       setRemoteUpdate(null); // suppress transient conflict banner from our own write
     } catch {
@@ -1202,7 +1311,7 @@ export function TasksPage({ store, userProfile }) {
   async function handleDeleteTask() {
     if (!showDetail?._docId) return;
     const ok = await confirm({
-      title: 'Delete task?',
+      title: `Delete ${noun}?`,
       message: <>Permanently delete <strong>{showDetail.name}</strong>. This cannot be undone.</>,
       confirmLabel: 'Delete',
       danger: true,
@@ -1210,12 +1319,12 @@ export function TasksPage({ store, userProfile }) {
     if (!ok) return;
     setSaving(true);
     try {
-      await deleteTask(showDetail._docId, showDetail, userId, userName);
+      await deleteItem(showDetail._docId, showDetail, userId, userName);
       setShowDetail(null);
       setDetailEdits({});
-      flash('Task deleted.');
+      flash(`${Noun} deleted.`);
     } catch {
-      flash('Failed to delete task.', true);
+      flash(`Failed to delete ${noun}.`, true);
     } finally {
       setSaving(false);
     }
@@ -1490,37 +1599,72 @@ export function TasksPage({ store, userProfile }) {
     setConvertJobSaving(false);
   }
 
-  // ── Cross-hub: Create maintenance ticket from task ──
-  async function handleCreateTicket() {
-    if (!showDetail) return;
-    setCreateTicketSaving(true);
-    let ticketDocId = null;
-    try {
-      ticketDocId = await addTicket({
-        name: showDetail.name,
-        description: showDetail.description || '',
-        priority: showDetail.priority || 'Medium',
-        linkedTaskDocId: showDetail._docId,
-      }, userId, userName);
-      try {
-        await updateTask(showDetail._docId, { linkedTicketDocId: ticketDocId }, userId, userName, showDetail.taskNumber);
-      } catch (linkErr) {
-        try {
-          await deleteTicket(ticketDocId);
-          flash('Failed to link the new ticket — rolled back.', true);
-        } catch {
-          flash(`Failed to link the new ticket. Orphaned ticket ${ticketDocId.slice(0,8)}… needs manual cleanup.`, true);
-        }
-        throw linkErr;
-      }
-      setDetailEdits(d => ({ ...d, linkedTicketDocId: ticketDocId }));
-      setShowDetail(prev => ({ ...prev, linkedTicketDocId: ticketDocId }));
-      setShowCreateTicketModal(false);
-      flash('Maintenance ticket created and linked.');
-    } catch {
-      if (!ticketDocId) flash('Failed to create ticket.', true);
-    }
-    setCreateTicketSaving(false);
+  // (The task→maintenance convert feature was removed with the Work board
+  // merge: tasks and maintenance share one collection, so "make this a ticket"
+  // is now just a type flip rather than a linked spawn. See merge plan §4.)
+
+  // ── Maintenance-only: vendor directory CRUD ──
+  async function handleAddVendor() {
+    if (!vendorForm.name.trim()) return;
+    setSaving(true);
+    await addVendor({ ...vendorForm });
+    setShowAddVendor(false);
+    setVendorForm(getEmptyVendor());
+    setSaving(false);
+    flash('Vendor added!');
+  }
+
+  async function handleUpdateVendor() {
+    if (!showEditVendor || !vendorForm.name.trim()) return;
+    setSaving(true);
+    const { _docId, createdAt: _createdAt, ...rest } = showEditVendor;
+    await updateVendor(_docId, { ...rest, ...vendorForm });
+    setShowEditVendor(null);
+    setVendorForm(getEmptyVendor());
+    setSaving(false);
+    flash('Vendor updated!');
+  }
+
+  async function handleDeleteVendor(vendor) {
+    const ok = await confirm({
+      title: 'Delete vendor?',
+      message: <>Delete <strong>{vendor.name}</strong>. Existing tickets that reference this vendor keep their stored name.</>,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    await deleteVendor(vendor._docId);
+    flash('Vendor deleted.');
+  }
+
+  // ── Maintenance-only: schedule a contractor against this ticket ──
+  // Creates a linked, scheduled timeEntry (People Access → Timesheet). When the
+  // hours are later logged there, the cost rolls back into actualCost.
+  const contractors = (accessPeople || []).filter(p => p.active !== false && p.personType === 'contractor');
+  function openContractorModal() {
+    setContractorForm({ personId: contractors[0]?._docId || '', date: detailEdits.dueDate || localDateStr(new Date()), hours: '' });
+    setContractorModal(true);
+  }
+  async function handleScheduleContractor() {
+    const person = contractors.find(p => p._docId === contractorForm.personId);
+    if (!person || !showDetail) return;
+    const hrs = Number(contractorForm.hours);
+    await addTimeEntry({
+      personId: person._docId,
+      personName: person.name || '',
+      date: contractorForm.date,
+      estHours: hrs > 0 ? hrs : null,
+      hours: 0,
+      cost: 0,
+      description: `${showDetail[numberField] || ''}: ${showDetail.name || ''}`.trim().replace(/^:\s*/, ''),
+      ministry: person.ministries?.[0] || null,
+      rate: person.hourlyRate != null ? Number(person.hourlyRate) : null,
+      status: 'scheduled',
+      linkedTicketId: showDetail._docId,
+      createdBy: userProfile.uid,
+    });
+    setContractorModal(false);
+    flash('Contractor scheduled — see it in People Access → Timesheet.');
   }
 
   // ── Saved filter views ──
@@ -1560,7 +1704,7 @@ export function TasksPage({ store, userProfile }) {
       if (filterMyTasks && !t.assignees?.some(a => a.uid === userId)) return false;
       if (filterAssignee && !t.assignees?.some(a => a.uid === filterAssignee)) return false;
       if (filterMinistry && t.ministry !== filterMinistry) return false;
-      if (search && !t.name?.toLowerCase().includes(search) && !t.description?.toLowerCase().includes(search) && !t.tags?.some(tag => tag.includes(search)) && !t.taskNumber?.toLowerCase().includes(search)) return false;
+      if (search && !t.name?.toLowerCase().includes(search) && !t.description?.toLowerCase().includes(search) && !t.tags?.some(tag => tag.includes(search)) && !(t.taskNumber || t.ticketNumber)?.toLowerCase().includes(search)) return false;
       return true;
     });
   }, [visibleTasks, filterSearch, filterPriority, filterStatus, filterMyTasks, filterAssignee, filterMinistry, userId]);
@@ -1611,18 +1755,59 @@ export function TasksPage({ store, userProfile }) {
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20, flexWrap:'wrap', gap:12 }}>
         <div>
-          <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:'0 0 2px' }}>Tasks Hub</h2>
-          <p style={{ color:B.textLight, fontSize:13, margin:0 }}>Track and manage church admin tasks</p>
+          <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:'0 0 2px' }}>{isMaint ? 'Maintenance Hub' : 'Tasks Hub'}</h2>
+          <p style={{ color:B.textLight, fontSize:13, margin:0 }}>{isMaint ? `Track repair tickets${canOperate ? ' and manage service vendors' : ''}` : 'Track and manage church admin tasks'}</p>
         </div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <button onClick={openPaste} style={btnS} title="Bulk-create tasks from a pasted list (one per line, or tab-separated columns)">
-            Paste Tasks
-          </button>
-          <button onClick={() => { setTaskForm({ ...getEmptyTask(), visibility: taskDefaults.visibility, sharedWith: [...taskDefaults.sharedWith] }); setPhotoFiles([]); setPhotoPreviews([]); setShowAdd(true); }} style={btnP}>
-            + New Task
-          </button>
+          {isMaint && canOperate && (
+            <button onClick={() => setShowVendors(v => !v)} style={{ ...btnS, fontSize:13, padding:'9px 18px' }}>
+              {showVendors ? 'Hide Vendors' : `Vendors (${vendors.length})`}
+            </button>
+          )}
+          {!isMaint && (
+            <button onClick={openPaste} style={btnS} title="Bulk-create tasks from a pasted list (one per line, or tab-separated columns)">
+              Paste Tasks
+            </button>
+          )}
+          {canCreate && (
+            <button onClick={() => { setTaskForm(isMaint ? getEmptyTask() : { ...getEmptyTask(), visibility: taskDefaults.visibility, sharedWith: [...taskDefaults.sharedWith] }); setPhotoFiles([]); setPhotoPreviews([]); setShowAdd(true); }} style={btnP}>
+              + New {Noun}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Vendor Directory (maintenance) */}
+      {isMaint && showVendors && (
+        <div style={{ background:B.white, borderRadius:14, padding:'20px 24px', border:'1px solid '+B.sand, marginBottom:20, boxShadow:'0 1px 3px rgba(27,42,74,0.06)' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+            <h3 style={{ margin:0, fontFamily:f1, fontSize:16, fontWeight:700, color:B.navy }}>Vendor Directory</h3>
+            {canOperate && <button onClick={() => { setVendorForm(getEmptyVendor()); setShowAddVendor(true); }} style={{ ...btnP, padding:'6px 14px', fontSize:12 }}>+ Add Vendor</button>}
+          </div>
+          {vendors.length === 0
+            ? <p style={{ color:B.textLight, fontSize:14 }}>No vendors yet. Add your service providers and contractors.</p>
+            : (
+              <div style={{ display:'grid', gridTemplateColumns:isMobile ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap:10 }}>
+                {vendors.map(v => (
+                  <div key={v._docId} style={{ padding:'14px 16px', borderRadius:10, background:B.warmGray, border:'1px solid '+B.sand }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:4 }}>
+                      <div style={{ fontWeight:600, fontSize:14, color:B.navy }}>{v.name}</div>
+                      {canOperate && <div style={{ display:'flex', gap:6, flexShrink:0, marginLeft:8 }}>
+                        <button onClick={() => { setVendorForm({ name:v.name||'', phone:formatPhone(v.phone||''), email:v.email||'', specialty:v.specialty||'', notes:v.notes||'' }); setShowEditVendor(v); }} style={{ border:'none', background:'none', cursor:'pointer', fontSize:13, color:B.textLight, padding:'2px 4px' }} title="Edit">✏️</button>
+                        <button onClick={() => handleDeleteVendor(v)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:13, color:B.textLight, padding:'2px 4px' }} title="Delete">🗑️</button>
+                      </div>}
+                    </div>
+                    {v.specialty && <div style={{ fontSize:12, color:B.teal, fontFamily:f1, marginBottom:4 }}>{v.specialty}</div>}
+                    {v.phone && <div style={{ fontSize:12, color:B.textMid }}><EmojiIcon emoji="📞" label="Phone" /> <a href={`tel:${v.phone.replace(/[^0-9+]/g, '')}`} style={{ color:B.teal, textDecoration:'none' }}>{formatPhone(v.phone)}</a></div>}
+                    {v.email && <div style={{ fontSize:12, color:B.textMid }}><EmojiIcon emoji="✉️" label="Email" /> <a href={`mailto:${v.email}`} style={{ color:B.teal, textDecoration:'none' }}>{v.email}</a></div>}
+                    {v.notes && <div style={{ fontSize:11, color:B.textLight, marginTop:4 }}>{v.notes}</div>}
+                  </div>
+                ))}
+              </div>
+            )
+          }
+        </div>
+      )}
 
       {/* Stats */}
       <div style={{ display:'flex', flexWrap:'wrap', gap:10, marginBottom:20 }}>
@@ -1648,7 +1833,7 @@ export function TasksPage({ store, userProfile }) {
       <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap', alignItems:'center' }}>
         <input
           style={{ ...inp, flex:1, minWidth:160, maxWidth:280 }}
-          placeholder="Search tasks..."
+          placeholder={`Search ${noun}s...`}
           value={filterSearch}
           onChange={e => setFilterSearch(e.target.value)}
         />
@@ -1669,9 +1854,9 @@ export function TasksPage({ store, userProfile }) {
           onClick={() => setFilterMyTasks(v => !v)}
           style={{ padding:'9px 14px', borderRadius:10, border:'1px solid '+(filterMyTasks ? B.teal : B.sand), background:filterMyTasks ? B.tealPale : B.white, color:filterMyTasks ? B.teal : B.textMid, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:filterMyTasks ? 700 : 500, whiteSpace:'nowrap' }}
         >
-          My tasks
+          My {noun}s
         </button>
-        {(settings?.ministries || []).length > 0 && (
+        {!isMaint && (settings?.ministries || []).length > 0 && (
           <select style={{ ...inp, width:'auto', cursor:'pointer' }} value={filterMinistry} onChange={e => setFilterMinistry(e.target.value)}>
             <option value="">All ministries</option>
             {(settings.ministries || []).map(m => <option key={m} value={m}>{m}</option>)}
@@ -1680,11 +1865,11 @@ export function TasksPage({ store, userProfile }) {
         {(filterSearch || filterPriority || filterStatus || filterAssignee || filterMyTasks || filterMinistry) && (
           <>
             <button type="button" onClick={() => { setFilterSearch(''); setFilterPriority(''); setFilterStatus(''); setFilterAssignee(''); setFilterMyTasks(false); setFilterMinistry(''); }} style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, cursor:'pointer' }}>Clear</button>
-            <button type="button" onClick={handleSaveView} title="Save current filters as a named view" style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.teal, fontSize:13, cursor:'pointer' }}>Save View</button>
+            {!isMaint && <button type="button" onClick={handleSaveView} title="Save current filters as a named view" style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.teal, fontSize:13, cursor:'pointer' }}>Save View</button>}
           </>
         )}
       </div>
-      {savedFilters.length > 0 && (
+      {!isMaint && savedFilters.length > 0 && (
         <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
           {savedFilters.map((v, i) => (
             <span key={i} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 12px', borderRadius:20, background:B.tealPale, border:'1px solid '+B.tealLight, fontSize:12, fontFamily:f1, color:B.teal }}>
@@ -1698,7 +1883,7 @@ export function TasksPage({ store, userProfile }) {
       {/* View Toggle + Sort */}
       <div style={{ display:'flex', gap:8, marginBottom:18, alignItems:'center', flexWrap:'wrap' }}>
         <div style={{ display:'flex', background:B.warmGray, borderRadius:10, padding:3 }}>
-          {[['kanban', 'Kanban'], ['list', 'List'], ['calendar', 'Calendar'], ...(canOperate ? [['insights', 'Insights']] : [])].map(([mode, label]) => (
+          {[['kanban', 'Kanban'], ['list', 'List'], ['calendar', 'Calendar'], ...(!isMaint && canOperate ? [['insights', 'Insights']] : [])].map(([mode, label]) => (
             <button key={mode} onClick={() => switchViewMode(mode)} style={{ padding:'7px 18px', borderRadius:8, border:'none', background:viewMode===mode ? B.white : 'transparent', color:viewMode===mode ? B.navy : B.textMid, fontWeight:viewMode===mode ? 700 : 500, fontSize:13, fontFamily:f1, cursor:'pointer', boxShadow:viewMode===mode ? '0 1px 3px rgba(27,42,74,0.1)' : 'none', transition:'all 0.15s' }}>
               {label}
             </button>
@@ -1713,31 +1898,37 @@ export function TasksPage({ store, userProfile }) {
             <option value="dueDate">Due date</option>
           </select>
         </div>
-        <button
-          type="button"
-          onClick={() => { setDefaultsForm({ visibility: userProfile?.taskDefaultVisibility || 'team', sharedWith: userProfile?.taskDefaultSharedWith || [] }); setShowDefaultsModal(true); }}
-          style={{ padding:'7px 14px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:500, display:'flex', alignItems:'center', gap:5 }}
-        >
-          ⚙ Defaults
-        </button>
-        <button
-          type="button"
-          onClick={() => exportTasksCSV(filteredTasks)}
-          title="Export visible tasks to CSV"
-          style={{ padding:'7px 14px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:500 }}
-        >
-          Export CSV
-        </button>
-        <button
-          type="button"
-          onClick={() => exportTasksICS(filteredTasks.filter(t => t.dueDate), config?.churchName || '')}
-          title="Export tasks with due dates to iCal (.ics)"
-          style={{ padding:'7px 14px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:500 }}
-        >
-          Export ICS
-        </button>
+        {!isMaint && (
+          <button
+            type="button"
+            onClick={() => { setDefaultsForm({ visibility: userProfile?.taskDefaultVisibility || 'team', sharedWith: userProfile?.taskDefaultSharedWith || [] }); setShowDefaultsModal(true); }}
+            style={{ padding:'7px 14px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:500, display:'flex', alignItems:'center', gap:5 }}
+          >
+            ⚙ Defaults
+          </button>
+        )}
+        {!isMaint && (
+          <button
+            type="button"
+            onClick={() => exportTasksCSV(filteredTasks)}
+            title="Export visible tasks to CSV"
+            style={{ padding:'7px 14px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:500 }}
+          >
+            Export CSV
+          </button>
+        )}
+        {!isMaint && (
+          <button
+            type="button"
+            onClick={() => exportTasksICS(filteredTasks.filter(t => t.dueDate), config?.churchName || '')}
+            title="Export tasks with due dates to iCal (.ics)"
+            style={{ padding:'7px 14px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:500 }}
+          >
+            Export ICS
+          </button>
+        )}
         <span style={{ color:B.textLight, fontSize:13, marginLeft:'auto' }}>
-          {filteredTasks.length}{filteredTasks.length !== visibleTasks.length ? ` of ${visibleTasks.length}` : ''} task{visibleTasks.length !== 1 ? 's' : ''}
+          {filteredTasks.length}{filteredTasks.length !== visibleTasks.length ? ` of ${visibleTasks.length}` : ''} {noun}{visibleTasks.length !== 1 ? 's' : ''}
         </span>
       </div>
 
@@ -1748,23 +1939,23 @@ export function TasksPage({ store, userProfile }) {
         </div>
       )}
 
-      {/* Empty state — no tasks at all */}
+      {/* Empty state — no items at all */}
       {visibleTasks.length === 0 && !loading && (
         <div style={{ background:B.white, borderRadius:18, padding:'48px 32px', border:'1px solid '+B.sand, textAlign:'center' }}>
-          <EmojiIcon emoji="✅" decorative style={{ fontSize:48, marginBottom:16, display:'block' }} />
-          <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 8px', fontSize:18 }}>No tasks yet</h3>
-          <p style={{ color:B.textLight, fontSize:14 }}>Create a task to start tracking your church admin work.</p>
+          <EmojiIcon emoji={isMaint ? '🔧' : '✅'} decorative style={{ fontSize:48, marginBottom:16, display:'block' }} />
+          <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 8px', fontSize:18 }}>{isMaint ? 'No maintenance tickets yet' : 'No tasks yet'}</h3>
+          <p style={{ color:B.textLight, fontSize:14 }}>{isMaint ? (canOperate ? 'Create a ticket to track repairs and maintenance tasks.' : 'No tickets yet. Ask an admin or manager to create one.') : 'Create a task to start tracking your church admin work.'}</p>
         </div>
       )}
 
-      {/* Empty state — My Tasks filter active but no assigned tasks */}
+      {/* Empty state — My filter active but nothing assigned */}
       {filterMyTasks && filteredTasks.length === 0 && visibleTasks.length > 0 && (
         <div style={{ background:B.white, borderRadius:14, padding:'32px 24px', border:'1px solid '+B.sand, textAlign:'center', marginBottom:16 }}>
           <EmojiIcon emoji="👤" decorative style={{ fontSize:36, marginBottom:12, display:'block' }} />
-          <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 6px', fontSize:16 }}>No tasks assigned to you</h3>
-          <p style={{ color:B.textLight, fontSize:13, margin:'0 0 12px' }}>Open any task and click <strong>Me</strong> in the Assignees field, then save to assign yourself.</p>
+          <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 6px', fontSize:16 }}>No {noun}s assigned to you</h3>
+          <p style={{ color:B.textLight, fontSize:13, margin:'0 0 12px' }}>Open any {noun} and click <strong>Me</strong> in the Assignees field, then save to assign yourself.</p>
           <button type="button" onClick={() => setFilterMyTasks(false)} style={{ padding:'8px 18px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.teal, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:600 }}>
-            Show all tasks
+            Show all {noun}s
           </button>
         </div>
       )}
@@ -1773,7 +1964,7 @@ export function TasksPage({ store, userProfile }) {
       {viewMode === 'kanban' && visibleTasks.length > 0 && (
         <div style={{ display:'flex', gap:12, overflowX:isMobile ? 'hidden' : 'auto', flexDirection:isMobile ? 'column' : 'row', paddingBottom:8, alignItems:'flex-start' }}>
           {STATUSES.map(status => (
-            <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onReorder={(from, to) => handleReorder(from, to, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile} onQuickAdd={name => handleQuickAddTask(name, status)}/>
+            <KanbanColumn key={status} status={status} tasks={tasksByStatus[status]} onTaskClick={openDetail} onDrop={docId => handleDrop(docId, status)} onReorder={isMaint ? undefined : (from, to) => handleReorder(from, to, status)} onStatusChange={(task, newStatus) => handleDrop(task._docId, newStatus)} isMobile={isMobile} onQuickAdd={isMaint ? undefined : name => handleQuickAddTask(name, status)}/>
           ))}
         </div>
       )}
@@ -1781,8 +1972,8 @@ export function TasksPage({ store, userProfile }) {
       {/* List View */}
       {viewMode === 'list' && visibleTasks.length > 0 && (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          {/* Bulk action bar */}
-          {selectedTaskIds.size > 0 && (
+          {/* Bulk action bar (tasks only) */}
+          {!isMaint && selectedTaskIds.size > 0 && (
             <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 16px', background:'#EFF6FF', borderRadius:12, border:'1px solid #BFDBFE', flexWrap:'wrap' }}>
               <span style={{ fontSize:13, fontWeight:700, color:'#1D4ED8', fontFamily:f1 }}>{selectedTaskIds.size} selected</span>
               <button onClick={clearSelection} style={{ ...btnS, fontSize:12, padding:'4px 10px' }}>Clear</button>
@@ -1824,12 +2015,12 @@ export function TasksPage({ store, userProfile }) {
                 {!collapsed && (
                   <div style={{ padding:'12px 16px 4px' }}>
                     {statusTasks.length === 0
-                      ? <div style={{ color:B.textLight, fontSize:13, textAlign:'center', padding:'12px 0' }}>No tasks in {status}</div>
+                      ? <div style={{ color:B.textLight, fontSize:13, textAlign:'center', padding:'12px 0' }}>No {noun}s in {status}</div>
                       : statusTasks.map(t => {
                           const isSelected = selectedTaskIds.has(t._docId);
                           return (
                             <div key={t._docId} style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
-                              <input type="checkbox" checked={isSelected} onChange={() => toggleSelectTask(t._docId)} onClick={e => e.stopPropagation()} style={{ marginTop:18, width:15, height:15, cursor:'pointer', flexShrink:0 }} aria-label={`Select task ${t.name}`}/>
+                              {!isMaint && <input type="checkbox" checked={isSelected} onChange={() => toggleSelectTask(t._docId)} onClick={e => e.stopPropagation()} style={{ marginTop:18, width:15, height:15, cursor:'pointer', flexShrink:0 }} aria-label={`Select task ${t.name}`}/>}
                               <div style={{ flex:1, minWidth:0 }}>
                                 <TaskCard task={t} onClick={openDetail}/>
                               </div>
@@ -1847,11 +2038,11 @@ export function TasksPage({ store, userProfile }) {
 
       {/* Calendar View */}
       {viewMode === 'calendar' && (
-        <BoardCalendar items={filteredTasks} onItemClick={openDetail} isMobile={isMobile} noun="task"/>
+        <BoardCalendar items={filteredTasks} onItemClick={openDetail} isMobile={isMobile} noun={noun}/>
       )}
 
-      {/* Insights View */}
-      {viewMode === 'insights' && canOperate && (
+      {/* Insights View (tasks only) */}
+      {viewMode === 'insights' && !isMaint && canOperate && (
         <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
           <div style={{ background:B.white, borderRadius:14, padding:'24px', border:'1px solid '+B.sand }}>
             <div style={{ fontWeight:700, fontSize:14, color:B.navy, fontFamily:f1, marginBottom:2 }}>Task Velocity — Last 12 Weeks</div>
@@ -1889,25 +2080,27 @@ export function TasksPage({ store, userProfile }) {
         </div>
       )}
 
-      {/* ═══ ADD TASK MODAL ═══ */}
-      <Modal open={showAdd} onClose={() => { setShowAdd(false); setTaskForm(getEmptyTask()); setPhotoFiles([]); photoPreviews.forEach(u => URL.revokeObjectURL(u)); setPhotoPreviews([]); }} title="New Task" wide>
-        {(taskTemplates || []).length > 0 && (
+      {/* ═══ ADD ITEM MODAL ═══ */}
+      <Modal open={showAdd} onClose={() => { setShowAdd(false); setTaskForm(getEmptyTask()); setPhotoFiles([]); photoPreviews.forEach(u => URL.revokeObjectURL(u)); setPhotoPreviews([]); }} title={isMaint ? 'New Maintenance Ticket' : 'New Task'} wide>
+        {!isMaint && (taskTemplates || []).length > 0 && (
           <div style={{ marginBottom:14 }}>
             <button type="button" onClick={() => setShowTemplates(true)} style={{ ...btnS, fontSize:13, padding:'7px 14px' }}>
               From Template
             </button>
           </div>
         )}
-        <FF label="Task Name" required>
+        <FF label={`${Noun} Name`} required>
           <input style={inp} value={taskForm.name} onChange={e => setTaskForm(f => ({ ...f, name:e.target.value }))} placeholder="Short descriptive name..."/>
         </FF>
-        <RichTextarea label="Description" style={{ ...inp, minHeight:72, resize:'vertical' }} value={taskForm.description} onChange={v => setTaskForm(f => ({ ...f, description:v }))} placeholder="What needs to be done — scope, context, and acceptance criteria"/>
-        <div style={{ display:'grid', gridTemplateColumns:isMobile ? '1fr 1fr' : '1fr 1fr 1fr 1fr', gap:12 }}>
-          <FF label="Status">
-            <select style={{ ...inp, cursor:'pointer' }} value={taskForm.status} onChange={e => setTaskForm(f => ({ ...f, status:e.target.value }))}>
-              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </FF>
+        <RichTextarea label="Description" style={{ ...inp, minHeight:72, resize:'vertical' }} value={taskForm.description} onChange={v => setTaskForm(f => ({ ...f, description:v }))} placeholder={isMaint ? 'Full details of the issue or maintenance needed...' : 'What needs to be done — scope, context, and acceptance criteria'}/>
+        <div style={{ display:'grid', gridTemplateColumns:isMobile ? '1fr 1fr' : (isMaint ? '1fr 1fr 1fr' : '1fr 1fr 1fr 1fr'), gap:12 }}>
+          {!isMaint && (
+            <FF label="Status">
+              <select style={{ ...inp, cursor:'pointer' }} value={taskForm.status} onChange={e => setTaskForm(f => ({ ...f, status:e.target.value }))}>
+                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </FF>
+          )}
           <FF label="Priority">
             <select style={{ ...inp, cursor:'pointer' }} value={taskForm.priority} onChange={e => setTaskForm(f => ({ ...f, priority:e.target.value }))}>
               {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
@@ -1932,77 +2125,106 @@ export function TasksPage({ store, userProfile }) {
         <FF label="Tags">
           <TagInput tags={taskForm.tags} onChange={tags => setTaskForm(f => ({ ...f, tags }))} suggestions={taskTags}/>
         </FF>
-        <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
+        <div style={{ display:'grid', gridTemplateColumns: isMobile || isMaint ? '1fr' : '1fr 1fr', gap:12 }}>
           <FF label="Assignees">
             <AssigneeSelect assignees={taskForm.assignees} onChange={assignees => setTaskForm(f => ({ ...f, assignees }))} users={taskHubUsers} currentUserId={userId} currentUserName={userName}/>
           </FF>
-          <FF label="Visibility">
-            <VisibilitySelect visibility={taskForm.visibility} onChange={v => setTaskForm(f => ({ ...f, visibility:v, sharedWith: v !== 'shared' ? [] : f.sharedWith })) } canEdit={true}/>
-          </FF>
+          {!isMaint && (
+            <FF label="Visibility">
+              <VisibilitySelect visibility={taskForm.visibility} onChange={v => setTaskForm(f => ({ ...f, visibility:v, sharedWith: v !== 'shared' ? [] : f.sharedWith })) } canEdit={true}/>
+            </FF>
+          )}
         </div>
-        {taskForm.visibility === 'shared' && (
+        {!isMaint && taskForm.visibility === 'shared' && (
           <FF label="Share With">
             <SharedWithSelect sharedWith={taskForm.sharedWith} onChange={sharedWith => setTaskForm(f => ({ ...f, sharedWith }))} users={taskHubUsers} assignees={taskForm.assignees} currentUserId={userId}/>
           </FF>
         )}
-        <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap:12 }}>
-          {(settings?.ministries || []).length > 0 && (
-            <FF label="Ministry (optional)">
-              <select style={{ ...inp, cursor:'pointer' }} value={taskForm.ministry} onChange={e => setTaskForm(f => ({ ...f, ministry: e.target.value }))}>
+        {!isMaint && (
+          <>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap:12 }}>
+              {(settings?.ministries || []).length > 0 && (
+                <FF label="Ministry (optional)">
+                  <select style={{ ...inp, cursor:'pointer' }} value={taskForm.ministry} onChange={e => setTaskForm(f => ({ ...f, ministry: e.target.value }))}>
+                    <option value="">— None —</option>
+                    {(settings.ministries || []).map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </FF>
+              )}
+              <FF label="Estimate (hrs)">
+                <input style={inp} type="number" min="0" step="0.5" value={taskForm.estimatedHours ?? ''} onChange={e => setTaskForm(f => ({ ...f, estimatedHours: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="0"/>
+              </FF>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
+              <FF label="Link to Item (optional)">
+                <select style={{ ...inp, cursor:'pointer' }} value={taskForm.linkedItemDocId || ''} onChange={e => setTaskForm(f => ({ ...f, linkedItemDocId: e.target.value || null }))}>
+                  <option value="">— None —</option>
+                  {(items || []).filter(i => i.status !== 'Disposed').sort((a,b) => (a.itemId||'').localeCompare(b.itemId||'')).map(i => (
+                    <option key={i._docId} value={i._docId}>{i.itemId}{i.description ? ' — '+i.description.slice(0,40) : ''}</option>
+                  ))}
+                </select>
+              </FF>
+              <FF label="Link to Ticket (optional)">
+                <select style={{ ...inp, cursor:'pointer' }} value={taskForm.linkedTicketDocId || ''} onChange={e => setTaskForm(f => ({ ...f, linkedTicketDocId: e.target.value || null }))}>
+                  <option value="">— None —</option>
+                  {(maintenanceTickets || []).filter(t => t.status !== 'Closed').sort((a,b) => ((a.ticketNumber||'').localeCompare(b.ticketNumber||''))).map(t => (
+                    <option key={t._docId} value={t._docId}>{t.ticketNumber}{t.name ? ' — '+t.name.slice(0,40) : ''}</option>
+                  ))}
+                </select>
+              </FF>
+            </div>
+          </>
+        )}
+        {isMaint && (
+          <>
+            <FF label="Linked Equipment (optional)">
+              <select style={{ ...inp, cursor:'pointer' }} value={taskForm.linkedItemDocId || ''} onChange={e => setTaskForm(f => ({ ...f, linkedItemDocId: e.target.value || '' }))}>
                 <option value="">— None —</option>
-                {(settings.ministries || []).map(m => <option key={m} value={m}>{m}</option>)}
+                {activeItems.map(i => <option key={i._docId} value={i._docId}>{i.description} ({i.itemId})</option>)}
               </select>
             </FF>
-          )}
-          <FF label="Estimate (hrs)">
-            <input style={inp} type="number" min="0" step="0.5" value={taskForm.estimatedHours ?? ''} onChange={e => setTaskForm(f => ({ ...f, estimatedHours: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="0"/>
-          </FF>
-        </div>
-        <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
-          <FF label="Link to Item (optional)">
-            <select style={{ ...inp, cursor:'pointer' }} value={taskForm.linkedItemDocId || ''} onChange={e => setTaskForm(f => ({ ...f, linkedItemDocId: e.target.value || null }))}>
-              <option value="">— None —</option>
-              {(items || []).filter(i => i.status !== 'Disposed').sort((a,b) => (a.itemId||'').localeCompare(b.itemId||'')).map(i => (
-                <option key={i._docId} value={i._docId}>{i.itemId}{i.description ? ' — '+i.description.slice(0,40) : ''}</option>
-              ))}
-            </select>
-          </FF>
-          <FF label="Link to Ticket (optional)">
-            <select style={{ ...inp, cursor:'pointer' }} value={taskForm.linkedTicketDocId || ''} onChange={e => setTaskForm(f => ({ ...f, linkedTicketDocId: e.target.value || null }))}>
-              <option value="">— None —</option>
-              {(maintenanceTickets || []).filter(t => t.status !== 'Closed').sort((a,b) => (a.ticketNumber||'').localeCompare(b.ticketNumber||'')).map(t => (
-                <option key={t._docId} value={t._docId}>{t.ticketNumber}{t.title ? ' — '+t.title.slice(0,40) : ''}</option>
-              ))}
-            </select>
-          </FF>
-        </div>
+            <div style={{ display:'grid', gridTemplateColumns:vendors.length > 0 ? '1fr 1fr' : '1fr', gap:12 }}>
+              {vendors.length > 0 && (
+                <FF label="Vendor">
+                  <select style={{ ...inp, cursor:'pointer' }} value={taskForm.vendorId} onChange={e => setTaskForm(f => ({ ...f, vendorId:e.target.value }))}>
+                    <option value="">— None —</option>
+                    {vendors.map(v => <option key={v._docId} value={v._docId}>{v.name}{v.specialty ? ' — '+v.specialty : ''}</option>)}
+                  </select>
+                </FF>
+              )}
+              <FF label="Estimated Cost ($)">
+                <input style={inp} type="number" min="0" step="0.01" value={taskForm.estimatedCost} onChange={e => setTaskForm(f => ({ ...f, estimatedCost:e.target.value }))} placeholder="0.00"/>
+              </FF>
+            </div>
+          </>
+        )}
         <FF label="Photos">
           <PhotoGrid photos={photoPreviews} onAdd={handlePhotoSelect} onRemove={handlePreviewRemove} uploading={false}/>
         </FF>
-        <RichTextarea label="Notes" style={{ ...inp, minHeight:52, resize:'vertical' }} value={taskForm.notes} onChange={v => setTaskForm(f => ({ ...f, notes:v }))} placeholder="Follow-up reminders, reference links, or working notes"/>
+        <RichTextarea label="Notes" style={{ ...inp, minHeight:52, resize:'vertical' }} value={taskForm.notes} onChange={v => setTaskForm(f => ({ ...f, notes:v }))} placeholder={isMaint ? 'Additional notes...' : 'Follow-up reminders, reference links, or working notes'}/>
         <button onClick={handleAddTask} disabled={saving || !taskForm.name.trim()} style={{ ...btnP, width:'100%', opacity:(saving || !taskForm.name.trim()) ? .5 : 1, marginTop:4 }}>
-          {saving ? 'Creating...' : 'Create Task'}
+          {saving ? 'Creating...' : `Create ${Noun}`}
         </button>
       </Modal>
 
-      {/* ═══ TASK DETAIL MODAL ═══ */}
-      <Modal open={!!showDetail} onClose={closeDetail} title={(showDetail?.taskNumber || '') + (showDetail?.name ? ' — ' + showDetail.name.slice(0, 40) : '')} wide>
+      {/* ═══ ITEM DETAIL MODAL ═══ */}
+      <Modal open={!!showDetail} onClose={closeDetail} title={(showDetail?.[numberField] || '') + (showDetail?.name ? ' — ' + showDetail.name.slice(0, 40) : '')} wide>
         {showDetail && (
           <div>
-            {showDetail.taskNumber && (
+            {showDetail[numberField] && (
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, fontFamily:'monospace', fontSize:12, color:B.textLight }}>
-                <span>{showDetail.taskNumber}</span>
+                <span>{showDetail[numberField]}</span>
                 <button
                   type="button"
                   onClick={async () => {
                     try {
-                      await navigator.clipboard.writeText(showDetail.taskNumber);
-                      flash(`Copied ${showDetail.taskNumber}`);
+                      await navigator.clipboard.writeText(showDetail[numberField]);
+                      flash(`Copied ${showDetail[numberField]}`);
                     } catch {
                       flash('Could not copy to clipboard', true);
                     }
                   }}
-                  aria-label={`Copy ${showDetail.taskNumber}`}
+                  aria-label={`Copy ${showDetail[numberField]}`}
                   title="Copy to clipboard"
                   style={{ background:'none', border:'none', cursor:'pointer', padding:'2px 6px', color:B.teal, fontSize:12, fontFamily:f1 }}>
                   <EmojiIcon emoji="📋" decorative /> Copy
@@ -2011,7 +2233,7 @@ export function TasksPage({ store, userProfile }) {
             )}
             {remoteUpdate && (
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, padding:'10px 14px', borderRadius:8, background:'#FEF3E8', border:'1px solid #F59E42', marginBottom:14 }}>
-                <span style={{ fontSize:13, color:'#7A4A10', fontFamily:f2 }}>This task was updated by another team member.</span>
+                <span style={{ fontSize:13, color:'#7A4A10', fontFamily:f2 }}>This {noun} was updated by another team member.</span>
                 <div style={{ display:'flex', gap:8, flexShrink:0 }}>
                   <button type="button" style={{ ...btnP, padding:'4px 12px', fontSize:12 }} onClick={async () => {
                     if (isDetailDirtyNow) {
@@ -2050,7 +2272,7 @@ export function TasksPage({ store, userProfile }) {
                 <input style={inp} type="date" value={detailEdits.dueDate} onChange={e => setDetailEdits(d => ({ ...d, dueDate:e.target.value }))}/>
               </FF>
               <FF label="Recurrence">
-                <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.recurrence} onChange={e => setDetailEdits(d => ({ ...d, recurrence:e.target.value }))}>
+                <select style={{ ...inp, cursor: (isMaint && !canOperate) ? 'default' : 'pointer' }} value={detailEdits.recurrence} onChange={e => setDetailEdits(d => ({ ...d, recurrence:e.target.value }))} disabled={isMaint && !canOperate}>
                   {RECURRENCE_OPTIONS.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
                 </select>
                 {detailEdits.recurrence && detailEdits.dueDate && (
@@ -2063,58 +2285,109 @@ export function TasksPage({ store, userProfile }) {
             <FF label="Tags">
               <TagInput tags={detailEdits.tags || []} onChange={tags => setDetailEdits(d => ({ ...d, tags }))} suggestions={taskTags}/>
             </FF>
-            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile || isMaint ? '1fr' : '1fr 1fr', gap:12 }}>
               <FF label="Assignees">
                 <AssigneeSelect assignees={detailEdits.assignees || []} onChange={assignees => setDetailEdits(d => ({ ...d, assignees }))} users={taskHubUsers} currentUserId={userId} currentUserName={userName}/>
               </FF>
-              <FF label="Visibility">
-                <VisibilitySelect
-                  visibility={detailEdits.visibility || 'team'}
-                  onChange={v => setDetailEdits(d => ({ ...d, visibility:v, sharedWith: v !== 'shared' ? [] : d.sharedWith }))}
-                  canEdit={canEditVisibility}
-                />
-              </FF>
+              {!isMaint && (
+                <FF label="Visibility">
+                  <VisibilitySelect
+                    visibility={detailEdits.visibility || 'team'}
+                    onChange={v => setDetailEdits(d => ({ ...d, visibility:v, sharedWith: v !== 'shared' ? [] : d.sharedWith }))}
+                    canEdit={canEditVisibility}
+                  />
+                </FF>
+              )}
             </div>
-            {detailEdits.visibility === 'shared' && canEditVisibility && (
+            {!isMaint && detailEdits.visibility === 'shared' && canEditVisibility && (
               <FF label="Share With">
                 <SharedWithSelect sharedWith={detailEdits.sharedWith || []} onChange={sharedWith => setDetailEdits(d => ({ ...d, sharedWith }))} users={taskHubUsers} assignees={detailEdits.assignees || []} currentUserId={userId}/>
               </FF>
             )}
-            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap:12 }}>
-              {(settings?.ministries || []).length > 0 && (
-                <FF label="Ministry">
-                  <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.ministry || ''} onChange={e => setDetailEdits(d => ({ ...d, ministry: e.target.value }))}>
+            {!isMaint && (
+              <>
+                <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap:12 }}>
+                  {(settings?.ministries || []).length > 0 && (
+                    <FF label="Ministry">
+                      <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.ministry || ''} onChange={e => setDetailEdits(d => ({ ...d, ministry: e.target.value }))}>
+                        <option value="">— None —</option>
+                        {(settings.ministries || []).map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </FF>
+                  )}
+                  <FF label="Estimate (hrs)">
+                    <input style={inp} type="number" min="0" step="0.5" value={detailEdits.estimatedHours ?? ''} onChange={e => setDetailEdits(d => ({ ...d, estimatedHours: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="0"/>
+                  </FF>
+                  <FF label="Actual (hrs)">
+                    <input style={inp} type="number" min="0" step="0.5" value={detailEdits.actualHours ?? ''} onChange={e => setDetailEdits(d => ({ ...d, actualHours: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="0"/>
+                  </FF>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
+                  <FF label="Link to Item (optional)">
+                    <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.linkedItemDocId || ''} onChange={e => setDetailEdits(d => ({ ...d, linkedItemDocId: e.target.value || null }))}>
+                      <option value="">— None —</option>
+                      {(items || []).filter(i => i.status !== 'Disposed').sort((a,b) => (a.itemId||'').localeCompare(b.itemId||'')).map(i => (
+                        <option key={i._docId} value={i._docId}>{i.itemId}{i.description ? ' — '+i.description.slice(0,40) : ''}</option>
+                      ))}
+                    </select>
+                  </FF>
+                  <FF label="Link to Ticket (optional)">
+                    <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.linkedTicketDocId || ''} onChange={e => setDetailEdits(d => ({ ...d, linkedTicketDocId: e.target.value || null }))}>
+                      <option value="">— None —</option>
+                      {(maintenanceTickets || []).filter(t => t.status !== 'Closed').sort((a,b) => ((a.ticketNumber||'').localeCompare(b.ticketNumber||''))).map(t => (
+                        <option key={t._docId} value={t._docId}>{t.ticketNumber}{t.name ? ' — '+t.name.slice(0,40) : ''}</option>
+                      ))}
+                    </select>
+                  </FF>
+                </div>
+              </>
+            )}
+            {isMaint && (
+              <>
+                <FF label="Linked Equipment">
+                  <select style={{ ...inp, cursor: canOperate ? 'pointer' : 'default' }} value={detailEdits.linkedItemDocId || ''} onChange={e => setDetailEdits(d => ({ ...d, linkedItemDocId:e.target.value }))} disabled={!canOperate}>
                     <option value="">— None —</option>
-                    {(settings.ministries || []).map(m => <option key={m} value={m}>{m}</option>)}
+                    {activeItems.map(i => <option key={i._docId} value={i._docId}>{i.description} ({i.itemId})</option>)}
                   </select>
                 </FF>
-              )}
-              <FF label="Estimate (hrs)">
-                <input style={inp} type="number" min="0" step="0.5" value={detailEdits.estimatedHours ?? ''} onChange={e => setDetailEdits(d => ({ ...d, estimatedHours: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="0"/>
-              </FF>
-              <FF label="Actual (hrs)">
-                <input style={inp} type="number" min="0" step="0.5" value={detailEdits.actualHours ?? ''} onChange={e => setDetailEdits(d => ({ ...d, actualHours: e.target.value ? parseFloat(e.target.value) : null }))} placeholder="0"/>
-              </FF>
-            </div>
-            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:12 }}>
-              <FF label="Link to Item (optional)">
-                <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.linkedItemDocId || ''} onChange={e => setDetailEdits(d => ({ ...d, linkedItemDocId: e.target.value || null }))}>
-                  <option value="">— None —</option>
-                  {(items || []).filter(i => i.status !== 'Disposed').sort((a,b) => (a.itemId||'').localeCompare(b.itemId||'')).map(i => (
-                    <option key={i._docId} value={i._docId}>{i.itemId}{i.description ? ' — '+i.description.slice(0,40) : ''}</option>
-                  ))}
-                </select>
-              </FF>
-              <FF label="Link to Ticket (optional)">
-                <select style={{ ...inp, cursor:'pointer' }} value={detailEdits.linkedTicketDocId || ''} onChange={e => setDetailEdits(d => ({ ...d, linkedTicketDocId: e.target.value || null }))}>
-                  <option value="">— None —</option>
-                  {(maintenanceTickets || []).filter(t => t.status !== 'Closed').sort((a,b) => (a.ticketNumber||'').localeCompare(b.ticketNumber||'')).map(t => (
-                    <option key={t._docId} value={t._docId}>{t.ticketNumber}{t.title ? ' — '+t.title.slice(0,40) : ''}</option>
-                  ))}
-                </select>
-              </FF>
-            </div>
-            <RichTextarea label="Notes" style={{ ...inp, minHeight:52, resize:'vertical' }} value={detailEdits.notes} onChange={v => setDetailEdits(d => ({ ...d, notes:v }))} placeholder="Follow-up reminders, reference links, or working notes"/>
+                <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap:12 }}>
+                  {vendors.length > 0 && (
+                    <FF label="Vendor">
+                      <select style={{ ...inp, cursor: canOperate ? 'pointer' : 'default' }} value={detailEdits.vendorId} onChange={e => setDetailEdits(d => ({ ...d, vendorId:e.target.value }))} disabled={!canOperate}>
+                        <option value="">— None —</option>
+                        {vendors.map(v => <option key={v._docId} value={v._docId}>{v.name}{v.specialty ? ' — '+v.specialty : ''}</option>)}
+                      </select>
+                    </FF>
+                  )}
+                  <FF label="Estimated Cost ($)">
+                    <input style={inp} type="number" min="0" step="0.01" value={detailEdits.estimatedCost} onChange={e => setDetailEdits(d => ({ ...d, estimatedCost:e.target.value }))} placeholder="0.00" disabled={!canOperate}/>
+                  </FF>
+                  <FF label="Actual Cost ($)">
+                    <input style={inp} type="number" min="0" step="0.01" value={detailEdits.actualCost} onChange={e => setDetailEdits(d => ({ ...d, actualCost:e.target.value }))} placeholder="0.00" disabled={!canOperate}/>
+                  </FF>
+                </div>
+                <FF label="Contractor Work">
+                  <div style={{ border:'1px dashed '+B.sand, borderRadius:10, padding:'10px 14px', display:'flex', flexDirection:'column', gap:8 }}>
+                    {timeEntries.filter(e => e.linkedTicketId === showDetail?._docId).map(e => {
+                      const st = { scheduled:'Scheduled', logged:'Logged', approved:'Approved', paid:'Paid' }[e.status] || e.status;
+                      return (
+                        <div key={e._docId} style={{ fontSize:13, color:B.textDark, fontFamily:f2 }}>
+                          <EmojiIcon emoji="🔧" decorative /> <strong>{e.personName || 'Contractor'}</strong> · {e.date}
+                          {e.estHours != null && e.status === 'scheduled' ? ` · ~${Number(e.estHours).toFixed(2)} h` : ''}
+                          {e.cost ? ` · $${Number(e.cost).toFixed(2)}` : ''}
+                          <span style={{ marginLeft:6, fontSize:11, fontWeight:700, color:B.textLight }}>{st}</span>
+                        </div>
+                      );
+                    })}
+                    {canOperate && (contractors.length > 0
+                      ? <button type="button" onClick={openContractorModal} style={{ ...btnS, padding:'6px 14px', fontSize:12, alignSelf:'flex-start' }}>+ Schedule Contractor</button>
+                      : <span style={{ fontSize:12, color:B.textLight, fontFamily:f2 }}>Add a person of type <strong>Contractor</strong> in People Access to schedule work here.</span>
+                    )}
+                  </div>
+                </FF>
+              </>
+            )}
+            <RichTextarea label="Notes" style={{ ...inp, minHeight:52, resize:'vertical' }} value={detailEdits.notes} onChange={v => setDetailEdits(d => ({ ...d, notes:v }))} placeholder={isMaint ? 'Additional notes...' : 'Follow-up reminders, reference links, or working notes'}/>
             <FF label="Checklist">
               <div style={{ border:'1px dashed '+B.sand, borderRadius:10, padding:'12px 14px' }}>
                 {(detailEdits.checklist || []).length === 0 && (
@@ -2195,14 +2468,13 @@ export function TasksPage({ store, userProfile }) {
             </FF>
             <div style={{ display:'flex', gap:10, justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', marginBottom:20 }}>
               <div style={{ fontSize:12, color:B.textLight }}>
-                Created by <strong>{showDetail.createdByName}</strong> on {showDetail.createdAt?.split('T')[0]}
+                Created by <strong>{showDetail.createdByName || showDetail.reportedByName}</strong> on {showDetail.createdAt?.split('T')[0]}
                 {showDetail.completedAt && <> · Completed {showDetail.completedAt.split('T')[0]}</>}
               </div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                {(canOperate || showDetail.createdBy === userId) && <button onClick={handleDeleteTask} disabled={saving} style={{ ...btnD, fontSize:13, padding:'9px 14px', opacity:saving ? 0.5 : 1 }}>Delete</button>}
-                {canOperate && <button onClick={handleOpenSaveTemplate} style={{ ...btnS, fontSize:13, padding:'9px 14px' }}>Save as Template</button>}
-                {canOperate && !showDetail.linkedJobDocId && <button onClick={openConvertToJob} style={{ ...btnS, fontSize:13, padding:'9px 14px' }}>→ Job</button>}
-                {canOperate && !showDetail.linkedTicketDocId && <button onClick={() => setShowCreateTicketModal(true)} style={{ ...btnS, fontSize:13, padding:'9px 14px' }}>→ Ticket</button>}
+                {(canOperate || (!isMaint && showDetail.createdBy === userId)) && <button onClick={handleDeleteTask} disabled={saving} style={{ ...btnD, fontSize:13, padding:'9px 14px', opacity:saving ? 0.5 : 1 }}>Delete</button>}
+                {!isMaint && canOperate && <button onClick={handleOpenSaveTemplate} style={{ ...btnS, fontSize:13, padding:'9px 14px' }}>Save as Template</button>}
+                {!isMaint && canOperate && !showDetail.linkedJobDocId && <button onClick={openConvertToJob} style={{ ...btnS, fontSize:13, padding:'9px 14px' }}>→ Job</button>}
                 <button onClick={closeDetail} style={btnS}>Cancel</button>
                 <button onClick={handleUpdateTask} disabled={saving || !detailEdits.name?.trim()} style={{ ...btnP, opacity:(saving || !detailEdits.name?.trim()) ? .5 : 1 }}>
                   {saving ? 'Saving...' : 'Save Changes'}
@@ -2211,7 +2483,7 @@ export function TasksPage({ store, userProfile }) {
             </div>
 
             {/* Linked job chip */}
-            {showDetail.linkedJobDocId && (
+            {!isMaint && showDetail.linkedJobDocId && (
               <div style={{ marginBottom:12, padding:'8px 12px', borderRadius:8, background:'#EDF2FF', border:'1px solid #C7D2FE', display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ fontSize:12, color:'#3730A3', fontFamily:f1, fontWeight:600 }}><EmojiIcon emoji="💼" decorative /> Linked Job</span>
                 <span style={{ fontSize:12, color:'#4F46E5', fontFamily:'monospace' }}>{showDetail.linkedJobDocId.slice(0,8)}…</span>
@@ -2230,7 +2502,7 @@ export function TasksPage({ store, userProfile }) {
             {/* Comments */}
             <div>
               <div style={{ fontWeight:700, fontSize:12, color:B.textMid, fontFamily:f1, textTransform:'uppercase', letterSpacing:.5, marginBottom:10 }}>Comments</div>
-              <CommentThread comments={comments} loading={commentsLoading} newComment={newComment} onChange={setNewComment} onPost={handlePostComment} posting={postingComment} userId={userId} canOperate={canOperate} onEdit={handleEditComment} onDelete={handleDeleteComment} users={taskHubUsers}/>
+              <CommentThread comments={comments} loading={commentsLoading} newComment={newComment} onChange={setNewComment} onPost={handlePostComment} posting={postingComment} userId={userId} canOperate={canOperate} onEdit={handleEditComment} onDelete={handleDeleteComment} users={isMaint ? undefined : taskHubUsers}/>
             </div>
           </div>
         )}
@@ -2369,17 +2641,78 @@ export function TasksPage({ store, userProfile }) {
         </div>
       </Modal>
 
-      {/* ═══ CREATE TICKET FROM TASK MODAL ═══ */}
-      <Modal open={showCreateTicketModal} onClose={() => setShowCreateTicketModal(false)} title="Create Maintenance Ticket">
-        <p style={{ fontSize:13, color:B.textMid, fontFamily:f2, marginBottom:16 }}>
-          Create a maintenance ticket from "<strong>{showDetail?.name}</strong>"?
-        </p>
-        <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
-          <button onClick={() => setShowCreateTicketModal(false)} style={btnS}>Cancel</button>
-          <button onClick={handleCreateTicket} disabled={createTicketSaving} style={{ ...btnP, opacity: createTicketSaving ? 0.5 : 1 }}>
-            {createTicketSaving ? 'Creating…' : 'Create Ticket'}
-          </button>
+      {/* ═══ EDIT VENDOR MODAL (maintenance) ═══ */}
+      <Modal open={!!showEditVendor} onClose={() => { setShowEditVendor(null); setVendorForm(getEmptyVendor()); }} title="Edit Vendor">
+        <FF label="Vendor / Company Name" required>
+          <input style={inp} value={vendorForm.name} onChange={e => setVendorForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. Smith's HVAC"/>
+        </FF>
+        <FF label="Specialty">
+          <input style={inp} value={vendorForm.specialty} onChange={e => setVendorForm(f => ({ ...f, specialty:e.target.value }))} placeholder="e.g. HVAC, Electrical, AV Systems"/>
+        </FF>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+          <FF label="Phone">
+            <input style={inp} value={vendorForm.phone} onChange={e => setVendorForm(f => ({ ...f, phone:formatPhone(e.target.value) }))} placeholder="(555) 000-0000"/>
+          </FF>
+          <FF label="Email">
+            <input style={inp} type="email" value={vendorForm.email} onChange={e => setVendorForm(f => ({ ...f, email:e.target.value }))} placeholder="contact@vendor.com"/>
+          </FF>
         </div>
+        <FF label="Notes">
+          <textarea style={{ ...inp, minHeight:60, resize:'vertical' }} value={vendorForm.notes} onChange={e => setVendorForm(f => ({ ...f, notes:e.target.value }))} placeholder="Contract details, hours, etc."/>
+        </FF>
+        <button onClick={handleUpdateVendor} disabled={saving || !vendorForm.name.trim()} style={{ ...btnP, width:'100%', opacity:(saving || !vendorForm.name.trim()) ? .5 : 1, marginTop:4 }}>
+          {saving ? 'Saving...' : 'Save Changes'}
+        </button>
+      </Modal>
+
+      {/* ═══ ADD VENDOR MODAL (maintenance) ═══ */}
+      <Modal open={showAddVendor} onClose={() => { setShowAddVendor(false); setVendorForm(getEmptyVendor()); }} title="Add Vendor">
+        <FF label="Vendor / Company Name" required>
+          <input style={inp} value={vendorForm.name} onChange={e => setVendorForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. Smith's HVAC"/>
+        </FF>
+        <FF label="Specialty">
+          <input style={inp} value={vendorForm.specialty} onChange={e => setVendorForm(f => ({ ...f, specialty:e.target.value }))} placeholder="e.g. HVAC, Electrical, AV Systems"/>
+        </FF>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+          <FF label="Phone">
+            <input style={inp} value={vendorForm.phone} onChange={e => setVendorForm(f => ({ ...f, phone:formatPhone(e.target.value) }))} placeholder="(555) 000-0000"/>
+          </FF>
+          <FF label="Email">
+            <input style={inp} type="email" value={vendorForm.email} onChange={e => setVendorForm(f => ({ ...f, email:e.target.value }))} placeholder="contact@vendor.com"/>
+          </FF>
+        </div>
+        <FF label="Notes">
+          <textarea style={{ ...inp, minHeight:60, resize:'vertical' }} value={vendorForm.notes} onChange={e => setVendorForm(f => ({ ...f, notes:e.target.value }))} placeholder="Contract details, hours, etc."/>
+        </FF>
+        <button onClick={handleAddVendor} disabled={saving || !vendorForm.name.trim()} style={{ ...btnP, width:'100%', opacity:(saving || !vendorForm.name.trim()) ? .5 : 1, marginTop:4 }}>
+          {saving ? 'Saving...' : 'Add Vendor'}
+        </button>
+      </Modal>
+
+      {/* ═══ SCHEDULE CONTRACTOR MODAL (maintenance) ═══ */}
+      <Modal open={contractorModal} onClose={() => setContractorModal(false)} title="Schedule Contractor">
+        <FF label="Contractor" required>
+          <select style={inp} value={contractorForm.personId} onChange={e => setContractorForm(f => ({ ...f, personId:e.target.value }))}>
+            {contractors.length === 0 && <option value="">No contractors yet</option>}
+            {contractors.map(p => (
+              <option key={p._docId} value={p._docId}>{p.name}{p.hourlyRate != null ? ` ($${Number(p.hourlyRate).toFixed(2)}/hr)` : ''}</option>
+            ))}
+          </select>
+        </FF>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+          <FF label="Date" required>
+            <input style={inp} type="date" value={contractorForm.date} onChange={e => setContractorForm(f => ({ ...f, date:e.target.value }))} />
+          </FF>
+          <FF label="Estimated hours">
+            <input style={inp} type="number" min="0" step="0.25" value={contractorForm.hours} onChange={e => setContractorForm(f => ({ ...f, hours:e.target.value }))} placeholder="optional" />
+          </FF>
+        </div>
+        <p style={{ fontSize:12, color:B.textLight, fontFamily:f2, margin:'4px 0 12px' }}>
+          Creates a scheduled entry in People Access → Timesheet, linked to this ticket. When you log the actual hours there, the cost rolls into this ticket's Actual Cost.
+        </p>
+        <button onClick={handleScheduleContractor} disabled={!contractorForm.personId || !contractorForm.date} style={{ ...btnP, width:'100%', opacity:(!contractorForm.personId || !contractorForm.date) ? .5 : 1 }}>
+          Schedule
+        </button>
       </Modal>
       <ConfirmHost />
     </div>

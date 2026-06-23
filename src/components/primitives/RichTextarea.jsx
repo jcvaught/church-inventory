@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { B, f1 } from '../brand/tokens.js';
 
-// Shared by TasksPage + MaintenancePage (previously duplicated). Renders a
+// Shared by the WorkBoard engine (tasks + maintenance) and others. Renders a
 // textarea with bullet/numbered toggles in a small toolbar above. Auto-grows
 // with content (fix from 2026-05-13: without auto-grow, pressing Enter at
 // end-of-content felt broken — state updated but the new empty line was

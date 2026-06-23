@@ -2,7 +2,13 @@
 
 **Drafted:** 2026-06-23
 **Owner:** John (jvaught@fxcc.org)
-**Status (updated 2026-06-23):** ✅ **v1 SHIPPED** — the user-facing merge is live. A user who can use both categories now sees one **Work** card (`src/pages/WorkPage.jsx`) with a Tasks/Maintenance segmented toggle that mounts the existing pages; single-category users keep their own card untouched. Per-user `allowedHubs` scoping preserved at category granularity (E2E-verified on prod). **Deferred (carried debt):** v1 *wraps* `TasksPage`/`MaintenancePage` rather than collapsing them into one engine — the §4 dedup (delete one duplicate board engine) and the task↔maintenance **convert-feature deletion** are NOT done. Those are the remaining engineering payoff; do them when touching the board engine next.
+**Status (updated 2026-06-23):** ✅ **v2 SHIPPED — engine dedup COMPLETE.** Both board engines are now ONE parameterized component, `src/pages/hubs/WorkBoard.jsx` (`<WorkBoard type="task|maintenance">`), selected by `type`. `MaintenancePage.jsx` (1333 lines) was **deleted**; `WorkPage`, and the single-category `tasks`/`maintenance` routes in `HubsPage`, all mount the one engine. The task↔maintenance **convert-feature (`→ Ticket`) was removed** (§4) — within one collection it's a `type` flip, not a linked spawn. The §4 dedup and convert deletion (the v1 carried debt) are **DONE**.
+
+Type-driven divergence is isolated to a small `isMaint` adapter layer at the top of `WorkBoard` (store-fn aliases — the maintenance store fns harmlessly ignore the extra trailing args the task fns consume — plus number-field/prefix/tag-source/hub-key/notify-type). Each category keeps its exact prior feature set: tasks retain visibility/sharing, paste-import, templates, ministry, insights, bulk actions, saved views, drag-reorder, →Job; maintenance retains vendors, linked-equipment, estimated/actual cost, contractor scheduling, admin-only create. Verified: build clean, `test:rules` 29/29, E2E `work-merge` (incl. a new maintenance-detail scoping test) + `work-unification` green against the real Firebase test tenant.
+
+**v1 (superseded):** the first cut merely *wrapped* `TasksPage`/`MaintenancePage` behind the `WorkPage` toggle.
+
+**Also shipped this session (prep for the dedup):** a hotfix for a Part C regression — 5 direct-collection refs in the two pages still pointed at the deleted `tasks`/`maintenanceTickets` collections (comment listeners, live-sync, recurring-on-complete, drag-reorder), silently broken in prod after Part C. Repointed to `workItems/{task_|mnt_}{id}`.
 **Supersedes:** the Tasks+Maintenance portion of Phase 4 in `WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md`. **Jobs is explicitly OUT of scope** (deferred indefinitely — see §6).
 
 ---
@@ -63,10 +69,10 @@ Recommendation: **(a)**, with single-category users still seeing their familiar 
 
 ---
 
-## 4. What gets deleted
+## 4. What gets deleted ✅ DONE (2026-06-23)
 
-- One of the two duplicate board engines (`TasksPage.jsx` / `MaintenancePage.jsx` → one `WorkPage`).
-- The **task ↔ maintenance convert feature** (`→ Ticket` on Tasks, and any task-from-maintenance path) + its `linkedTicketDocId`/`linkedTaskDocId` *task↔maintenance* back-refs. Within one board, "make this task a maintenance item" is a `type` flip, not a linked spawn. **(NB: `linkedJobDocId`/`linkedTaskDocId` to/from Jobs stay — Jobs is still separate.)**
+- ✅ One of the two duplicate board engines — `MaintenancePage.jsx` deleted; `TasksPage.jsx` generalized + renamed to `WorkBoard.jsx`.
+- ✅ The **task ↔ maintenance convert feature** (`→ Ticket` button, `handleCreateTicket`, the convert modal) removed. Within one board, "make this task a maintenance item" is a `type` flip, not a linked spawn. The `linkedTicketDocId` form field/back-ref was retired from the convert path. **(NB: `linkedJobDocId`/`linkedTaskDocId` to/from Jobs stay — Jobs is still separate; the `→ Job` convert is untouched.)**
 
 ---
 

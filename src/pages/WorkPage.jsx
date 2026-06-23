@@ -15,8 +15,9 @@ import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
 // allowed only one category lands straight on that board with no toggle — but
 // in practice such users keep their original single hub card and never reach
 // here; this page is rendered for users who can use BOTH. Jobs is NOT here.
-const TasksPage       = lazyWithRetry(() => import('./hubs/TasksPage.jsx').then(m => ({ default: m.TasksPage })), 'TasksPage');
-const MaintenancePage = lazyWithRetry(() => import('./hubs/MaintenancePage.jsx').then(m => ({ default: m.MaintenancePage })), 'MaintenancePage');
+// One engine, parameterized by category. (The old standalone MaintenancePage
+// was folded into WorkBoard — see the merge plan §4.)
+const WorkBoard = lazyWithRetry(() => import('./hubs/WorkBoard.jsx').then(m => ({ default: m.WorkBoard })), 'WorkBoard');
 
 const CATEGORIES = [
   { key: 'tasks', hub: 'tasks', label: 'Tasks', icon: '✅', color: '#059669' },
@@ -81,9 +82,7 @@ export function WorkPage({ store, userProfile, userCanSeeHub }) {
       )}
 
       <Suspense fallback={<WorkLoadingFallback />}>
-        {active === 'maintenance'
-          ? <MaintenancePage store={store} userProfile={userProfile} />
-          : <TasksPage store={store} userProfile={userProfile} />}
+        <WorkBoard store={store} userProfile={userProfile} type={active === 'maintenance' ? 'maintenance' : 'task'} />
       </Suspense>
     </div>
   );
