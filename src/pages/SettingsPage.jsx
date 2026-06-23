@@ -656,9 +656,10 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
       {/* My Compliance — visible if this user is linked to an accessPerson */}
       {(() => {
         const me = getPerson(makeRef('user', userProfile.uid), peopleCtx);
-        if (!me || !me.linkedTrackedId) return null;
+        const myIds = me?.linkedTrackedIds || [];
+        if (myIds.length === 0) return null;
         const myRecords = (accessRecords || [])
-          .filter(r => r.personId === me.linkedTrackedId)
+          .filter(r => myIds.includes(r.personId)) // all of this user's tracked docs, not just one
           .sort((a, b) => (b.completedDate || '').localeCompare(a.completedDate || ''));
         return (
           <div style={{ background:B.white, borderRadius:14, padding:"22px 24px", border:"1px solid "+B.sand, marginBottom:16, boxShadow:"0 1px 3px rgba(27,42,74,0.06)" }}>

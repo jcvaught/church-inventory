@@ -87,12 +87,17 @@ export function expiryStatus(expiryDate, today) {
  * `ok` is true when no record is expired. NOTE: this is the "nothing lapsed"
  * summary; requirement-gating ("do they hold a non-expired record of each type a
  * shift needs?") is a separate concern — see isEligibleFor.
+ *
+ * `trackedId` accepts a single id OR an array — a uid can carry >1 tracked doc
+ * (the link isn't DB-enforced 1:1), so summarize across all of them, matching the
+ * eligibility path and the server.
  */
 export function complianceStatusForTracked(trackedId, accessRecords = [], today) {
+  const ids = Array.isArray(trackedId) ? trackedId : [trackedId];
   const expiringSoon = [];
   const expired = [];
   for (const r of accessRecords) {
-    if (r.personId !== trackedId) continue;
+    if (!ids.includes(r.personId)) continue;
     const status = expiryStatus(r.expiryDate, today);
     const entry = { type: r.type, expiryDate: r.expiryDate || null, status, requirementId: r.requirementId };
     if (status === 'expired') expired.push(entry);
@@ -169,7 +174,7 @@ function buildPerson(user, tracked, accessRecords, today, accessPeople = []) {
       email: (user && user.email) || (tracked && tracked.email) || '',
       phone: (user && user.phone) || (tracked && tracked.phone) || '',
     },
-    complianceStatus: trackedId ? complianceStatusForTracked(trackedId, accessRecords, today) : null,
+    complianceStatus: linkedTrackedIds.length ? complianceStatusForTracked(linkedTrackedIds, accessRecords, today) : null,
     active: tracked ? tracked.active !== false : (user ? user.active !== false : true),
   };
 }

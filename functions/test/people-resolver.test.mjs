@@ -105,6 +105,35 @@ test('complianceStatus is ok when nothing is expired (incl. zero records)', () =
   assert.deepEqual(complianceStatusForTracked('nobody', [], TODAY), { ok: true, expiringSoon: [], expired: [] });
 });
 
+test('complianceStatusForTracked aggregates across multiple tracked ids (array form)', () => {
+  const records = [
+    { personId: 'pA', type: 'background_check', expiryDate: ymd(2026, 6, 10) }, // expired (on doc A)
+    { personId: 'pB', type: 'certification', expiryDate: ymd(2026, 6, 20) },    // critical (on doc B)
+    { personId: 'pC', type: 'key_assignment', expiryDate: ymd(2026, 6, 1) },    // a third person — ignored
+  ];
+  // Both of the user's tracked docs are summarized together.
+  const cs = complianceStatusForTracked(['pA', 'pB'], records, TODAY);
+  assert.equal(cs.ok, false);                 // doc A has an expired record
+  assert.equal(cs.expired.length, 1);
+  assert.equal(cs.expired[0].type, 'background_check');
+  assert.equal(cs.expiringSoon.length, 1);
+  assert.equal(cs.expiringSoon[0].type, 'certification');
+  // Single-id (string) form still works unchanged.
+  assert.equal(complianceStatusForTracked('pA', records, TODAY).expired.length, 1);
+});
+
+test('resolver Person.complianceStatus reflects ALL of a uid\'s tracked docs', () => {
+  const users = [{ id: 'uMulti' }];
+  const accessPeople = [{ _docId: 'pM1', userId: 'uMulti' }, { _docId: 'pM2', userId: 'uMulti' }];
+  const records = [
+    { personId: 'pM1', type: 'background_check', expiryDate: ymd(2030, 1, 1) }, // ok
+    { personId: 'pM2', type: 'certification', expiryDate: ymd(2026, 6, 10) },   // expired — only on the 2nd doc
+  ];
+  const person = getPerson(makeRef('user', 'uMulti'), { users, accessPeople, accessRecords: records, today: TODAY });
+  assert.equal(person.complianceStatus.ok, false); // the 2nd doc's expiry must surface
+  assert.equal(person.complianceStatus.expired[0].type, 'certification');
+});
+
 // ── getPerson: the link collapse ─────────────────────────────────────────────
 const users = [
   { id: 'uAdmin', name: 'Ada Admin', role: 'admin', email: 'ada@x.org' },
