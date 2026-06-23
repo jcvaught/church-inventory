@@ -20,16 +20,16 @@ test.describe('Work-unification — unified-path comments, links, converts', () 
   });
 
   // ── helpers ────────────────────────────────────────────────────────────────
-  const openTasksHub = async (page) => {
+  // Post-merge, a both-access user reaches Tasks/Maintenance through the one
+  // "Work" card + the in-board toggle (the separate hub cards are gone).
+  const openWork = async (page, tabRe) => {
     await page.goto('/');
     await page.getByRole('button', { name: /^hubs$/i }).first().click();
-    await page.getByText('Tasks Hub').first().click();
+    await page.getByRole('button', { name: 'Work', exact: true }).click();
+    await page.getByRole('tab', { name: tabRe }).click();
   };
-  const openMaintenanceHub = async (page) => {
-    await page.goto('/');
-    await page.getByRole('button', { name: /^hubs$/i }).first().click();
-    await page.getByText('Maintenance Hub').first().click();
-  };
+  const openTasksHub = (page) => openWork(page, /Tasks/);
+  const openMaintenanceHub = (page) => openWork(page, /Maintenance/);
   // Card aria-label is `${number}: ${name}` (TaskCard/TicketCard role="button"),
   // so the unique [E2E] name is a substring match.
   const openCard = (page, name) => page.getByRole('button', { name }).first().click();

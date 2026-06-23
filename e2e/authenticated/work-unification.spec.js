@@ -33,7 +33,8 @@ test.describe('Work-unification — unified workItems path', () => {
 
     await page.goto('/');
     await page.getByRole('button', { name: /^hubs$/i }).first().click();
-    await page.locator('text=Tasks Hub').first().click();
+    await page.getByRole('button', { name: 'Work', exact: true }).click();
+    await page.getByRole('tab', { name: /Tasks/ }).click();
 
     // The "N tasks" count chip is computed from the store's `tasks` array, which
     // in unified mode is derived from workItems split by type.
@@ -46,7 +47,8 @@ test.describe('Work-unification — unified workItems path', () => {
 
     await page.goto('/');
     await page.getByRole('button', { name: /^hubs$/i }).first().click();
-    await page.locator('text=Tasks Hub').first().click();
+    await page.getByRole('button', { name: 'Work', exact: true }).click();
+    await page.getByRole('tab', { name: /Tasks/ }).click();
     await page.getByRole('button', { name: /^\+ new task$/i }).click();
     await page.getByPlaceholder('Short descriptive name...').fill(name);
     await page.getByRole('button', { name: /^create task$/i }).click();
