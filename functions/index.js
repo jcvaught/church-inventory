@@ -1049,15 +1049,12 @@ exports.icsCalendarFeed = onRequest({ cors: true, invoker: 'public' }, async (re
       occurrences.push(...reservationsToOccurrences(reservations));
     }
     if (activeTypes.includes('maintenance')) {
-      // Work-unification: read maintenance from the unified `workItems`
-      // collection (filtered to type:maintenance) when the church has flipped.
-      const wiEnabled = await churchWorkItemsEnabled(db, churchId);
-      const coll = wiEnabled ? 'workItems' : 'maintenanceTickets';
-      const snap = await db.collection(`churches/${churchId}/${coll}`)
+      // Maintenance lives in the unified `workItems` collection (type:maintenance).
+      const snap = await db.collection(`churches/${churchId}/workItems`)
         .where('dueDate', '>=', cutoff).limit(1000).get();
       const tickets = snap.docs
         .map(d => ({ _docId: d.id, ...d.data() }))
-        .filter(t => !wiEnabled || t.type === 'maintenance');
+        .filter(t => t.type === 'maintenance');
       occurrences.push(...maintenanceToOccurrences(tickets));
     }
 
@@ -1097,25 +1094,6 @@ function effectiveHasHub(user, hubName) {
   if (user.role === 'admin') return true;
   if (!Array.isArray(user.allowedHubs)) return true;
   return user.allowedHubs.includes(hubName);
-}
-
-// ── Work-unification read-path flag (Phase 2) ─────────────────────────────
-// Per-church switch, mirroring the client read in useFirestore.js: when
-// `config/featureFlags.workItemsEnabled` is true, this church's tasks +
-// maintenance live in the unified `workItems` collection (one doc per item,
-// `type: 'task' | 'maintenance'`, id prefixed `task_`/`mnt_`) instead of the
-// legacy `tasks` / `maintenanceTickets` collections. Absence or a read error =
-// off (the dark-launch default). Pass a `cache` object ({} keyed by churchId)
-// when iterating churches to avoid re-reading the flag per doc.
-async function churchWorkItemsEnabled(db, churchId, cache) {
-  if (cache && churchId in cache) return cache[churchId];
-  let enabled = false;
-  try {
-    const snap = await db.doc(`churches/${churchId}/config/featureFlags`).get();
-    enabled = snap.exists && snap.data()?.workItemsEnabled === true;
-  } catch { enabled = false; }
-  if (cache) cache[churchId] = enabled;
-  return enabled;
 }
 
 // ── sendWelcomeEmail ──────────────────────────────────────────────────────
@@ -1748,36 +1726,14 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 * * * *', timeZone: 'Am
   // The query pulls a generous UTC window [today−91 … today+7] so it covers
   // every church's [today−90 … +6] regardless of zone; precise per-church
   // bounds are applied in the send loop.
-  // Work-unification: tasks may live in the legacy `tasks` collection OR the
-  // unified `workItems` collection (type:task), per each church's
-  // `workItemsEnabled` flag. Query BOTH collection groups over the window, then
-  // keep only the docs from each church's AUTHORITATIVE collection — otherwise a
-  // flipped-and-backfilled church would have its tasks in both places and get
-  // double-reminded. Each candidate carries its source so the per-church flag
-  // decides which to keep; the surviving doc's `_ref` is what gets stamped.
-  const [legacySnap, unifiedSnap] = await Promise.all([
-    db.collectionGroup('tasks')
-      .where('dueDate', '>=', utcYmdOffset(-91)).where('dueDate', '<=', utcYmdOffset(7))
-      .limit(5000).get(),
-    db.collectionGroup('workItems')
-      .where('dueDate', '>=', utcYmdOffset(-91)).where('dueDate', '<=', utcYmdOffset(7))
-      .limit(5000).get(),
-  ]);
+  // Tasks live in the unified `workItems` collection (type:task). Query the
+  // collection group over the window; precise per-church bounds + idempotency
+  // are applied per church in the send loop below.
+  const unifiedSnap = await db.collectionGroup('workItems')
+    .where('dueDate', '>=', utcYmdOffset(-91)).where('dueDate', '<=', utcYmdOffset(7))
+    .limit(5000).get();
 
-  const candidates = [
-    ...legacySnap.docs.map(d => ({ doc: d, source: 'legacy' })),
-    ...unifiedSnap.docs.filter(d => d.data().type === 'task').map(d => ({ doc: d, source: 'unified' })),
-  ];
-  if (candidates.length === 0) return;
-
-  // Resolve the read-path flag once per candidate church, then keep each doc
-  // only if it came from that church's active collection.
-  const wiCache = {};
-  const candidateChurchIds = [...new Set(candidates.map(c => c.doc.ref.parent.parent.id))];
-  await Promise.all(candidateChurchIds.map(id => churchWorkItemsEnabled(db, id, wiCache)));
-  const taskDocs = candidates
-    .filter(c => (wiCache[c.doc.ref.parent.parent.id] ? c.source === 'unified' : c.source === 'legacy'))
-    .map(c => c.doc);
+  const taskDocs = unifiedSnap.docs.filter(d => d.data().type === 'task');
   if (taskDocs.length === 0) return;
 
   // Filter to active tasks with assignees; group by assignee uid → [taskInfo + taskRef].
@@ -2291,13 +2247,9 @@ async function callClaude({ system, user, maxTokens = 900 }) {
 // Collect this week's attention signals for one church. Each block is
 // hub-gated and contributes a compact summary + a few example strings.
 async function gatherAttentionSignals(db, churchId, todayStr) {
-  // Work-unification: when the church has flipped, tasks + maintenance both
-  // live in `workItems` (split by type); otherwise read the legacy collections.
-  const wiEnabled = await churchWorkItemsEnabled(db, churchId);
-  const [workItemsSnap, legacyTasksSnap, legacyTicketsSnap, recordsSnap, suppliesSnap, itemsSnap, jobsSnap, timeSnap, subSnap] = await Promise.all([
-    wiEnabled ? db.collection(`churches/${churchId}/workItems`).get() : Promise.resolve(null),
-    wiEnabled ? Promise.resolve(null) : db.collection(`churches/${churchId}/tasks`).get(),
-    wiEnabled ? Promise.resolve(null) : db.collection(`churches/${churchId}/maintenanceTickets`).get(),
+  // Tasks + maintenance both live in `workItems` (split by type).
+  const [workItemsSnap, recordsSnap, suppliesSnap, itemsSnap, jobsSnap, timeSnap, subSnap] = await Promise.all([
+    db.collection(`churches/${churchId}/workItems`).get(),
     db.collection(`churches/${churchId}/accessRecords`).get(),
     db.collection(`churches/${churchId}/supplies`).get(),
     db.collection(`churches/${churchId}/items`).get(),
@@ -2306,9 +2258,9 @@ async function gatherAttentionSignals(db, churchId, todayStr) {
     db.doc(`churches/${churchId}/config/subscription`).get(),
   ]);
   const withId = (snap) => (snap ? snap.docs.map(d => ({ _docId: d.id, ...d.data() })) : []);
-  const allWork = wiEnabled ? withId(workItemsSnap) : null;
-  const taskData = (wiEnabled ? allWork.filter(w => w.type === 'task') : withId(legacyTasksSnap)).map(w => ({ ...w, type: 'task' }));
-  const maintData = (wiEnabled ? allWork.filter(w => w.type === 'maintenance') : withId(legacyTicketsSnap)).map(w => ({ ...w, type: 'maintenance' }));
+  const allWork = withId(workItemsSnap);
+  const taskData = allWork.filter(w => w.type === 'task').map(w => ({ ...w, type: 'task' }));
+  const maintData = allWork.filter(w => w.type === 'maintenance').map(w => ({ ...w, type: 'maintenance' }));
   const has = (h) => subHasHub(subSnap.data() || {}, h);
 
   // F4: the grouping / thresholds / predicates live in the shared attention lib
@@ -3396,20 +3348,15 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
     return subCache[churchId];
   }
 
-  const wiCache = {};
   for (const templateDoc of due) {
     const template = templateDoc.data();
     const churchId = templateDoc.ref.parent.parent.id;
     if (!await churchHasTasksHub(churchId)) continue;
 
     try {
-      // Work-unification: write the generated task into `workItems` (id
-      // `task_<auto>`, type:task) when the church has flipped, else `tasks`.
-      const wiEnabled = await churchWorkItemsEnabled(db, churchId, wiCache);
+      // Write the generated task into `workItems` (id `task_<auto>`, type:task).
       const configRef = db.doc(`churches/${churchId}/config/main`);
-      const newTaskRef = wiEnabled
-        ? db.doc(`churches/${churchId}/workItems/task_${db.collection(`churches/${churchId}/workItems`).doc().id}`)
-        : db.collection(`churches/${churchId}/tasks`).doc();
+      const newTaskRef = db.doc(`churches/${churchId}/workItems/task_${db.collection(`churches/${churchId}/workItems`).doc().id}`);
       let taskNumber;
       const nextDate = template.autoGenerateFrequency ? calculateNextDue(todayStr, template.autoGenerateFrequency) : todayStr;
 
@@ -3425,7 +3372,7 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
         taskNumber = 'TSK-' + String(maxNum).padStart(3, '0');
         t.set(configRef, { maxTaskNumber: maxNum }, { merge: true });
         t.set(newTaskRef, {
-          ...(wiEnabled ? { type: 'task' } : {}),
+          type: 'task',
           name: template.name || 'Recurring Task',
           description: template.description || '',
           priority: template.priority || 'Medium',
