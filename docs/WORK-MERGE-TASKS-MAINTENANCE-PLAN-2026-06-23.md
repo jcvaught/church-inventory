@@ -2,7 +2,7 @@
 
 **Drafted:** 2026-06-23
 **Owner:** John (jvaught@fxcc.org)
-**Status:** PLAN — not started. The data foundation is done (see below); this is the UI merge.
+**Status (updated 2026-06-23):** ✅ **v1 SHIPPED** — the user-facing merge is live. A user who can use both categories now sees one **Work** card (`src/pages/WorkPage.jsx`) with a Tasks/Maintenance segmented toggle that mounts the existing pages; single-category users keep their own card untouched. Per-user `allowedHubs` scoping preserved at category granularity (E2E-verified on prod). **Deferred (carried debt):** v1 *wraps* `TasksPage`/`MaintenancePage` rather than collapsing them into one engine — the §4 dedup (delete one duplicate board engine) and the task↔maintenance **convert-feature deletion** are NOT done. Those are the remaining engineering payoff; do them when touching the board engine next.
 **Supersedes:** the Tasks+Maintenance portion of Phase 4 in `WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md`. **Jobs is explicitly OUT of scope** (deferred indefinitely — see §6).
 
 ---

@@ -4,6 +4,16 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-23 — Tasks + Maintenance UI merge (one "Work" board) — v1
+
+The user-facing half of the Work unification: Tasks and Maintenance (already one `workItems` collection since Phase 2) now present as a single board.
+
+- **`src/pages/WorkPage.jsx`** (new) — a Tasks/Maintenance segmented toggle that mounts the existing `TasksPage`/`MaintenancePage`. The toggle only offers categories the user's `allowedHubs` permits (`userCanSeeHub('tasks')`/`('maintenance')`); selection persists in `localStorage` (`workCategory`).
+- **`HubsPage`** — a user who can use **both** categories sees one synthetic **"Work"** card (`HUB_DEFS` `key:'work'`, `synthetic:true`); the separate Tasks/Maintenance cards are hidden (`mergeWork`). Single-category users keep their existing card untouched. **`allowedHubs` stays `'tasks'`/`'maintenance'`** — no `'work'` access key — so per-category scoping + invite scoping are unchanged. The `'work'` shell bypasses `UpgradeGate` (access enforced inside `WorkPage`, like Shepherd).
+- **Bug fix (same change):** the "✨ Unlock everything — one plan" callout on the Hubs page no longer shows to a fully-unlocked church (pro/all-in/grandfathered) — it now renders only when a real paid hub is still locked (`HUB_DEFS.some(h => !h.special && !h.synthetic && !hasHub(h.key))`). FXCC is grandfathered, so it was being wrongly upsold its own plan.
+- **Verified on prod:** build + lint clean; `e2e/authenticated/work-merge.spec.js` (one Work card, separate cards gone, toggle swaps boards) + the work-unification specs repointed through Work→toggle — **11/11 green**.
+- **Deferred (carried debt):** v1 *wraps* the two pages rather than collapsing them into one engine — the duplicate-board-engine dedup and the task↔maintenance **convert-feature deletion** are NOT done. See `docs/WORK-MERGE-TASKS-MAINTENANCE-PLAN-2026-06-23.md`.
+
 ## 2026-06-23 — Work-unification Phase 2, Part C: collapse to `workItems`-only
 
 Closed out the Tasks+Maintenance data merge. After a clean ~1-week soak post-cutover (FXCC live on `workItems` since 2026-06-17), removed the dual-path machinery and deleted the legacy collections.

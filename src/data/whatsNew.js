@@ -4,6 +4,12 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-06-23',
+    tag: 'Improved',
+    title: 'Tasks and Maintenance, now in one Work board',
+    body: "Tasks and Maintenance now live together under a single Work card in Hubs. Open it and flip between Tasks and Maintenance with one toggle — no more bouncing between two separate hubs. Everything works exactly as before (your numbers, assignees, comments, and recurring items are all intact); it's just one place now. If your access is limited to only one of them, nothing changes for you.",
+  },
+  {
     date: '2026-06-18',
     tag: 'New',
     title: 'Event Day — your Sunday at a glance',
