@@ -20,6 +20,7 @@ const PeopleAccessPage  = lazyWithRetry(() => import('./hubs/PeopleAccessPage.js
 const TasksPage         = lazyWithRetry(() => import('./hubs/TasksPage.jsx').then(m => ({ default: m.TasksPage })), 'TasksPage');
 const JobsPage          = lazyWithRetry(() => import('./hubs/JobsPage.jsx').then(m => ({ default: m.JobsPage })), 'JobsPage');
 const ShepherdHubPage   = lazyWithRetry(() => import('./hubs/ShepherdHubPage.jsx').then(m => ({ default: m.ShepherdHubPage })), 'ShepherdHubPage');
+const WorkPage          = lazyWithRetry(() => import('./WorkPage.jsx').then(m => ({ default: m.WorkPage })), 'WorkPage');
 
 const HubLoadingFallback = () => (
   <div style={{ display:'flex', justifyContent:'center', alignItems:'center', padding:'80px 20px' }}>
@@ -35,6 +36,19 @@ const HUB_DEFS = [
     price: '$7/mo',
     color: '#0D9488',
     desc: 'Utilization stats, ministry breakdowns, seasonal trends, and financial tracking.',
+  },
+  {
+    // Synthetic "Work" card — shown ONLY to users who can use both Tasks and
+    // Maintenance (mergeWork below); it replaces the two separate cards and
+    // opens the unified board with a Tasks/Maintenance toggle (WorkPage). The
+    // underlying access keys stay 'tasks'/'maintenance' (allowedHubs is never
+    // collapsed to a 'work' key), so per-category scoping is preserved.
+    key: 'work',
+    label: 'Work',
+    icon: '🗂️',
+    color: '#059669',
+    desc: "Tasks and maintenance in one board — assign, track, and complete your church's to-dos and repairs.",
+    synthetic: true,
   },
   {
     key: 'maintenance',
@@ -122,9 +136,10 @@ const UPGRADE_PREVIEWS = {
   jobs: '/upgrade-previews/jobs.jpg',
 };
 
-function HubContent({ hubKey, store, userProfile, jobsInitialView, isElder }) {
+function HubContent({ hubKey, store, userProfile, jobsInitialView, isElder, userCanSeeHub }) {
   let page = null;
   if (hubKey === 'insights') page = <InsightsPage store={store} userProfile={userProfile} />;
+  else if (hubKey === 'work') page = <WorkPage store={store} userProfile={userProfile} userCanSeeHub={userCanSeeHub} />;
   else if (hubKey === 'maintenance') page = <MaintenancePage store={store} userProfile={userProfile} />;
   else if (hubKey === 'coordination') page = <CoordinationPage store={store} userProfile={userProfile} />;
   else if (hubKey === 'accountability') page = <AccountabilityPage store={store} userProfile={userProfile} />;
@@ -146,6 +161,11 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
   const isMobile = useContext(MobileCtx);
   const def = HUB_DEFS.find(h => h.key === hubKey);
   const volunteerMode = isVolunteerOnly(userProfile);
+
+  // Tasks + Maintenance collapse into one "Work" card+board ONLY for users who
+  // can use both. A user scoped to just one keeps that one card (untouched), so
+  // per-category access scoping is preserved. allowedHubs stays 'tasks'/'maintenance'.
+  const mergeWork = !volunteerMode && !!userCanSeeHub?.('tasks') && !!userCanSeeHub?.('maintenance');
 
   // Single-hub users (volunteers + anyone whose admin scoped them to exactly
   // one hub they have access to) skip the picker grid — auto-route them into
@@ -181,6 +201,25 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
           {canSeeShepherd
             ? <HubContent hubKey={hubKey} store={store} userProfile={userProfile} isElder={isElder} />
             : <div style={{ textAlign: 'center', padding: '60px 20px', color: B.textLight, fontFamily: f2 }}>This hub is for elders only.</div>}
+        </div>
+      );
+    }
+    // Work area: no UpgradeGate (it gates on a real hub key; 'work' is a merged
+    // shell). Access is enforced inside WorkPage at category granularity — show
+    // it to anyone who can use at least one of Tasks/Maintenance.
+    if (hubKey === 'work') {
+      const canSeeWork = userCanSeeHub?.('tasks') || userCanSeeHub?.('maintenance');
+      return (
+        <div>
+          <div style={{ marginBottom: 20 }}>
+            <button onClick={() => onOpenHub(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.teal, fontSize: 13, fontWeight: 600, fontFamily: f1, padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+              ← All Hubs
+            </button>
+          </div>
+          {canSeeWork
+            ? <HubContent hubKey="work" store={store} userProfile={userProfile} userCanSeeHub={userCanSeeHub} />
+            : <div style={{ textAlign: 'center', padding: '60px 20px', color: B.textLight, fontFamily: f2 }}>You don't have access to this hub. Contact your admin.</div>}
         </div>
       );
     }
@@ -235,11 +274,17 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
           // Volunteers (jobs-only) shouldn't be confronted with 6 upgrade cards
           // for hubs they have no access to — show only their hub.
           if (volunteerMode && hub.key !== 'jobs') return false;
+          // Work merge: show the synthetic "Work" card only when both categories
+          // are usable, and hide the individual Tasks/Maintenance cards then.
+          if (hub.key === 'work') return mergeWork;
+          if ((hub.key === 'tasks' || hub.key === 'maintenance') && mergeWork) return false;
           return true;
         }).map(hub => {
           const isSpecial = !!hub.special;
-          const active = isSpecial ? true : hasHub(hub.key);
-          const canSee = isSpecial ? true : (active && userCanSeeHub(hub.key));
+          // 'work' is a merged shell (no real subscription key): only shown when
+          // both underlying hubs are usable, so it's always active + visible.
+          const active = isSpecial || hub.key === 'work' ? true : hasHub(hub.key);
+          const canSee = isSpecial || hub.key === 'work' ? true : (active && userCanSeeHub(hub.key));
           return (
             <div key={hub.key}
               onClick={() => onOpenHub(hub.key)}
@@ -284,8 +329,11 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
         })}
       </div>
 
-      {/* Plan callout — admin/manager only; volunteers don't choose plans */}
-      {!volunteerMode && <div style={{ marginTop: 28, padding: 20, background: `linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 100%)`, borderRadius: 16, color: B.white }}>
+      {/* Plan callout — admin/manager only (volunteers don't choose plans), and
+          only when something is still locked. A pro/all-in/grandfathered church
+          already has every paid hub active (hasHub → true for all), so there's
+          nothing to upsell — don't show "Unlock everything" to a full-plan church. */}
+      {!volunteerMode && HUB_DEFS.some(h => !h.special && !h.synthetic && !hasHub(h.key)) && <div style={{ marginTop: 28, padding: 20, background: `linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 100%)`, borderRadius: 16, color: B.white }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, fontFamily: f1, marginBottom: 4 }}>✨ Unlock everything — one plan</div>
