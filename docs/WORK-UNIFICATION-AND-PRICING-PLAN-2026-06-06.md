@@ -1,7 +1,7 @@
 # ChurchOpsHub — Work Unification & Pricing Simplification Plan
 
 **Drafted:** 2026-06-06
-**Status:** PLAN — not yet started. Open decisions at the bottom need owner sign-off before Phase 2.
+**Status (updated 2026-06-23):** P0/P1/P5 shipped. **P2 (Tasks+Maintenance → `workItems`) FULLY COMPLETE** — cutover 2026-06-17, **Part C cleanup 2026-06-23** (flag + legacy branches stripped from code; legacy `tasks`/`maintenanceTickets` collections deleted from prod). **P3 (Jobs) DEFERRED INDEFINITELY** by owner. **P4 rescoped to Tasks+Maintenance ONLY** (one board + Tasks/Maintenance toggle, Jobs excluded) → see `WORK-MERGE-TASKS-MAINTENANCE-PLAN-2026-06-23.md`. The "not yet started" note below is historical.
 **Owner:** John (jvaught@fxcc.org)
 
 This plan does three things, in order of conviction:
@@ -216,14 +216,14 @@ Extract the shared board engine + recurrence util (§6). Ship behind the existin
 ### Phase 1 — Contractor hours / time tracking (ships value FAST)
 `trackedPeople.personType` + `hourlyRate`; `timeEntries` collection + rules + indexes; "Log time" on existing tasks/tickets + a standalone Timesheet view; approval + cost rollup + CSV. Lands John's contractor tracking **without waiting for full unification.** Link-to-maintenance `actualCost` auto-sum included.
 
-### Phase 2 — Unify Tasks + Maintenance into `workItems`
-Introduce `workItems` with `category`. Migrate `tasks` + `maintenanceTickets` (Admin SDK script, dry-run + idempotent). New rules + indexes (probe in prod — `firebase deploy --only firestore:indexes` silently skips two index kinds). Old collections kept read-only one release for rollback. UI: one Work board with category filter; Maintenance/Tasks nav entries point at it.
+### Phase 2 — Unify Tasks + Maintenance into `workItems` — ✅ COMPLETE
+Introduced `workItems` (discriminated by `type:'task'|'maintenance'`). Migrated `tasks` + `maintenanceTickets` (idempotent Admin SDK script). **Cutover 2026-06-17** (FXCC flipped via per-church `workItemsEnabled` flag). **Part C cleanup 2026-06-23:** the flag + all legacy read/write branches stripped from `useFirestore.js` + the Cloud Functions; legacy `tasks`/`maintenanceTickets` collections **deleted from prod** (verified every legacy doc had a `workItems` twin first; the other 3 churches had zero task/maintenance data). The hook reads `workItems` unconditionally and still exposes split `tasks`/`maintenanceTickets` arrays so the pages are unchanged pending the UI merge.
 
-### Phase 3 — Fold Jobs/volunteer shifts into Work
-Migrate `jobListings` (+ signups/waitlist) → `workItems` `category:'shift'`, preserving sign-up/waitlist/compliance/public-board/SMS/attendance/swaps. `assignmentMode` toggle replaces the convert features. Public board route compatibility-aliased.
+### Phase 3 — Fold Jobs/volunteer shifts into Work — ⛔ DEFERRED INDEFINITELY (owner, 2026-06-23)
+Jobs stays its own `jobListings` collection + hub. The two-collection decision (§0/§11 #7) already made this independent and optional; owner has chosen **not** to merge Jobs for now (mature, audited, date-driven, externally-facing → higher risk, not currently wanted). Nothing forecloses revisiting it later.
 
-### Phase 4 — UI convergence + retire hub boundaries
-One "Work" area with the six views (§5). Remove separate hub navigation. Delete the convert-features and their backref fields. Delete the now-dead duplicate board files.
+### Phase 4 — UI convergence — ↪ RESCOPED to Tasks + Maintenance only
+**See `WORK-MERGE-TASKS-MAINTENANCE-PLAN-2026-06-23.md`.** Collapse `TasksPage` + `MaintenancePage` into **one board with a Tasks/Maintenance toggle**, preserving per-user `allowedHubs` scoping at **category granularity** (maint-only sees only maintenance; tasks-only sees only tasks; new-invite scoping unchanged). Delete the task↔maintenance convert feature + the dead duplicate board engine. **Jobs excluded** (no shift view here). Not started.
 
 ### Phase 5 — Pricing simplification
 Flatten `config/subscription` to `plan`, collapse `hasHub`→`isPro`, decouple `allowedHubs` from billing, retire Coordination as a SKU, migrate + grandfather existing subscribers, update Stripe products, update `docs/BUSINESS_MODEL.md` + LandingPage pricing copy.

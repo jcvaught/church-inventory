@@ -44,12 +44,12 @@ After Part A: prod has a full `workItems` mirror, all code/rules/index live, **a
 
 ---
 
-## Part C — Post-window
+## Part C — Post-window — ✅ DONE 2026-06-23
 
-- [ ] **C1. Watch** Sentry + behavior for the rest of the day (the AI digest, ICS feed, and task due-reminders now read `workItems` for FXCC).
-- [ ] **C2. Legacy stays read-only one full week** as the rollback escape hatch — do **not** delete `tasks` / `maintenanceTickets` yet.
-- [ ] **C3. After a clean week:** delete the legacy collections, then in a follow-up PR remove the flag + the legacy read/write branches from `useFirestore.js` and the 4 CFs (collapse to `workItems`-only).
-- [ ] **C4. Docs:** CHANGELOG entry (window executed), flip the backlog/CLAUDE Phase-2 status to shipped, add a `whatsNew.js` entry only if anything is user-visible (it shouldn't be — that's the point).
+- [x] **C1. Watched** Sentry + behavior — clean (day-2 health verified 2026-06-18; 0 CF errors since cutover).
+- [x] **C2. Legacy held read-only ~1 week** as the rollback hatch (2026-06-17 → 06-23).
+- [x] **C3. Collapsed to `workItems`-only (2026-06-23):** stripped the `workItemsEnabled` flag + all legacy `tasks`/`maintenanceTickets` read/write branches from `useFirestore.js` and the CFs (`icsCalendarFeed`, `sendTaskDueReminders`, `gatherAttentionSignals`, `generateRecurringTemplateTasks`; removed the `churchWorkItemsEnabled` helper). Deleted the legacy collections from prod after verifying every legacy doc had a `workItems` twin (reverse-coverage 0/0; the other 3 churches had zero task/maintenance data). lint/build clean, test:unit 54/54, test:rules 29/29, test:handlers 51/51; 5 CFs redeployed + invoker-IAM probed OK. **Rollback is no longer a flag flip — it's redeploying the prior commit (`8b23268`).**
+- [x] **C4. Docs:** CHANGELOG entry added; backlog + plan + CLAUDE Phase-2 status flipped to complete; Phase 3 (Jobs) marked deferred, Phase 4 rescoped (`WORK-MERGE-TASKS-MAINTENANCE-PLAN-2026-06-23.md`). No `whatsNew.js` entry — change is invisible to users (as intended).
 
 ---
 

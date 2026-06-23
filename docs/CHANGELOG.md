@@ -4,6 +4,19 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-23 — Work-unification Phase 2, Part C: collapse to `workItems`-only
+
+Closed out the Tasks+Maintenance data merge. After a clean ~1-week soak post-cutover (FXCC live on `workItems` since 2026-06-17), removed the dual-path machinery and deleted the legacy collections.
+
+- **Code (`8b23268..7f5872e`):** stripped the per-church `config/featureFlags.workItemsEnabled` flag and every legacy `tasks`/`maintenanceTickets` read/write branch.
+  - `src/useFirestore.js`: dropped the featureFlags probe, the `workItemsEnabled` state/ref, and the legacy collection subscriptions; the `taskDocRef`/`ticketDocRef`/mint helpers and all CRUD no longer take/thread an `enabled` arg; `tasks`/`maintenanceTickets` arrays are derived from the single `workItems` subscription unconditionally (totalSubs 20).
+  - `functions/index.js`: removed the `churchWorkItemsEnabled()` helper and every `wiEnabled` branch in `icsCalendarFeed`, `sendTaskDueReminders` (now one `collectionGroup('workItems')` query, no legacy `collectionGroup('tasks')`), `gatherAttentionSignals`, and `generateRecurringTemplateTasks`.
+- **Data:** verified every legacy doc had a `workItems` twin (reverse-coverage 0/0); FXCC was the only church with task/maintenance data (76 tasks + 41 tickets, all mirrored; `workItems` also holds 1 post-cutover maintenance item). Deleted FXCC's `tasks` + `maintenanceTickets` (incl. `comments` subcollections); the other 3 churches were empty. `workItems` left intact (76 task + 42 maintenance).
+- **Verification:** lint clean (no new errors), build clean, `test:unit` 54/54, `test:rules` 29/29 (workItems create-split), `test:handlers` 51/51. Redeployed 5 CFs; invoker-IAM probed OK (`icsCalendarFeed` 400, `getAttentionDigest` 401-JSON — both reached, not stripped).
+- **Rollback** is no longer a flag flip — redeploy the prior commit (`8b23268`).
+- **Next:** Jobs merge (old Phase 3) **deferred indefinitely**; the remaining Work step is the Tasks+Maintenance **UI** merge (one board + Tasks/Maintenance toggle, scoping preserved at category granularity) — `docs/WORK-MERGE-TASKS-MAINTENANCE-PLAN-2026-06-23.md`.
+- **Known leftover (not in scope):** `firestore.rules` still has dead `tasks`/`maintenanceTickets` rules (harmless — nothing writes those paths); remove in a later cleanup. Pre-existing unrelated lint error at `EventDayPage.jsx:84` (drifted baseline, not from this change).
+
 ## 2026-06-18 — Event-Day Ops view (first premium feature on the foundations)
 
 A single-screen admin/manager console for one day — the first premium feature built on the just-shipped foundations (F2 People resolver, F5 Scheduled-Occurrences). Cross-sources everything happening that day so ops staff stop bouncing between the Jobs schedule, Reservations, and the work boards. Plan: `docs/EVENT-DAY-OPS-PLAN-2026-06-18.md`.

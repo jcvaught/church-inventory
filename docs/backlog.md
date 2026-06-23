@@ -3,12 +3,12 @@
 This is the canonical list of **open** work. Update it here (not scattered across the many plan/audit docs). Detailed specs live in the linked docs; this file is the index.
 
 ## Keystone migration (unblocks most else)
-Plan: `docs/WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md`. Decision (#7): **TWO collections** — `workItems` (tasks+maintenance merged) + jobs stays its own collection, so Phase 3 is a UI unification, not a data migration.
+Plan: `docs/WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md`. Decision (#7): **TWO collections** — `workItems` (tasks+maintenance merged) + jobs stays its own collection. **Jobs merge (old Phase 3) is now DEFERRED INDEFINITELY (owner 2026-06-23);** the remaining Work step is the Tasks+Maintenance **UI** merge (rescoped Phase 4).
 - **Phase 0** (shared board/recurrence primitives) — on `phase0` branch (not merged).
 - **Phase 1** (contractor hours + Timesheet, `timeEntries`, `personType`/`hourlyRate`) — ✅ SHIPPED & live.
-- **Phase 2** (`workItems` migration) — ✅ **CUTOVER DONE 2026-06-17: FXCC live on `workItems`** (Parts A+B per `docs/WORK-UNIFICATION-PHASE2-CUTOVER-RUNBOOK.md`; see CHANGELOG). Rollback = `set-work-flag.cjs --off --prod` (instant). **Part C remaining:** legacy `tasks`/`maintenanceTickets` kept read-only ~1 week as the rollback hatch → then delete + strip the flag/legacy branches from `useFirestore.js` + the 4 CFs. Other churches stay flag-off.
-- **Phase 3** (fold Jobs in) — not started; UI/nav unification + "convert" → spawn-linked-shift (NOT a data migration).
-- **Phase 4** (UI convergence: one "Work" area, six views; delete convert-features + duplicate board engines) — not started.
+- **Phase 2** (`workItems` migration) — ✅ **FULLY COMPLETE.** Cutover 2026-06-17 (FXCC); **Part C done 2026-06-23** — flag + legacy read/write branches stripped from `useFirestore.js` + the CFs (icsCalendarFeed, sendTaskDueReminders, gatherAttentionSignals, generateRecurringTemplateTasks); legacy `tasks`/`maintenanceTickets` collections **deleted from prod** (verified mirrored first; other 3 churches were empty). Hook reads `workItems`-only; rollback now = redeploy prior code (the flip flag is gone). See CHANGELOG.
+- **Phase 3** (fold Jobs in) — ⛔ **DEFERRED INDEFINITELY** (owner 2026-06-23). Jobs stays its own `jobListings` collection/hub. Two-collection decision already made this optional; revisit later if ever.
+- **Phase 4** — ↪ **RESCOPED to Tasks+Maintenance only:** one board + Tasks/Maintenance toggle, preserving per-user `allowedHubs` scoping at category granularity (maint-only→maint, tasks-only→tasks, new-invite scoping unchanged), Jobs excluded. **Plan: `docs/WORK-MERGE-TASKS-MAINTENANCE-PLAN-2026-06-23.md`.** Not started — **this is the next Work step.**
 - **Phase 5** (pricing flatten to $15/mo) — ✅ SHIPPED standalone 2026-06-15 (0 payers → no grandfathering).
 
 ## Platform foundations (architecture spec'd; build-order phased)
