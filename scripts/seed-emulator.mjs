@@ -78,9 +78,13 @@ async function main() {
     { taskNumber: 'TSK-003', name: 'Restock coffee bar', status: 'Planning', priority: 'Low', dueDate: ymd(addDays(5)) },
     { taskNumber: 'TSK-004', name: 'Quarterly board report', status: 'On Hold', priority: 'Medium', dueDate: ymd(addDays(20)), recurrence: 'quarterly' },
   ];
+  // Tasks + maintenance live in ONE `workItems` collection (doc id prefixed
+  // `task_`/`mnt_`, discriminated by `type`) — mirror useFirestore.addTask/addTicket
+  // so the WorkBoard (which reads workItems-only) actually shows the seeded data.
   let firstTaskRef;
   for (const t of tasks) {
-    const ref = await C('tasks').add({ ...t, description: '', assignees: me, visibility: 'team', tags: [], checklist: [], createdBy: uid, createdByName: 'Test Admin', createdAt: NOW, sortOrder: 0 });
+    const ref = C('workItems').doc(`task_${C('workItems').doc().id}`);
+    await ref.set({ ...t, type: 'task', description: '', assignees: me, visibility: 'team', tags: [], checklist: [], createdBy: uid, createdByName: 'Test Admin', createdAt: NOW, sortOrder: 0 });
     firstTaskRef ||= ref;
   }
   // One comment so the Work-unification migration's comment-copy path is exercised.
@@ -94,7 +98,8 @@ async function main() {
   ];
   let firstTicketRef;
   for (const t of tickets) {
-    const ref = await C('maintenanceTickets').add({ ...t, description: '', assignees: me, tags: [], createdBy: uid, createdByName: 'Test Admin', createdAt: NOW });
+    const ref = C('workItems').doc(`mnt_${C('workItems').doc().id}`);
+    await ref.set({ ...t, type: 'maintenance', description: '', assignees: me, tags: [], createdBy: uid, createdByName: 'Test Admin', createdAt: NOW });
     firstTicketRef ||= ref;
   }
   await firstTicketRef.collection('comments').add({ text: 'Ordered the replacement filter.', authorId: uid, authorName: 'Test Admin', createdAt: NOW });
@@ -128,9 +133,9 @@ async function main() {
   // Read back through the same connection to prove the writes landed where we
   // think (the emulator, never prod — the host guard above already enforced that).
   const backChurch = await db.doc(`churches/${churchId}`).get();
-  const backTasks = await db.collection(`churches/${churchId}/tasks`).get();
-  console.log(`  verify : churches/${churchId} exists=${backChurch.exists}, tasks=${backTasks.size}, FIRESTORE_EMULATOR_HOST=${process.env.FIRESTORE_EMULATOR_HOST}`);
-  if (!backChurch.exists || backTasks.size === 0) { console.error('  ✗ read-back found nothing — aborting.'); process.exit(1); }
+  const backWork = await db.collection(`churches/${churchId}/workItems`).get();
+  console.log(`  verify : churches/${churchId} exists=${backChurch.exists}, workItems=${backWork.size}, FIRESTORE_EMULATOR_HOST=${process.env.FIRESTORE_EMULATOR_HOST}`);
+  if (!backChurch.exists || backWork.size === 0) { console.error('  ✗ read-back found nothing — aborting.'); process.exit(1); }
 
   console.log('✓ Seeded sandbox church:');
   console.log(`  church : ${churchId}`);

@@ -4,7 +4,7 @@
 // download wrapper + the client VCALENDAR header — its PRODID differs from the
 // feed's and it omits METHOD:PUBLISH, a byte-difference preserved on purpose.
 import { localDateStr } from './date.js';
-import { tasksToOccurrences, shiftsToOccurrences, occurrenceToVEvent, escICS } from '../lib/occurrences.js';
+import { tasksToOccurrences, shiftsToOccurrences, occurrenceToVEvent, escICS, foldLine } from '../lib/occurrences.js';
 
 function buildICS(calName, events) {
   return [
@@ -15,7 +15,7 @@ function buildICS(calName, events) {
     'CALSCALE:GREGORIAN',
     ...events,
     'END:VCALENDAR',
-  ].join('\r\n');
+  ].map(foldLine).join('\r\n');
 }
 
 function downloadICS(content, filename) {

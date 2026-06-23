@@ -161,7 +161,10 @@ function computeAttention(ctx, opts = {}) {
   out.sort((a, b) => {
     const s = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
     if (s !== 0) return s;
-    return (a.dueDate || '￿').localeCompare(b.dueDate || '￿');
+    // Plain ASCII compare on canonical YYYY-MM-DD — twin of src/lib/attention.js.
+    // NOT localeCompare (default locale differs browser↔Node). '~' sends undated last.
+    const da = a.dueDate || '~', db = b.dueDate || '~';
+    return da < db ? -1 : da > db ? 1 : 0;
   });
   return out;
 }

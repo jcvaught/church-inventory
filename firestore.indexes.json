@@ -67,14 +67,6 @@
   ],
   "fieldOverrides": [
     {
-      "collectionGroup": "tasks",
-      "fieldPath": "dueDate",
-      "indexes": [
-        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" },
-        { "order": "DESCENDING", "queryScope": "COLLECTION_GROUP" }
-      ]
-    },
-    {
       "collectionGroup": "workItems",
       "fieldPath": "dueDate",
       "indexes": [

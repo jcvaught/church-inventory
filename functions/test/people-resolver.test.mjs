@@ -220,3 +220,25 @@ test('isEligibleFor matches the server isAccessEligible across cases', () => {
     assert.equal(actual, expected, `eligibility parity failed for uid=${uid} req=[${req}]`);
   }
 });
+
+// Regression guard for the divergence the 1:1 fixtures above couldn't catch: the
+// user↔tracked link is NOT DB-enforced as 1:1, so a uid can carry >1 tracked doc.
+// The server aggregates records across ALL of them (Set form); the resolver must
+// too (linkedTrackedIds), or the Event-Day badge disagrees with the sign-up gate.
+test('isEligibleFor aggregates across multiple tracked docs for one uid (matches server)', () => {
+  const todayS = '2026-06-17';
+  const people = [
+    { _docId: 'pM1', userId: 'uMulti' },
+    { _docId: 'pM2', userId: 'uMulti' }, // second tracked doc for the SAME user
+  ];
+  const records = [
+    { personId: 'pM1', type: 'background_check', expiryDate: ymd(2027, 1, 1) },
+    { personId: 'pM2', type: 'certification', expiryDate: ymd(2027, 1, 1) }, // only on the 2nd doc
+  ];
+  const ctx = { users: [{ id: 'uMulti' }], accessPeople: people, accessRecords: records, today: TODAY };
+  const person = getPerson(makeRef('user', 'uMulti'), ctx);
+  const req = ['background_check', 'certification'];
+  assert.equal(serverIsAccessEligible('uMulti', req, people, records, todayS), true); // server: eligible
+  assert.equal(isEligibleFor(person, req, records, TODAY), true);                      // resolver must agree
+  assert.deepEqual([...person.linkedTrackedIds].sort(), ['pM1', 'pM2']);
+});

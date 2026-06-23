@@ -668,7 +668,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             ) : (
               <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                 {myRecords.map(r => {
-                  const es = expiryStatus(r.expiryDate);
+                  const es = expiryStatus(r.expiryDate, new Date());
                   const expiringSoon = es === 'warning' || es === 'critical';
                   return (
                     <div key={r._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:10, background:B.warmGray }}>

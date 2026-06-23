@@ -241,7 +241,11 @@ export function computeAttention(ctx, opts = {}) {
   out.sort((a, b) => {
     const s = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
     if (s !== 0) return s;
-    return (a.dueDate || '￿').localeCompare(b.dueDate || '￿');
+    // Plain ASCII compare on canonical YYYY-MM-DD (NOT localeCompare, whose
+    // default locale differs browser↔Node and could reorder the digest vs the
+    // dashboard). '~' (0x7E > digits/'-') sends undated items last.
+    const da = a.dueDate || '~', db = b.dueDate || '~';
+    return da < db ? -1 : da > db ? 1 : 0;
   });
   return out;
 }

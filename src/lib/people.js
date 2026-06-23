@@ -69,7 +69,7 @@ function addDays(d, n) {
  * when there is no expiry date (= never lapses). Parses the date as LOCAL (not UTC)
  * to avoid timezone-shift false positives — same as PeopleAccessPage.getExpiryStatus.
  */
-export function expiryStatus(expiryDate, today = new Date()) {
+export function expiryStatus(expiryDate, today) {
   if (!expiryDate) return null;
   const [y, m, day] = String(expiryDate).split('-').map(Number);
   const dt = new Date(y, m - 1, day);
@@ -88,7 +88,7 @@ export function expiryStatus(expiryDate, today = new Date()) {
  * summary; requirement-gating ("do they hold a non-expired record of each type a
  * shift needs?") is a separate concern — see isEligibleFor.
  */
-export function complianceStatusForTracked(trackedId, accessRecords = [], today = new Date()) {
+export function complianceStatusForTracked(trackedId, accessRecords = [], today) {
   const expiringSoon = [];
   const expired = [];
   for (const r of accessRecords) {
@@ -127,7 +127,7 @@ function displayNameOf(user, tracked) {
   return (user && user.name) || (tracked && tracked.name) || (user && user.email) || (tracked && tracked.email) || '';
 }
 
-function buildPerson(user, tracked, accessRecords, today) {
+function buildPerson(user, tracked, accessRecords, today, accessPeople = []) {
   const roles = new Set();
   if (user) {
     if (user.role === 'admin') roles.add('admin');
@@ -140,6 +140,14 @@ function buildPerson(user, tracked, accessRecords, today) {
   }
 
   const trackedId = docId(tracked);
+  // ALL tracked docs for this human, not just the representative one. The
+  // user↔tracked link is not DB-enforced as 1:1, so a uid can carry >1 tracked
+  // doc; eligibility must aggregate across all of them to match the server's
+  // Set-based isAccessEligible (functions/index.js). For a tracked-only person
+  // there is exactly the one id.
+  const linkedTrackedIds = user
+    ? accessPeople.filter(p => p.userId === user.id).map(docId).filter(Boolean)
+    : (trackedId ? [trackedId] : []);
   // Canonical ref prefers the user identity (auth is the stronger key) when linked.
   const ref = user
     ? makeRef('user', user.id, displayNameOf(user, tracked))
@@ -155,6 +163,7 @@ function buildPerson(user, tracked, accessRecords, today) {
     roles,
     linkedUserId: user ? user.id : null,
     linkedTrackedId: trackedId,
+    linkedTrackedIds,
     hourlyRate,
     contact: {
       email: (user && user.email) || (tracked && tracked.email) || '',
@@ -192,7 +201,7 @@ export function getPerson(ref, ctx) {
     if (tracked && tracked.userId) user = users.find(u => u.id === tracked.userId) || null;
   }
   if (!user && !tracked) return null;
-  return buildPerson(user, tracked, accessRecords, today);
+  return buildPerson(user, tracked, accessRecords, today, accessPeople);
 }
 
 /**
@@ -208,16 +217,25 @@ export function listPeople(ctx) {
   const collapsedTracked = new Set();
 
   for (const u of users) {
-    const tracked = accessPeople.find(p => p.userId === u.id) || null;
-    if (tracked) collapsedTracked.add(docId(tracked));
-    out.push(buildPerson(u, tracked, accessRecords, today));
+    const linked = accessPeople.filter(p => p.userId === u.id);
+    linked.forEach(p => collapsedTracked.add(docId(p)));
+    out.push(buildPerson(u, linked[0] || null, accessRecords, today, accessPeople));
   }
   for (const p of accessPeople) {
     if (collapsedTracked.has(docId(p))) continue; // already emitted with its linked user
     if (p.userId && users.some(u => u.id === p.userId)) continue; // linked, user already emitted
-    out.push(buildPerson(null, p, accessRecords, today));
+    out.push(buildPerson(null, p, accessRecords, today, accessPeople));
   }
   return out;
+}
+
+// All tracked-doc ids backing this Person. Prefers the aggregated set the
+// resolver computes (linkedTrackedIds — all docs for a uid); falls back to the
+// single linkedTrackedId for hand-built persons (e.g. unit-test inputs).
+function trackedIdsOf(person) {
+  if (!person) return [];
+  if (person.linkedTrackedIds && person.linkedTrackedIds.length) return person.linkedTrackedIds;
+  return person.linkedTrackedId ? [person.linkedTrackedId] : [];
 }
 
 /**
@@ -225,13 +243,14 @@ export function listPeople(ctx) {
  * Mirror of functions/index.js `isAccessEligible`: empty requirement list ⇒ eligible;
  * otherwise the person must hold a non-expired tracked record of EACH required type.
  * A person with no tracked record can never satisfy a non-empty requirement list.
- * (Assumes the 1:1 user↔tracked link that People Access enforces; the server's
- * Set-based form additionally aggregates across multiple tracked docs per uid.)
+ * Aggregates across ALL of the person's tracked docs (linkedTrackedIds) so it
+ * matches the server's Set-based form when a uid carries more than one.
  */
-export function isEligibleFor(person, requiredTypes, accessRecords = [], today = new Date()) {
+export function isEligibleFor(person, requiredTypes, accessRecords = [], today) {
   if (!requiredTypes || requiredTypes.length === 0) return true;
-  if (!person || !person.linkedTrackedId) return false;
-  const myRecords = accessRecords.filter(r => r.personId === person.linkedTrackedId);
+  const ids = trackedIdsOf(person);
+  if (ids.length === 0) return false;
+  const myRecords = accessRecords.filter(r => ids.includes(r.personId));
   return requiredTypes.every(reqType =>
     myRecords.some(r => r.type === reqType && expiryStatus(r.expiryDate, today) !== 'expired')
   );
@@ -247,10 +266,11 @@ export function isEligibleFor(person, requiredTypes, accessRecords = [], today =
  * Built on isEligibleFor + expiryStatus so the "is this volunteer cleared to
  * serve this shift?" question has one answer everywhere (Event-Day ops, etc.).
  */
-export function shiftReadiness(person, requiredTypes, accessRecords = [], today = new Date()) {
+export function shiftReadiness(person, requiredTypes, accessRecords = [], today) {
   if (!requiredTypes || requiredTypes.length === 0) return null;
   if (!isEligibleFor(person, requiredTypes, accessRecords, today)) return { level: 'blocked' };
-  const myRecords = accessRecords.filter(r => r.personId === person.linkedTrackedId);
+  const ids = trackedIdsOf(person);
+  const myRecords = accessRecords.filter(r => ids.includes(r.personId));
   const soon = requiredTypes.some(t => {
     const valid = myRecords.filter(r => r.type === t && expiryStatus(r.expiryDate, today) !== 'expired');
     return valid.length > 0 && valid.every(r => ['warning', 'critical'].includes(expiryStatus(r.expiryDate, today)));

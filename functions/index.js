@@ -2153,6 +2153,10 @@ exports.sendEmptyJobMorningAlert = onSchedule({ schedule: '0 * * * *', timeZone:
     if (!subHasHub(sub, 'jobs')) continue;
 
     const todayStr = parts.ymd;
+    // At-least-once dedup: onSchedule can fire twice in the 7am hour, and unlike
+    // sendJobReminders this alert has no per-job stamp — without this guard a retry
+    // re-emails every admin (real cost against the shared Brevo daily cap).
+    if (settings.lastEmptyJobAlertDate === todayStr) continue;
 
     // Single-field equality on scheduledDate (auto-indexed); status + signup
     // filtering happens in-memory since today's set is small.
@@ -2198,6 +2202,9 @@ exports.sendEmptyJobMorningAlert = onSchedule({ schedule: '0 * * * *', timeZone:
     const results = await Promise.allSettled(admins.map(a => sendEmailSafe({ to: a.email, from: FROM, subject, html, text })));
     results.forEach((r) => { if (r.status === 'rejected') { console.error('sendEmptyJobMorningAlert: email failed', { churchId, reason: r.reason?.message }); Sentry.captureException(r.reason); } });
     processed += results.filter(r => r.status === 'fulfilled').length;
+    // Stamp the church-local date so a same-hour retry is a no-op.
+    try { await db.doc(`churches/${churchId}/config/settings`).set({ lastEmptyJobAlertDate: todayStr }, { merge: true }); }
+    catch (err) { console.error('sendEmptyJobMorningAlert: stamp write failed', { churchId, err: err.message }); }
   }
   return { processed };
 }));
@@ -2954,7 +2961,9 @@ async function promoteWaitlistForJob(db, churchId, jobDocId) {
     accessPeople = peopleSnap.docs.map(d => ({ _docId: d.id, ...d.data() }));
     accessRecords = recordsSnap.docs.map(d => ({ _docId: d.id, ...d.data() }));
   }
-  const todayS = new Date().toISOString().slice(0, 10);
+  // Church-local date — NOT UTC toISOString (would be tomorrow for US evenings,
+  // wrongly expiring a still-valid cert on the boundary day). See CLAUDE.md pitfall.
+  const todayS = localPartsFor(await getChurchTimeZone(db, churchId, {})).ymd;
 
   // Oldest-first scan; first eligible waitlister wins the freed spot.
   const wlSnap = await db.collection(`churches/${churchId}/jobListings/${jobDocId}/waitlist`)
@@ -3086,7 +3095,8 @@ exports.jobSignUp = onCall({ cors: true }, async (req) => {
     ]);
     const accessPeople = peopleSnap.docs.map(d => ({ _docId: d.id, ...d.data() }));
     const accessRecords = recordsSnap.docs.map(d => ({ _docId: d.id, ...d.data() }));
-    const todayS = new Date().toISOString().slice(0, 10);
+    // Church-local date (see promoteWaitlistForJob + CLAUDE.md toISOString pitfall).
+    const todayS = localPartsFor(await getChurchTimeZone(db, churchId, {})).ymd;
     if (!isAccessEligible(uid, requiredTypes, accessPeople, accessRecords, todayS)) {
       return {
         error: `This job requires a valid ${requiredTypes.join(' + ')} on file. Ask an admin to add yours under People Access.`,

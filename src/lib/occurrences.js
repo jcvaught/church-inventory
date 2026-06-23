@@ -25,6 +25,36 @@ export function escICS(str) {
   return (str || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 }
 
+// RFC 5545 §3.1 — content lines longer than 75 OCTETS must be folded: split into
+// ≤75-octet pieces, each continuation line prefixed with a single space (which
+// counts toward the octet budget). Octet-aware + never splits a multibyte char,
+// so a long SUMMARY/DESCRIPTION/LOCATION doesn't get rejected by strict importers.
+// A short line is returned unchanged (so byte-parity with the legacy short fixtures
+// holds). The TextEncoder global exists in both Vite and Node.
+export function foldLine(line) {
+  const enc = new TextEncoder();
+  if (enc.encode(line).length <= 75) return line;
+  const segments = [];
+  let cur = '';
+  let curBytes = 0;
+  let first = true;
+  for (const ch of line) {
+    const chBytes = enc.encode(ch).length;
+    const limit = first ? 75 : 74; // continuation reserves 1 octet for the leading space
+    if (curBytes + chBytes > limit) {
+      segments.push(first ? cur : ' ' + cur);
+      first = false;
+      cur = ch;
+      curBytes = chBytes;
+    } else {
+      cur += ch;
+      curBytes += chBytes;
+    }
+  }
+  if (cur) segments.push(first ? cur : ' ' + cur);
+  return segments.join('\r\n');
+}
+
 export function dateToICS(dateStr) {
   return dateStr ? dateStr.slice(0, 10).replace(/-/g, '') : null;
 }
@@ -230,5 +260,5 @@ export function buildCalendar(calName, occurrences) {
     'CALSCALE:GREGORIAN',
     ...flat,
     'END:VCALENDAR',
-  ].join('\r\n');
+  ].map(foldLine).join('\r\n');
 }

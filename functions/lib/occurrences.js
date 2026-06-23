@@ -11,6 +11,31 @@ function escICS(str) {
   return (str || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 }
 
+// RFC 5545 §3.1 line folding — twin of src/lib/occurrences.js foldLine. KEEP IN SYNC.
+function foldLine(line) {
+  const enc = new TextEncoder();
+  if (enc.encode(line).length <= 75) return line;
+  const segments = [];
+  let cur = '';
+  let curBytes = 0;
+  let first = true;
+  for (const ch of line) {
+    const chBytes = enc.encode(ch).length;
+    const limit = first ? 75 : 74;
+    if (curBytes + chBytes > limit) {
+      segments.push(first ? cur : ' ' + cur);
+      first = false;
+      cur = ch;
+      curBytes = chBytes;
+    } else {
+      cur += ch;
+      curBytes += chBytes;
+    }
+  }
+  if (cur) segments.push(first ? cur : ' ' + cur);
+  return segments.join('\r\n');
+}
+
 function dateToICS(dateStr) {
   return dateStr ? dateStr.slice(0, 10).replace(/-/g, '') : null;
 }
@@ -199,11 +224,11 @@ function buildCalendar(calName, occurrences) {
     'CALSCALE:GREGORIAN',
     ...flat,
     'END:VCALENDAR',
-  ].join('\r\n');
+  ].map(foldLine).join('\r\n');
 }
 
 module.exports = {
-  escICS, dateToICS, addOneDay, timeToICS, ICS_DOMAIN,
+  escICS, foldLine, dateToICS, addOneDay, timeToICS, ICS_DOMAIN,
   reservationsToOccurrences, shiftsToOccurrences, maintenanceToOccurrences, tasksToOccurrences,
   getOccurrences, occurrenceToVEvent, buildCalendar,
 };
