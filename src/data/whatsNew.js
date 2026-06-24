@@ -5,6 +5,18 @@
 export const WHATS_NEW = [
   {
     date: '2026-06-24',
+    tag: 'New',
+    title: 'Instant booking for trusted leaders',
+    body: "Tired of approving your own reservations? In Settings → Church Settings, admins can turn on auto-approve so bookings made by an admin or manager (or a space's designated approver) are approved instantly instead of sitting in Pending. You can also mark an individual space \"Open\" in Manage Spaces so anyone can book it without approval — handy for a prayer room or small huddle space. Conflicts and space availability are still checked either way; regular members still request approval.",
+  },
+  {
+    date: '2026-06-24',
+    tag: 'Fixed',
+    title: 'Cancelled & denied reservations no longer clutter the calendar feed',
+    body: "If you subscribe to the church calendar feed in Google or Apple Calendar, denied and cancelled reservations were still showing up. They're now correctly left out — only active bookings appear.",
+  },
+  {
+    date: '2026-06-24',
     tag: 'Improved',
     title: 'Cancel a recurring reservation your way',
     body: "When you cancel a reservation that's part of a recurring series, you can now choose the scope: just this one (skip a single week), this and all future ones (end the series early), or the entire series. The app tells you how many bookings each choice affects before you confirm.",

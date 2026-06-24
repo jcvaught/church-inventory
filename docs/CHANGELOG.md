@@ -4,6 +4,21 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-24 — Room calendar Phase 4: auto-approve / instant-book + ICS feed status fix
+
+**Feed fix (the pre-existing bug flagged in 3b):** `reservationsToOccurrences` (client + CJS server twins) filtered `status !== 'denied'` (lowercase), but real reservations store `'Denied'`/`'Cancelled'` → denied **and** cancelled reservations leaked into the `icsCalendarFeed`. Now `!['denied','cancelled'].includes(String(status).toLowerCase())` — case-insensitive, also excludes Cancelled. Byte-parity with legacy `ics.js` holds (the fixtures are Approved/Pending). +1 occurrence test (Denied/Cancelled capitalized excluded, Approved/Pending kept). 77 unit tests.
+
+**Phase 4 — auto-approve / instant-book.** Two opt-in mechanisms, both still enforcing conflicts + availability:
+- **Church setting** `config/settings.reservationAutoApprove` (Settings → Church Settings, admin toggle): a booking by an admin, a managing-ministry manager, or a space's designated approver is created **Approved** (with `approvedBy/approvedByName/approvedAt`) instead of Pending — they could approve it anyway, so this skips the busywork. Regular members still request.
+- **Per-space** `rooms.bookingPolicy: 'open' | 'request'` (Manage Spaces select): an **open** space books instantly for **anyone**. For low-stakes spaces (prayer room, huddle space).
+- `addReservation` now honors a passed `status` (`res.status || 'Pending'`) so the auto-approve path writes Approved directly; `handleAdd` computes `autoApprove` after the conflict/availability gates and merges approval fields into `baseRes` (single + recurring series). Flash reads "booked" vs "requested".
+- All additive — no rule/migration changes.
+- **Verified:** build + lint clean; 77 unit tests. Playwright E2E — enabled the church setting, booked the Projector as admin → created **Approved** instantly (not Pending). Help + What's New updated.
+
+**Phase 4 complete.** Remaining: Phase 5 (one-click "Add to Google Calendar" + GCal slow-refresh note) · Phase 6 (cross-hub moat).
+
+---
+
 ## 2026-06-24 — Room calendar Phase 3b: recurring-reservation series cancel
 
 The remaining Phase 3 piece — Jobs-style series management for recurring reservations, scoped to **cancel** (reservations have no edit-fields flow to extend; cancel-with-scope is the high-value series operation and stays consistent with the existing soft `status: Cancelled`).

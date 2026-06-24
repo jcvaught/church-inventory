@@ -461,6 +461,7 @@ export function HelpPage({ onBack }) {
                 'Approvers — pick specific people (e.g. your facilities coordinator) who can approve bookings for THIS space. Admins can always approve; this adds others without making them admins.',
                 'Blackout dates — specific days the space can\'t be booked (a holiday, a renovation week).',
                 'Weekly blocked hours — recurring times the space is off-limits, like "Sunday 9:00–12:00" for the worship service. The app will refuse any booking that lands in those hours.',
+                'Booking policy — "Requires approval" (default) or "Open" (anyone can book it instantly, no approval needed).',
               ]} />
               <P>Click <strong>Add Space</strong> and repeat for each room. Spaces can be edited or removed from the same Manage Spaces window — removing a space is a soft-archive, so it stops showing up in new bookings without disturbing past reservations.</P>
               <Note>Only admins and managers can create or edit spaces. Everyone else can reserve them.</Note>
@@ -491,6 +492,11 @@ export function HelpPage({ onBack }) {
 
             <Accordion title="Approving and denying">
               <P>Pending reservations show in the Reservations Hub. Admins and managers can approve or deny. For equipment, approving lets you check the item out; for a space, you can mark the booking complete when it's done. When email notifications are on, the requester is notified automatically of the decision.</P>
+            </Accordion>
+
+            <Accordion title="Instant booking (auto-approve)">
+              <P>Don't want leaders approving their own bookings? In <strong>Settings → Church Settings</strong>, an admin can turn on <strong>auto-approve</strong> — then a reservation made by an admin, a managing-ministry manager, or a space's designated approver is approved instantly instead of waiting in Pending. Regular members still request approval.</P>
+              <P>You can also set an individual space's <strong>booking policy</strong> to <strong>Open</strong> (in Manage Spaces) so <em>anyone</em> can book it without approval — useful for a prayer room or small huddle space. Either way, conflicts and the space's availability rules are still checked.</P>
             </Accordion>
 
             <Accordion title="Recurring reservations">

@@ -522,7 +522,7 @@ export function useFirestore(churchId) {
         ...res,
         requestedBy: userId,
         requestedByName: userName,
-        status: 'Pending',
+        status: res.status || 'Pending', // auto-approve path passes 'Approved' (Phase 4)
         createdAt: new Date().toISOString()
       });
     } catch (err) { handleErr(err); }

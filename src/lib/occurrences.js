@@ -94,7 +94,9 @@ export const ICS_DOMAIN = {
 // occurrence stream and the old per-type builders agree exactly.
 
 export function reservationsToOccurrences(reservations) {
-  return (reservations || []).filter(r => r && r.eventDate && r.status !== 'denied').map(r => {
+  // Skip terminal "not happening" statuses. Case-insensitive: real reservations
+  // store 'Denied'/'Cancelled' (capitalized); the legacy/seed data used lowercase.
+  return (reservations || []).filter(r => r && r.eventDate && !['denied', 'cancelled'].includes(String(r.status || '').toLowerCase())).map(r => {
     const parts = [];
     if (r.purpose && r.purpose !== r.eventName) parts.push(r.purpose);
     if (r.ministry) parts.push(`Ministry: ${r.ministry}`);

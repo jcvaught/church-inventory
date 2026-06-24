@@ -112,6 +112,16 @@ test('adapters apply the legacy terminal-status skips', () => {
   assert.equal(tasksToOccurrences([{ _docId: 'x', name: 'done', dueDate: '2026-07-01', status: 'Done' }]).length, 1);
 });
 
+test('reservation feed excludes real (capitalized) Denied + Cancelled', () => {
+  // Real reservations store 'Denied'/'Cancelled'; both must be kept out of the feed.
+  assert.equal(reservationsToOccurrences([{ _docId: 'x', eventDate: '2026-07-01', status: 'Denied' }]).length, 0);
+  assert.equal(reservationsToOccurrences([{ _docId: 'x', eventDate: '2026-07-01', status: 'Cancelled' }]).length, 0);
+  assert.equal(reservationsToOccurrences([{ _docId: 'x', eventDate: '2026-07-01', status: 'cancelled' }]).length, 0);
+  // Active statuses still produce an occurrence.
+  assert.equal(reservationsToOccurrences([{ _docId: 'x', eventDate: '2026-07-01', status: 'Approved' }]).length, 1);
+  assert.equal(reservationsToOccurrences([{ _docId: 'x', eventDate: '2026-07-01', status: 'Pending' }]).length, 1);
+});
+
 test('adapters drop undatable records', () => {
   assert.equal(shiftsToOccurrences([{ _docId: 'x', status: 'open' }]).length, 0); // no scheduledDate
   assert.equal(reservationsToOccurrences([{ _docId: 'x' }]).length, 0); // no eventDate

@@ -274,6 +274,18 @@ export function ReservationsPage({ store, userProfile }) {
     if (blocked) { setConflictErr(unavailableMsg(blocked)); return; }
     const conflict = conflictFor(form.eventDate, form.returnDate);
     if (conflict) { setConflictErr(conflictMsg(conflict)); return; }
+    // Auto-approve (Phase 4): an "open" space books instantly for anyone; otherwise
+    // the church's auto-approve setting lets a booker who could approve it anyway
+    // (admin / ministry-manager / per-space approver) skip the Pending step.
+    // Conflict + availability are already enforced above.
+    const bookerCanApprove = isAdmin
+      || (isManager && form.ministry && managedMinistries.includes(form.ministry))
+      || (isRoom && (selectedRoom?.approverUids || []).includes(userId));
+    const autoApprove = (isRoom && selectedRoom?.bookingPolicy === 'open')
+      || (!!settings?.reservationAutoApprove && bookerCanApprove);
+    const approvalFields = autoApprove
+      ? { status: RES_STATUS.APPROVED, approvedBy: userId, approvedByName: userName, approvedAt: new Date().toISOString() }
+      : {};
     setSaving(true);
     try {
       const baseRes = isRoom ? {
@@ -293,6 +305,7 @@ export function ReservationsPage({ store, userProfile }) {
         purpose: form.purpose,
         ministry: form.ministry,
         notes: form.notes,
+        ...approvalFields,
       } : {
         resourceType: RESOURCE_TYPE.ITEM,
         itemDocId: form.itemDocId,
@@ -304,6 +317,7 @@ export function ReservationsPage({ store, userProfile }) {
         purpose: form.purpose,
         ministry: form.ministry,
         notes: form.notes,
+        ...approvalFields,
       };
       if (recurring && recurrenceEnd && recurrenceEnd > form.eventDate) {
         const retOffset = form.returnDate
@@ -334,10 +348,10 @@ export function ReservationsPage({ store, userProfile }) {
         for (const d of extraDates) {
           await addReservation({ ...baseRes, eventDate: d.eventDate, returnDate: d.returnDate, recurrenceGroupId: groupId, recurrenceFreq }, userId, userName);
         }
-        flash(`Reservation series created (${allDates.length} occurrences)!`);
+        flash(`Reservation series ${autoApprove ? 'booked' : 'created'} (${allDates.length} occurrences)!`);
       } else {
         await addReservation(baseRes, userId, userName);
-        flash("Reservation requested!");
+        flash(autoApprove ? "Reservation booked!" : "Reservation requested!");
       }
       setForm(emptyRes);
       setRecurring(false);

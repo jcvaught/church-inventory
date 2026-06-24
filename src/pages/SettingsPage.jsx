@@ -17,7 +17,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import { resizeImageForUpload } from '../utils/imageResize.js';
 
 // Manage Spaces form — kept as one constant so every reset site stays in sync.
-const EMPTY_ROOM_FORM = { name:'', capacity:'', location:'', description:'', amenities:'', photoUrl:'', approverUids:[], blackoutDates:[], blockedWindows:[], color:'', defaultSetupMinutes:'', defaultTeardownMinutes:'' };
+const EMPTY_ROOM_FORM = { name:'', capacity:'', location:'', description:'', amenities:'', photoUrl:'', approverUids:[], blackoutDates:[], blockedWindows:[], color:'', defaultSetupMinutes:'', defaultTeardownMinutes:'', bookingPolicy:'request' };
 const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 // Calendar swatch palette — keep in sync with ROOM_PALETTE in ReservationsPage.jsx.
 const ROOM_COLOR_SWATCHES = ['#2A7D6E','#0D9488','#7C3AED','#D97706','#2563EB','#DC2626','#DB2777','#65A30D','#0891B2','#9333EA'];
@@ -738,6 +738,19 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
               { v:'Pacific/Honolulu',    label:'Hawaii (Honolulu)' },
             ].map(tz => <option key={tz.v} value={tz.v}>{tz.label}</option>)}
           </select>
+
+          <div style={{ marginTop:22, paddingTop:18, borderTop:'1px solid '+B.sand }}>
+            <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Reservations</div>
+            <label style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', fontSize:14, fontFamily:f2, color:B.textDark }}>
+              <input type="checkbox" style={{ marginTop:2, width:16, height:16, cursor:'pointer', accentColor:B.teal }}
+                checked={settings?.reservationAutoApprove === true}
+                onChange={(e) => updateSettings({ reservationAutoApprove: e.target.checked })} />
+              <span>
+                <strong>Auto-approve bookings by admins &amp; managers</strong>
+                <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>When on, a reservation made by an admin or manager (or a space's designated approver) is approved instantly instead of waiting in Pending. Conflicts and space availability are still enforced. Regular members still request approval. You can also make an individual space "Open" in Manage Spaces.</div>
+              </span>
+            </label>
+          </div>
 
           <div style={{ marginTop:22, paddingTop:18, borderTop:'1px solid '+B.sand }}>
               <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Weekly Email Digests</div>
@@ -1653,6 +1666,15 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           </div>
           <div style={{ fontSize:12, color:B.textLight, marginTop:-8, marginBottom:8 }}>Time held before/after each booking of this space so back-to-back events don't collide. Optional — leave at 0 for none; pre-fills new bookings (still editable per booking).</div>
 
+          {/* Booking policy */}
+          <FF label="Booking policy">
+            <select style={{ ...inp, cursor:'pointer' }} value={roomForm.bookingPolicy || 'request'} onChange={e => setRoomForm(f => ({ ...f, bookingPolicy:e.target.value }))}>
+              <option value="request">Requires approval (default)</option>
+              <option value="open">Open — anyone can book without approval</option>
+            </select>
+            <div style={{ fontSize:12, color:B.textLight, marginTop:6 }}>"Open" books this space instantly for any member (conflicts + availability are still checked). Use for low-stakes spaces like a prayer room.</div>
+          </FF>
+
           {/* Approvers */}
           <FF label="Who can approve bookings for this space (optional)">
             <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
@@ -1729,6 +1751,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                     color: roomForm.color || null,
                     defaultSetupMinutes: roomForm.defaultSetupMinutes ? parseInt(roomForm.defaultSetupMinutes, 10) : 0,
                     defaultTeardownMinutes: roomForm.defaultTeardownMinutes ? parseInt(roomForm.defaultTeardownMinutes, 10) : 0,
+                    bookingPolicy: roomForm.bookingPolicy === 'open' ? 'open' : 'request',
                   };
                   if (editRoomId) {
                     await updateRoom(editRoomId, payload);
@@ -1766,7 +1789,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                   </div>
                 )}
               </div>
-              <button onClick={() => { setEditRoomId(r._docId); setRoomPhotoFile(null); setRoomForm({ name:r.name, capacity:r.capacity ?? '', location:r.location||'', description:r.description||'', amenities:(r.amenities||[]).join(', '), photoUrl:r.photoUrl||'', approverUids:r.approverUids||[], blackoutDates:r.blackoutDates||[], blockedWindows:r.blockedWindows||[], color:r.color||'', defaultSetupMinutes:r.defaultSetupMinutes ?? '', defaultTeardownMinutes:r.defaultTeardownMinutes ?? '' }); }}
+              <button onClick={() => { setEditRoomId(r._docId); setRoomPhotoFile(null); setRoomForm({ name:r.name, capacity:r.capacity ?? '', location:r.location||'', description:r.description||'', amenities:(r.amenities||[]).join(', '), photoUrl:r.photoUrl||'', approverUids:r.approverUids||[], blackoutDates:r.blackoutDates||[], blockedWindows:r.blockedWindows||[], color:r.color||'', defaultSetupMinutes:r.defaultSetupMinutes ?? '', defaultTeardownMinutes:r.defaultTeardownMinutes ?? '', bookingPolicy:r.bookingPolicy || 'request' }); }}
                 style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:13, fontWeight:600, padding:"4px 8px" }}>Edit</button>
               {r.active === false
                 ? <button onClick={() => updateRoom(r._docId, { active:true })} style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:13, fontWeight:600, padding:"4px 8px" }}>Restore</button>
