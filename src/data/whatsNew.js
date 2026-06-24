@@ -6,6 +6,12 @@ export const WHATS_NEW = [
   {
     date: '2026-06-24',
     tag: 'New',
+    title: 'Know what equipment lives in each room',
+    body: "If you reserve rooms (Spaces), you can now link inventory items to them. When you add or edit an item, pick its Space — then you can filter inventory by space, see a count of what's in each room under Settings → Manage Spaces, and when you book that room, the equipment kept there is starred so it's one tap to hold it for your event. It's optional and only shows up once you've set up Spaces.",
+  },
+  {
+    date: '2026-06-24',
+    tag: 'New',
     title: 'Reserve equipment & create a setup task right from a booking',
     body: "Open any room booking and you'll see a new \"For this event\" section. Hold the equipment you'll need (the projector, the sound cart) so it's reserved for that date and linked to the booking — equipment kept in that space is starred to make it quick. And create a setup task in one click: it lands on your Work board, pre-filled and due the day of the event, so nothing falls through the cracks. Book the gym, hold the projector, and the setup task is ready — all from one place.",
   },

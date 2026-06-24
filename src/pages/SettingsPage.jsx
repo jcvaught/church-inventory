@@ -43,7 +43,7 @@ const NOTIF_EVENTS = [
 ];
 
 export function SettingsPage({ store, userProfile, subscription, user, canAdd, deleteAccount }) {
-  const { settings, config, users, accessPeople, accessRecords, rooms, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, addRoom, updateRoom, deleteRoom } = store;
+  const { settings, config, users, accessPeople, accessRecords, rooms, items, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, addRoom, updateRoom, deleteRoom } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
   const [newItem, setNewItem] = useState("");
@@ -1810,7 +1810,10 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
               <div style={{ flex:1 }}>
                 <div style={{ fontWeight:700, fontSize:14, color:B.navy, fontFamily:f1, display:'flex', alignItems:'center', gap:7 }}>{r.color && <span style={{ width:10, height:10, borderRadius:3, background:r.color, flexShrink:0 }}/>}{r.name}{r.active === false ? ' (archived)' : ''}</div>
                 <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>
-                  {[r.capacity ? `Cap. ${r.capacity}` : null, r.location, (r.amenities||[]).join(', ')].filter(Boolean).join(' · ') || 'No details'}
+                  {(() => {
+                    const itemCount = (items || []).filter(i => i.roomDocId === r._docId && i.status !== 'Disposed').length;
+                    return [r.capacity ? `Cap. ${r.capacity}` : null, r.location, (r.amenities||[]).join(', '), itemCount > 0 ? `📦 ${itemCount} item${itemCount>1?'s':''}` : null].filter(Boolean).join(' · ') || 'No details';
+                  })()}
                 </div>
                 {((r.blackoutDates||[]).length>0 || (r.blockedWindows||[]).length>0 || (r.approverUids||[]).length>0) && (
                   <div style={{ fontSize:11, color:B.textLight, marginTop:3 }}>

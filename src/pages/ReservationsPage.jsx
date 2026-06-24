@@ -217,15 +217,20 @@ export function ReservationsPage({ store, userProfile, userCanSeeHub }) {
     if (!res?.linkedSetupTaskDocId) return null;
     return (tasks || []).find(t => t._docId === res.linkedSetupTaskDocId) || null;
   }
-  // Items sorted so equipment whose free-text location matches the room (name or
-  // its own location) floats to the top — a soft suggestion, no hard FK.
+  // Items sorted so equipment kept in this space floats to the top. Primary match
+  // is the explicit room-scoped-inventory link (item.roomDocId === the booked room);
+  // falls back to a free-text location string match for un-linked items.
   function itemsForRoomHold(res) {
     const room = (rooms || []).find(rm => rm._docId === res?.roomDocId);
     const keys = [room?.name, room?.location].filter(Boolean).map(s => String(s).toLowerCase().trim());
     const heldIds = new Set(heldEquipmentFor(res).map(h => h.itemDocId));
     return activeItems
       .filter(i => !heldIds.has(i._docId))
-      .map(i => ({ i, match: keys.some(k => k && String(i.location || '').toLowerCase().trim() === k) }))
+      .map(i => ({
+        i,
+        match: (!!res?.roomDocId && i.roomDocId === res.roomDocId)
+          || keys.some(k => k && String(i.location || '').toLowerCase().trim() === k),
+      }))
       .sort((a, b) => (b.match - a.match) || String(a.i.description||'').localeCompare(String(b.i.description||'')));
   }
 

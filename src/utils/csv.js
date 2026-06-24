@@ -1,7 +1,7 @@
 import { localDateStr } from './date.js';
 
 export function exportItemsCSV(items) {
-  const cols = ['itemId','description','location','ministry','status','condition','tags','assignedTo','checkOutDate','expectedReturn','notes'];
+  const cols = ['itemId','description','location','roomName','ministry','status','condition','tags','assignedTo','checkOutDate','expectedReturn','notes'];
   const header = cols.join(',');
   const rows = items.map(item => cols.map(c => {
     const v = item[c];

@@ -322,6 +322,7 @@ export function HelpPage({ onBack }) {
                 'Description — what the item is (fill this first)',
                 'Item ID — auto-filled from the description as you type (e.g. "Wireless Microphone" → MIC-001). Edit it if you want something different.',
                 'Location — where it lives when not in use',
+                'Space (optional) — link the item to a reservable room (appears once you\'ve set up Spaces). Lets you filter inventory by room, see a per-room item count in Manage Spaces, and have the item suggested when someone books that room for an event.',
                 'Ministry — which ministry owns or uses it',
                 'Status — Available, Checked Out, In Use, Under Repair, or Disposed',
                 'Photo — optional; resized automatically before upload',

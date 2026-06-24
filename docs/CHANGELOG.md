@@ -4,6 +4,21 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-24 — Room-scoped inventory (Shape A: optional item↔space link)
+
+Follow-on to the room-calendar moat. An **additive** link from inventory items to reservable spaces — chosen over a full `rooms`↔`settings.locations` convergence after a prod-data check showed the migration would buy little (biggest church has 14 location strings; **0 rooms exist anywhere yet**, so there's nothing to converge and no demand). Shape A gets ~80% of the value for ~20% of the cost and keeps the free-text `location` untouched.
+
+- **Model (additive, no migration):** items gain optional `roomDocId` + denormalized `roomName`.
+- **Item add/edit forms:** a **"Space (optional)"** dropdown listing active rooms, shown **only when spaces exist** (so it appears naturally once a church adopts rooms — FXCC has none yet). Selecting a space denormalizes `roomName` and prefills the free-text Location if empty. `openEdit`/`openDuplicate` carry the fields.
+- **Inventory:** a **"Space" filter** (persisted `inv_spaceFilter`) alongside the location filter; item detail shows **🏛️ Space**; CSV export gains a `roomName` column.
+- **Manage Spaces:** each space row shows a **📦 N items** count — the "what's in this room" entry point.
+- **Phase 6 upgrade:** the equipment-hold suggestion (`itemsForRoomHold`) now matches on the **exact `roomDocId`** link as primary (falls back to the old free-text location-string heuristic for unlinked items), so the ⭐ "kept in this space" marker is now accurate.
+- All additive — reservations + items are open-field; no rule/index/migration change.
+- **Verified:** build + lint clean, 77 unit tests; **full emulator + Playwright smoke** — created a "Sanctuary" space, linked the Projector to it (detail showed 🏛️ Sanctuary), saw the Space filter + "📦 1 item" in Manage Spaces, and confirmed a Sanctuary booking's equipment-hold listed "Projector — Sanctuary ⭐".
+- **Deferred (documented):** the full Shape B convergence (single canonical place model — repoint every free-text `location` consumer: Items/Supplies filters, Insights by-location, Accountability audits, exports) stays off the table until a concrete "hard room-inventory link" feature demands it. Supplies `roomDocId` is a trivial future extension if wanted.
+
+---
+
 ## 2026-06-24 — Room calendar Phase 6: cross-hub moat (book room → hold equipment + create setup task)
 
 The differentiator — a booking that knows what the *event* needs, which neither Google Calendar nor PCO ties together. Built on existing collections; **no data migration**.

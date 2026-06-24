@@ -35,7 +35,8 @@ function generateId(description, existingIds) {
 }
 
 export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, onScannedItemConsumed }) {
-  const { items, supplies, settings, config, activityLog, addItem, addSupply, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem, publicRequests, dismissPublicRequest, updateSettings } = store;
+  const { items, supplies, settings, config, activityLog, rooms, addItem, addSupply, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem, publicRequests, dismissPublicRequest, updateSettings } = store;
+  const activeRooms = useMemo(() => (rooms || []).filter(r => r.active !== false), [rooms]);
   const _isMobile = useContext(MobileCtx);
   const activeItems = useMemo(() => items.filter(i => i.status !== ITEM_STATUS.DISPOSED), [items]);
   const disposedItems = useMemo(() => items.filter(i => i.status === ITEM_STATUS.DISPOSED), [items]);
@@ -43,10 +44,12 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem('inv_statusFilter') || 'all');
   const [locationFilter, setLocationFilter] = useState(() => localStorage.getItem('inv_locationFilter') || 'all');
+  const [spaceFilter, setSpaceFilter] = useState(() => localStorage.getItem('inv_spaceFilter') || 'all');
   const [ministryFilter, setMinistryFilter] = useState(() => localStorage.getItem('inv_ministryFilter') || 'all');
   const [showDisposed, setShowDisposed] = useState(false);
 
   function setLocation(v) { setLocationFilter(v); localStorage.setItem('inv_locationFilter', v); }
+  function setSpace(v) { setSpaceFilter(v); localStorage.setItem('inv_spaceFilter', v); }
   function setMinistry(v) { setMinistryFilter(v); localStorage.setItem('inv_ministryFilter', v); }
   function setStatus(v) { setStatusFilter(v); localStorage.setItem('inv_statusFilter', v); }
 
@@ -130,7 +133,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   }, [activeModal, bulkModal, bulkMode, isAdmin, isManager]);
 
   // Forms
-  const emptyItem = { itemId:"", description:"", location:"", ministry:"", status:ITEM_STATUS.AVAILABLE, condition:"Good", notes:"", tags:[], purchaseDate:"", purchasePrice:"", warrantyExpiry:"", estimatedValue:"" };
+  const emptyItem = { itemId:"", description:"", location:"", roomDocId:"", roomName:"", ministry:"", status:ITEM_STATUS.AVAILABLE, condition:"Good", notes:"", tags:[], purchaseDate:"", purchasePrice:"", warrantyExpiry:"", estimatedValue:"" };
   const [itemForm, setItemForm] = useState(emptyItem);
   const [idTouched, setIdTouched] = useState(false);
   const [coForm, setCoForm] = useState({ person:"", purpose:"", ministry:"", date:"", returnDate:"" });
@@ -160,12 +163,20 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
     if (search && !item.description?.toLowerCase().includes(search.toLowerCase()) && !item.itemId?.toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter !== "all" && item.status !== statusFilter) return false;
     if (locationFilter !== "all" && item.location !== locationFilter) return false;
+    if (spaceFilter !== "all" && item.roomDocId !== spaceFilter) return false;
     if (ministryFilter !== "all" && item.ministry !== ministryFilter) return false;
     return true;
-  }), [showDisposed, disposedItems, activeItems, search, statusFilter, locationFilter, ministryFilter]);
+  }), [showDisposed, disposedItems, activeItems, search, statusFilter, locationFilter, spaceFilter, ministryFilter]);
 
   // Helpers
   function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
+
+  // Link an item to a reservable Space (room-scoped inventory). Denormalizes the
+  // room name for display/CSV; prefills the free-text Location if it's still empty.
+  function handleSelectSpace(docId) {
+    const room = activeRooms.find(r => r._docId === docId);
+    setItemForm(f => ({ ...f, roomDocId: docId, roomName: room?.name || "", location: f.location || room?.name || "" }));
+  }
   const today = localDateStr(new Date());
 
   // ── AI Item Identification ──
@@ -301,6 +312,8 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       itemId: itemForm.itemId.trim(),
       description: itemForm.description.trim(),
       location: itemForm.location,
+      roomDocId: itemForm.roomDocId || "",
+      roomName: itemForm.roomName || "",
       ministry: itemForm.ministry,
       status: ITEM_STATUS.AVAILABLE,
       condition: itemForm.condition || "Good",
@@ -343,6 +356,8 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       itemId: itemForm.itemId.trim(),
       description: itemForm.description.trim(),
       location: itemForm.location,
+      roomDocId: itemForm.roomDocId || "",
+      roomName: itemForm.roomName || "",
       ministry: itemForm.ministry,
       condition: itemForm.condition,
       notes: itemForm.notes,
@@ -490,6 +505,8 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       itemId: item.itemId || "",
       description: item.description || "",
       location: item.location || "",
+      roomDocId: item.roomDocId || "",
+      roomName: item.roomName || "",
       ministry: item.ministry || "",
       condition: item.condition || "Good",
       notes: item.notes || "",
@@ -514,6 +531,8 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
       itemId: generateId(desc, items.map(i => i.itemId)),
       description: desc,
       location: item.location || "",
+      roomDocId: item.roomDocId || "",
+      roomName: item.roomName || "",
       ministry: item.ministry || "",
       condition: item.condition || "Good",
       notes: item.notes || "",
@@ -704,6 +723,12 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
               {locations.map(l => <option key={l} value={l}>{l}</option>)}
             </select>
           )}
+          {activeRooms.length > 0 && (
+            <select aria-label="Filter by space" value={spaceFilter} onChange={e=>setSpace(e.target.value)} style={{...inp, width:"auto", flex:"0 1 180px"}}>
+              <option value="all">All Spaces</option>
+              {activeRooms.map(r => <option key={r._docId} value={r._docId}>{r.name}</option>)}
+            </select>
+          )}
           {ministries.length > 0 && (
             <select value={ministryFilter} onChange={e=>setMinistry(e.target.value)} style={{...inp, width:"auto", flex:"0 1 180px"}}>
               <option value="all">All Ministries</option>
@@ -776,6 +801,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
             <div><span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", fontFamily:f1 }}>Item ID</span><div style={{ fontFamily:"monospace", fontSize:14, marginTop:2 }}>{showDetail.itemId}</div></div>
             <div><span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", fontFamily:f1 }}>Status</span><div style={{ marginTop:4 }}><Badge status={showDetail.status}/></div></div>
             <div><span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", fontFamily:f1 }}>Location</span><div style={{ fontSize:14, marginTop:2 }}>{showDetail.location || "—"}</div></div>
+            {showDetail.roomName && <div><span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", fontFamily:f1 }}>Space</span><div style={{ fontSize:14, marginTop:2 }}>🏛️ {showDetail.roomName}</div></div>}
             <div><span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", fontFamily:f1 }}>Ministry</span><div style={{ fontSize:14, marginTop:2 }}>{showDetail.ministry || "—"}</div></div>
             <div><span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", fontFamily:f1 }}>Condition</span><div style={{ fontSize:14, marginTop:2 }}>{showDetail.condition || "—"}</div></div>
             <div><span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:"uppercase", fontFamily:f1 }}>Assigned To</span><div style={{ fontSize:14, marginTop:2 }}>{showDetail.assignedTo || "—"}</div></div>
@@ -921,6 +947,15 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
             {ministries.map(m => <option key={m} value={m}>{m}</option>)}
           </select></FF>
         </div>
+        {activeRooms.length > 0 && (
+          <FF label="Space (optional)">
+            <select style={inp} value={itemForm.roomDocId} onChange={e=>handleSelectSpace(e.target.value)}>
+              <option value="">— Not in a reservable space —</option>
+              {activeRooms.map(r => <option key={r._docId} value={r._docId}>{r.name}</option>)}
+            </select>
+            <div style={{ fontSize:12, color:B.textLight, marginTop:4 }}>Link to a room to track what's in each space and suggest it when booking that room.</div>
+          </FF>
+        )}
         <FF label="Condition"><select style={inp} value={itemForm.condition} onChange={e=>setItemForm({...itemForm, condition:e.target.value})}>
           <option value="New">New</option><option value="Good">Good</option><option value="Fair">Fair</option><option value="Poor">Poor</option>
         </select></FF>
@@ -993,6 +1028,15 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
             {ministries.map(m => <option key={m} value={m}>{m}</option>)}
           </select></FF>
         </div>
+        {activeRooms.length > 0 && (
+          <FF label="Space (optional)">
+            <select style={inp} value={itemForm.roomDocId} onChange={e=>handleSelectSpace(e.target.value)}>
+              <option value="">— Not in a reservable space —</option>
+              {activeRooms.map(r => <option key={r._docId} value={r._docId}>{r.name}</option>)}
+            </select>
+            <div style={{ fontSize:12, color:B.textLight, marginTop:4 }}>Link to a room to track what's in each space and suggest it when booking that room.</div>
+          </FF>
+        )}
         <FF label="Condition"><select style={inp} value={itemForm.condition} onChange={e=>setItemForm({...itemForm, condition:e.target.value})}>
           <option value="New">New</option><option value="Good">Good</option><option value="Fair">Fair</option><option value="Poor">Poor</option>
         </select></FF>
