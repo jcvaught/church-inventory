@@ -4,6 +4,21 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-24 — Room calendar Phase 5: one-click "Add to Google Calendar" + per-room feed + GCal-refresh honesty
+
+The "either location" promise rounded out — making the existing ICS feed effortless to subscribe to and honest about its limits.
+
+- **One-click subscribe (Settings → Calendar Feed):** new **Add to Google Calendar** button next to copy-URL. Builds `https://calendar.google.com/calendar/r?cid=<URL-encoded webcal:// feed URL>` (the feed URL with `https://`→`webcal://`), so the admin lands in Google with the feed pre-filled and just clicks Add. Copy-URL (for Apple Calendar/Outlook + the "From URL" path) stays.
+- **Honest refresh note:** an in-app line in the Calendar Feed card (and the HelpPage accordion via `<Tip>`) explains Google/Apple poll subscribed ICS feeds on their own schedule (often hours, up to ~24h) — for the live picture, use COH directly; the feed is a mirror. (Faster/2-way = the parked GCal-API project.) This is environmental, **not a bug** — documented, not chased.
+- **Optional per-room feed (DONE):** `icsCalendarFeed` accepts `?room=<roomDocId>` — forces reservations-only, filters reservation docs to that room, and titles the calendar by the space (`<church> — <roomName>`). The **Manage Spaces** editor surfaces a per-space "Add to Google Calendar" + copy-feed-link when editing an existing space (gated on `feedToken` existing), so a ministry can follow just their room.
+- **Timed VEVENTs already carry room in `LOCATION`** (Phase 0 `reservationsToOccurrences` → `r.roomName`), so item 2 was verification-only.
+- All additive — no rule/migration/index changes. `whatsNew.js` entry added.
+- **Verified:** build + lint clean; 77 unit tests pass. Server change deployed (`icsCalendarFeed`).
+
+**Phase 5 complete.** Remaining: Phase 6 (cross-hub moat — book room → hold equipment → auto-create setup task; prereq: equipment not tied to rooms).
+
+---
+
 ## 2026-06-24 — Room calendar Phase 4: auto-approve / instant-book + ICS feed status fix
 
 **Feed fix (the pre-existing bug flagged in 3b):** `reservationsToOccurrences` (client + CJS server twins) filtered `status !== 'denied'` (lowercase), but real reservations store `'Denied'`/`'Cancelled'` → denied **and** cancelled reservations leaked into the `icsCalendarFeed`. Now `!['denied','cancelled'].includes(String(status).toLowerCase())` — case-insensitive, also excludes Cancelled. Byte-parity with legacy `ics.js` holds (the fixtures are Approved/Pending). +1 occurrence test (Denied/Cancelled capitalized excluded, Approved/Pending kept). 77 unit tests.

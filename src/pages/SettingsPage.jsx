@@ -102,6 +102,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
   const [requestLinkCopied, setRequestLinkCopied] = useState(false);
   const [feedUrlCopied, setFeedUrlCopied] = useState(false);
+  const [roomFeedCopied, setRoomFeedCopied] = useState(false);
   const [teamHubFilter, setTeamHubFilter] = useState('all');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [undo, setUndo] = useState(null);
@@ -806,6 +807,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
         const feedUrl = feedToken && churchId
           ? `https://us-central1-church-inventory-9615c.cloudfunctions.net/icsCalendarFeed?churchId=${encodeURIComponent(churchId)}&token=${encodeURIComponent(feedToken)}`
           : '';
+        const gcalUrl = feedUrl
+          ? `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(feedUrl.replace(/^https?:\/\//, 'webcal://'))}`
+          : '';
         const genToken = () => {
           const t = (window.crypto?.randomUUID?.() || (Date.now().toString(36) + Math.random().toString(36).slice(2)));
           updateSettings({ feedToken: t });
@@ -831,9 +835,17 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                     {feedUrlCopied ? "Copied!" : "Copy"}
                   </button>
                 </div>
-                <button onClick={genToken} style={{ background:"none", border:"none", color:B.textMid, cursor:"pointer", fontSize:12, fontFamily:f1, fontWeight:600, padding:0 }}>
-                  Rotate link (revokes the old one)
-                </button>
+                <div style={{ display:"flex", gap:14, alignItems:"center", flexWrap:"wrap" }}>
+                  <a href={gcalUrl} target="_blank" rel="noopener noreferrer" style={{ ...btnP, fontSize:13, padding:"9px 16px", textDecoration:"none", display:"inline-flex", alignItems:"center", gap:6 }}>
+                    <EmojiIcon emoji="📅" decorative /> Add to Google Calendar
+                  </a>
+                  <button onClick={genToken} style={{ background:"none", border:"none", color:B.textMid, cursor:"pointer", fontSize:12, fontFamily:f1, fontWeight:600, padding:0 }}>
+                    Rotate link (revokes the old one)
+                  </button>
+                </div>
+                <div style={{ fontSize:12, color:B.textLight, fontFamily:f2, marginTop:12, lineHeight:1.5 }}>
+                  Heads up: Google and Apple poll subscribed calendar links on their own schedule — usually a few hours, occasionally up to a day — so new bookings may take a while to appear there. For an up-to-the-minute view, use ChurchOpsHub directly; the calendar feed is a convenient mirror.
+                </div>
               </>
             )}
           </div>
@@ -1721,6 +1733,26 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
               {roomForm.blockedWindows.map((w,i) => <div key={i} style={{ display:'flex', alignItems:'center', gap:8, fontSize:13 }}><span>{DAY_LABELS[w.day]} {w.start}–{w.end}{w.label?` · ${w.label}`:''}</span><button type="button" onClick={()=>setRoomForm(f=>({ ...f, blockedWindows:(f.blockedWindows||[]).filter((_,j)=>j!==i) }))} style={{ border:'none', background:'none', cursor:'pointer', color:B.red, fontWeight:700, lineHeight:1 }}>×</button></div>)}
             </div>}
           </FF>
+
+          {/* Per-space calendar feed — subscribe to just this room's bookings. */}
+          {editRoomId && settings?.feedToken && userProfile?.churchId && (() => {
+            const roomFeed = `https://us-central1-church-inventory-9615c.cloudfunctions.net/icsCalendarFeed?churchId=${encodeURIComponent(userProfile.churchId)}&token=${encodeURIComponent(settings.feedToken)}&room=${encodeURIComponent(editRoomId)}`;
+            const roomGcal = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(roomFeed.replace(/^https?:\/\//, 'webcal://'))}`;
+            return (
+              <div style={{ background:B.white, border:"1px solid "+B.sand, borderRadius:10, padding:"12px 14px", marginBottom:14 }}>
+                <div style={{ fontFamily:f1, fontWeight:700, fontSize:13, color:B.navy, marginBottom:4 }}>Calendar feed for this space</div>
+                <div style={{ fontSize:12, color:B.textMid, fontFamily:f2, marginBottom:10 }}>A ministry can subscribe to just this room's bookings in Google or Apple Calendar.</div>
+                <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
+                  <a href={roomGcal} target="_blank" rel="noopener noreferrer" style={{ ...btnS, fontSize:12, padding:"7px 14px", textDecoration:"none", display:"inline-flex", alignItems:"center", gap:6 }}>
+                    <EmojiIcon emoji="📅" decorative /> Add to Google Calendar
+                  </a>
+                  <button type="button" onClick={()=>{ navigator.clipboard.writeText(roomFeed).catch(()=>{}); setRoomFeedCopied(true); setTimeout(()=>setRoomFeedCopied(false), 2000); }} style={{ background:"none", border:"none", color:roomFeedCopied?B.teal:B.textMid, cursor:"pointer", fontSize:12, fontFamily:f1, fontWeight:600, padding:0 }}>
+                    {roomFeedCopied ? "Copied!" : "Copy feed link"}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
           <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:4 }}>
             {editRoomId && <button onClick={() => { setEditRoomId(null); setRoomForm(EMPTY_ROOM_FORM); setRoomPhotoFile(null); }} style={btnS}>Cancel Edit</button>}

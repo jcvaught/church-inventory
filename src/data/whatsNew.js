@@ -6,6 +6,12 @@ export const WHATS_NEW = [
   {
     date: '2026-06-24',
     tag: 'New',
+    title: 'One-click "Add to Google Calendar"',
+    body: "Subscribing to your church calendar feed is now one click. In Settings → Calendar Feed, hit \"Add to Google Calendar\" and your shifts, reservations, and maintenance flow straight into Google Calendar (copy the link for Apple Calendar or Outlook). Want to follow just one room? Edit a space in Manage Spaces and grab its own subscribe link — perfect for a ministry that only cares about the gym or the fellowship hall. Heads up: Google and Apple refresh subscribed feeds on their own schedule (often a few hours), so for the live picture, open ChurchOpsHub directly.",
+  },
+  {
+    date: '2026-06-24',
+    tag: 'New',
     title: 'Instant booking for trusted leaders',
     body: "Tired of approving your own reservations? In Settings → Church Settings, admins can turn on auto-approve so bookings made by an admin or manager (or a space's designated approver) are approved instantly instead of sitting in Pending. You can also mark an individual space \"Open\" in Manage Spaces so anyone can book it without approval — handy for a prayer room or small huddle space. Conflicts and space availability are still checked either way; regular members still request approval.",
   },

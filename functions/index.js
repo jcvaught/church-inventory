@@ -979,7 +979,10 @@ exports.emailEventWebhook = onRequest({ cors: false, invoker: 'public' }, async 
 // ─── ICS Calendar Feed (read-only, token-protected) ────────────────────────
 // A subscribable text/calendar feed so a church can see its shifts,
 // reservations, and maintenance in Google Calendar / Apple Calendar etc.
-//   GET /icsCalendarFeed?churchId=<id>&token=<feedToken>[&types=jobs,reservations,maintenance]
+//   GET /icsCalendarFeed?churchId=<id>&token=<feedToken>[&types=jobs,reservations,maintenance][&room=<roomDocId>]
+// `room` (optional) scopes the feed to a single space's reservations — a ministry
+// can subscribe to just their room. When present, only reservations for that room
+// are emitted (types is forced to reservations).
 // Auth is a per-church rotatable token stored on config/settings.feedToken
 // (generated + rotated from Settings → Church Settings). Each requested type
 // is additionally gated on the church's active hubs via subHasHub, mirroring
@@ -994,13 +997,15 @@ const ICS_HUB_FOR_TYPE = { jobs: 'jobs', reservations: null, maintenance: 'maint
 exports.icsCalendarFeed = onRequest({ cors: true, invoker: 'public' }, async (req, res) => {
   const churchId = String(req.query?.churchId || '').trim();
   const token = String(req.query?.token || '').trim();
-  const typesRaw = String(req.query?.types || ICS_TYPES.join(',')).trim();
+  const room = String(req.query?.room || '').trim();
+  // A room-scoped feed is reservations-only (the others aren't tied to a space).
+  const typesRaw = room ? 'reservations' : String(req.query?.types || ICS_TYPES.join(',')).trim();
   const types = typesRaw.split(',').map(t => t.trim().toLowerCase()).filter(t => ICS_TYPES.includes(t));
 
   if (!churchId || !token) { res.status(400).send('Missing churchId or token'); return; }
   if (types.length === 0) { res.status(400).send('No valid calendar types requested'); return; }
 
-  const cacheKey = `${churchId}|${token}|${types.slice().sort().join(',')}`;
+  const cacheKey = `${churchId}|${token}|${types.slice().sort().join(',')}|room=${room}`;
   const cached = _icsCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     res.set('Cache-Control', 'public, max-age=60');
@@ -1045,7 +1050,8 @@ exports.icsCalendarFeed = onRequest({ cors: true, invoker: 'public' }, async (re
     if (activeTypes.includes('reservations')) {
       const snap = await db.collection(`churches/${churchId}/reservations`)
         .where('eventDate', '>=', cutoff).limit(1000).get();
-      const reservations = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+      let reservations = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+      if (room) reservations = reservations.filter(r => r.roomDocId === room);
       occurrences.push(...reservationsToOccurrences(reservations));
     }
     if (activeTypes.includes('maintenance')) {
@@ -1059,7 +1065,10 @@ exports.icsCalendarFeed = onRequest({ cors: true, invoker: 'public' }, async (re
     }
 
     const churchName = churchSnap.data()?.churchName || 'ChurchOpsHub';
-    const body = buildCalendar(`${churchName} — Calendar`, occurrences);
+    // Room-scoped feeds title by the space (pulled from the matched reservations).
+    const roomName = room ? (occurrences.find(o => o.location)?.location || 'Space') : null;
+    const calTitle = roomName ? `${churchName} — ${roomName}` : `${churchName} — Calendar`;
+    const body = buildCalendar(calTitle, occurrences);
     _icsCache.set(cacheKey, { expiresAt: Date.now() + ICS_TTL_MS, body });
     res.set('Cache-Control', 'public, max-age=60');
     res.type('text/calendar').send(body);

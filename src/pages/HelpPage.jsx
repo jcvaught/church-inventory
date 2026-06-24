@@ -1030,7 +1030,9 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Calendar feed (subscribe in Google Calendar)">
-              <P>Admins can generate a read-only <strong>Calendar Feed</strong> link in Settings that shows your church's shifts, reservations, and maintenance in Google Calendar, Apple Calendar, or Outlook. In Google Calendar choose <strong>Other calendars → + → From URL</strong> and paste the link — it updates automatically. The link is private to your church; use <strong>Rotate</strong> to revoke an old one and issue a fresh link.</P>
+              <P>Admins can generate a read-only <strong>Calendar Feed</strong> link in Settings that shows your church's shifts, reservations, and maintenance in Google Calendar, Apple Calendar, or Outlook. The quickest way is the <strong>Add to Google Calendar</strong> button — it opens Google with the feed pre-filled, so you just click <strong>Add</strong>. To subscribe manually (or in Apple Calendar/Outlook), copy the link and, in Google Calendar, choose <strong>Other calendars → + → From URL</strong> and paste it. The link is private to your church; use <strong>Rotate</strong> to revoke an old one and issue a fresh link.</P>
+              <P><strong>Subscribe to just one room:</strong> in <strong>Settings → Manage Spaces</strong>, edit a space and use its own <strong>Add to Google Calendar</strong> link — a ministry can follow only the room they care about instead of the whole church calendar.</P>
+              <Tip>Google and Apple poll subscribed calendar links on their own schedule — usually a few hours, sometimes up to a day — so a brand-new booking may take a while to show up there. That's how external calendar subscriptions work, not a bug. For an up-to-the-minute view, open ChurchOpsHub directly; the calendar feed is a convenient mirror.</Tip>
             </Accordion>
 
             <Accordion title="Subscription and billing">
