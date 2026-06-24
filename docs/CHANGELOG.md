@@ -4,6 +4,17 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-23 — Room calendar Phase 0+1: timed reservations + time-aware conflicts
+
+First cut of the room-scheduling upgrade (plan: `docs/ROOM-CALENDAR-PLAN-2026-06-23.md`), built into the Reservations Hub.
+
+- **Phase 0 — times through the pipeline.** `reservationsToOccurrences` (client `src/lib/occurrences.js` + CJS server twin) now populates `startTime`/`endTime` and infers `allDay` (single-day with a startTime ⇒ timed VEVENT, like shifts; multi-day spans + time-less records stay all-day). The `icsCalendarFeed` therefore emits real timed VEVENTs for room bookings. Backward-compatible: existing date-only reservations are byte-identical to the legacy `ics.js` builder (parity tests hold). 5 new occurrence tests (timed shape, +1h default, multi-day-stays-allday, client≡server twin).
+- **Phase 1 — booking form + time-aware conflicts.** New `src/utils/reservationConflict.js` (pure, zero-import): `minutesOf`/`isAllDay`/`effectiveWindow`/`reservationsCollide`/`findRoomConflict`. Rooms get time-aware collision detection (all-day blocks the day; two timed bookings collide on buffer-expanded interval overlap; adjacent bookings are allowed); equipment stays date-overlap. **Setup/teardown buffers are supported in the engine now (default 0)** — Phase 3 exposes them in the UI. 10 dedicated unit tests. `ReservationsPage`: Space bookings gain an **All day** toggle + Start/End time inputs (single-day only; hidden for equipment and multi-day spans); `handleAdd` (single + recurring series) routes through `findRoomConflict` with a time-aware conflict message; times render on cards + the detail modal.
+- **Schema** (`reservations`, additive): `startTime`/`endTime` (`"HH:MM"`). No rule/migration changes (write path spreads `...res`; rule is `isMember`). DATA_MODEL.md updated.
+- **Verified:** 71 unit tests pass (15 new), build + lint clean. Emulator + Playwright smoke confirmed the booking form (time inputs render in Space mode + hidden in Equipment; All-day toggle hides times). **Next:** the month-calendar view (Phase 2) + setup/teardown buffer UI (Phase 3).
+
+---
+
 ## 2026-06-23 — Hub restructure: Inventory + Reservations become free hubs
 
 Navigation consistency pass (plan: `docs/HUB-RESTRUCTURE-PLAN-2026-06-23.md`). Items, Supplies, and Reservations moved out of top-level nav tabs into the Hubs grid as **free hub cards** (`HUB_DEFS` `free:true` — "Included" badge, no `UpgradeGate`, shown first). Done *before* the room-calendar build (`docs/ROOM-CALENDAR-PLAN-2026-06-23.md`) so that work lands in its final home (the Reservations Hub) and isn't moved twice.

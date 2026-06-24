@@ -5,6 +5,12 @@
 export const WHATS_NEW = [
   {
     date: '2026-06-23',
+    tag: 'New',
+    title: 'Reserve a room by time of day',
+    body: "Space reservations can now have a start and end time, not just a date — so you can book the Fellowship Hall 9am–noon AND 6–9pm on the same day. ChurchOpsHub checks for time conflicts automatically, so two groups can't double-book the same room and the same hour. Need the whole day? Just check \"All day.\" These times flow into the calendar feed too, so they show up correctly when you subscribe in Google or Apple Calendar. (Equipment checkouts still work by date, as before.)",
+  },
+  {
+    date: '2026-06-23',
     tag: 'Improved',
     title: 'Everything lives under Hubs now',
     body: "Items, Supplies, and Reservations have moved from the top menu into the Hubs page, so all of your church's tools are in one consistent place. Open Hubs and you'll find them up top as included (free) cards: an Inventory Hub with an Items/Supplies toggle, and a Reservations Hub. Nothing about how they work changed — they're just easier to find alongside everything else. The top menu is now simpler: Dashboard, Event Day, Hubs, Activity Log, and Settings.",

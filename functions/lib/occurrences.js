@@ -74,16 +74,21 @@ function reservationsToOccurrences(reservations) {
     if (r.purpose && r.purpose !== r.eventName) parts.push(r.purpose);
     if (r.ministry) parts.push(`Ministry: ${r.ministry}`);
     if (r.status) parts.push(`Status: ${r.status}`);
+    // Single-day room bookings carry start/end times → timed VEVENT (DTSTART
+    // with a time, like shifts). Multi-day spans and any record without a
+    // startTime stay all-day — matching the date-only legacy reservations
+    // (byte-parity) and the scope (single-day=timed, multi-day=span).
+    const timed = !!r.startTime && (!r.returnDate || r.returnDate === r.eventDate);
     return {
       id: `reservation:${r._docId}`,
       sourceType: 'reservation',
       sourceId: r._docId,
       title: r.eventName || r.purpose || 'Reservation',
       start: r.eventDate,
-      startTime: null,
+      startTime: timed ? r.startTime : null,
       end: r.returnDate || null,
-      endTime: null,
-      allDay: true,
+      endTime: timed ? (r.endTime || null) : null,
+      allDay: !timed,
       location: r.roomName || r.location || null,
       link: null,
       description: parts.length ? parts.join(' | ') : null,

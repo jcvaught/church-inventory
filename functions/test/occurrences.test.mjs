@@ -126,6 +126,46 @@ test('reservation end falls back to eventDate when no returnDate', () => {
   assert.deepEqual(occurrenceToVEvent(occ).filter(l => l.startsWith('DTEND')), ['DTEND;VALUE=DATE:20260712']);
 });
 
+// ── Timed room bookings (room-calendar Phase 0) ──────────────────────────────
+// NB: these are kept OUT of the shared RESERVATIONS fixture on purpose — the
+// legacy ics.js builder only knows all-day reservations, so a timed fixture
+// would fail the byte-parity assertions above. The pipeline below is new.
+
+test('single-day reservation with startTime is a timed occurrence', () => {
+  const [occ] = reservationsToOccurrences([{ _docId: 'rt', eventName: 'Fellowship lunch', eventDate: '2026-07-12', startTime: '12:00', endTime: '14:00', roomName: 'Fellowship Hall', status: 'approved' }]);
+  assert.equal(occ.allDay, false);
+  assert.equal(occ.startTime, '12:00');
+  assert.equal(occ.endTime, '14:00');
+  // Timed VEVENT carries DTSTART/DTEND with the clock times (reuses timeToICS).
+  const v = occurrenceToVEvent(occ);
+  assert.ok(v.includes('DTSTART:20260712T120000'), v.join('\n'));
+  assert.ok(v.includes('DTEND:20260712T140000'), v.join('\n'));
+});
+
+test('reservation with startTime but no endTime defaults to +1h', () => {
+  const [occ] = reservationsToOccurrences([{ _docId: 'rt2', eventName: 'Prayer', eventDate: '2026-07-13', startTime: '06:00', status: 'approved' }]);
+  assert.equal(occ.allDay, false);
+  assert.equal(occ.endTime, null);
+  assert.ok(occurrenceToVEvent(occ).includes('DTEND:20260713T070000'));
+});
+
+test('multi-day reservation with startTime stays all-day (span)', () => {
+  // eventDate < returnDate ⇒ a span (camp/lock-in); times are ignored.
+  const [occ] = reservationsToOccurrences([{ _docId: 'rspan', eventName: 'Youth lock-in', eventDate: '2026-07-18', returnDate: '2026-07-19', startTime: '20:00', endTime: '08:00', status: 'approved' }]);
+  assert.equal(occ.allDay, true);
+  assert.equal(occ.startTime, null);
+  assert.deepEqual(occurrenceToVEvent(occ).filter(l => l.startsWith('DTSTART')), ['DTSTART;VALUE=DATE:20260718']);
+});
+
+test('timed reservation: client ≡ server twin', () => {
+  const r = { _docId: 'rtwin', eventName: 'Setup', eventDate: '2026-07-12', startTime: '08:30', endTime: '09:30', roomName: 'Gym', status: 'approved' };
+  assert.deepEqual(server.reservationsToOccurrences([r]), reservationsToOccurrences([r]));
+  assert.deepEqual(
+    server.occurrenceToVEvent(server.reservationsToOccurrences([r])[0]),
+    occurrenceToVEvent(reservationsToOccurrences([r])[0]),
+  );
+});
+
 test('client Pay line is opt-in (includePay)', () => {
   const job = JOBS[0];
   assert.ok(!shiftsToOccurrences([job])[0].description.includes('Pay:'));

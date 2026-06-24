@@ -9,6 +9,7 @@ import { useConfirm } from '../components/primitives/ConfirmDialog.jsx';
 import { exportReservationsCSV } from '../utils/csv.js';
 import { ITEM_STATUS, RES_STATUS, RESOURCE_TYPE } from '../utils/constants.js';
 import { localDateStr, generateRecurrenceDates, RECURRENCE_FREQS } from '../utils/date.js';
+import { findRoomConflict } from '../utils/reservationConflict.js';
 import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
 
 export function ReservationsPage({ store, userProfile }) {
@@ -37,8 +38,9 @@ export function ReservationsPage({ store, userProfile }) {
 
   const [resourceType, setResourceType] = useState(() => localStorage.getItem('res_resourceType') || RESOURCE_TYPE.ITEM);
   function setResourceTypePersisted(val) { setResourceType(val); localStorage.setItem('res_resourceType', val); }
-  const emptyRes = { itemDocId:"", itemId:"", itemDesc:"", roomDocId:"", roomName:"", eventName:"", eventDate:"", returnDate:"", purpose:"", ministry:"", notes:"" };
+  const emptyRes = { itemDocId:"", itemId:"", itemDesc:"", roomDocId:"", roomName:"", eventName:"", eventDate:"", returnDate:"", startTime:"", endTime:"", purpose:"", ministry:"", notes:"" };
   const [form, setForm] = useState(emptyRes);
+  const [allDay, setAllDay] = useState(false); // room bookings: all-day vs timed
   const [conflictErr, setConflictErr] = useState("");
   const [recurring, setRecurring] = useState(false);
   const [recurrenceFreq, setRecurrenceFreq] = useState("weekly");
@@ -80,22 +82,33 @@ export function ReservationsPage({ store, userProfile }) {
     if (isRoom ? !form.roomDocId : !form.itemDocId) return;
     if (!form.eventName.trim() || !form.eventDate) return;
     if (form.returnDate && new Date(form.returnDate) < new Date(form.eventDate)) { setConflictErr("Return date cannot be before the event date."); return; }
-    setConflictErr("");
-    const aStart = form.eventDate;
-    const aEnd = form.returnDate || form.eventDate;
-    const conflict = reservations.find(r => {
-      const sameResource = isRoom ? r.roomDocId === form.roomDocId : r.itemDocId === form.itemDocId;
-      if (!sameResource) return false;
-      if (r.status !== RES_STATUS.PENDING && r.status !== RES_STATUS.APPROVED) return false;
-      const bStart = r.eventDate;
-      const bEnd = r.returnDate || r.eventDate;
-      return aStart <= bEnd && aEnd >= bStart;
-    });
-    if (conflict) {
-      const resourceLabel = isRoom ? `this space` : `this item`;
-      setConflictErr(`Conflict: "${conflict.eventName}" (${conflict.status}) already has ${resourceLabel} on ${conflict.eventDate}${conflict.returnDate && conflict.returnDate !== conflict.eventDate ? " – "+conflict.returnDate : ""}. Pick a different ${isRoom ? 'space' : 'item'} or date.`);
-      return;
+    // Times apply to single-day SPACE bookings only (equipment stays date-range;
+    // multi-day spans are all-day). See docs/ROOM-CALENDAR-PLAN-2026-06-23.md.
+    const isSpan = !!form.returnDate && form.returnDate > form.eventDate;
+    const timed = isRoom && !allDay && !isSpan;
+    if (timed && form.startTime && form.endTime && form.endTime <= form.startTime) {
+      setConflictErr("End time must be after the start time."); return;
     }
+    setConflictErr("");
+    const times = timed ? { startTime: form.startTime, endTime: form.endTime } : {};
+    // Rooms get time-aware conflict detection (findRoomConflict); items stay date-overlap.
+    const itemConflict = (eventDate, returnDate) => reservations.find(r => {
+      if (r.itemDocId !== form.itemDocId) return false;
+      if (r.status !== RES_STATUS.PENDING && r.status !== RES_STATUS.APPROVED) return false;
+      const bStart = r.eventDate, bEnd = r.returnDate || r.eventDate;
+      return eventDate <= bEnd && (returnDate || eventDate) >= bStart;
+    });
+    const conflictFor = (eventDate, returnDate) => isRoom
+      ? findRoomConflict({ roomDocId: form.roomDocId, eventDate, returnDate, ...times }, reservations)
+      : itemConflict(eventDate, returnDate);
+    const conflictMsg = (c, dateLabel) => {
+      const when = (timed && c.startTime)
+        ? `${c.eventDate} at ${c.startTime}${c.endTime ? "–"+c.endTime : ""}`
+        : `${c.eventDate}${c.returnDate && c.returnDate !== c.eventDate ? " – "+c.returnDate : ""}`;
+      return `Conflict${dateLabel ? ` on ${dateLabel}` : ""}: "${c.eventName}" (${c.status}) already has this ${isRoom ? "space" : "item"} on ${when}. Pick a different ${isRoom ? "space" : "item"}, date${isRoom ? ", or time" : ""}.`;
+    };
+    const conflict = conflictFor(form.eventDate, form.returnDate);
+    if (conflict) { setConflictErr(conflictMsg(conflict)); return; }
     setSaving(true);
     try {
       const baseRes = isRoom ? {
@@ -105,6 +118,8 @@ export function ReservationsPage({ store, userProfile }) {
         eventName: form.eventName,
         eventDate: form.eventDate,
         returnDate: form.returnDate,
+        startTime: timed ? form.startTime : '',
+        endTime: timed ? form.endTime : '',
         purpose: form.purpose,
         ministry: form.ministry,
         notes: form.notes,
@@ -131,18 +146,9 @@ export function ReservationsPage({ store, userProfile }) {
         }));
         const extraDates = allDates.slice(1);
         for (const d of allDates) {
-          const dStart = d.eventDate;
-          const dEnd = d.returnDate || d.eventDate;
-          const seriesConflict = reservations.find(r => {
-            const sameResource = isRoom ? r.roomDocId === form.roomDocId : r.itemDocId === form.itemDocId;
-            if (!sameResource) return false;
-            if (r.status !== RES_STATUS.PENDING && r.status !== RES_STATUS.APPROVED) return false;
-            const bStart = r.eventDate;
-            const bEnd = r.returnDate || r.eventDate;
-            return dStart <= bEnd && dEnd >= bStart;
-          });
+          const seriesConflict = conflictFor(d.eventDate, d.returnDate);
           if (seriesConflict) {
-            setConflictErr(`Conflict on ${d.eventDate}: "${seriesConflict.eventName}" (${seriesConflict.status}) already has this ${isRoom ? 'space' : 'item'}. Adjust the series dates.`);
+            setConflictErr(conflictMsg(seriesConflict, d.eventDate) + " Adjust the series dates.");
             setSaving(false);
             return;
           }
@@ -258,7 +264,7 @@ export function ReservationsPage({ store, userProfile }) {
         <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:0 }}>Reservations</h2>
         <div style={{ display:"flex", gap:8 }}>
           {reservations.length > 0 && <button aria-label="Export reservations as CSV" onClick={()=>exportReservationsCSV(reservations)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
-          <button onClick={()=>{setForm(emptyRes);setRecurring(false);setRecurrenceEnd("");setShowAdd(true);}} style={btnP}>+ New Reservation</button>
+          <button onClick={()=>{setForm(emptyRes);setAllDay(false);setRecurring(false);setRecurrenceEnd("");setShowAdd(true);}} style={btnP}>+ New Reservation</button>
         </div>
       </div>
 
@@ -324,6 +330,7 @@ export function ReservationsPage({ store, userProfile }) {
                     <div style={{ fontSize:14, fontWeight:600, color: isPast&&r.status===RES_STATUS.PENDING ? B.red : B.navy }}>
                       {formatDate(r.eventDate)}
                     </div>
+                    {r.startTime && <div style={{ fontSize:12, color:B.textMid, fontWeight:600 }}>{r.startTime}{r.endTime ? "–"+r.endTime : ""}</div>}
                     {r.returnDate && <div style={{ fontSize:12, color:B.textLight }}>Return: {formatDate(r.returnDate)}</div>}
                     {isPast && r.status === RES_STATUS.PENDING && <div style={{ fontSize:11, color:B.red, fontWeight:600, marginTop:2 }}>Event date passed!</div>}
                   </div>
@@ -379,6 +386,21 @@ export function ReservationsPage({ store, userProfile }) {
           <div style={{ flex:1 }}><FF label="Event Date" required><input type="date" style={inp} value={form.eventDate} onChange={e=>setForm(f=>({...f, eventDate:e.target.value}))}/></FF></div>
           <div style={{ flex:1 }}><FF label="Expected Return"><input type="date" style={inp} value={form.returnDate} onChange={e=>setForm(f=>({...f, returnDate:e.target.value}))}/></FF></div>
         </div>
+        {/* Times — single-day SPACE bookings only (multi-day spans are all-day) */}
+        {resourceType === RESOURCE_TYPE.ROOM && !(form.returnDate && form.returnDate > form.eventDate) && (
+          <div style={{ marginBottom:16 }}>
+            <label style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", marginBottom:allDay?0:12 }}>
+              <input type="checkbox" checked={allDay} onChange={e=>setAllDay(e.target.checked)} style={{ width:16, height:16, cursor:"pointer" }}/>
+              <span style={{ fontSize:14, color:B.textDark, fontWeight:500 }}>All day</span>
+            </label>
+            {!allDay && (
+              <div style={{ display:"flex", gap:14 }}>
+                <div style={{ flex:1 }}><FF label="Start time"><input type="time" style={inp} value={form.startTime} onChange={e=>setForm(f=>({...f, startTime:e.target.value}))}/></FF></div>
+                <div style={{ flex:1 }}><FF label="End time"><input type="time" style={inp} value={form.endTime} onChange={e=>setForm(f=>({...f, endTime:e.target.value}))}/></FF></div>
+              </div>
+            )}
+          </div>
+        )}
         {/* Recurring */}
         <div style={{ marginBottom:16 }}>
           <label style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", marginBottom:recurring?12:0 }}>
@@ -444,7 +466,7 @@ export function ReservationsPage({ store, userProfile }) {
               </div>
               <div>
                 <div style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Event Date</div>
-                <div style={{ fontSize:15, fontWeight:600 }}>{formatDate(r.eventDate)}</div>
+                <div style={{ fontSize:15, fontWeight:600 }}>{formatDate(r.eventDate)}{r.startTime ? ` · ${r.startTime}${r.endTime ? "–"+r.endTime : ""}` : ""}</div>
               </div>
               {r.returnDate && <div>
                 <div style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Return By</div>
