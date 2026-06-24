@@ -4,6 +4,18 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-24 — Room calendar Phase 3a: setup/teardown buffers + per-room calendar color
+
+Buffer UI + editable per-room color (`docs/ROOM-CALENDAR-PLAN-2026-06-23.md`). The conflict engine already honored buffers (default 0); this exposes them.
+
+- **Per-room config (Manage Spaces):** `rooms.color` (10-swatch picker; "Auto" = palette-by-index, the calendar reads `room.color` when set — already wired in Phase 2), `rooms.defaultSetupMinutes`/`defaultTeardownMinutes` (number inputs). Space list shows a color dot.
+- **Per-booking buffer (ReservationsPage):** booking gains `setupMinutes`/`teardownMinutes` (timed bookings only). Selecting a space **pre-fills** the buffer from the room's defaults; a tucked-away **"+ Add setup/teardown time"** link reveals the inputs (auto-shown when a value is present) so the form stays clean for the common no-buffer case. Buffers flow into the conflict candidate (`findRoomConflict` → `effectiveWindow`) and are saved + shown on the detail.
+- All additive — no rule/migration changes (`rooms`/`reservations` write paths spread the payload).
+- **Verified:** 75 unit tests pass (buffer collision already covered: `effectiveWindow applies buffers`, `buffers push adjacent bookings into conflict`); build + lint clean. **Full Playwright E2E:** created "Buffer Hall" (color #DC2626 + 30-min default teardown) → persisted with color dot; booking 9–10 pre-filled teardown=30; a 10:00–10:30 booking was **rejected** (collides with #1's buffered window to 10:30), 10:30–11:00 **succeeded**. Help + What's New updated.
+- **Remaining Phase 3 piece:** Jobs-style series editing (this / this-and-future / all) — needs the gcloud COLLECTION-scope `(recurrenceGroupId, eventDate)` index; tracked for a focused follow-up.
+
+---
+
 ## 2026-06-24 — Room calendar Phase 2: month calendar view
 
 `List | Calendar` toggle on the Reservations Hub (`docs/ROOM-CALENDAR-PLAN-2026-06-23.md`).

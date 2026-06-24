@@ -181,9 +181,10 @@ export function ReservationsPage({ store, userProfile }) {
 
   const [resourceType, setResourceType] = useState(() => localStorage.getItem('res_resourceType') || RESOURCE_TYPE.ITEM);
   function setResourceTypePersisted(val) { setResourceType(val); localStorage.setItem('res_resourceType', val); }
-  const emptyRes = { itemDocId:"", itemId:"", itemDesc:"", roomDocId:"", roomName:"", eventName:"", eventDate:"", returnDate:"", startTime:"", endTime:"", expectedAttendance:"", contactName:"", contactPhone:"", purpose:"", ministry:"", notes:"" };
+  const emptyRes = { itemDocId:"", itemId:"", itemDesc:"", roomDocId:"", roomName:"", eventName:"", eventDate:"", returnDate:"", startTime:"", endTime:"", setupMinutes:"", teardownMinutes:"", expectedAttendance:"", contactName:"", contactPhone:"", purpose:"", ministry:"", notes:"" };
   const [form, setForm] = useState(emptyRes);
   const [allDay, setAllDay] = useState(false); // room bookings: all-day vs timed
+  const [showBuffers, setShowBuffers] = useState(false); // tucked-away setup/teardown editor
   const [conflictErr, setConflictErr] = useState("");
   const [recurring, setRecurring] = useState(false);
   const [recurrenceFreq, setRecurrenceFreq] = useState("weekly");
@@ -235,7 +236,12 @@ export function ReservationsPage({ store, userProfile }) {
       setConflictErr("End time must be after the start time."); return;
     }
     setConflictErr("");
-    const times = timed ? { startTime: form.startTime, endTime: form.endTime } : {};
+    const times = timed ? {
+      startTime: form.startTime,
+      endTime: form.endTime,
+      setupMinutes: form.setupMinutes ? parseInt(form.setupMinutes, 10) : 0,
+      teardownMinutes: form.teardownMinutes ? parseInt(form.teardownMinutes, 10) : 0,
+    } : {};
     // Rooms get time-aware conflict detection (findRoomConflict); items stay date-overlap.
     const itemConflict = (eventDate, returnDate) => reservations.find(r => {
       if (r.itemDocId !== form.itemDocId) return false;
@@ -278,6 +284,8 @@ export function ReservationsPage({ store, userProfile }) {
         returnDate: form.returnDate,
         startTime: timed ? form.startTime : '',
         endTime: timed ? form.endTime : '',
+        setupMinutes: timed && form.setupMinutes ? parseInt(form.setupMinutes, 10) : 0,
+        teardownMinutes: timed && form.teardownMinutes ? parseInt(form.teardownMinutes, 10) : 0,
         expectedAttendance: form.expectedAttendance ? parseInt(form.expectedAttendance, 10) : null,
         contactName: form.contactName.trim() || '',
         contactPhone: form.contactPhone.trim() || '',
@@ -431,7 +439,7 @@ export function ReservationsPage({ store, userProfile }) {
         <h2 style={{ fontFamily:f1, fontSize:22, fontWeight:700, color:B.navy, margin:0 }}>Reservations</h2>
         <div style={{ display:"flex", gap:8 }}>
           {reservations.length > 0 && <button aria-label="Export reservations as CSV" onClick={()=>exportReservationsCSV(reservations)} style={{ ...btnS, fontSize:13, padding:"9px 18px" }}>⬇ Export CSV</button>}
-          <button onClick={()=>{setForm(emptyRes);setAllDay(false);setRecurring(false);setRecurrenceEnd("");setShowAdd(true);}} style={btnP}>+ New Reservation</button>
+          <button onClick={()=>{setForm(emptyRes);setAllDay(false);setShowBuffers(false);setRecurring(false);setRecurrenceEnd("");setShowAdd(true);}} style={btnP}>+ New Reservation</button>
         </div>
       </div>
 
@@ -555,7 +563,10 @@ export function ReservationsPage({ store, userProfile }) {
             ) : (
               <select autoFocus style={{...inp, cursor:"pointer"}} value={form.roomDocId} onChange={e => {
                 const room = activeRooms.find(r => r._docId === e.target.value);
-                setForm(f => ({ ...f, roomDocId: e.target.value, roomName: room?.name || '' }));
+                // Pre-fill setup/teardown from the space's defaults (still editable per booking).
+                setForm(f => ({ ...f, roomDocId: e.target.value, roomName: room?.name || '',
+                  setupMinutes: room?.defaultSetupMinutes ? String(room.defaultSetupMinutes) : '',
+                  teardownMinutes: room?.defaultTeardownMinutes ? String(room.defaultTeardownMinutes) : '' }));
               }}>
                 <option value="">Select a space...</option>
                 {activeRooms.map(r => <option key={r._docId} value={r._docId}>{r.name}{r.capacity ? ` (cap. ${r.capacity})` : ''}{r.location ? ` — ${r.location}` : ''}</option>)}
@@ -590,10 +601,23 @@ export function ReservationsPage({ store, userProfile }) {
               <span style={{ fontSize:14, color:B.textDark, fontWeight:500 }}>All day</span>
             </label>
             {!allDay && (
-              <div style={{ display:"flex", gap:14 }}>
-                <div style={{ flex:1 }}><FF label="Start time"><input type="time" style={inp} value={form.startTime} onChange={e=>setForm(f=>({...f, startTime:e.target.value}))}/></FF></div>
-                <div style={{ flex:1 }}><FF label="End time"><input type="time" style={inp} value={form.endTime} onChange={e=>setForm(f=>({...f, endTime:e.target.value}))}/></FF></div>
-              </div>
+              <>
+                <div style={{ display:"flex", gap:14 }}>
+                  <div style={{ flex:1 }}><FF label="Start time"><input type="time" style={inp} value={form.startTime} onChange={e=>setForm(f=>({...f, startTime:e.target.value}))}/></FF></div>
+                  <div style={{ flex:1 }}><FF label="End time"><input type="time" style={inp} value={form.endTime} onChange={e=>setForm(f=>({...f, endTime:e.target.value}))}/></FF></div>
+                </div>
+                {/* Setup/teardown buffer — tucked away; held before/after so back-to-back events don't collide */}
+                {showBuffers || form.setupMinutes || form.teardownMinutes ? (
+                  <div style={{ display:"flex", gap:14, alignItems:"flex-end" }}>
+                    <div style={{ flex:1 }}><FF label="Setup before (min)"><input type="number" min="0" style={inp} value={form.setupMinutes} onChange={e=>setForm(f=>({...f, setupMinutes:e.target.value}))} placeholder="0"/></FF></div>
+                    <div style={{ flex:1 }}><FF label="Teardown after (min)"><input type="number" min="0" style={inp} value={form.teardownMinutes} onChange={e=>setForm(f=>({...f, teardownMinutes:e.target.value}))} placeholder="0"/></FF></div>
+                  </div>
+                ) : (
+                  <button type="button" onClick={()=>setShowBuffers(true)} style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:13, fontWeight:600, fontFamily:f1, padding:0, marginBottom:4 }}>
+                    + Add setup/teardown time
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}
@@ -712,6 +736,10 @@ export function ReservationsPage({ store, userProfile }) {
               {(r.contactName || r.contactPhone) && <div>
                 <div style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Day-of Contact</div>
                 <div style={{ fontSize:14 }}>{[r.contactName, r.contactPhone].filter(Boolean).join(" · ")}</div>
+              </div>}
+              {(r.setupMinutes > 0 || r.teardownMinutes > 0) && <div>
+                <div style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Setup / Teardown</div>
+                <div style={{ fontSize:14 }}>{[r.setupMinutes > 0 ? `${r.setupMinutes} min before` : null, r.teardownMinutes > 0 ? `${r.teardownMinutes} min after` : null].filter(Boolean).join(" · ")}</div>
               </div>}
             </div>
             {(() => { const rm = (rooms||[]).find(x => x._docId === r.roomDocId); return rm?.photoUrl ? (

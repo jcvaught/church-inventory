@@ -17,8 +17,10 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import { resizeImageForUpload } from '../utils/imageResize.js';
 
 // Manage Spaces form — kept as one constant so every reset site stays in sync.
-const EMPTY_ROOM_FORM = { name:'', capacity:'', location:'', description:'', amenities:'', photoUrl:'', approverUids:[], blackoutDates:[], blockedWindows:[] };
+const EMPTY_ROOM_FORM = { name:'', capacity:'', location:'', description:'', amenities:'', photoUrl:'', approverUids:[], blackoutDates:[], blockedWindows:[], color:'', defaultSetupMinutes:'', defaultTeardownMinutes:'' };
 const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+// Calendar swatch palette — keep in sync with ROOM_PALETTE in ReservationsPage.jsx.
+const ROOM_COLOR_SWATCHES = ['#2A7D6E','#0D9488','#7C3AED','#D97706','#2563EB','#DC2626','#DB2777','#65A30D','#0891B2','#9333EA'];
 
 function formatPhoneDisplay(e164) {
   if (!e164) return '';
@@ -1631,6 +1633,26 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             </div>
           </FF>
 
+          {/* Calendar color */}
+          <FF label="Calendar color (optional)">
+            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+              {ROOM_COLOR_SWATCHES.map(c => {
+                const on = roomForm.color === c;
+                return <button key={c} type="button" aria-label={`Color ${c}`} onClick={()=>setRoomForm(f=>({ ...f, color: on ? '' : c }))}
+                  style={{ width:26, height:26, borderRadius:7, background:c, border:on?'3px solid '+B.navy:'2px solid '+B.white, boxShadow:'0 0 0 1px '+B.sand, cursor:'pointer' }}/>;
+              })}
+              {roomForm.color && <button type="button" onClick={()=>setRoomForm(f=>({ ...f, color:'' }))} style={{ background:'none', border:'none', color:B.textLight, cursor:'pointer', fontSize:12, fontWeight:600 }}>Auto</button>}
+            </div>
+            <div style={{ fontSize:12, color:B.textLight, marginTop:6 }}>How this space appears on the reservations calendar. Leave on Auto to assign one for you.</div>
+          </FF>
+
+          {/* Default setup / teardown buffers */}
+          <div style={{ display:'flex', gap:12 }}>
+            <div style={{ flex:1 }}><FF label="Default setup (min)"><input style={inp} type="number" min="0" value={roomForm.defaultSetupMinutes} onChange={e => setRoomForm(f => ({ ...f, defaultSetupMinutes:e.target.value }))} placeholder="0"/></FF></div>
+            <div style={{ flex:1 }}><FF label="Default teardown (min)"><input style={inp} type="number" min="0" value={roomForm.defaultTeardownMinutes} onChange={e => setRoomForm(f => ({ ...f, defaultTeardownMinutes:e.target.value }))} placeholder="0"/></FF></div>
+          </div>
+          <div style={{ fontSize:12, color:B.textLight, marginTop:-8, marginBottom:8 }}>Time held before/after each booking of this space so back-to-back events don't collide. Optional — leave at 0 for none; pre-fills new bookings (still editable per booking).</div>
+
           {/* Approvers */}
           <FF label="Who can approve bookings for this space (optional)">
             <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
@@ -1704,6 +1726,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                     approverUids: roomForm.approverUids || [],
                     blackoutDates: roomForm.blackoutDates || [],
                     blockedWindows: roomForm.blockedWindows || [],
+                    color: roomForm.color || null,
+                    defaultSetupMinutes: roomForm.defaultSetupMinutes ? parseInt(roomForm.defaultSetupMinutes, 10) : 0,
+                    defaultTeardownMinutes: roomForm.defaultTeardownMinutes ? parseInt(roomForm.defaultTeardownMinutes, 10) : 0,
                   };
                   if (editRoomId) {
                     await updateRoom(editRoomId, payload);
@@ -1728,7 +1753,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             <div key={r._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 14px", borderRadius:10, background:r.active === false ? B.warmGray : B.white, border:"1px solid "+B.sand, opacity:r.active === false ? .6 : 1 }}>
               {r.photoUrl && <img src={r.photoUrl} alt="" style={{ width:44, height:44, objectFit:'cover', borderRadius:8, border:'1px solid '+B.sand, flexShrink:0 }}/>}
               <div style={{ flex:1 }}>
-                <div style={{ fontWeight:700, fontSize:14, color:B.navy, fontFamily:f1 }}>{r.name}{r.active === false ? ' (archived)' : ''}</div>
+                <div style={{ fontWeight:700, fontSize:14, color:B.navy, fontFamily:f1, display:'flex', alignItems:'center', gap:7 }}>{r.color && <span style={{ width:10, height:10, borderRadius:3, background:r.color, flexShrink:0 }}/>}{r.name}{r.active === false ? ' (archived)' : ''}</div>
                 <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>
                   {[r.capacity ? `Cap. ${r.capacity}` : null, r.location, (r.amenities||[]).join(', ')].filter(Boolean).join(' · ') || 'No details'}
                 </div>
@@ -1741,7 +1766,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                   </div>
                 )}
               </div>
-              <button onClick={() => { setEditRoomId(r._docId); setRoomPhotoFile(null); setRoomForm({ name:r.name, capacity:r.capacity ?? '', location:r.location||'', description:r.description||'', amenities:(r.amenities||[]).join(', '), photoUrl:r.photoUrl||'', approverUids:r.approverUids||[], blackoutDates:r.blackoutDates||[], blockedWindows:r.blockedWindows||[] }); }}
+              <button onClick={() => { setEditRoomId(r._docId); setRoomPhotoFile(null); setRoomForm({ name:r.name, capacity:r.capacity ?? '', location:r.location||'', description:r.description||'', amenities:(r.amenities||[]).join(', '), photoUrl:r.photoUrl||'', approverUids:r.approverUids||[], blackoutDates:r.blackoutDates||[], blockedWindows:r.blockedWindows||[], color:r.color||'', defaultSetupMinutes:r.defaultSetupMinutes ?? '', defaultTeardownMinutes:r.defaultTeardownMinutes ?? '' }); }}
                 style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:13, fontWeight:600, padding:"4px 8px" }}>Edit</button>
               {r.active === false
                 ? <button onClick={() => updateRoom(r._docId, { active:true })} style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:13, fontWeight:600, padding:"4px 8px" }}>Restore</button>

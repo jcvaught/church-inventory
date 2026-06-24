@@ -456,6 +456,8 @@ export function HelpPage({ onBack }) {
               ]} />
               <P>You can also fine-tune how each space is booked:</P>
               <UL items={[
+                'Calendar color — the color this space shows in on the reservations calendar (leave on "Auto" to have one assigned).',
+                'Default setup / teardown minutes — time automatically held before and after each booking so back-to-back events don\'t collide (e.g. 30 minutes to reset the Fellowship Hall). Pre-fills new bookings; optional — leave at 0 for none.',
                 'Approvers — pick specific people (e.g. your facilities coordinator) who can approve bookings for THIS space. Admins can always approve; this adds others without making them admins.',
                 'Blackout dates — specific days the space can\'t be booked (a holiday, a renovation week).',
                 'Weekly blocked hours — recurring times the space is off-limits, like "Sunday 9:00–12:00" for the worship service. The app will refuse any booking that lands in those hours.',
@@ -467,6 +469,7 @@ export function HelpPage({ onBack }) {
             <Accordion title="Reserving a space or piece of equipment" defaultOpen>
               <P>In the Reservations Hub, click <strong>+ New Reservation</strong>, then pick <strong>📦 Equipment</strong> or <strong>🏛️ Space</strong> at the top of the form. Enter the event/purpose, ministry, and date(s). For recurring needs, turn on <strong>Repeat this reservation</strong> and choose a frequency and end date — the form shows a live count of how many will be created.</P>
               <P>For a <strong>space</strong>, you can also record the <strong>expected attendance</strong> and a <strong>day-of contact</strong> name and phone. If the attendance is larger than the room's capacity, you'll get a gentle heads-up — it won't stop you, it just flags it so you can plan overflow seating or pick a bigger room.</P>
+              <P>If the space has default <strong>setup/teardown</strong> time, it pre-fills automatically; use <strong>"Add setup/teardown time"</strong> to set or adjust it for just this booking. That buffer is held before and after your event when checking for conflicts.</P>
             </Accordion>
 
             <Accordion title="List view vs. Calendar view">

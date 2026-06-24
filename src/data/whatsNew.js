@@ -6,6 +6,12 @@ export const WHATS_NEW = [
   {
     date: '2026-06-24',
     tag: 'New',
+    title: 'Setup & teardown time + calendar colors for spaces',
+    body: "Two upgrades for spaces (Settings → 🏛️ Spaces). Give each space a calendar color so it stands out on the reservations calendar. And set default setup/teardown minutes — time held before and after each booking so back-to-back events don't collide (the Fellowship Hall needs 30 minutes to reset? Set it once). When you book that space the buffer pre-fills, and you can tweak or remove it per booking via \"Add setup/teardown time.\" Totally optional — leave it at zero and nothing changes.",
+  },
+  {
+    date: '2026-06-24',
+    tag: 'New',
     title: 'See your reservations on a calendar',
     body: "The Reservations Hub now has a Calendar view — flip between ☰ List and 📅 Calendar at the top. The month grid shows every booking on its day, color-coded by space with a legend, so you can see what's happening and where at a glance. Click any booking to open it, page between months, and filter by space or ministry. On your phone it becomes a clean grouped list (This Week / Next 30 Days / Later).",
   },
