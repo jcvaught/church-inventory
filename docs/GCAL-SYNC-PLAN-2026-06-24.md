@@ -104,6 +104,15 @@ trigger doing insert/patch/delete with `gcalEventId` write-back; backfill on con
 terminal-status skips (denied/cancelled → delete from GCal). Timezone-aware. Recurring series = N
 individual events (COH already materializes per-date docs — matches F5; do NOT use GCal RRULE in v1).
 
+> **Progress (2026-06-24):** `functions/lib/gcal.js` BUILT — the pure `occurrenceToGcalEvent(occ, tz)`
+> mapping (timed/all-day, +1h default end w/ midnight carry, exclusive all-day end, `extendedProperties.
+> private` source-id stamp for 2-way reconcile) + the dependency-free OAuth helpers (`buildConsentUrl`,
+> `exchangeCode`, `getAccessToken`, `revokeToken` — creds read at call time so the module loads
+> pre-Phase-0) + the Calendar REST wrappers (`createCalendar`/`deleteCalendar`/`insertEvent`/`patchEvent`/
+> `deleteEvent`). Unit-tested in `functions/test/gcal.test.mjs` (12 cases, green — 89 unit total). **Still
+> to build:** the `gcalAuthStart`/`gcalAuthCallback`/`gcalDisconnect` CFs, the `onReservationWriteSyncGcal`
+> trigger, backfill, `config/gcalSync` rules, and the Settings UI — all deploy-blocked on Phase 0.
+
 ### Phase 3 — Hardening + UX honesty
 Token-refresh failure → mark `connected:false` + `lastError` + Sentry + a Settings banner ("Reconnect
 Google Calendar"). Backoff on 429/5xx; idempotent upserts. Update Help + What's New: the feed is now
