@@ -437,18 +437,48 @@ export function HelpPage({ onBack }) {
           {/* RESERVATIONS                         */}
           {/* ──────────────────────────────────── */}
           <Section id="reservations" icon="📅" title="Reservations">
-            <P>Let your team request items in advance. Admins and managers approve or deny requests.</P>
+            <P>Reserve two kinds of things in advance: <strong>Equipment</strong> (an inventory item) and <strong>Spaces</strong> (a room or area). Your team requests them; admins and managers approve or deny. You'll find it under <strong>Hubs → Reservations Hub</strong>.</P>
 
-            <Accordion title="Creating a reservation" defaultOpen>
-              <P>Click <strong>+ Reserve</strong>. Select the item, dates, purpose, and requester. For recurring needs, enable <strong>Repeat</strong> and choose weekly, biweekly, or monthly with an end date — the app shows a live count of instances before you save.</P>
+            <Accordion title="Setting up your Spaces (rooms) — do this first" defaultOpen badge="Admin / Manager">
+              <P>Before anyone can reserve a room, an admin or manager has to define your church's spaces. If the booking screen says <em>"No spaces defined yet,"</em> that's this step.</P>
+              <UL items={[
+                'Go to Settings (top navigation), then find the 🏛️ Spaces card',
+                'Click Manage Spaces',
+                'Fill in the space — only Name is required:',
+              ]} />
+              <UL items={[
+                'Name — e.g. "Sanctuary", "Fellowship Hall", "Room 5" (required)',
+                'Capacity — max occupancy (optional); shown next to the name when booking',
+                'Location — e.g. "Main Building", "Annex" (optional)',
+                'Description — a short note about the space (optional)',
+                'Amenities — comma-separated, e.g. "Projector, Sound System, Whiteboard" (optional)',
+              ]} />
+              <P>Click <strong>Add Space</strong> and repeat for each room. Spaces can be edited or removed from the same Manage Spaces window — removing a space is a soft-archive, so it stops showing up in new bookings without disturbing past reservations.</P>
+              <Note>Only admins and managers can create or edit spaces. Everyone else can reserve them.</Note>
+            </Accordion>
+
+            <Accordion title="Reserving a space or piece of equipment" defaultOpen>
+              <P>In the Reservations Hub, click <strong>+ New Reservation</strong>, then pick <strong>📦 Equipment</strong> or <strong>🏛️ Space</strong> at the top of the form. Enter the event/purpose, ministry, and date(s). For recurring needs, turn on <strong>Repeat this reservation</strong> and choose a frequency and end date — the form shows a live count of how many will be created.</P>
+            </Accordion>
+
+            <Accordion title="Booking a room by time of day" badge="New">
+              <P>Space reservations can have a <strong>start and end time</strong>, not just a date — so you can book the same room for a morning event <em>and</em> an evening event on the same day. When you choose <strong>🏛️ Space</strong>, set the Start time and End time, or check <strong>All day</strong> to hold the room for the whole day.</P>
+              <UL items={[
+                'ChurchOpsHub checks for conflicts automatically — two groups cannot book the same space for the same time. You\'ll see a message telling you what it conflicts with.',
+                'Back-to-back bookings are fine (one ending at 12:00 and another starting at 12:00 do not conflict).',
+                'An "All day" booking holds the room for that whole day, so nothing else can be booked that day.',
+                'Multi-day bookings (a different return date) are treated as all-day for the whole span — useful for a lock-in or camp.',
+                'Equipment reservations stay date-based (no time of day).',
+              ]} />
+              <Tip>Times also flow into the calendar feed, so a room booked 9–11am shows at the right time when you subscribe to the calendar in Google or Apple Calendar (see Settings → Calendar Feed).</Tip>
             </Accordion>
 
             <Accordion title="Approving and denying">
-              <P>Pending reservations show in the Reservations tab. Admins and managers can approve (which checks the item out) or deny. If EmailJS is configured (Coordination Hub), the requester receives an automatic email notification.</P>
+              <P>Pending reservations show in the Reservations Hub. Admins and managers can approve or deny. For equipment, approving lets you check the item out; for a space, you can mark the booking complete when it's done. When email notifications are on, the requester is notified automatically of the decision.</P>
             </Accordion>
 
             <Accordion title="Recurring reservations">
-              <P>All instances in a recurring series are linked via a <em>recurrence group ID</em>. They display with a recurring badge. Cancelling one instance does not affect the others.</P>
+              <P>All instances in a recurring series are linked together and display with a recurring badge. Each occurrence is conflict-checked when you create the series, so the app warns you if any date (or time, for a room) is already taken. Cancelling one instance does not affect the others.</P>
             </Accordion>
           </Section>
 
@@ -961,6 +991,11 @@ export function HelpPage({ onBack }) {
 
             <Accordion title="Locations, Ministries, and Tags" defaultOpen>
               <P>Manage these dropdown lists in Settings. Admins and managers can add and remove entries. Changes take effect immediately across the app.</P>
+            </Accordion>
+
+            <Accordion title="Spaces (rooms you can reserve)">
+              <P>The <strong>🏛️ Spaces</strong> card in Settings is where you define the rooms and areas your team can reserve — the Sanctuary, Fellowship Hall, classrooms, and so on. Click <strong>Manage Spaces</strong>, then add each space with a name (required) and optional capacity, location, description, and amenities. Until at least one space exists, the room option in a reservation shows <em>"No spaces defined yet."</em></P>
+              <P>Admins and managers manage the list here; everyone can then reserve those spaces from the <strong>Reservations Hub</strong>. See the <strong>Reservations</strong> help section for booking, times, and conflict checking.</P>
             </Accordion>
 
             <Accordion title="Church code">
