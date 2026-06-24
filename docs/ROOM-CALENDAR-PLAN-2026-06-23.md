@@ -12,6 +12,34 @@ we own the booking intelligence underneath and publish the result to GCal.
 
 ---
 
+## ▶ STATUS (updated 2026-06-24) — read this first
+
+The per-phase detail below is the **original spec**. This block is **what actually shipped** + where
+it diverged. Prereq: the **Hub Restructure** (`docs/HUB-RESTRUCTURE-PLAN-2026-06-23.md`, commit
+`089f373`) ran first — Reservations is now a free **hub** (Hubs → Reservations Hub), not a top-tab.
+
+| Phase | Status | Commit | Notes / deviations |
+|---|---|---|---|
+| **0** — times through the pipeline | ✅ shipped | `f287df2` | `reservationsToOccurrences` (both twins) emits timed VEVENTs; date-only stays byte-parity |
+| **1** — timed booking + time-aware conflicts | ✅ shipped | `f287df2` | pure `src/utils/reservationConflict.js` (`findRoomConflict`/`effectiveWindow`) |
+| **Spaces best-practices** (extra) | ✅ shipped | `1eed963` | attendance+capacity warning, per-space approvers, blackout dates, weekly blocked hours, room photo, day-of contact. `roomUnavailability()` hard-blocks bookings in blackout/blocked windows |
+| **2** — month calendar view | ✅ shipped | `e9b863b` | `ReservationCalendar`: List\|Calendar toggle, month grid color-by-room + legend, mobile `windowGroups`, room/ministry filters. Day detail = **inline expand** (chips open the reservation), not a separate timeline panel |
+| **3a** — buffers UI + per-room color | ✅ shipped | `075c809` | tucked-away "+ Add setup/teardown time"; room defaults pre-fill; color swatch picker (calendar reads `room.color`) |
+| **3b** — series editing | ✅ shipped | `acb0b2f` | Delivered as **cancel-with-scope** (Just this one / This & future / Entire series), NOT field-editing (no single-edit flow exists to extend). **NO gcloud index needed** — reservations are fully subscribed, so `seriesCancelTargets()` filters in-memory + batches by docId |
+| **ICS feed fix** | ✅ shipped | `0d374b5` | feed excluded `'denied'` lowercase only → real `'Denied'`/`'Cancelled'` leaked into GCal; now case-insensitive, excludes both |
+| **4** — auto-approve / instant-book | ✅ shipped | `0d374b5` | church `reservationAutoApprove` (admin/mgr/approver → Approved on create) + per-space `bookingPolicy:'open'` (anyone). Conflicts+availability still enforced. `addReservation` honors `res.status` |
+| **5** — one-click "Add to Google Calendar" | ⬜ NEXT | — | Settings → Calendar Feed: a `https://calendar.google.com/calendar/r?cid=<webcal-encoded feed URL>` link beside copy-URL; honest in-app note on GCal's slow (hours) ICS refresh. Optional per-room `?room=` feed. Feed UI already exists in Settings + HelpPage |
+| **6** — cross-hub moat | ⬜ queued | — | book room → hold equipment → auto-create setup task. **Prereq: equipment is NOT tied to rooms** — converge `rooms` ↔ `settings.locations` (two parallel place-models, latent debt) |
+
+**Test/verification baseline:** 77 pure unit tests (`npm run test:unit` — `reservation-conflict.test.mjs`
++ `occurrences.test.mjs`); every phase smoke-tested via Firebase emulator + Playwright. Build + lint clean.
+All changes additive — **no Firestore rule or migration changes** across the whole effort.
+
+**Live recall:** memory `project_coh_room_calendar` (in `~/.claude/.../memory/`) holds the same status
++ the equipment-not-tied-to-rooms Phase-6 prereq. CHANGELOG has dated entries per phase.
+
+---
+
 ## Why this is mostly assembly, not new construction
 
 The expensive infrastructure already exists and is parity-tested:
