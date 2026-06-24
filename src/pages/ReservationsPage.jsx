@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useContext } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { MobileCtx } from '../hooks/useMobile.js';
 import { notify } from '../utils/notify.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../components/brand/tokens.js';
 import { Modal } from '../components/primitives/Modal.jsx';
@@ -10,13 +11,149 @@ import { exportReservationsCSV } from '../utils/csv.js';
 import { ITEM_STATUS, RES_STATUS, RESOURCE_TYPE } from '../utils/constants.js';
 import { localDateStr, generateRecurrenceDates, RECURRENCE_FREQS } from '../utils/date.js';
 import { findRoomConflict, roomUnavailability } from '../utils/reservationConflict.js';
+import { monthMatrix, windowGroups } from '../utils/calendarGrid.js';
 import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+// Stable per-room calendar palette (Phase 3 adds an editable per-room `color`;
+// until then we assign from this by room index). Equipment bookings = slate.
+const ROOM_PALETTE = ['#2A7D6E','#0D9488','#7C3AED','#D97706','#2563EB','#DC2626','#DB2777','#65A30D','#0891B2','#9333EA'];
+const EQUIP_COLOR = '#94A3B8';
+
+// ── Month-grid + mobile-list calendar for reservations (room-calendar Phase 2).
+// Mirrors JobCalendar's chrome; chips are colored by room (with a legend) and
+// open the reservation on click. Reads the already-filtered reservations.
+function ReservationCalendar({ reservations, rooms, onClick, isMobile, todayStr }) {
+  const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
+  const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
+  const [expandedDay, setExpandedDay] = useState(null);
+  const [collapsedGroups, setCollapsedGroups] = useState({});
+
+  const roomColorMap = useMemo(() => {
+    const m = new Map();
+    (rooms || []).filter(r => r.active !== false).forEach((r, i) => m.set(r._docId, r.color || ROOM_PALETTE[i % ROOM_PALETTE.length]));
+    return m;
+  }, [rooms]);
+  const colorFor = (r) => r.resourceType === 'room' ? (roomColorMap.get(r.roomDocId) || ROOM_PALETTE[0]) : EQUIP_COLOR;
+  const dimmed = (r) => r.status === 'Denied' || r.status === 'Cancelled';
+
+  const byDate = useMemo(() => {
+    const map = new Map();
+    (reservations || []).forEach(r => {
+      if (!r.eventDate) return;
+      const key = r.eventDate.slice(0, 10);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(r);
+    });
+    for (const arr of map.values()) arr.sort((a, b) => (a.startTime || '99:99').localeCompare(b.startTime || '99:99'));
+    return map;
+  }, [reservations]);
+
+  function prevMonth() { setExpandedDay(null); if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); } else setViewMonth(m => m - 1); }
+  function nextMonth() { setExpandedDay(null); if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); } else setViewMonth(m => m + 1); }
+  function goToday() { const now = new Date(); setViewYear(now.getFullYear()); setViewMonth(now.getMonth()); setExpandedDay(null); }
+
+  const calendarDays = useMemo(() => monthMatrix(viewYear, viewMonth), [viewYear, viewMonth]);
+
+  const Chip = ({ r }) => (
+    <button onClick={() => onClick(r)} title={`${r.eventName}${r.startTime ? ' · ' + r.startTime + (r.endTime ? '–' + r.endTime : '') : ''}`}
+      style={{ display:'block', width:'100%', textAlign:'left', border:'none', cursor:'pointer', background:colorFor(r)+'1F', borderLeft:'3px solid '+colorFor(r), borderRadius:4, padding:'2px 5px', marginBottom:2, fontSize:11, color:B.textDark, fontFamily:f1, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', opacity:dimmed(r)?.5:1, textDecoration:dimmed(r)?'line-through':'none' }}>
+      {r.startTime ? r.startTime + ' ' : ''}{r.eventName}
+    </button>
+  );
+
+  // Mobile: grouped list (Overdue = past + still Pending).
+  if (isMobile) {
+    const groups = windowGroups(reservations || [], { dateOf: r => r.eventDate, todayStr, now: new Date(), isOverdue: r => r.status === 'Pending' });
+    const any = (reservations || []).some(r => r.eventDate);
+    return (
+      <div>
+        {groups.map(g => g.items.length > 0 && (
+          <div key={g.label} style={{ marginBottom:20 }}>
+            <button type="button" onClick={() => setCollapsedGroups(c => ({ ...c, [g.label]: !c[g.label] }))} aria-expanded={!collapsedGroups[g.label]}
+              style={{ background:'none', border:'none', cursor:'pointer', padding:0, marginBottom:8, display:'flex', alignItems:'center', gap:6, fontFamily:f1, fontWeight:700, fontSize:13, color:g.label==='Overdue'?B.red:B.textMid, textTransform:'uppercase', letterSpacing:.8 }}>
+              <span aria-hidden="true" style={{ fontSize:10, transition:'transform .15s', transform:collapsedGroups[g.label]?'rotate(-90deg)':'none' }}>▾</span>
+              {g.label} <span style={{ fontWeight:500, color:B.textLight, letterSpacing:0 }}>({g.items.length})</span>
+            </button>
+            {!collapsedGroups[g.label] && g.items.map(r => (
+              <div key={r._docId} role="button" tabIndex={0} onClick={() => onClick(r)} onKeyDown={e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();onClick(r);} }} aria-label={r.eventName}
+                style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:10, background:B.white, border:'1px solid '+B.sand, marginBottom:6, cursor:'pointer', opacity:dimmed(r)?.6:1 }}>
+                <span style={{ width:8, height:8, borderRadius:'50%', background:colorFor(r), flexShrink:0 }}/>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:14, fontWeight:600, color:B.navy, fontFamily:f1 }}>{r.eventName}</div>
+                  <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>{r.eventDate}{r.startTime ? ' · '+r.startTime+(r.endTime?'–'+r.endTime:'') : ''} · {r.resourceType==='room' ? (r.roomName||'Space') : (r.itemDesc||'Equipment')}</div>
+                </div>
+                <span style={{ fontSize:11, color:B.textLight, fontFamily:f1 }}>{r.status}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+        {!any && <div style={{ textAlign:'center', color:B.textLight, fontSize:14, padding:32 }}>No reservations with dates.</div>}
+      </div>
+    );
+  }
+
+  // Desktop: month grid + legend.
+  const legendRooms = (rooms || []).filter(r => r.active !== false);
+  const hasEquip = (reservations || []).some(r => r.resourceType !== 'room' && r.eventDate);
+  const CHIP_LIMIT = 3;
+  return (
+    <div>
+      <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14, flexWrap:'wrap' }}>
+        <button onClick={prevMonth} aria-label="Previous month" style={{ ...btnS, padding:'6px 12px', fontSize:16, lineHeight:1 }}>‹</button>
+        <span style={{ fontFamily:f1, fontWeight:700, fontSize:18, color:B.navy, minWidth:190, textAlign:'center' }}>{MONTH_NAMES[viewMonth]} {viewYear}</span>
+        <button onClick={nextMonth} aria-label="Next month" style={{ ...btnS, padding:'6px 12px', fontSize:16, lineHeight:1 }}>›</button>
+        <button onClick={goToday} style={{ ...btnS, padding:'6px 14px', fontSize:13, marginLeft:4 }}>Today</button>
+      </div>
+      {(legendRooms.length > 0 || hasEquip) && (
+        <div style={{ display:'flex', flexWrap:'wrap', gap:'6px 14px', marginBottom:12 }}>
+          {legendRooms.map(r => (
+            <span key={r._docId} style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:12, color:B.textMid, fontFamily:f1 }}>
+              <span style={{ width:10, height:10, borderRadius:3, background:roomColorMap.get(r._docId) }}/>{r.name}
+            </span>
+          ))}
+          {hasEquip && <span style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:12, color:B.textMid, fontFamily:f1 }}><span style={{ width:10, height:10, borderRadius:3, background:EQUIP_COLOR }}/>Equipment</span>}
+        </div>
+      )}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', gap:2, marginBottom:2 }}>
+        {DAY_NAMES.map(d => <div key={d} style={{ textAlign:'center', fontSize:12, fontWeight:700, color:B.textLight, fontFamily:f1, padding:'4px 0', textTransform:'uppercase', letterSpacing:.6 }}>{d}</div>)}
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', gap:2 }}>
+        {calendarDays.map((day, idx) => {
+          const ds = localDateStr(day.date);
+          const items = byDate.get(ds) || [];
+          const isToday = ds === todayStr;
+          const isExpanded = expandedDay === ds;
+          const visible = items.slice(0, CHIP_LIMIT);
+          const overflow = items.length - CHIP_LIMIT;
+          return (
+            <div key={idx} style={{ minHeight:88, background:day.isCurrentMonth?B.white:'#F8F8FA', borderRadius:8, border:'1px solid '+(isToday?B.teal:B.sand), padding:'5px 6px', outline:isToday?'2px solid '+B.teal:'none', outlineOffset:'-1px' }}>
+              <div style={{ fontSize:12, fontWeight:isToday?800:500, color:isToday?B.teal:day.isCurrentMonth?B.textDark:B.textLight, fontFamily:f1, marginBottom:3, textAlign:'right' }}>{day.date.getDate()}</div>
+              {(isExpanded ? items : visible).map(r => <Chip key={r._docId} r={r}/>)}
+              {!isExpanded && overflow > 0 && (
+                <button onClick={() => setExpandedDay(ds)} aria-label={`Show all ${items.length} reservations on ${ds}`} style={{ background:'none', border:'none', cursor:'pointer', fontSize:11, color:B.teal, fontWeight:700, fontFamily:f1, textAlign:'center', marginTop:2, padding:0, width:'100%' }}>+{overflow} more</button>
+              )}
+              {isExpanded && overflow > 0 && (
+                <button onClick={() => setExpandedDay(null)} aria-label="Collapse day" style={{ background:'none', border:'none', cursor:'pointer', fontSize:11, color:B.textLight, fontFamily:f1, textAlign:'center', marginTop:2, padding:0, width:'100%' }}>Show less</button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export function ReservationsPage({ store, userProfile }) {
   const { items, settings, reservations, users, rooms, notificationConfig, config, addReservation, updateReservation, checkOutItem, logActivity } = store;
   const activeItems = useMemo(() => items.filter(i => i.status !== ITEM_STATUS.DISPOSED), [items]);
   const activeRooms = useMemo(() => (rooms || []).filter(r => r.active !== false), [rooms]);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('res_viewMode') || 'list');
+  function setViewModePersisted(v) { setViewMode(v); localStorage.setItem('res_viewMode', v); }
+  const [roomFilter, setRoomFilter] = useState("all");
+  const [ministryFilter, setMinistryFilter] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -29,6 +166,7 @@ export function ReservationsPage({ store, userProfile }) {
   const isManager = userProfile?.role === "manager";
   const managedMinistries = userProfile?.managedMinistries || [];
   const ministries = settings?.ministries || [];
+  const isMobile = useContext(MobileCtx);
 
   function canApproveReservation(r) {
     if (isAdmin) return true;
@@ -70,8 +208,10 @@ export function ReservationsPage({ store, userProfile }) {
   const filtered = useMemo(() =>
     reservations
       .filter(r => statusFilter === "all" || r.status === statusFilter)
+      .filter(r => roomFilter === "all" || r.roomDocId === roomFilter)
+      .filter(r => ministryFilter === "all" || r.ministry === ministryFilter)
       .sort((a,b) => (b.createdAt||"").localeCompare(a.createdAt||"")),
-    [reservations, statusFilter]
+    [reservations, statusFilter, roomFilter, ministryFilter]
   );
 
   async function sendReservationEmail(requesterEmail, requesterName, status, params) {
@@ -302,6 +442,33 @@ export function ReservationsPage({ store, userProfile }) {
         <Stat label="Total" value={reservations.length} icon="📅"/>
       </div>
 
+      {/* View toggle + room/ministry filters */}
+      <div style={{ display:"flex", gap:10, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
+        <div style={{ display:"inline-flex", gap:4, background:B.warmGray, padding:4, borderRadius:10 }}>
+          {[["list","☰ List"],["calendar","📅 Calendar"]].map(([v,label]) => (
+            <button key={v} onClick={()=>setViewModePersisted(v)}
+              style={{ padding:"7px 14px", border:"none", borderRadius:8, cursor:"pointer", fontFamily:f1, fontSize:13, fontWeight:700, background:viewMode===v?B.white:"transparent", color:viewMode===v?B.teal:B.textMid, boxShadow:viewMode===v?"0 1px 4px rgba(27,42,74,0.12)":"none" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {activeRooms.length > 0 && (
+          <select aria-label="Filter by space" style={{ ...inp, width:"auto", cursor:"pointer", marginBottom:0 }} value={roomFilter} onChange={e=>setRoomFilter(e.target.value)}>
+            <option value="all">All spaces</option>
+            {activeRooms.map(r => <option key={r._docId} value={r._docId}>{r.name}</option>)}
+          </select>
+        )}
+        {ministries.length > 0 && (
+          <select aria-label="Filter by ministry" style={{ ...inp, width:"auto", cursor:"pointer", marginBottom:0 }} value={ministryFilter} onChange={e=>setMinistryFilter(e.target.value)}>
+            <option value="all">All ministries</option>
+            {ministries.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        )}
+        {(roomFilter !== "all" || ministryFilter !== "all") && (
+          <button onClick={()=>{setRoomFilter("all");setMinistryFilter("all");}} style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:13, fontWeight:600, fontFamily:f1 }}>Clear filters</button>
+        )}
+      </div>
+
       {/* Success message */}
       {msg && (
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError?'#FEE8E8':B.tealPale, border:`1px solid ${msg.isError?'#FECACA':B.tealLight}`, borderRadius:10, padding:"10px 16px", marginBottom:16, fontSize:14, fontWeight:600, color:msg.isError?B.red:B.teal }}>
@@ -321,8 +488,10 @@ export function ReservationsPage({ store, userProfile }) {
         ))}
       </div>
 
-      {/* Reservation Cards */}
-      {filtered.length === 0 ? (
+      {/* Body: calendar or list */}
+      {viewMode === 'calendar' ? (
+        <ReservationCalendar reservations={filtered} rooms={activeRooms} onClick={setShowDetail} isMobile={isMobile} todayStr={today} />
+      ) : filtered.length === 0 ? (
         <div style={{ background:B.white, borderRadius:18, padding:"48px 32px", border:"1px solid "+B.sand, textAlign:"center" }}>
           <div style={{ fontSize:40, marginBottom:12 }}>📅</div>
           <p style={{ color:B.textLight, fontSize:15 }}>{statusFilter === "all" ? (isAdmin || isManager ? "No reservations yet. Create one to get started!" : "No reservations yet.") : "No "+statusFilter.toLowerCase()+" reservations."}</p>

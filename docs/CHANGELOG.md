@@ -4,6 +4,18 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-24 — Room calendar Phase 2: month calendar view
+
+`List | Calendar` toggle on the Reservations Hub (`docs/ROOM-CALENDAR-PLAN-2026-06-23.md`).
+
+- New `ReservationCalendar` component in `ReservationsPage.jsx` (mirrors `JobCalendar`): month grid via the shared `monthMatrix`; chips **color-coded by space** (stable `ROOM_PALETTE` by room index until Phase 3's editable per-room `color`; equipment = slate) with a **legend**; expandable days (`+N more`); chips open the reservation detail; Denied/Cancelled chips dimmed + struck. **Mobile** = `windowGroups` grouped list (Overdue = past + still Pending / This Week / Next 30 / Later), matching the Jobs calendar.
+- **Filters:** room + ministry dropdowns added; together with the existing status pills they apply to **both** views (the `filtered` memo now filters status + room + ministry). `viewMode` persists in `localStorage.res_viewMode`.
+- No schema/rule changes — pure view layer over the already-subscribed `reservations`/`rooms`.
+- **Verified:** build + lint clean; emulator + Playwright smoke — toggle both directions, month grid + weekday headers + nav + Today render, both seeded reservations show as chips, a chip opens the detail modal, and the List view restores its cards.
+- **Next:** Phase 3 (setup/teardown buffer UI + editable per-room calendar color, into the Manage Spaces modal); the calendar already reads a room's `color` when present.
+
+---
+
 ## 2026-06-23 — Spaces best-practices pass: richer config + better booking data
 
 Acted on a best-practices review of what we collect for spaces/bookings. Five gaps closed (plan context in `docs/ROOM-CALENDAR-PLAN-2026-06-23.md`).

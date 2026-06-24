@@ -469,6 +469,10 @@ export function HelpPage({ onBack }) {
               <P>For a <strong>space</strong>, you can also record the <strong>expected attendance</strong> and a <strong>day-of contact</strong> name and phone. If the attendance is larger than the room's capacity, you'll get a gentle heads-up — it won't stop you, it just flags it so you can plan overflow seating or pick a bigger room.</P>
             </Accordion>
 
+            <Accordion title="List view vs. Calendar view">
+              <P>Use the <strong>☰ List / 📅 Calendar</strong> toggle at the top of the Reservations Hub to switch how you see bookings. <strong>Calendar</strong> shows a month grid with every booking on its day, color-coded by space (there's a legend), and you can page between months or jump to Today — click any booking to open it. <strong>List</strong> shows the familiar cards. You can filter either view by <strong>space</strong>, <strong>ministry</strong>, or status. On a phone, the calendar becomes a tidy grouped list (This Week / Next 30 Days / Later).</P>
+            </Accordion>
+
             <Accordion title="Booking a room by time of day" badge="New">
               <P>Space reservations can have a <strong>start and end time</strong>, not just a date — so you can book the same room for a morning event <em>and</em> an evening event on the same day. When you choose <strong>🏛️ Space</strong>, set the Start time and End time, or check <strong>All day</strong> to hold the room for the whole day.</P>
               <UL items={[

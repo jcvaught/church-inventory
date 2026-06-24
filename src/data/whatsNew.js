@@ -4,6 +4,12 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-06-24',
+    tag: 'New',
+    title: 'See your reservations on a calendar',
+    body: "The Reservations Hub now has a Calendar view — flip between ☰ List and 📅 Calendar at the top. The month grid shows every booking on its day, color-coded by space with a legend, so you can see what's happening and where at a glance. Click any booking to open it, page between months, and filter by space or ministry. On your phone it becomes a clean grouped list (This Week / Next 30 Days / Later).",
+  },
+  {
     date: '2026-06-23',
     tag: 'New',
     title: 'Smarter spaces: photos, approvers, blackout dates & blocked hours',
