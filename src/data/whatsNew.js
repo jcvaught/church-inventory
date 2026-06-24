@@ -6,6 +6,12 @@ export const WHATS_NEW = [
   {
     date: '2026-06-24',
     tag: 'New',
+    title: 'Reserve equipment & create a setup task right from a booking',
+    body: "Open any room booking and you'll see a new \"For this event\" section. Hold the equipment you'll need (the projector, the sound cart) so it's reserved for that date and linked to the booking — equipment kept in that space is starred to make it quick. And create a setup task in one click: it lands on your Work board, pre-filled and due the day of the event, so nothing falls through the cracks. Book the gym, hold the projector, and the setup task is ready — all from one place.",
+  },
+  {
+    date: '2026-06-24',
+    tag: 'New',
     title: 'One-click "Add to Google Calendar"',
     body: "Subscribing to your church calendar feed is now one click. In Settings → Calendar Feed, hit \"Add to Google Calendar\" and your shifts, reservations, and maintenance flow straight into Google Calendar (copy the link for Apple Calendar or Outlook). Want to follow just one room? Edit a space in Manage Spaces and grab its own subscribe link — perfect for a ministry that only cares about the gym or the fellowship hall. Heads up: Google and Apple refresh subscribed feeds on their own schedule (often a few hours), so for the live picture, open ChurchOpsHub directly.",
   },

@@ -691,6 +691,7 @@ export function useFirestore(churchId) {
       const photoUrls = typeof task === 'object' ? (task?.photos || []) : [];
       const linkedJobDocId = typeof task === 'object' ? task?.linkedJobDocId : null;
       const linkedTicketDocId = typeof task === 'object' ? task?.linkedTicketDocId : null;
+      const linkedReservationDocId = typeof task === 'object' ? task?.linkedReservationDocId : null;
       const taskRef = taskDocRef(churchId, docId);
       const commentsSnap = await getDocs(collection(taskRef, 'comments'));
       const batch = writeBatch(db);
@@ -707,6 +708,9 @@ export function useFirestore(churchId) {
       }
       if (linkedTicketDocId) {
         updateDoc(ticketDocRef(churchId, linkedTicketDocId), { linkedTaskDocId: null }).catch(() => {});
+      }
+      if (linkedReservationDocId) {
+        updateDoc(doc(db, 'churches', churchId, 'reservations', linkedReservationDocId), { linkedSetupTaskDocId: null }).catch(() => {});
       }
       if (userId) await logActivity('delete_task', taskNumber, userId, userName, {});
     } catch (err) { handleErr(err); throw err; }

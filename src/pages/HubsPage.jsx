@@ -160,7 +160,7 @@ const UPGRADE_PREVIEWS = {
 function HubContent({ hubKey, store, userProfile, jobsInitialView, isElder, userCanSeeHub, initialItemId, scannedItemId, onScannedItemConsumed }) {
   let page = null;
   if (hubKey === 'inventory') page = <InventoryPage store={store} userProfile={userProfile} initialItemId={initialItemId} scannedItemId={scannedItemId} onScannedItemConsumed={onScannedItemConsumed} />;
-  else if (hubKey === 'reservations') page = <ReservationsPage store={store} userProfile={userProfile} />;
+  else if (hubKey === 'reservations') page = <ReservationsPage store={store} userProfile={userProfile} userCanSeeHub={userCanSeeHub} />;
   else if (hubKey === 'insights') page = <InsightsPage store={store} userProfile={userProfile} />;
   else if (hubKey === 'work') page = <WorkPage store={store} userProfile={userProfile} userCanSeeHub={userCanSeeHub} />;
   else if (hubKey === 'maintenance') page = <WorkBoard store={store} userProfile={userProfile} type="maintenance" />;

@@ -145,8 +145,9 @@ function ReservationCalendar({ reservations, rooms, onClick, isMobile, todayStr 
   );
 }
 
-export function ReservationsPage({ store, userProfile }) {
-  const { items, settings, reservations, users, rooms, notificationConfig, config, addReservation, updateReservation, checkOutItem, logActivity } = store;
+export function ReservationsPage({ store, userProfile, userCanSeeHub }) {
+  const { items, settings, reservations, users, rooms, tasks, notificationConfig, config, addReservation, updateReservation, checkOutItem, addTask, logActivity } = store;
+  const canUseTasks = typeof userCanSeeHub === 'function' ? userCanSeeHub('tasks') : true;
   const activeItems = useMemo(() => items.filter(i => i.status !== ITEM_STATUS.DISPOSED), [items]);
   const activeRooms = useMemo(() => (rooms || []).filter(r => r.active !== false), [rooms]);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -192,6 +193,110 @@ export function ReservationsPage({ store, userProfile }) {
   const [recurrenceEnd, setRecurrenceEnd] = useState("");
 
   function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
+
+  // ── Phase 6: cross-hub moat — equipment holds + setup task off a room booking ──
+  const [eqHoldRes, setEqHoldRes] = useState(null);      // room booking we're holding equipment for
+  const [eqHoldItem, setEqHoldItem] = useState("");      // chosen item docId
+  const [eqHoldErr, setEqHoldErr] = useState("");
+  const [eqHoldSaving, setEqHoldSaving] = useState(false);
+  const [setupRes, setSetupRes] = useState(null);        // room booking we're creating a setup task for
+  const [setupForm, setSetupForm] = useState({ name:"", dueDate:"", description:"" });
+  const [setupSaving, setSetupSaving] = useState(false);
+
+  // Active equipment holds linked to a given room booking (excludes denied/cancelled).
+  function heldEquipmentFor(res) {
+    if (!res?._docId) return [];
+    return reservations.filter(r =>
+      r.linkedReservationDocId === res._docId &&
+      r.resourceType === RESOURCE_TYPE.ITEM &&
+      r.status !== RES_STATUS.DENIED && r.status !== RES_STATUS.CANCELLED
+    );
+  }
+  // The setup task linked to a room booking, if it still exists.
+  function linkedSetupTask(res) {
+    if (!res?.linkedSetupTaskDocId) return null;
+    return (tasks || []).find(t => t._docId === res.linkedSetupTaskDocId) || null;
+  }
+  // Items sorted so equipment whose free-text location matches the room (name or
+  // its own location) floats to the top — a soft suggestion, no hard FK.
+  function itemsForRoomHold(res) {
+    const room = (rooms || []).find(rm => rm._docId === res?.roomDocId);
+    const keys = [room?.name, room?.location].filter(Boolean).map(s => String(s).toLowerCase().trim());
+    const heldIds = new Set(heldEquipmentFor(res).map(h => h.itemDocId));
+    return activeItems
+      .filter(i => !heldIds.has(i._docId))
+      .map(i => ({ i, match: keys.some(k => k && String(i.location || '').toLowerCase().trim() === k) }))
+      .sort((a, b) => (b.match - a.match) || String(a.i.description||'').localeCompare(String(b.i.description||'')));
+  }
+
+  function openEqHold(res) { setEqHoldRes(res); setEqHoldItem(""); setEqHoldErr(""); }
+  async function handleReserveEquipment() {
+    if (!eqHoldRes || !eqHoldItem) return;
+    const item = activeItems.find(i => i._docId === eqHoldItem);
+    if (!item) return;
+    const eventDate = eqHoldRes.eventDate;
+    const returnDate = eqHoldRes.returnDate || "";
+    // Reuse the same item date-overlap conflict guard as the main add flow.
+    const conflict = reservations.find(r => {
+      if (r.itemDocId !== eqHoldItem) return false;
+      if (r.status !== RES_STATUS.PENDING && r.status !== RES_STATUS.APPROVED) return false;
+      const bStart = r.eventDate, bEnd = r.returnDate || r.eventDate;
+      return eventDate <= bEnd && (returnDate || eventDate) >= bStart;
+    });
+    if (conflict) {
+      setEqHoldErr(`"${item.description}" is already reserved for "${conflict.eventName}" (${conflict.status}) on ${conflict.eventDate}${conflict.returnDate && conflict.returnDate !== conflict.eventDate ? " – "+conflict.returnDate : ""}.`);
+      return;
+    }
+    // A coordinator placing a hold off an existing booking can approve it anyway,
+    // so admins/managers create it Approved; a member's hold stays Pending.
+    const autoApprove = isAdmin || isManager;
+    setEqHoldSaving(true);
+    try {
+      await addReservation({
+        resourceType: RESOURCE_TYPE.ITEM,
+        itemDocId: item._docId,
+        itemId: item.itemId,
+        itemDesc: item.description,
+        eventName: eqHoldRes.eventName,
+        eventDate,
+        returnDate,
+        purpose: eqHoldRes.purpose || "",
+        ministry: eqHoldRes.ministry || "",
+        notes: `For: ${eqHoldRes.eventName}${eqHoldRes.roomName ? ` (${eqHoldRes.roomName})` : ""}`,
+        linkedReservationDocId: eqHoldRes._docId,
+        ...(autoApprove ? { status: RES_STATUS.APPROVED, approvedBy: userId, approvedByName: userName, approvedAt: new Date().toISOString() } : {}),
+      }, userId, userName);
+      setEqHoldRes(null); setEqHoldItem("");
+      flash(autoApprove ? "Equipment reserved for this event." : "Equipment requested for this event.");
+    } catch { setEqHoldErr("Could not reserve that equipment. Try again."); }
+    setEqHoldSaving(false);
+  }
+
+  function openSetupTask(res) {
+    setSetupForm({ name: `Setup: ${res.eventName}`, dueDate: res.eventDate || "", description: res.roomName ? `Set up ${res.roomName} for ${res.eventName}.` : "" });
+    setSetupRes(res);
+  }
+  async function handleCreateSetupTask() {
+    if (!setupRes || !setupForm.name.trim()) return;
+    setSetupSaving(true);
+    try {
+      const taskDocId = await addTask({
+        name: setupForm.name.trim(),
+        dueDate: setupForm.dueDate || "",
+        description: setupForm.description || "",
+        priority: "High",
+        ministry: setupRes.ministry || "",
+        linkedReservationDocId: setupRes._docId,
+      }, userId, userName);
+      if (taskDocId) {
+        await updateReservation(setupRes._docId, { linkedSetupTaskDocId: taskDocId });
+        setShowDetail(prev => prev && prev._docId === setupRes._docId ? { ...prev, linkedSetupTaskDocId: taskDocId } : prev);
+      }
+      setSetupRes(null);
+      flash("Setup task created.");
+    } catch { flash("Could not create the setup task.", true); }
+    setSetupSaving(false);
+  }
 
   const statusMap = {
     Pending:   { bg:"#FFF8E1", tx:"#96750E", dt:B.gold,    icon:"⏳" },
@@ -792,6 +897,54 @@ export function ReservationsPage({ store, userProfile }) {
                 Denied by <span style={{ fontWeight:600 }}>{r.deniedByName}</span> on {r.deniedAt ? new Date(r.deniedAt).toLocaleDateString() : "—"}
               </div>
             )}
+            {/* For this event (Phase 6 cross-hub): equipment holds + setup task */}
+            {r.resourceType === RESOURCE_TYPE.ROOM && r.status !== RES_STATUS.DENIED && r.status !== RES_STATUS.CANCELLED && (() => {
+              const held = heldEquipmentFor(r);
+              const setupTask = linkedSetupTask(r);
+              const canCoordinate = isAdmin || isManager || r.requestedBy === userId;
+              return (
+                <div style={{ border:"1px solid "+B.sand, borderRadius:12, padding:"14px 16px", marginBottom:20 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:12 }}>For this event</div>
+                  {/* Equipment */}
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:B.navy, marginBottom:6 }}>Equipment</div>
+                    {held.length > 0 ? (
+                      <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom: canCoordinate ? 10 : 0 }}>
+                        {held.map(h => (
+                          <div key={h._docId} style={{ display:"flex", alignItems:"center", gap:10, fontSize:14, flexWrap:"wrap" }}>
+                            <button onClick={()=>setShowDetail(h)} style={{ background:"none", border:"none", padding:0, color:B.teal, cursor:"pointer", fontWeight:600, fontFamily:f2 }}>{h.itemDesc}</button>
+                            <ResBadge status={h.status}/>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize:13, color:B.textLight, marginBottom: canCoordinate ? 10 : 0 }}>No equipment held yet.</div>
+                    )}
+                    {canCoordinate && <button onClick={()=>openEqHold(r)} style={{ ...btnS, fontSize:13, padding:"7px 14px" }}>+ Reserve equipment</button>}
+                  </div>
+                  {/* Setup task */}
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:B.navy, marginBottom:6 }}>Setup task</div>
+                    {r.linkedSetupTaskDocId ? (
+                      setupTask ? (
+                        <div style={{ fontSize:14 }}>
+                          <span style={{ fontFamily:"monospace", color:B.textMid, marginRight:8 }}>{setupTask.taskNumber}</span>
+                          {setupTask.name}{setupTask.status ? <span style={{ color:B.textLight }}> — {setupTask.status}</span> : null}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize:13, color:B.textLight }}>Linked setup task — open the Work board to view.</div>
+                      )
+                    ) : canCoordinate ? (
+                      canUseTasks
+                        ? <button onClick={()=>openSetupTask(r)} style={{ ...btnS, fontSize:13, padding:"7px 14px" }}>+ Create setup task</button>
+                        : <div style={{ fontSize:12, color:B.textLight }}>Add the Tasks hub to auto-create setup tasks from a booking.</div>
+                    ) : (
+                      <div style={{ fontSize:13, color:B.textLight }}>None.</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
             {/* Actions */}
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end", flexWrap:"wrap" }}>
               {!r.recurrenceGroupId && r.status === RES_STATUS.PENDING && (r.requestedBy === userId || isAdmin) && (
@@ -822,6 +975,50 @@ export function ReservationsPage({ store, userProfile }) {
             </div>
           </>;
         })()}
+      </Modal>
+
+      {/* ═══ RESERVE EQUIPMENT FOR EVENT (Phase 6) ═══ */}
+      <Modal open={!!eqHoldRes} onClose={()=>setEqHoldRes(null)} title="Reserve equipment for this event">
+        {eqHoldRes && (<>
+          <div style={{ fontSize:13, color:B.textMid, marginBottom:14 }}>
+            Hold a piece of equipment for <strong>{eqHoldRes.eventName}</strong> on {formatDate(eqHoldRes.eventDate)}{eqHoldRes.returnDate && eqHoldRes.returnDate !== eqHoldRes.eventDate ? ` – ${formatDate(eqHoldRes.returnDate)}` : ""}. It's linked to this booking and shows up here. ⭐ marks equipment kept in this space.
+          </div>
+          <FF label="Equipment" required>
+            <select autoFocus style={{...inp, cursor:"pointer"}} value={eqHoldItem} onChange={e=>{ setEqHoldItem(e.target.value); setEqHoldErr(""); }}>
+              <option value="">Select equipment…</option>
+              {itemsForRoomHold(eqHoldRes).map(({ i, match }) => (
+                <option key={i._docId} value={i._docId}>{i.description}{i.location ? ` — ${i.location}` : ""}{match ? " ⭐" : ""}</option>
+              ))}
+            </select>
+          </FF>
+          {eqHoldErr && <div style={{ background:B.redPale, border:"1px solid #FECACA", borderRadius:10, padding:"10px 14px", marginBottom:12, fontSize:13, color:B.red }}>{eqHoldErr}</div>}
+          <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+            <button onClick={()=>setEqHoldRes(null)} style={btnS}>Cancel</button>
+            <button onClick={handleReserveEquipment} disabled={!eqHoldItem || eqHoldSaving} style={{ ...btnP, opacity:(!eqHoldItem||eqHoldSaving)?.5:1 }}>{eqHoldSaving ? "Reserving…" : "Reserve"}</button>
+          </div>
+        </>)}
+      </Modal>
+
+      {/* ═══ CREATE SETUP TASK (Phase 6) ═══ */}
+      <Modal open={!!setupRes} onClose={()=>setSetupRes(null)} title="Create setup task">
+        {setupRes && (<>
+          <div style={{ fontSize:13, color:B.textMid, marginBottom:14 }}>
+            Adds a task to the Work board, linked to this booking. Defaults to the event date — change it if you set up the day before.
+          </div>
+          <FF label="Task name" required>
+            <input style={inp} value={setupForm.name} onChange={e=>setSetupForm(f=>({...f, name:e.target.value}))} placeholder="Setup: …"/>
+          </FF>
+          <FF label="Due date">
+            <input type="date" style={inp} value={setupForm.dueDate} onChange={e=>setSetupForm(f=>({...f, dueDate:e.target.value}))}/>
+          </FF>
+          <FF label="Details">
+            <textarea style={{...inp, minHeight:60, resize:"vertical"}} value={setupForm.description} onChange={e=>setSetupForm(f=>({...f, description:e.target.value}))}/>
+          </FF>
+          <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+            <button onClick={()=>setSetupRes(null)} style={btnS}>Cancel</button>
+            <button onClick={handleCreateSetupTask} disabled={!setupForm.name.trim() || setupSaving} style={{ ...btnP, opacity:(!setupForm.name.trim()||setupSaving)?.5:1 }}>{setupSaving ? "Creating…" : "Create task"}</button>
+          </div>
+        </>)}
       </Modal>
 
       {/* ═══ RECURRING-SERIES CANCEL SCOPE ═══ */}

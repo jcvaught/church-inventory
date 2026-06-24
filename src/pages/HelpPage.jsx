@@ -503,6 +503,15 @@ export function HelpPage({ onBack }) {
               <P>All instances in a recurring series are linked together and display with a recurring badge. Each occurrence is conflict-checked when you create the series, so the app warns you if any date (or time, for a room) is already taken.</P>
               <P>To cancel part of a series, open any occurrence and choose <strong>Cancel…</strong> — you'll pick the scope: <strong>just this one</strong> (skip a single week), <strong>this and all future</strong> (end the series early), or the <strong>entire series</strong>. The app shows how many bookings each choice affects before you confirm.</P>
             </Accordion>
+
+            <Accordion title="Equipment & setup tasks for an event">
+              <P>Open a room booking and use the <strong>For this event</strong> section to line up everything the event needs in one place:</P>
+              <UL items={[
+                'Reserve equipment — hold an item (projector, sound cart, etc.) for the same date as the booking. It’s linked to the event and listed right there. Equipment whose location matches the space is starred (⭐) to make it quick to find.',
+                'Create setup task — adds a task to your Work board, pre-filled (“Setup: <event name>”) and due the event date. Change the due date if you set up the day before. (Requires the Tasks hub.)',
+              ]} />
+              <P>So a single booking can carry its room, its equipment, and its setup task together — book the gym, hold the projector, and the setup task is ready to assign.</P>
+            </Accordion>
           </Section>
 
           {/* ──────────────────────────────────── */}

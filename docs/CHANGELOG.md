@@ -4,6 +4,22 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-24 — Room calendar Phase 6: cross-hub moat (book room → hold equipment + create setup task)
+
+The differentiator — a booking that knows what the *event* needs, which neither Google Calendar nor PCO ties together. Built on existing collections; **no data migration**.
+
+- **Key finding:** the long-flagged "equipment is NOT tied to rooms" prerequisite turned out **not to block the moat**. Holding equipment for an event = creating a linked **equipment reservation** (the `resourceType:'item'` path already exists); the setup task = a linked **`workItem`**. Neither needs an item↔room foreign key. The full `rooms`↔`settings.locations` convergence is deferred as separate debt (only needed for hard "what equipment lives in this room" features).
+- **"For this event" section** in the room-booking detail modal (active bookings only): lists held equipment + linked setup task, with create actions for coordinators (admin/manager/requester).
+- **Reserve equipment:** mini-modal picks an item (sorted so equipment whose free-text `location` matches the room name/location floats up with a `⭐` — a soft suggestion, no FK), reuses the same item date-overlap conflict guard as the main add flow, and creates an equipment reservation carrying `linkedReservationDocId`. Admins/managers create it `Approved` (they could approve it anyway); a member's hold stays `Pending`. Reverse display = reservations filtered by `linkedReservationDocId` (active only).
+- **Create setup task:** mini-modal pre-filled `Setup: <eventName>`, due = event date, details mention the room; creates a `workItem` (type task, High priority) with `linkedReservationDocId`, then stamps `linkedSetupTaskDocId` on the booking. Gated on tasks-hub access (`userCanSeeHub('tasks')` — passed from HubsPage); shows an upgrade hint otherwise.
+- **Backref cleanup:** `deleteTask` clears `linkedSetupTaskDocId` on the linked reservation (mirrors the existing job/ticket cleanup). Equipment holds are soft-cancelled like any reservation, so their backref is harmless and filtered out of the active list.
+- All additive — no rule/index/migration changes (reservations + workItems are open-field; the `isMember`/member-create rules already cover the new fields). `whatsNew.js` + HelpPage updated.
+- **Verified:** build + lint clean; 77 unit tests pass. **Full emulator + Playwright smoke** (admin@test.local): opened the seeded "Youth group" room booking → "For this event" rendered → reserved the Projector (created **Approved**, appeared linked) → created setup task (**TSK-005 "Setup: Youth group" — Backlog**, appeared linked). 0 app console errors (only the benign Auth-emulator token 400).
+
+**Phase 6 complete — the room-calendar initiative is fully shipped (Phases 0–6).** Deferred follow-on: the `rooms`↔`locations` data-model convergence, if/when a hard room-inventory link is wanted.
+
+---
+
 ## 2026-06-24 — Room calendar Phase 5: one-click "Add to Google Calendar" + per-room feed + GCal-refresh honesty
 
 The "either location" promise rounded out — making the existing ICS feed effortless to subscribe to and honest about its limits.
