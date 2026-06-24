@@ -494,7 +494,8 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Recurring reservations">
-              <P>All instances in a recurring series are linked together and display with a recurring badge. Each occurrence is conflict-checked when you create the series, so the app warns you if any date (or time, for a room) is already taken. Cancelling one instance does not affect the others.</P>
+              <P>All instances in a recurring series are linked together and display with a recurring badge. Each occurrence is conflict-checked when you create the series, so the app warns you if any date (or time, for a room) is already taken.</P>
+              <P>To cancel part of a series, open any occurrence and choose <strong>Cancel…</strong> — you'll pick the scope: <strong>just this one</strong> (skip a single week), <strong>this and all future</strong> (end the series early), or the <strong>entire series</strong>. The app shows how many bookings each choice affects before you confirm.</P>
             </Accordion>
           </Section>
 

@@ -4,6 +4,18 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-24 — Room calendar Phase 3b: recurring-reservation series cancel
+
+The remaining Phase 3 piece — Jobs-style series management for recurring reservations, scoped to **cancel** (reservations have no edit-fields flow to extend; cancel-with-scope is the high-value series operation and stays consistent with the existing soft `status: Cancelled`).
+
+- A recurring reservation's detail now offers **Cancel…** → a scope picker: **Just this one** (skip a week) / **This and all future** (end early) / **Entire series**, each showing how many bookings it affects. Non-recurring keeps the existing single "Cancel Request."
+- Pure `seriesCancelTargets(res, reservations, scope)` in `reservationConflict.js` ('one' = this · 'future' = this + later **active** siblings · 'all' = all active siblings; ACTIVE = Pending|Approved). **No Firestore index needed** — reservations are fully subscribed (unlike capped `jobListings`), so it filters the in-memory array and batches `updateReservation` by docId. +1 unit test (76 total).
+- Available to the requester, an approver (incl. per-space approvers), or an admin; logs a `reservation_cancelled` activity with scope + count.
+- **Verified:** build + lint clean; full Playwright E2E — created a 5-occurrence weekly series (all recurring-badged), the scope picker showed correct counts (future=1 on the last occurrence, all=5), and "Entire series" flipped all 5 to Cancelled. Help + What's New updated.
+- **Note (pre-existing, out of scope):** `reservationsToOccurrences` filters `status !== 'denied'` (lowercase) but real denials are `'Denied'`, so denied reservations leak into the ICS calendar feed. The legacy `ics.js` had the same check (byte-parity holds). A `toLowerCase()` fix is safe and tracked for a follow-up.
+
+---
+
 ## 2026-06-24 — Room calendar Phase 3a: setup/teardown buffers + per-room calendar color
 
 Buffer UI + editable per-room color (`docs/ROOM-CALENDAR-PLAN-2026-06-23.md`). The conflict engine already honored buffers (default 0); this exposes them.

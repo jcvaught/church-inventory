@@ -83,6 +83,21 @@ function eachDate(start, end) {
   return out;
 }
 
+// Which active siblings of a recurring reservation to cancel for a given scope
+// (room-calendar Phase 3b). 'one' = just this occurrence · 'future' = this +
+// later active siblings · 'all' = every active sibling. ACTIVE = Pending |
+// Approved (terminal ones are already off the calendar). Pure: filters the
+// provided array — reservations are fully subscribed, so no Firestore index.
+export function seriesCancelTargets(res, reservations, scope) {
+  if (!res) return [];
+  if (scope === 'one') return [res];
+  const active = (reservations || []).filter(x =>
+    x && x.recurrenceGroupId && x.recurrenceGroupId === res.recurrenceGroupId &&
+    (x.status === 'Pending' || x.status === 'Approved'));
+  if (scope === 'future') return active.filter(x => x.eventDate >= res.eventDate);
+  return active;
+}
+
 // Is the candidate booking blocked by the ROOM's own availability rules — a
 // blackout date or a weekly blocked window (e.g. Sunday-service hours)? Returns
 // a reason `{ date, label?, window? }` or null. Distinct from booking-vs-booking

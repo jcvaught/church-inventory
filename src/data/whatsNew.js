@@ -5,6 +5,12 @@
 export const WHATS_NEW = [
   {
     date: '2026-06-24',
+    tag: 'Improved',
+    title: 'Cancel a recurring reservation your way',
+    body: "When you cancel a reservation that's part of a recurring series, you can now choose the scope: just this one (skip a single week), this and all future ones (end the series early), or the entire series. The app tells you how many bookings each choice affects before you confirm.",
+  },
+  {
+    date: '2026-06-24',
     tag: 'New',
     title: 'Setup & teardown time + calendar colors for spaces',
     body: "Two upgrades for spaces (Settings → 🏛️ Spaces). Give each space a calendar color so it stands out on the reservations calendar. And set default setup/teardown minutes — time held before and after each booking so back-to-back events don't collide (the Fellowship Hall needs 30 minutes to reset? Set it once). When you book that space the buffer pre-fills, and you can tweak or remove it per booking via \"Add setup/teardown time.\" Totally optional — leave it at zero and nothing changes.",

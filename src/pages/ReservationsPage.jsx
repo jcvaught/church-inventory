@@ -10,7 +10,7 @@ import { useConfirm } from '../components/primitives/ConfirmDialog.jsx';
 import { exportReservationsCSV } from '../utils/csv.js';
 import { ITEM_STATUS, RES_STATUS, RESOURCE_TYPE } from '../utils/constants.js';
 import { localDateStr, generateRecurrenceDates, RECURRENCE_FREQS } from '../utils/date.js';
-import { findRoomConflict, roomUnavailability } from '../utils/reservationConflict.js';
+import { findRoomConflict, roomUnavailability, seriesCancelTargets } from '../utils/reservationConflict.js';
 import { monthMatrix, windowGroups } from '../utils/calendarGrid.js';
 import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
 
@@ -156,6 +156,7 @@ export function ReservationsPage({ store, userProfile }) {
   const [ministryFilter, setMinistryFilter] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
+  const [cancelScopeRes, setCancelScopeRes] = useState(null); // recurring-series cancel scope picker
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
   const { confirm, ConfirmHost } = useConfirm();
@@ -383,6 +384,22 @@ export function ReservationsPage({ store, userProfile }) {
     setSaving(true);
     await updateReservation(res._docId, { status:RES_STATUS.CANCELLED });
     flash("Reservation cancelled.");
+    setShowDetail(null);
+    setSaving(false);
+  }
+
+  // ── Recurring-series cancel (Phase 3b) ─────────────────────────────────────
+  // Reservations are fully subscribed, so series ops filter the in-memory array
+  // and batch by docId — no Firestore (recurrenceGroupId, eventDate) index needed.
+  // seriesCancelTargets (pure, unit-tested) computes the affected docs per scope.
+  async function cancelScope(res, scope) {
+    const targets = seriesCancelTargets(res, reservations, scope);
+    if (targets.length === 0) { setCancelScopeRes(null); return; }
+    setSaving(true);
+    await Promise.all(targets.map(t => updateReservation(t._docId, { status: RES_STATUS.CANCELLED })));
+    await logActivity("reservation_cancelled", res.itemId || res.roomDocId, userId, userName, { eventName: res.eventName, scope, count: targets.length });
+    flash(`Cancelled ${targets.length} reservation${targets.length !== 1 ? 's' : ''}.`);
+    setCancelScopeRes(null);
     setShowDetail(null);
     setSaving(false);
   }
@@ -763,11 +780,14 @@ export function ReservationsPage({ store, userProfile }) {
             )}
             {/* Actions */}
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end", flexWrap:"wrap" }}>
-              {r.status === RES_STATUS.PENDING && (r.requestedBy === userId || isAdmin) && (
+              {!r.recurrenceGroupId && r.status === RES_STATUS.PENDING && (r.requestedBy === userId || isAdmin) && (
                 <button onClick={async ()=>{
                   if (!await confirm({ title: 'Cancel request?', message: 'Cancel this reservation request?', confirmLabel: 'Cancel request', danger: true })) return;
                   handleCancel(r);
                 }} disabled={saving} style={{ ...btnS, color:B.red, borderColor:"#FECACA" }}>Cancel Request</button>
+              )}
+              {r.recurrenceGroupId && (r.status === RES_STATUS.PENDING || r.status === RES_STATUS.APPROVED) && (r.requestedBy === userId || isAdmin || canApproveReservation(r)) && (
+                <button onClick={()=>setCancelScopeRes(r)} disabled={saving} style={{ ...btnS, color:B.red, borderColor:"#FECACA" }}>Cancel…</button>
               )}
               {r.status === RES_STATUS.PENDING && canApproveReservation(r) && <>
                 <button onClick={async ()=>{
@@ -785,6 +805,34 @@ export function ReservationsPage({ store, userProfile }) {
                   handleMarkRoomComplete(r);
                 }} disabled={saving} style={btnP}>Mark Complete</button>
               )}
+            </div>
+          </>;
+        })()}
+      </Modal>
+
+      {/* ═══ RECURRING-SERIES CANCEL SCOPE ═══ */}
+      <Modal open={!!cancelScopeRes} onClose={()=>setCancelScopeRes(null)} title="Cancel recurring reservation">
+        {cancelScopeRes && (() => {
+          const r = cancelScopeRes;
+          const futureN = seriesCancelTargets(r, reservations, 'future').length;
+          const allN = seriesCancelTargets(r, reservations, 'all').length;
+          return <>
+            <p style={{ fontSize:14, color:B.textMid, marginBottom:16, lineHeight:1.5 }}>
+              <strong style={{ color:B.navy }}>{r.eventName}</strong> is part of a recurring series. What would you like to cancel?
+            </p>
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              <button onClick={()=>cancelScope(r,'one')} disabled={saving} style={{ ...btnS, textAlign:"left", padding:"12px 16px" }}>
+                Just this one <span style={{ color:B.textLight }}>· {formatDate(r.eventDate)}</span>
+              </button>
+              <button onClick={()=>cancelScope(r,'future')} disabled={saving} style={{ ...btnS, textAlign:"left", padding:"12px 16px" }}>
+                This and all future <span style={{ color:B.textLight }}>· {futureN} reservation{futureN!==1?'s':''}</span>
+              </button>
+              <button onClick={()=>cancelScope(r,'all')} disabled={saving} style={{ ...btnD, textAlign:"left", padding:"12px 16px" }}>
+                Entire series <span style={{ opacity:.85 }}>· {allN} reservation{allN!==1?'s':''}</span>
+              </button>
+            </div>
+            <div style={{ display:"flex", justifyContent:"flex-end", marginTop:16 }}>
+              <button onClick={()=>setCancelScopeRes(null)} disabled={saving} style={btnS}>Keep all</button>
             </div>
           </>;
         })()}

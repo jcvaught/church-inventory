@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  minutesOf, isAllDay, effectiveWindow, datesOverlap, reservationsCollide, findRoomConflict, roomUnavailability,
+  minutesOf, isAllDay, effectiveWindow, datesOverlap, reservationsCollide, findRoomConflict, roomUnavailability, seriesCancelTargets,
 } from '../../src/utils/reservationConflict.js';
 
 const room = (over) => ({ roomDocId: 'R1', status: 'Approved', eventDate: '2026-07-12', ...over });
@@ -112,4 +112,22 @@ test('roomUnavailability: a multi-day span that crosses a blocked Sunday is bloc
   assert.ok(roomUnavailability({ eventDate: '2026-07-10', returnDate: '2026-07-12' }, room));
   // Fri → Sat span ⇒ no Sunday ⇒ fine.
   assert.equal(roomUnavailability({ eventDate: '2026-07-10', returnDate: '2026-07-11' }, room), null);
+});
+
+// ── Recurring-series cancel scoping (Phase 3b) ───────────────────────────────
+test('seriesCancelTargets: one / future / all, active-only', () => {
+  const G = 'grp1';
+  const series = [
+    { _docId: 'a', recurrenceGroupId: G, eventDate: '2026-07-06', status: 'Approved' },
+    { _docId: 'b', recurrenceGroupId: G, eventDate: '2026-07-13', status: 'Pending' },
+    { _docId: 'c', recurrenceGroupId: G, eventDate: '2026-07-20', status: 'Cancelled' }, // terminal → excluded from future/all
+    { _docId: 'd', recurrenceGroupId: G, eventDate: '2026-07-27', status: 'Approved' },
+    { _docId: 'z', recurrenceGroupId: 'other', eventDate: '2026-07-13', status: 'Approved' }, // different series
+  ];
+  const b = series[1];
+  assert.deepEqual(seriesCancelTargets(b, series, 'one').map(x => x._docId), ['b']);
+  // future from b (2026-07-13): b + d (c is Cancelled, a is earlier, z is other series)
+  assert.deepEqual(seriesCancelTargets(b, series, 'future').map(x => x._docId).sort(), ['b', 'd']);
+  // all active in the series: a, b, d
+  assert.deepEqual(seriesCancelTargets(b, series, 'all').map(x => x._docId).sort(), ['a', 'b', 'd']);
 });
