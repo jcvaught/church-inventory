@@ -69,3 +69,47 @@ export function findRoomConflict(candidate, existing, { excludeDocId } = {}) {
   }
   return null;
 }
+
+// Enumerate YYYY-MM-DD from start..end inclusive (≤366 cap). Local-time math.
+function eachDate(start, end) {
+  if (!start) return [];
+  const out = [];
+  const d = new Date(start + 'T00:00:00');
+  const last = new Date(((end && end > start) ? end : start) + 'T00:00:00');
+  while (d <= last && out.length < 366) {
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
+// Is the candidate booking blocked by the ROOM's own availability rules — a
+// blackout date or a weekly blocked window (e.g. Sunday-service hours)? Returns
+// a reason `{ date, label?, window? }` or null. Distinct from booking-vs-booking
+// collisions (findRoomConflict): this is the room itself being unavailable.
+// An all-day/multi-day booking is blocked if ANY day it spans hits a blackout or
+// has a blocked window; a timed booking is blocked only if its hours overlap one.
+export function roomUnavailability(candidate, room) {
+  if (!room) return null;
+  const blackout = new Set(room.blackoutDates || []);
+  const windows = (room.blockedWindows || []).filter(w => w && w.start && w.end);
+  if (blackout.size === 0 && windows.length === 0) return null;
+  const allDay = isAllDay(candidate);
+  const bStart = allDay ? null : minutesOf(candidate.startTime);
+  const bEnd = allDay ? null : (() => {
+    const s = minutesOf(candidate.startTime), e = minutesOf(candidate.endTime);
+    return (e != null && e > s) ? e : s + 60;
+  })();
+  for (const date of eachDate(candidate.eventDate, candidate.returnDate)) {
+    if (blackout.has(date)) return { date, label: 'a blackout date' };
+    const dow = new Date(date + 'T00:00:00').getDay();
+    for (const w of windows) {
+      if (Number(w.day) !== dow) continue;
+      if (allDay) return { date, window: w };
+      const ws = minutesOf(w.start), we = minutesOf(w.end);
+      if (ws == null || we == null) continue;
+      if (bStart < we && ws < bEnd) return { date, window: w };
+    }
+  }
+  return null;
+}

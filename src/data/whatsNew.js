@@ -6,6 +6,12 @@ export const WHATS_NEW = [
   {
     date: '2026-06-23',
     tag: 'New',
+    title: 'Smarter spaces: photos, approvers, blackout dates & blocked hours',
+    body: "Setting up your reservable spaces just got a lot more capable (Settings → 🏛️ Spaces). Each space can now have a photo, designated approvers (let your facilities person approve bookings without making them an admin), blackout dates, and weekly blocked hours — so the app automatically refuses to book the Sanctuary during the Sunday service, for example. When you book a space, you can also record the expected attendance and a day-of contact; if attendance is bigger than the room holds, you'll get a friendly heads-up.",
+  },
+  {
+    date: '2026-06-23',
+    tag: 'New',
     title: 'Reserve a room by time of day',
     body: "Space reservations can now have a start and end time, not just a date — so you can book the Fellowship Hall 9am–noon AND 6–9pm on the same day. ChurchOpsHub checks for time conflicts automatically, so two groups can't double-book the same room and the same hour. Need the whole day? Just check \"All day.\" These times flow into the calendar feed too, so they show up correctly when you subscribe in Google or Apple Calendar. (Equipment checkouts still work by date, as before.)",
   },

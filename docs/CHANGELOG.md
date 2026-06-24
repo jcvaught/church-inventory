@@ -4,6 +4,20 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-06-23 — Spaces best-practices pass: richer config + better booking data
+
+Acted on a best-practices review of what we collect for spaces/bookings. Five gaps closed (plan context in `docs/ROOM-CALENDAR-PLAN-2026-06-23.md`).
+
+- **Expected attendance + capacity warning.** Bookings collect `expectedAttendance`; the form (and detail view) **soft-warn** when it exceeds the space's `capacity` — never blocks (overflow seating is legitimate). Closes the "we collect capacity but never use it" gap.
+- **Per-space approvers.** `rooms.approverUids[]` — designated people can approve bookings for a space in addition to admins + the ministry manager. Enforced in `ReservationsPage.canApproveReservation`. Editable as a pill multi-select (admin/manager users) in Manage Spaces.
+- **Availability rules.** `rooms.blackoutDates[]` (specific days) + `rooms.blockedWindows[]` (`{day,start,end,label}` weekly hours, e.g. Sunday service). New pure `roomUnavailability()` in `reservationConflict.js` **hard-blocks** any booking (single or recurring series) that lands in a blackout/blocked window — all-day/multi-day bookings are blocked if any day they span hits a rule; timed bookings only if their hours overlap. +4 unit tests.
+- **Room photo.** `rooms.photoUrl` — uploaded in Manage Spaces (reuses `resizeImageForUpload` + the existing `churches/{id}/**` storage rule, path `churches/{id}/rooms/<ts>`; **no storage-rule change**), shown in the space list and on the booking detail.
+- **Day-of contact.** Bookings collect `contactName`/`contactPhone`, shown on the detail.
+- Manage Spaces modal extended (photo upload, approver pills, blackout-date chips, weekly-blocked-hours editor); `EMPTY_ROOM_FORM` constant keeps the reset sites in sync. All fields additive — **no Firestore rule or migration changes** (write paths spread the payload; `rooms`/`reservations` rules are membership-based).
+- **Verified:** 75 unit tests pass (4 new), build + lint clean (0 errors). DATA_MODEL + Help (Spaces setup + booking) + What's New updated.
+
+---
+
 ## 2026-06-23 — Room calendar Phase 0+1: timed reservations + time-aware conflicts
 
 First cut of the room-scheduling upgrade (plan: `docs/ROOM-CALENDAR-PLAN-2026-06-23.md`), built into the Reservations Hub.

@@ -448,10 +448,17 @@ export function HelpPage({ onBack }) {
               ]} />
               <UL items={[
                 'Name — e.g. "Sanctuary", "Fellowship Hall", "Room 5" (required)',
-                'Capacity — max occupancy (optional); shown next to the name when booking',
+                'Capacity — max occupancy (optional); used to warn when an event\'s expected attendance is too big for the room',
                 'Location — e.g. "Main Building", "Annex" (optional)',
                 'Description — a short note about the space (optional)',
                 'Amenities — comma-separated, e.g. "Projector, Sound System, Whiteboard" (optional)',
+                'Photo — a picture of the space, so people booking it know what they\'re reserving (optional)',
+              ]} />
+              <P>You can also fine-tune how each space is booked:</P>
+              <UL items={[
+                'Approvers — pick specific people (e.g. your facilities coordinator) who can approve bookings for THIS space. Admins can always approve; this adds others without making them admins.',
+                'Blackout dates — specific days the space can\'t be booked (a holiday, a renovation week).',
+                'Weekly blocked hours — recurring times the space is off-limits, like "Sunday 9:00–12:00" for the worship service. The app will refuse any booking that lands in those hours.',
               ]} />
               <P>Click <strong>Add Space</strong> and repeat for each room. Spaces can be edited or removed from the same Manage Spaces window — removing a space is a soft-archive, so it stops showing up in new bookings without disturbing past reservations.</P>
               <Note>Only admins and managers can create or edit spaces. Everyone else can reserve them.</Note>
@@ -459,6 +466,7 @@ export function HelpPage({ onBack }) {
 
             <Accordion title="Reserving a space or piece of equipment" defaultOpen>
               <P>In the Reservations Hub, click <strong>+ New Reservation</strong>, then pick <strong>📦 Equipment</strong> or <strong>🏛️ Space</strong> at the top of the form. Enter the event/purpose, ministry, and date(s). For recurring needs, turn on <strong>Repeat this reservation</strong> and choose a frequency and end date — the form shows a live count of how many will be created.</P>
+              <P>For a <strong>space</strong>, you can also record the <strong>expected attendance</strong> and a <strong>day-of contact</strong> name and phone. If the attendance is larger than the room's capacity, you'll get a gentle heads-up — it won't stop you, it just flags it so you can plan overflow seating or pick a bigger room.</P>
             </Accordion>
 
             <Accordion title="Booking a room by time of day" badge="New">
@@ -468,6 +476,7 @@ export function HelpPage({ onBack }) {
                 'Back-to-back bookings are fine (one ending at 12:00 and another starting at 12:00 do not conflict).',
                 'An "All day" booking holds the room for that whole day, so nothing else can be booked that day.',
                 'Multi-day bookings (a different return date) are treated as all-day for the whole span — useful for a lock-in or camp.',
+                'If a space has blackout dates or weekly blocked hours set up (like Sunday service), the app will refuse a booking that lands in them and tell you why.',
                 'Equipment reservations stay date-based (no time of day).',
               ]} />
               <Tip>Times also flow into the calendar feed, so a room booked 9–11am shows at the right time when you subscribe to the calendar in Google or Apple Calendar (see Settings → Calendar Feed).</Tip>
@@ -994,7 +1003,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Spaces (rooms you can reserve)">
-              <P>The <strong>🏛️ Spaces</strong> card in Settings is where you define the rooms and areas your team can reserve — the Sanctuary, Fellowship Hall, classrooms, and so on. Click <strong>Manage Spaces</strong>, then add each space with a name (required) and optional capacity, location, description, and amenities. Until at least one space exists, the room option in a reservation shows <em>"No spaces defined yet."</em></P>
+              <P>The <strong>🏛️ Spaces</strong> card in Settings is where you define the rooms and areas your team can reserve — the Sanctuary, Fellowship Hall, classrooms, and so on. Click <strong>Manage Spaces</strong>, then add each space with a name (required) and optional capacity, location, description, amenities, and a photo. You can also set <strong>approvers</strong> (people who can approve bookings for that space), <strong>blackout dates</strong>, and <strong>weekly blocked hours</strong> (e.g. during the Sunday service). Until at least one space exists, the room option in a reservation shows <em>"No spaces defined yet."</em></P>
               <P>Admins and managers manage the list here; everyone can then reserve those spaces from the <strong>Reservations Hub</strong>. See the <strong>Reservations</strong> help section for booking, times, and conflict checking.</P>
             </Accordion>
 

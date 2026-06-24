@@ -9,7 +9,7 @@ import { useConfirm } from '../components/primitives/ConfirmDialog.jsx';
 import { exportReservationsCSV } from '../utils/csv.js';
 import { ITEM_STATUS, RES_STATUS, RESOURCE_TYPE } from '../utils/constants.js';
 import { localDateStr, generateRecurrenceDates, RECURRENCE_FREQS } from '../utils/date.js';
-import { findRoomConflict } from '../utils/reservationConflict.js';
+import { findRoomConflict, roomUnavailability } from '../utils/reservationConflict.js';
 import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
 
 export function ReservationsPage({ store, userProfile }) {
@@ -33,12 +33,17 @@ export function ReservationsPage({ store, userProfile }) {
   function canApproveReservation(r) {
     if (isAdmin) return true;
     if (isManager && r.ministry && managedMinistries.includes(r.ministry)) return true;
+    // A space's designated approvers can approve bookings for that space.
+    if (r.roomDocId) {
+      const room = (rooms || []).find(rm => rm._docId === r.roomDocId);
+      if (room && (room.approverUids || []).includes(userId)) return true;
+    }
     return false;
   }
 
   const [resourceType, setResourceType] = useState(() => localStorage.getItem('res_resourceType') || RESOURCE_TYPE.ITEM);
   function setResourceTypePersisted(val) { setResourceType(val); localStorage.setItem('res_resourceType', val); }
-  const emptyRes = { itemDocId:"", itemId:"", itemDesc:"", roomDocId:"", roomName:"", eventName:"", eventDate:"", returnDate:"", startTime:"", endTime:"", purpose:"", ministry:"", notes:"" };
+  const emptyRes = { itemDocId:"", itemId:"", itemDesc:"", roomDocId:"", roomName:"", eventName:"", eventDate:"", returnDate:"", startTime:"", endTime:"", expectedAttendance:"", contactName:"", contactPhone:"", purpose:"", ministry:"", notes:"" };
   const [form, setForm] = useState(emptyRes);
   const [allDay, setAllDay] = useState(false); // room bookings: all-day vs timed
   const [conflictErr, setConflictErr] = useState("");
@@ -107,6 +112,19 @@ export function ReservationsPage({ store, userProfile }) {
         : `${c.eventDate}${c.returnDate && c.returnDate !== c.eventDate ? " – "+c.returnDate : ""}`;
       return `Conflict${dateLabel ? ` on ${dateLabel}` : ""}: "${c.eventName}" (${c.status}) already has this ${isRoom ? "space" : "item"} on ${when}. Pick a different ${isRoom ? "space" : "item"}, date${isRoom ? ", or time" : ""}.`;
     };
+    // Room availability rules (blackout dates / weekly blocked hours) — a hard block.
+    const selectedRoom = isRoom ? activeRooms.find(rm => rm._docId === form.roomDocId) : null;
+    const unavailableFor = (eventDate, returnDate) => selectedRoom
+      ? roomUnavailability({ eventDate, returnDate, ...times }, selectedRoom)
+      : null;
+    const unavailableMsg = (b, dateLabel) => {
+      const reason = b.label ? b.label
+        : b.window ? `blocked${b.window.label ? " for " + b.window.label : ""} (${b.window.start}–${b.window.end})`
+        : "unavailable";
+      return `${form.roomName || "This space"} is unavailable on ${dateLabel || b.date} — ${reason}.`;
+    };
+    const blocked = unavailableFor(form.eventDate, form.returnDate);
+    if (blocked) { setConflictErr(unavailableMsg(blocked)); return; }
     const conflict = conflictFor(form.eventDate, form.returnDate);
     if (conflict) { setConflictErr(conflictMsg(conflict)); return; }
     setSaving(true);
@@ -120,6 +138,9 @@ export function ReservationsPage({ store, userProfile }) {
         returnDate: form.returnDate,
         startTime: timed ? form.startTime : '',
         endTime: timed ? form.endTime : '',
+        expectedAttendance: form.expectedAttendance ? parseInt(form.expectedAttendance, 10) : null,
+        contactName: form.contactName.trim() || '',
+        contactPhone: form.contactPhone.trim() || '',
         purpose: form.purpose,
         ministry: form.ministry,
         notes: form.notes,
@@ -146,6 +167,12 @@ export function ReservationsPage({ store, userProfile }) {
         }));
         const extraDates = allDates.slice(1);
         for (const d of allDates) {
+          const blk = unavailableFor(d.eventDate, d.returnDate);
+          if (blk) {
+            setConflictErr(unavailableMsg(blk, d.eventDate) + " Adjust the series dates.");
+            setSaving(false);
+            return;
+          }
           const seriesConflict = conflictFor(d.eventDate, d.returnDate);
           if (seriesConflict) {
             setConflictErr(conflictMsg(seriesConflict, d.eventDate) + " Adjust the series dates.");
@@ -401,6 +428,25 @@ export function ReservationsPage({ store, userProfile }) {
             )}
           </div>
         )}
+        {/* Attendance + day-of contact — SPACE bookings only */}
+        {resourceType === RESOURCE_TYPE.ROOM && (() => {
+          const formRoom = activeRooms.find(r => r._docId === form.roomDocId);
+          const over = formRoom?.capacity && form.expectedAttendance && parseInt(form.expectedAttendance, 10) > formRoom.capacity;
+          return (
+            <>
+              <div style={{ display:"flex", gap:14 }}>
+                <div style={{ flex:1 }}><FF label="Expected attendance"><input type="number" min="0" style={inp} value={form.expectedAttendance} onChange={e=>setForm(f=>({...f, expectedAttendance:e.target.value}))} placeholder={formRoom?.capacity ? `Capacity: ${formRoom.capacity}` : "How many people?"}/></FF></div>
+                <div style={{ flex:1 }}><FF label="Day-of contact"><input style={inp} value={form.contactName} onChange={e=>setForm(f=>({...f, contactName:e.target.value}))} placeholder="Name (optional)"/></FF></div>
+              </div>
+              {over && (
+                <div style={{ background:"#FFF8E1", border:"1px solid "+B.gold, borderRadius:10, padding:"8px 14px", marginBottom:12, fontSize:13, color:"#96750E", fontWeight:500 }}>
+                  ⚠️ {form.expectedAttendance} exceeds {form.roomName || "this space"}'s capacity of {formRoom.capacity}. You can still book it — just make sure it works.
+                </div>
+              )}
+              <FF label="Contact phone"><input style={inp} value={form.contactPhone} onChange={e=>setForm(f=>({...f, contactPhone:e.target.value}))} placeholder="(optional)"/></FF>
+            </>
+          );
+        })()}
         {/* Recurring */}
         <div style={{ marginBottom:16 }}>
           <label style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", marginBottom:recurring?12:0 }}>
@@ -486,7 +532,22 @@ export function ReservationsPage({ store, userProfile }) {
                 <div style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Submitted</div>
                 <div style={{ fontSize:13, color:B.textMid }}>{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}</div>
               </div>
+              {r.expectedAttendance != null && r.expectedAttendance !== "" && (() => {
+                const rm = (rooms||[]).find(x => x._docId === r.roomDocId);
+                const over = rm?.capacity && r.expectedAttendance > rm.capacity;
+                return <div>
+                  <div style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Attendance</div>
+                  <div style={{ fontSize:14, fontWeight:600, color: over ? "#96750E" : B.navy }}>{r.expectedAttendance}{rm?.capacity ? ` / ${rm.capacity}` : ""}{over ? " ⚠️" : ""}</div>
+                </div>;
+              })()}
+              {(r.contactName || r.contactPhone) && <div>
+                <div style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Day-of Contact</div>
+                <div style={{ fontSize:14 }}>{[r.contactName, r.contactPhone].filter(Boolean).join(" · ")}</div>
+              </div>}
             </div>
+            {(() => { const rm = (rooms||[]).find(x => x._docId === r.roomDocId); return rm?.photoUrl ? (
+              <img src={rm.photoUrl} alt={rm.name} style={{ width:"100%", maxHeight:200, objectFit:"cover", borderRadius:12, border:"1px solid "+B.sand, marginBottom:20 }}/>
+            ) : null; })()}
             {r.notes && (
               <div style={{ background:B.warmGray, borderRadius:10, padding:"12px 16px", marginBottom:20, fontSize:14, color:B.textMid }}>
                 <div style={{ fontSize:12, fontWeight:600, color:B.textLight, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:4 }}>Notes</div>

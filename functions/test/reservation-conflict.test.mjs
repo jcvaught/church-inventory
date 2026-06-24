@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  minutesOf, isAllDay, effectiveWindow, datesOverlap, reservationsCollide, findRoomConflict,
+  minutesOf, isAllDay, effectiveWindow, datesOverlap, reservationsCollide, findRoomConflict, roomUnavailability,
 } from '../../src/utils/reservationConflict.js';
 
 const room = (over) => ({ roomDocId: 'R1', status: 'Approved', eventDate: '2026-07-12', ...over });
@@ -77,4 +77,39 @@ test('findRoomConflict: same room + active only, honors excludeDocId', () => {
   assert.equal(findRoomConflict(cand, existing, { excludeDocId: 'a' }), null); // editing a → no conflict
   const noClash = { roomDocId: 'R1', eventDate: '2026-07-12', startTime: '11:00', endTime: '12:00' };
   assert.equal(findRoomConflict(noClash, existing), null);                   // adjacent to a, different room from b, c inactive
+});
+
+// ── Room availability rules (blackout dates + weekly blocked windows) ────────
+// 2026-07-12 is a Sunday (getDay() === 0).
+
+test('roomUnavailability: no rules ⇒ always available', () => {
+  assert.equal(roomUnavailability({ eventDate: '2026-07-12' }, { name: 'X' }), null);
+  assert.equal(roomUnavailability({ eventDate: '2026-07-12' }, null), null);
+});
+
+test('roomUnavailability: blackout date blocks (all-day + timed)', () => {
+  const room = { blackoutDates: ['2026-07-12'] };
+  assert.equal(roomUnavailability({ eventDate: '2026-07-12' }, room)?.label, 'a blackout date');
+  assert.equal(roomUnavailability({ eventDate: '2026-07-12', startTime: '14:00', endTime: '15:00' }, room)?.date, '2026-07-12');
+  assert.equal(roomUnavailability({ eventDate: '2026-07-13' }, room), null); // different day
+});
+
+test('roomUnavailability: weekly blocked window blocks overlapping times only', () => {
+  const room = { blockedWindows: [{ day: 0, start: '09:00', end: '12:00', label: 'Worship' }] }; // Sunday AM
+  // All-day Sunday booking ⇒ blocked.
+  assert.ok(roomUnavailability({ eventDate: '2026-07-12' }, room));
+  // Timed Sunday booking overlapping the window ⇒ blocked.
+  assert.ok(roomUnavailability({ eventDate: '2026-07-12', startTime: '11:00', endTime: '13:00' }, room));
+  // Timed Sunday booking AFTER the window ⇒ fine.
+  assert.equal(roomUnavailability({ eventDate: '2026-07-12', startTime: '13:00', endTime: '15:00' }, room), null);
+  // Same time on a Monday (day 1) ⇒ fine.
+  assert.equal(roomUnavailability({ eventDate: '2026-07-13', startTime: '10:00', endTime: '11:00' }, room), null);
+});
+
+test('roomUnavailability: a multi-day span that crosses a blocked Sunday is blocked', () => {
+  const room = { blockedWindows: [{ day: 0, start: '09:00', end: '12:00' }] };
+  // Fri 2026-07-10 → Sun 2026-07-12 (all-day span) crosses Sunday ⇒ blocked.
+  assert.ok(roomUnavailability({ eventDate: '2026-07-10', returnDate: '2026-07-12' }, room));
+  // Fri → Sat span ⇒ no Sunday ⇒ fine.
+  assert.equal(roomUnavailability({ eventDate: '2026-07-10', returnDate: '2026-07-11' }, room), null);
 });

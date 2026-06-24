@@ -12,7 +12,13 @@ import { getPerson, makeRef, expiryStatus } from '../lib/people.js';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, getDocs, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { enablePush, pushSupported } from '../utils/push.js';
-import { app, db } from '../firebase.js';
+import { app, db, storage } from '../firebase.js';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { resizeImageForUpload } from '../utils/imageResize.js';
+
+// Manage Spaces form — kept as one constant so every reset site stays in sync.
+const EMPTY_ROOM_FORM = { name:'', capacity:'', location:'', description:'', amenities:'', photoUrl:'', approverUids:[], blackoutDates:[], blockedWindows:[] };
+const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 function formatPhoneDisplay(e164) {
   if (!e164) return '';
@@ -109,9 +115,13 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingError, setBillingError] = useState("");
   const [showSpacesModal, setShowSpacesModal] = useState(false);
-  const [roomForm, setRoomForm] = useState({ name:'', capacity:'', location:'', description:'', amenities:'' });
+  const [roomForm, setRoomForm] = useState(EMPTY_ROOM_FORM);
+  const [roomPhotoFile, setRoomPhotoFile] = useState(null);
   const [editRoomId, setEditRoomId] = useState(null);
   const [savingRoom, setSavingRoom] = useState(false);
+  // Blocked-window draft row (day/start/end/label) for the Manage Spaces editor.
+  const [windowDraft, setWindowDraft] = useState({ day:'0', start:'', end:'', label:'' });
+  const [blackoutDraft, setBlackoutDraft] = useState('');
   const [inviteHubsInitialized, setInviteHubsInitialized] = useState(false);
   const [jobDelegates, setJobDelegates] = useState(() => userProfile?.jobPosterDelegates || []);
   const [savingDelegates, setSavingDelegates] = useState(false);
@@ -1585,7 +1595,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
       </Modal>
 
       {/* ═══ SPACES MODAL ═══ */}
-      <Modal open={showSpacesModal} onClose={() => { setShowSpacesModal(false); setEditRoomId(null); setRoomForm({ name:'', capacity:'', location:'', description:'', amenities:'' }); }} title="Manage Spaces" wide>
+      <Modal open={showSpacesModal} onClose={() => { setShowSpacesModal(false); setEditRoomId(null); setRoomForm(EMPTY_ROOM_FORM); setRoomPhotoFile(null); }} title="Manage Spaces" wide>
         {/* Add / Edit form */}
         <div style={{ background:B.warmGray, borderRadius:12, padding:"16px 18px", marginBottom:20 }}>
           <div style={{ fontFamily:f1, fontWeight:700, fontSize:14, color:B.navy, marginBottom:12 }}>{editRoomId ? 'Edit Space' : 'Add New Space'}</div>
@@ -1606,29 +1616,106 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           <FF label="Amenities (comma-separated)">
             <input style={inp} value={roomForm.amenities} onChange={e => setRoomForm(f => ({ ...f, amenities:e.target.value }))} placeholder="e.g. Projector, Sound System, Whiteboard"/>
           </FF>
+
+          {/* Photo */}
+          <FF label="Photo (optional)">
+            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+              {(roomPhotoFile || roomForm.photoUrl) && (
+                <img src={roomPhotoFile ? URL.createObjectURL(roomPhotoFile) : roomForm.photoUrl} alt="" style={{ width:64, height:64, objectFit:'cover', borderRadius:8, border:'1px solid '+B.sand }}/>
+              )}
+              <label style={{ ...btnS, cursor:'pointer', fontSize:13, padding:'8px 14px' }}>
+                {(roomForm.photoUrl || roomPhotoFile) ? 'Change photo' : 'Upload photo'}
+                <input type="file" accept="image/*" style={{ display:'none' }} onChange={e => setRoomPhotoFile(e.target.files?.[0] || null)}/>
+              </label>
+              {(roomPhotoFile || roomForm.photoUrl) && <button type="button" onClick={()=>{ setRoomPhotoFile(null); setRoomForm(f=>({ ...f, photoUrl:'' })); }} style={{ background:'none', border:'none', color:B.red, cursor:'pointer', fontSize:13, fontWeight:600 }}>Remove</button>}
+            </div>
+          </FF>
+
+          {/* Approvers */}
+          <FF label="Who can approve bookings for this space (optional)">
+            <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+              {(users||[]).filter(u => u.active !== false && (u.role==='admin' || u.role==='manager')).map(u => {
+                const on = (roomForm.approverUids||[]).includes(u.id);
+                return (
+                  <button key={u.id} type="button"
+                    onClick={()=>setRoomForm(f=>({ ...f, approverUids: on ? (f.approverUids||[]).filter(x=>x!==u.id) : [...(f.approverUids||[]), u.id] }))}
+                    style={{ padding:'6px 12px', borderRadius:20, border:'1px solid '+(on?B.teal:B.sand), background:on?B.tealPale:B.white, color:on?B.teal:B.textMid, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:f1 }}>
+                    {on ? '✓ ' : ''}{u.name}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize:12, color:B.textLight, marginTop:6 }}>Admins can always approve. Add people here to let them approve bookings for this space too.</div>
+          </FF>
+
+          {/* Blackout dates */}
+          <FF label="Blackout dates — space unavailable on these days (optional)">
+            <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+              <input type="date" style={{ ...inp, width:'auto' }} value={blackoutDraft} onChange={e=>setBlackoutDraft(e.target.value)}/>
+              <button type="button" disabled={!blackoutDraft} onClick={()=>{ if(!blackoutDraft) return; setRoomForm(f=>({ ...f, blackoutDates:[...new Set([...(f.blackoutDates||[]), blackoutDraft])].sort() })); setBlackoutDraft(''); }} style={{ ...btnS, fontSize:13, opacity:blackoutDraft?1:.5 }}>Add</button>
+            </div>
+            {(roomForm.blackoutDates||[]).length>0 && <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:8 }}>
+              {roomForm.blackoutDates.map(d => <span key={d} style={{ display:'inline-flex', alignItems:'center', gap:6, background:B.warmGray, borderRadius:16, padding:'4px 10px', fontSize:12, fontFamily:f1 }}>{d}<button type="button" onClick={()=>setRoomForm(f=>({ ...f, blackoutDates:(f.blackoutDates||[]).filter(x=>x!==d) }))} style={{ border:'none', background:'none', cursor:'pointer', color:B.red, fontWeight:700, lineHeight:1 }}>×</button></span>)}
+            </div>}
+          </FF>
+
+          {/* Weekly blocked windows */}
+          <FF label="Weekly blocked hours — e.g. Sunday service (optional)">
+            <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+              <select style={{ ...inp, width:'auto', cursor:'pointer' }} value={windowDraft.day} onChange={e=>setWindowDraft(d=>({ ...d, day:e.target.value }))}>
+                {DAY_LABELS.map((lbl,i)=><option key={i} value={i}>{lbl}</option>)}
+              </select>
+              <input type="time" style={{ ...inp, width:'auto' }} value={windowDraft.start} onChange={e=>setWindowDraft(d=>({ ...d, start:e.target.value }))}/>
+              <span style={{ color:B.textLight }}>to</span>
+              <input type="time" style={{ ...inp, width:'auto' }} value={windowDraft.end} onChange={e=>setWindowDraft(d=>({ ...d, end:e.target.value }))}/>
+              <input style={{ ...inp, width:130 }} placeholder="Label (optional)" value={windowDraft.label} onChange={e=>setWindowDraft(d=>({ ...d, label:e.target.value }))}/>
+              <button type="button" disabled={!windowDraft.start || !windowDraft.end || windowDraft.end<=windowDraft.start}
+                onClick={()=>{ setRoomForm(f=>({ ...f, blockedWindows:[...(f.blockedWindows||[]), { day:Number(windowDraft.day), start:windowDraft.start, end:windowDraft.end, label:windowDraft.label.trim() }] })); setWindowDraft(d=>({ ...d, start:'', end:'', label:'' })); }}
+                style={{ ...btnS, fontSize:13, opacity:(!windowDraft.start || !windowDraft.end || windowDraft.end<=windowDraft.start)?.5:1 }}>Add</button>
+            </div>
+            {(roomForm.blockedWindows||[]).length>0 && <div style={{ display:'flex', flexDirection:'column', gap:4, marginTop:8 }}>
+              {roomForm.blockedWindows.map((w,i) => <div key={i} style={{ display:'flex', alignItems:'center', gap:8, fontSize:13 }}><span>{DAY_LABELS[w.day]} {w.start}–{w.end}{w.label?` · ${w.label}`:''}</span><button type="button" onClick={()=>setRoomForm(f=>({ ...f, blockedWindows:(f.blockedWindows||[]).filter((_,j)=>j!==i) }))} style={{ border:'none', background:'none', cursor:'pointer', color:B.red, fontWeight:700, lineHeight:1 }}>×</button></div>)}
+            </div>}
+          </FF>
+
           <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:4 }}>
-            {editRoomId && <button onClick={() => { setEditRoomId(null); setRoomForm({ name:'', capacity:'', location:'', description:'', amenities:'' }); }} style={btnS}>Cancel Edit</button>}
+            {editRoomId && <button onClick={() => { setEditRoomId(null); setRoomForm(EMPTY_ROOM_FORM); setRoomPhotoFile(null); }} style={btnS}>Cancel Edit</button>}
             <button
               disabled={savingRoom || !roomForm.name.trim()}
               style={{ ...btnP, opacity:(!roomForm.name.trim() || savingRoom) ? .5 : 1 }}
               onClick={async () => {
                 if (!roomForm.name.trim()) return;
                 setSavingRoom(true);
-                const payload = {
-                  name: roomForm.name.trim(),
-                  capacity: roomForm.capacity ? parseInt(roomForm.capacity, 10) : null,
-                  location: roomForm.location.trim() || null,
-                  description: roomForm.description.trim() || null,
-                  amenities: roomForm.amenities ? roomForm.amenities.split(',').map(a => a.trim()).filter(Boolean) : [],
-                };
-                if (editRoomId) {
-                  await updateRoom(editRoomId, payload);
-                } else {
-                  await addRoom(payload);
+                try {
+                  let photoUrl = roomForm.photoUrl || '';
+                  if (roomPhotoFile) {
+                    const resized = await resizeImageForUpload(roomPhotoFile);
+                    const sRef = storageRef(storage, `churches/${userProfile.churchId}/rooms/${Date.now()}`);
+                    await uploadBytes(sRef, resized, { contentType: 'image/jpeg' });
+                    photoUrl = await getDownloadURL(sRef);
+                  }
+                  const payload = {
+                    name: roomForm.name.trim(),
+                    capacity: roomForm.capacity ? parseInt(roomForm.capacity, 10) : null,
+                    location: roomForm.location.trim() || null,
+                    description: roomForm.description.trim() || null,
+                    amenities: roomForm.amenities ? roomForm.amenities.split(',').map(a => a.trim()).filter(Boolean) : [],
+                    photoUrl: photoUrl || null,
+                    approverUids: roomForm.approverUids || [],
+                    blackoutDates: roomForm.blackoutDates || [],
+                    blockedWindows: roomForm.blockedWindows || [],
+                  };
+                  if (editRoomId) {
+                    await updateRoom(editRoomId, payload);
+                  } else {
+                    await addRoom(payload);
+                  }
+                  setEditRoomId(null);
+                  setRoomForm(EMPTY_ROOM_FORM);
+                  setRoomPhotoFile(null);
+                } finally {
+                  setSavingRoom(false);
                 }
-                setSavingRoom(false);
-                setEditRoomId(null);
-                setRoomForm({ name:'', capacity:'', location:'', description:'', amenities:'' });
               }}>
               {savingRoom ? 'Saving...' : editRoomId ? 'Save Changes' : 'Add Space'}
             </button>
@@ -1639,13 +1726,22 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           {(rooms || []).length === 0 && <p style={{ color:B.textLight, fontSize:14, textAlign:"center", padding:16 }}>No spaces yet. Add one above.</p>}
           {(rooms || []).map(r => (
             <div key={r._docId} style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 14px", borderRadius:10, background:r.active === false ? B.warmGray : B.white, border:"1px solid "+B.sand, opacity:r.active === false ? .6 : 1 }}>
+              {r.photoUrl && <img src={r.photoUrl} alt="" style={{ width:44, height:44, objectFit:'cover', borderRadius:8, border:'1px solid '+B.sand, flexShrink:0 }}/>}
               <div style={{ flex:1 }}>
                 <div style={{ fontWeight:700, fontSize:14, color:B.navy, fontFamily:f1 }}>{r.name}{r.active === false ? ' (archived)' : ''}</div>
                 <div style={{ fontSize:12, color:B.textLight, marginTop:2 }}>
                   {[r.capacity ? `Cap. ${r.capacity}` : null, r.location, (r.amenities||[]).join(', ')].filter(Boolean).join(' · ') || 'No details'}
                 </div>
+                {((r.blackoutDates||[]).length>0 || (r.blockedWindows||[]).length>0 || (r.approverUids||[]).length>0) && (
+                  <div style={{ fontSize:11, color:B.textLight, marginTop:3 }}>
+                    {[(r.approverUids||[]).length>0 ? `${r.approverUids.length} approver${r.approverUids.length>1?'s':''}` : null,
+                      (r.blockedWindows||[]).length>0 ? `${r.blockedWindows.length} weekly block${r.blockedWindows.length>1?'s':''}` : null,
+                      (r.blackoutDates||[]).length>0 ? `${r.blackoutDates.length} blackout date${r.blackoutDates.length>1?'s':''}` : null,
+                    ].filter(Boolean).join(' · ')}
+                  </div>
+                )}
               </div>
-              <button onClick={() => { setEditRoomId(r._docId); setRoomForm({ name:r.name, capacity:r.capacity ?? '', location:r.location||'', description:r.description||'', amenities:(r.amenities||[]).join(', ') }); }}
+              <button onClick={() => { setEditRoomId(r._docId); setRoomPhotoFile(null); setRoomForm({ name:r.name, capacity:r.capacity ?? '', location:r.location||'', description:r.description||'', amenities:(r.amenities||[]).join(', '), photoUrl:r.photoUrl||'', approverUids:r.approverUids||[], blackoutDates:r.blackoutDates||[], blockedWindows:r.blockedWindows||[] }); }}
                 style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:13, fontWeight:600, padding:"4px 8px" }}>Edit</button>
               {r.active === false
                 ? <button onClick={() => updateRoom(r._docId, { active:true })} style={{ background:"none", border:"none", color:B.teal, cursor:"pointer", fontSize:13, fontWeight:600, padding:"4px 8px" }}>Restore</button>
