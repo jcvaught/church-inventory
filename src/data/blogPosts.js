@@ -1,5 +1,109 @@
 export const BLOG_POSTS = [
   {
+    slug: 'free-church-equipment-maintenance-log-template',
+    title: 'Free Church Equipment Maintenance Log Template (and How to Actually Use It)',
+    description: "A free, copy-it-yourself equipment maintenance log template for churches — the exact columns a useful log needs, what each one is for, how to set service intervals, and how to spread accountability so it doesn't all land on one person. Works in a spreadsheet or a live system.",
+    date: '2026-06-26',
+    keywords: 'church equipment maintenance log, free church maintenance template, church equipment maintenance, church maintenance log template, church facilities maintenance schedule, equipment service log church, preventive maintenance church, HVAC fire extinguisher maintenance log',
+    related: ['free-church-inventory-template', 'church-equipment-maintenance', 'quarterly-church-inventory-audit-checklist'],
+    content: `
+## Why a Maintenance Log Beats a Binder
+
+Most churches don't lack maintenance — they lack a *record* of it. The HVAC got serviced last spring, probably. The fire extinguishers were inspected, someone thinks. The van's oil was changed, but nobody's quite sure when, or by whom, or when it's due again. The knowledge is scattered across receipts in a drawer, a vendor's memory, and one trustee's mental notes.
+
+That gap is exactly where expensive surprises live. A compressor that fails in July because nobody changed the filters. A fire extinguisher that's three years past inspection when the insurance adjuster asks. A kitchen oven red-tagged by the health inspector because nobody logged the last service. None of these are maintenance failures, strictly speaking. They're *record* failures — the church did (or didn't) do the work, but had no living account of what was done, what's due, and who owns it.
+
+A maintenance log fixes that. And you don't need software to start — a spreadsheet works fine on day one, the same way a [free church inventory template](/blog/free-church-inventory-template) gets you tracking assets before you ever pay for a tool. What you need is the right structure and the discipline to keep it fed. This post gives you both: the exact columns a church equipment maintenance log needs, what each one does, how to set service intervals, and how to keep it from collapsing onto one exhausted volunteer.
+
+## The Template: Columns You Can Copy Today
+
+Open a fresh spreadsheet (or a table in whatever system you already use) and make these your column headers. Every one of them earns its place by answering a question someone will actually ask.
+
+| Column | What it holds | Example |
+|---|---|---|
+| **Item / Asset** | The specific piece of equipment | "Sanctuary HVAC — Rooftop Unit 2" |
+| **Location** | Where it physically lives | "Roof, north side" |
+| **Last Serviced** | Date of the most recent service | "2026-04-12" |
+| **Service Interval** | How often it's due | "Every 6 months" |
+| **Next Due** | Last Serviced + interval | "2026-10-12" |
+| **Responsible** | Who owns this item's upkeep | "Facilities — Dave R." |
+| **Vendor / Contact** | Who does the work | "CoolAir HVAC, (555) 010-2233" |
+| **Status / Notes** | Current state, quirks, history | "Filters changed; compressor noisy — watch" |
+
+That's the whole template. Eight columns. Don't add more until you feel a real need — an over-engineered log is one nobody updates. Here's what each column is for and how to fill it.
+
+**Item / Asset.** Be specific enough that there's no ambiguity. "HVAC" is useless when you have four units. "Sanctuary HVAC — Rooftop Unit 2" tells the next person exactly which machine. If you already keep an inventory, this column should mirror the names there so the two records line up.
+
+**Location.** Where someone would physically go to find it. "Roof, north side," "Kitchen — under the prep counter," "Fellowship hall storage closet." This is the column people skip and later regret, because a vague location means every service call starts with a scavenger hunt.
+
+**Last Serviced.** The date of the most recent completed service. This single field is the heartbeat of the whole log — everything downstream (Next Due especially) is computed from it. Update it the day the work happens, not "later."
+
+**Service Interval.** How often this item needs attention — "every 3 months," "annually," "every 5,000 miles." We'll cover how to set these in the next section.
+
+**Next Due.** Last Serviced plus the interval. In a spreadsheet you can compute this with a formula; in a live system it's calculated for you. This is the column you sort by every month to see what's coming.
+
+**Responsible.** The *person* who owns making sure this item gets serviced — not the vendor who does the work, but the church member who notices when it's due and makes the call. This is the column that prevents "I thought you had it."
+
+**Vendor / Contact.** Who actually performs the service, with a phone number. When something breaks at 6pm before a wedding, you do not want to be googling HVAC companies. Keep the relationship written down: "We use CoolAir because they bill monthly and answer on weekends."
+
+**Status / Notes.** Everything else — the last thing that was done, known quirks, warranty details, the fact that the compressor's been noisy since spring. This is where institutional memory goes so it doesn't walk out the door when a volunteer leaves.
+
+## What Church Equipment Actually Needs Logging
+
+Not everything needs a log entry — you'll drive yourself mad tracking every folding chair. Log the things where a missed service costs real money, creates a safety risk, or is legally required. For most churches that's:
+
+- **HVAC** — filters, coils, and seasonal inspections. The single most expensive thing to neglect. Quarterly filter changes, twice-yearly professional service.
+- **AV / sound gear** — mixers, amps, projectors, wireless mic batteries, lamp hours on projectors. Less about safety, more about not having the system die mid-service.
+- **Kitchen appliances** — commercial ovens, ranges, refrigerators, dishwashers, hood/grease filters. Some carry health-code inspection requirements; all are expensive to replace.
+- **Fire extinguishers & safety equipment** — extinguishers (annual inspection, required), smoke/CO detectors, emergency lighting, AED pads and batteries. These are non-negotiable and often legally mandated. A lapsed inspection is the kind of thing an insurer will point to.
+- **Vehicles / vans** — oil, tires, brakes, registration, inspection. Track by mileage *and* date, whichever comes first.
+- **Instruments** — piano tuning, organ maintenance, regular cleaning. Easy to forget because they degrade slowly.
+- **Lawn & maintenance equipment** — mowers, trimmers, snow blowers, generators. Seasonal items especially: the generator you need in an ice storm is the one nobody ran since last winter.
+
+This is the same equipment your [maintenance program](/blog/church-equipment-maintenance) should already be circling. The log just makes the program visible — turning "we maintain our stuff" into a record you can actually point to.
+
+## How to Set Service Intervals
+
+The interval is where most logs either get over-ambitious or stay blank. Three sources, in order of trust:
+
+1. **The manufacturer or the law.** Fire extinguishers: annual, full stop. HVAC: follow the unit's manual and your service contract. Vehicles: the owner's manual mileage schedule. When a real requirement exists, use it — don't guess.
+2. **The vendor's recommendation.** Your HVAC company, your kitchen-equipment tech, your piano tuner all have a "we should see this every ___" answer. Ask, and write it in the Service Interval column.
+3. **Honest judgment for everything else.** For items with no official schedule — the lawn mower, the sound board — pick a sane interval and adjust. Quarterly is a safe default for anything mechanical that gets regular use; annually for things that mostly sit.
+
+Set the interval once, and let Next Due do the work. The point isn't to predict the future perfectly — it's to make sure nothing falls off the radar for years because no one ever decided how often to look at it.
+
+## Don't Let It All Land on One Person
+
+Here's the failure mode that kills more maintenance logs than any other: one faithful person quietly owns *everything*, the log lives in their head or their personal files, and when they move or burn out, the whole record evaporates. The Responsible column exists specifically to prevent this.
+
+Spread ownership by category, not by dumping it all on the facilities lead:
+
+- The **tech director** owns AV gear.
+- Whoever runs **hospitality** owns the kitchen appliances.
+- A **trustee or facilities volunteer** owns HVAC, safety equipment, and the building systems.
+- Whoever drives or coordinates the **van** owns its service schedule.
+
+Each owner is responsible for one thing only: noticing when their items are due and making sure the work happens. They don't have to do the wrenching — they have to *not let it slip*. That's a far lighter ask, and it's one you can actually hand off cleanly when someone steps down, because it's written down and scoped.
+
+Then put a recurring review on the calendar. Once a month, someone (the facilities lead, an admin) opens the log, sorts by Next Due, and works the short list of what's coming up in the next 30–60 days. Fold a deeper pass into your [quarterly inventory audit](/blog/quarterly-church-inventory-audit-checklist) — when you're already walking the building counting assets, verify the maintenance log matches reality at the same time. Two birds, one walk.
+
+## Why a Living Record Beats a Stale Spreadsheet
+
+A spreadsheet is a fine place to start, and far better than nothing. But it has a predictable decay curve. Next Due dates have to be recomputed by hand. Nobody gets reminded — the log only helps the person who remembers to open it. It lives on one computer, or in one Drive folder half the team can't find. And there's no history: when you overwrite "Last Serviced," last year's date is just gone.
+
+That's the same wall the [free inventory template](/blog/free-church-inventory-template) eventually hits, and it's [why churches outgrow spreadsheets](/blog/why-churches-need-inventory-management) for operations that actually matter. A living record fixes the parts a spreadsheet can't: Next Due recalculates itself, the people responsible get nudged before something lapses, the log is reachable from a phone in the mechanical room instead of a laptop in the office, and every service builds a history instead of overwriting it.
+
+ChurchOpsHub can hold this exact record live — equipment, intervals, who's responsible, and automatic reminders when something's due — alongside the inventory it's attached to, so the maintenance log isn't a separate file that drifts out of sync. But that's a convenience, not a prerequisite. The structure above is the actual thing that matters, and it works the moment you paste those eight columns into a sheet.
+
+## Start With One Category This Week
+
+Don't try to log every piece of equipment in the building on day one — that's how good intentions die in a half-filled spreadsheet. Pick the one category where a missed service would hurt most (for most churches, that's HVAC or fire safety), and fill in those rows completely: item, location, last serviced, interval, next due, responsible, vendor, notes. Get one category genuinely current.
+
+Then add a category a week. In two months you'll have a complete, living maintenance record — and you'll have stopped discovering that something was overdue only after it failed. The best maintenance log is the one that exists and gets looked at. Everything else is detail.
+    `.trim(),
+  },
+
+  {
     slug: 'volunteer-role-handoff-knowledge-transfer-church',
     title: 'How to Hand Off a Volunteer Role Without Losing Everything in Their Head',
     description: "When a long-serving volunteer steps down, most of what they knew leaves with them — the vendor contacts, the closet combinations, the unwritten rules. Here is a practical handoff playbook for capturing that knowledge before it walks out the door, so the next volunteer inherits a role instead of starting from scratch.",
