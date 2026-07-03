@@ -1,5 +1,92 @@
 export const BLOG_POSTS = [
   {
+    slug: 'stewardship-includes-stuff-theology-of-church-operations',
+    title: 'The Theology of the Supply Closet: Why Stewardship Includes Stuff',
+    description: "Somebody restocks the communion cups. Somebody labels the AV cables and knows where the spare projector bulb lives. That work is not lesser ministry — it's stewardship, the quiet discipline that lets everything else happen. Here's why caring for the church's stuff is caring for the church's people, and why systems are an act of love.",
+    date: '2026-07-03',
+    keywords: 'church stewardship of resources, theology of church operations, church operations ministry, stewardship church facilities, Acts 6 ministry of tables, faithful in little church, church supply closet organization, honoring church volunteers time, why church operations matter',
+    related: ['why-churches-need-inventory-management', 'volunteer-coordinator-role-guide', 'church-facilities-management-guide'],
+    content: `
+## The Ministry Nobody Claps For
+
+Every church has a person like this. She gets there forty minutes before anyone else on communion Sunday, because the cups don't fill themselves. He's the one who coiled and labeled every cable in the AV booth so the sixteen-year-old running sound can find the right one in the dark. Somebody knows which key opens the boiler room, and it's written down nowhere, and that somebody hasn't missed a Sunday in eleven years.
+
+Nobody claps for this work. There's no supply-closet dedication Sunday. When the service goes beautifully, the sermon gets the compliments — not the person who made sure the mic batteries were fresh and the thermostat was set at 6 AM so the sanctuary wasn't a meat locker.
+
+And here's the quiet lie that creeps in, even among the people doing the work: that this is *lesser* ministry. Second-tier. The stuff you do because you can't sing or preach or teach. Real ministry happens up front; the closet is just logistics.
+
+I want to push back on that as directly as I can. The supply closet is not beneath theology. It has one. Caring for the church's stuff — carefully, systematically, faithfully — is stewardship, and stewardship is not a metaphor that stops at the offering plate. This post is the case for why operations work matters spiritually, and what taking it seriously actually looks like on a shelf-by-shelf level.
+
+## Stewardship Was Always About Stuff
+
+We've spiritualized the word "stewardship" so thoroughly that it mostly means the annual giving campaign now. But in Scripture, a steward is a person put in charge of *things* — a household, granaries, property, servants' wages, actual physical resources that belong to someone else.
+
+The parable of the talents (Matthew 25) is about entrusted property, and the master's commendation is telling: *"You have been faithful over a little; I will set you over much."* The faithfulness being praised is administrative. It's careful handling. The servant who buried the talent in the ground didn't steal anything — he just failed to *manage* what he was given, and that was the failure.
+
+Jesus says it even more pointedly in Luke 16:10: *"One who is faithful in a very little is also faithful in much."* We love to quote that verse about character. Fine — but notice that the "very little" in context is money and material things, and the "much" is true riches. The mundane is the proving ground. How a church treats its folding chairs is not disconnected from how it treats its calling. It's the rehearsal for it.
+
+The church's building, its van, its sound board, its shelf of VBS craft supplies — none of it belongs to the trustees or the deacons or even the congregation, really. It was given, mostly by people of modest means, some of whom sacrificed to give it. A steward's job is to be able to give a good account of what was entrusted. "We're not sure how many projectors we own or where the second one went" is not a good account.
+
+## Acts 6: The First Ops Team
+
+If you want a biblical charter for operations ministry, it's Acts 6, and it's worth reading slowly.
+
+The early church had a logistics failure: the Greek-speaking widows were being overlooked in the daily food distribution. Not a doctrine problem. Not a preaching problem. A *distribution* problem — the first-century equivalent of a broken sign-up sheet.
+
+And look at what the apostles did *not* do. They didn't say "it's just food, let's not get distracted from real ministry." They stopped, acknowledged the problem was real, and created a dedicated role for it. And the qualifications they set for the men who would wait on tables? *"Full of the Spirit and of wisdom."* The same spiritual bar as everything else. Stephen — the first martyr, the man whose sermon takes up all of Acts 7 — enters the story as a food-logistics volunteer.
+
+The church's first organizational hire was an operations team, staffed with its best people. The apostles understood something we keep forgetting: the word doesn't spread when the widows go hungry. The distribution *is* ministry, because the people on the receiving end of it are the ministry.
+
+That's the pattern. Operations is not what you do instead of caring for people. It's one of the load-bearing forms caring for people takes.
+
+## What Neglect Actually Costs
+
+Here's where this stops being abstract, because the theology of the supply closet has a very concrete negative image: what happens when nobody stewards the stuff.
+
+The nursery volunteer who arrives to find no wipes, again, and spends the first ten minutes of her shift hunting through three closets while a parent waits. The youth leader who plans a game night around the projector and discovers — at 6:55 PM — that the bulb died two months ago and everybody knew except him. The trustee who finds out the church has been paying to insure a trailer it sold in 2019, [because no inventory record exists](/blog/why-churches-need-inventory-management). The fire extinguisher that's three years past inspection when the adjuster asks. The $400 of duplicate craft supplies bought because nobody could find the first batch.
+
+None of these are spiritual failures in the way we usually use the phrase. But add them up and look at what they actually cost: volunteer hours burned on scavenger hunts, ministry moments that fizzled, money given sacrificially and then quietly wasted, and — most corrosive of all — the slow lesson taught to every volunteer that their time is not really valued here.
+
+That last one deserves its own paragraph, because I've watched it end more volunteer "careers" than any conflict ever did. When a volunteer gives you her Saturday morning and spends half of it looking for the table dolly, the church has communicated something, whether it meant to or not. Disorganization is never neutral. It always sends a message, and the message is: *your time is the cheapest thing we have.*
+
+## Systems Are How a Church Says Thank You
+
+Flip that around and you get the positive case: **a system is how a congregation honors its volunteers' time.**
+
+A labeled shelf says "we knew you were coming." A [maintenance log](/blog/free-church-equipment-maintenance-log-template) with a Next Due column says "you won't discover the problem mid-event." A checkout record says "you won't be the one blamed for the missing mixer." A [documented role handoff](/blog/volunteer-role-handoff-knowledge-transfer-church) says "your fifteen years of knowledge mattered enough to keep."
+
+This is why I have zero patience for the suggestion that checklists and inventory systems are somehow unspiritual — too corporate, too fussy, not how we do things. A checklist is a kindness. It is preparation made visible. The person who builds a good system for the communion supplies has done something for every volunteer who touches that cabinet for the next decade, most of whom will never know her name. If that's not a picture of servanthood, I don't know what is.
+
+And the practical bar is honestly low. You don't need an operations degree. You need:
+
+- **A written record of what the church owns and where it lives** — even a [simple one](/blog/church-facilities-management-guide), maintained honestly.
+- **Names attached to things.** Who owns the AV closet? Who reorders the coffee? Not "the church" — a person. "I thought someone else had it" is the epitaph of every dead system.
+- **A rhythm of checking.** A [periodic walk-through](/blog/quarterly-church-inventory-audit-checklist) where reality and the record get reconciled, because every untended record drifts into fiction.
+- **A way for the knowledge to outlive the volunteer.** Written down, shared, church-owned — not living in one faithful head.
+
+That's it. That's the whole discipline. It's not glamorous, which is rather the point: neither was waiting on tables, and the church put Stephen on it.
+
+## Dignifying the Work — Out Loud
+
+One more thing, and this one is for pastors and board chairs specifically: if operations is ministry, it should be *treated* like ministry in public.
+
+Commission the facilities team the way you commission Sunday school teachers. Pray for the person who manages the building the way you pray for the mission trip. When the [volunteer coordinator](/blog/volunteer-coordinator-role-guide) pulls off a season where nothing fell through the cracks, say so from the front — precisely *because* nothing visibly happened. The absence of chaos is somebody's labor.
+
+And when you recruit for these roles, recruit honestly upward, not apologetically downward. Not "we just need a warm body to keep the closet organized" but "we need someone faithful to steward what this congregation has been given." Same job. Entirely different theology. People rise to the second description and quietly resent the first.
+
+## Faithful in Little
+
+The stuff is not the point of the church. Nobody's arguing that. The gospel is not a supply closet, and the best-labeled cable in the world never saved anyone.
+
+But the stuff *carries* the point. The communion cups carry the sacrament. The van carries the youth group. The nursery shelf carries somebody's first impression of whether this church can be trusted with their child. Every piece of it was given by someone, is maintained by someone, and either serves the mission smoothly or quietly grinds against it.
+
+Tools help — a shared system like ChurchOpsHub can hold the inventory, the maintenance schedule, and the who-owns-what in one place the whole team can reach, instead of in one volunteer's head. But the tool isn't the theology. The theology is the conviction underneath: that the person who restocks the cups and labels the cables and tracks the keys is doing ministry, full stop, and the church that builds systems around that work is simply taking seriously what it prays — that we would be found faithful in little.
+
+So this week, open the supply closet. Look at it the way a steward would. And then go thank whoever keeps it — they've been doing theology in there for years.
+    `.trim(),
+  },
+
+  {
     slug: 'free-church-equipment-maintenance-log-template',
     title: 'Free Church Equipment Maintenance Log Template (and How to Actually Use It)',
     description: "A free, copy-it-yourself equipment maintenance log template for churches — the exact columns a useful log needs, what each one is for, how to set service intervals, and how to spread accountability so it doesn't all land on one person. Works in a spreadsheet or a live system.",
