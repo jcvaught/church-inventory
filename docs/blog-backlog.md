@@ -1,0 +1,43 @@
+# ChurchOpsHub Blog Backlog
+
+_Moved from Claude memory 2026-07-04; single source of truth._
+
+ChurchOpsHub has 21 published posts as of 2026-05-26 but no prior backlog memory. Per the 2026-05-26 SEO audit ([[project_blog_indexation_push]]), winning SERP angles are **inventory / facilities / volunteer-ops** (NOT generic "church management software" — that SERP is owned by Planning Center/Tithe.ly; COH ranks pos 55–94 there = bot noise). Topics below are filtered to the winning angles.
+
+## Topic Backlog (in priority order)
+
+Through-line set 2026-07-03: COH's message is **"operations is a ministry of stewardship — the quiet work that lets everything else happen."** Manifesto post published 2026-07-03 (see below); future posts should link back to it.
+
+1. **When the One Person Who Knows Everything Leaves** — institutional bus-factor; sequel to the volunteer-handoff post.
+2. **The Sunday Morning Pre-Flight: A 20-Minute Facilities Walkthrough** — run-it-from-the-page checklist.
+3. **Borrowed, Broken, or Just Gone: A Grace-Filled System for Equipment That Leaves the Building** — check-out/accountability, servant-hearted framing.
+4. **What to Do the Week After a Big Event** — teardown/restock/notes-for-next-year; closes the event loop.
+5. **Volunteer Roles Nobody Wants (And How to Make Them Wanted)** — deepens volunteer-ops cluster around the coordinator-guide sleeper.
+6. **Easter & Christmas Communion Supply Planning Checklist** — seasonal; queue for Q4.
+
+## Published Posts (since this memory created)
+
+- 2026-07-03: The Theology of the Supply Closet: Why Stewardship Includes Stuff (slug `stewardship-includes-stuff-theology-of-church-operations`) — the MANIFESTO post; ops as ministry of stewardship (talents parable, Luke 16:10, extended Acts 6 section, "systems are how a congregation says thank you"). 1,658 words. `related: [why-churches-need-inventory-management, volunteer-coordinator-role-guide, church-facilities-management-guide]`; 6 inline links all slug-verified (adds free-church-equipment-maintenance-log-template, volunteer-role-handoff-knowledge-transfer-church, quarterly-church-inventory-audit-checklist). Sitemap entry added. Written on `main` (branch confirmed). Commit 579fda1; Vercel auto-deploy on push. Link future posts back to this one.
+
+- 2026-06-26: Free Church Equipment Maintenance Log Template (and How to Actually Use It) (slug `free-church-equipment-maintenance-log-template`) — SEO-driven sibling of the two proven winners `free-church-inventory-template` (16 clicks/pos 5.8) + `church-equipment-maintenance` (pos 7.7); captures the high-converting "free template / downloadable" intent in the facilities lane. Includes an actual 8-column copy-it-yourself markdown table (Item/Asset · Location · Last Serviced · Service Interval · Next Due · Responsible · Vendor/Contact · Status). `related: [free-church-inventory-template, church-equipment-maintenance, quarterly-church-inventory-audit-checklist]`; inline links to those 3 + why-churches-need-inventory-management. ~1,766 words. Sitemap entry added.
+- 2026-06-17: How to Hand Off a Volunteer Role Without Losing Everything in Their Head (slug `volunteer-role-handoff-knowledge-transfer-church`) — volunteer-ops cluster; knowledge-transfer/turnover playbook (start-before-you-need-it · 5 capture buckets: rhythm/contacts/access/stuff/unwritten-rules · watch→do-with-spotter→solo overlap · split hero roles · church-owned shared record). `related: [volunteer-coordinator-role-guide, church-volunteer-scheduling-system-that-lasts, church-facilities-management-guide]`; inline links TO both sleeper winners (volunteer-coordinator-role-guide + church-facilities-management-guide) + scheduling-system post. Inbound links ADDED into volunteer-coordinator-role-guide ("Why Role Clarity Matters") and church-volunteer-scheduling-system-that-lasts (point 5 "no exit plan"). Sitemap manual entry added; 1687 words.
+- 2026-06-16: Wedding & Funeral Logistics Checklist for Small Churches (slug `wedding-funeral-logistics-checklist-small-church`) — (was backlog #2) reusable run-it-from-the-page logistics checklist for the two highest-stakes events; built around a one-page event brief + explicit who-owns-what handoffs. Volunteer-ops/facilities/event-logistics lane. `related: [vbs-supply-planning-checklist, church-workday-planning, volunteer-coordinator-role-guide]`; inline links to those + church-facilities-management-guide. Sitemap manual entry added.
+
+- 2026-06-09: Setting Up QR Asset Labels in Your Church (slug `setting-up-qr-asset-labels-in-your-church`) — (was backlog #3) inventory winning-angle how-to: what to buy (vinyl/poly asset tags), what the code links to (a live updatable record, NOT a stale sheet/PDF), area-prefix naming scheme, placement, ministry-by-ministry rollout, hand-off, quarterly scan. `related: [why-churches-need-inventory-management, how-to-do-a-church-physical-audit, church-equipment-maintenance]`; inline links to moving-beyond-spreadsheets, church-av-equipment-inventory, quarterly-audit-checklist. ⚠️ Authored on the `phase2-readpath` dark branch by mistake, then cherry-picked to `main` (commit c3c1dbb) so it deploys; `phase2-readpath` force-restored to its prior dark state — blog files don't overlap the Phase-2 CF work
+- 2026-06-11: What to Audit in Your Church's Inventory Every Quarter (slug `quarterly-church-inventory-audit-checklist`) — 5 categories (consumables/equipment/AV/keys+access/safety) + make-it-a-system close; inventory winning-angle; `related: [how-to-do-a-church-physical-audit, why-churches-need-inventory-management, church-facilities-management-guide]`; inline links to moving-beyond-spreadsheets, church-equipment-maintenance, church-av-equipment-inventory, church-volunteer-equipment-accountability
+- 2026-06-09: Volunteer Coordinator Burnout: 5 Warning Signs — clusters around the `volunteer-coordinator-role-guide` sleeper (pos 22.8); links to it + scheduling + workday posts
+- 2026-05-26: The First 30 Days as a Church Facilities Manager — role-persona companion to volunteer-coordinator-role-guide
+
+## Published Posts (clusters, for reference)
+
+**Volunteer Ops (6):** volunteer-coordinator-role-guide (198 impr, pos 22.8 — SLEEPER), church-volunteer-scheduling-system-that-lasts, church-volunteer-equipment-accountability, church-workday-planning, vbs-supply-planning-checklist
+
+**Facilities/Maintenance (7):** church-equipment-maintenance, how-to-do-a-church-physical-audit, church-facilities-manager-tracking, kanban-church-maintenance, church-facilities-management-guide (160 impr, pos 25.7 — SLEEPER), church-av-equipment-inventory, sortly-alternatives-for-churches
+
+**Inventory/Asset Mgmt (5):** why-churches-need-inventory-management, moving-beyond-spreadsheets, church-supply-management, free-church-inventory-template, hidden-cost-of-spreadsheet-church-operations
+
+**Software Comparison (3):** what-planning-center-cant-do, churchtrac-vs-servant-keeper-vs-churchopshub, tithely-vs-pushpay-vs-churchopshub (note: `best-church-management-software-small-churches` is a 4th but it's the bot-noise loser — don't add more like it)
+
+**Why:** Building SEO content to drive signups for ChurchOpsHub. Cluster strategy = deepen the 3 winning angles, don't chase the losing "ChMS comparison" SERP.
+
+**How to apply:** At the start of each session that involves COH blog work, suggest the next topic. After publishing, remove from this list and (if SEO data warrants) reorder. Avoid adding generic "best church management software" comparison posts — they don't rank.
