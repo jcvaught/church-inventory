@@ -92,6 +92,17 @@ The homepage has avg position 14.3 and is the highest-authority URL on the prope
 - church-facilities-management-guide: pos 25 → pos 15–20. Less dramatic but still meaningful for the "facility management" cluster.
 - Loser post: impressions decline as internal-link reinforcement vanishes. Not a loss — those impressions were never converting.
 
+## Result (verified 2026-06-26)
+
+✅ **The rewire worked.** 28-day GSC pull (2026-05-29 → 2026-06-26):
+
+| URL | Before | After | Verdict |
+|---|---|---|---|
+| `/blog/volunteer-coordinator-role-guide` | pos 22.8 (198 impr) | **pos 12.2** (136 impr) | Page 1, in the predicted 8–14 band |
+| `/blog/church-facilities-management-guide` | pos 25.7 (160 impr) | **pos 18.6** (65 impr) | In the predicted 15–20 band |
+
+Both cleared the doc's own success criterion ("moved below pos 18 → internal linking did its job; the remaining lever is external authority, not internal links"). **This item is closed.** Further movement now depends on **external backlinks** (the `project_blog_indexation_push` track), not more internal rewiring.
+
 ## How to verify
 
 Re-run after ~4 weeks (target: 2026-06-23):
