@@ -25,12 +25,14 @@ function generateId(description, existingIds) {
 }
 
 export function SuppliesPage({ store, userProfile }) {
-  const { supplies, settings, activityLog, items, addSupply, addItem, updateSupply, useSupply, restockSupply, deleteSupply, updateSettings } = store;
+  const { supplies, settings, activityLog, items, rooms, addSupply, addItem, updateSupply, useSupply, restockSupply, deleteSupply, updateSettings } = store;
+  const activeRooms = useMemo(() => (rooms || []).filter(r => r.active !== false), [rooms]);
   const isMobile = useContext(MobileCtx);
 
   const [search, setSearch] = useState("");
   const [showLowOnly, setShowLowOnly] = useState(false);
   const [locationFilter, setLocationFilter] = useState(() => localStorage.getItem("sup_locationFilter") || "");
+  const [spaceFilter, setSpaceFilter] = useState(() => localStorage.getItem("sup_spaceFilter") || "");
   const [sortBy, setSortBy] = useState(() => localStorage.getItem("sup_sortBy") || "default");
 
   // Modals
@@ -42,7 +44,7 @@ export function SuppliesPage({ store, userProfile }) {
   const [showDetail, setShowDetail] = useState(null);   // supply object (read-only)
 
   // Forms
-  const emptySupply = { supplyId:"", description:"", location:"", ministry:"", quantity:0, minQuantity:5, unit:"each", tags:[] };
+  const emptySupply = { supplyId:"", description:"", location:"", roomDocId:"", roomName:"", ministry:"", quantity:0, minQuantity:5, unit:"each", tags:[] };
 
   function toggleSupTag(form, setForm, tag) {
     setForm(prev => ({ ...prev, tags: prev.tags.includes(tag) ? prev.tags.filter(t => t !== tag) : [...prev.tags, tag] }));
@@ -81,7 +83,15 @@ export function SuppliesPage({ store, userProfile }) {
   function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
 
   useEffect(() => { localStorage.setItem("sup_locationFilter", locationFilter); }, [locationFilter]);
+  useEffect(() => { localStorage.setItem("sup_spaceFilter", spaceFilter); }, [spaceFilter]);
   useEffect(() => { localStorage.setItem("sup_sortBy", sortBy); }, [sortBy]);
+
+  // Link a supply to a reservable Space (room-scoped inventory, Shape A — mirrors
+  // ItemsPage). Denormalizes the room name and prefills free-text location if empty.
+  function handleSelectSpace(setForm, docId) {
+    const room = activeRooms.find(r => r._docId === docId);
+    setForm(f => ({ ...f, roomDocId: docId, roomName: room?.name || "", location: f.location || room?.name || "" }));
+  }
 
   // ── AI Supply Identification ──
   async function handleIdentify(file) {
@@ -120,12 +130,13 @@ export function SuppliesPage({ store, userProfile }) {
       if (showLowOnly && s.quantity > s.minQuantity) return false;
       if (tagFilter && !(s.tags || []).includes(tagFilter)) return false;
       if (locationFilter && (s.location || "") !== locationFilter) return false;
+      if (spaceFilter && (s.roomDocId || "") !== spaceFilter) return false;
       return true;
     });
     if (sortBy === "az") out.sort((a, b) => (a.description || "").localeCompare(b.description || ""));
     else if (sortBy === "za") out.sort((a, b) => (b.description || "").localeCompare(a.description || ""));
     return out;
-  }, [supplies, search, showLowOnly, tagFilter, locationFilter, sortBy]);
+  }, [supplies, search, showLowOnly, tagFilter, locationFilter, spaceFilter, sortBy]);
 
   const lowCount = supplies.filter(s => s.quantity <= s.minQuantity).length;
 
@@ -142,6 +153,8 @@ export function SuppliesPage({ store, userProfile }) {
       supplyId: supForm.supplyId.trim(),
       description: supForm.description.trim(),
       location: supForm.location,
+      roomDocId: supForm.roomDocId || "",
+      roomName: supForm.roomName || "",
       ministry: supForm.ministry,
       quantity: Number(supForm.quantity) || 0,
       minQuantity: Number(supForm.minQuantity) || 5,
@@ -165,6 +178,8 @@ export function SuppliesPage({ store, userProfile }) {
       supplyId: showEditSupply.supplyId,
       description: editSupForm.description.trim(),
       location: editSupForm.location,
+      roomDocId: editSupForm.roomDocId || "",
+      roomName: editSupForm.roomName || "",
       ministry: editSupForm.ministry,
       minQuantity: Number(editSupForm.minQuantity) || 5,
       unit: editSupForm.unit || "each",
@@ -232,6 +247,8 @@ export function SuppliesPage({ store, userProfile }) {
       itemId: id,
       description: showMoveToItem.description,
       location: showMoveToItem.location || "",
+      roomDocId: showMoveToItem.roomDocId || "",
+      roomName: showMoveToItem.roomName || "",
       ministry: showMoveToItem.ministry || "",
       status: "Available",
       tags: showMoveToItem.tags || [],
@@ -312,6 +329,12 @@ export function SuppliesPage({ store, userProfile }) {
             <option value="">All locations</option>
             {locations.map(l => <option key={l} value={l}>{l}</option>)}
           </select>
+          {activeRooms.length > 0 && (
+            <select aria-label="Filter by space" style={{ ...inp, flex:1, minWidth:140 }} value={spaceFilter} onChange={e=>setSpaceFilter(e.target.value)}>
+              <option value="">All Spaces</option>
+              {activeRooms.map(r => <option key={r._docId} value={r._docId}>{r.name}</option>)}
+            </select>
+          )}
           <select aria-label="Sort supplies" style={{ ...inp, flex:1, minWidth:140 }} value={sortBy} onChange={e=>setSortBy(e.target.value)}>
             <option value="default">Sort: Default</option>
             <option value="az">Sort: Name (A–Z)</option>
@@ -388,7 +411,7 @@ export function SuppliesPage({ store, userProfile }) {
                   </span>
                   <div style={{ display:"flex", gap:6, flexShrink:0 }} onClick={e=>e.stopPropagation()}>
                     <button onClick={()=>setShowHistory(s)} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>History</button>
-                    {canManageSupply(userProfile, s) && <button onClick={()=>{setEditSupForm({ supplyId:s.supplyId, description:s.description, location:s.location||"", ministry:s.ministry||"", quantity:s.quantity, minQuantity:s.minQuantity||5, unit:s.unit||"each", tags:s.tags||[] });setShowEditSupply(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Edit</button>}
+                    {canManageSupply(userProfile, s) && <button onClick={()=>{setEditSupForm({ supplyId:s.supplyId, description:s.description, location:s.location||"", roomDocId:s.roomDocId||"", roomName:s.roomName||"", ministry:s.ministry||"", quantity:s.quantity, minQuantity:s.minQuantity||5, unit:s.unit||"each", tags:s.tags||[] });setShowEditSupply(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Edit</button>}
                     <button onClick={()=>{setUseForm({ qty:"1", purpose:"" });setShowUse(s);}} style={{ ...btnS, padding:"5px 12px", fontSize:11 }}>Use</button>
                     <button onClick={()=>{setRestockForm({ qty:"", source:"" });setShowRestock(s);}} style={{ ...btnP, padding:"5px 12px", fontSize:11 }}>Restock</button>
                     {isAdmin && <button onClick={()=>handleDelete(s)} style={{ ...btnD, padding:"5px 12px", fontSize:11 }}>Delete</button>}
@@ -423,6 +446,15 @@ export function SuppliesPage({ store, userProfile }) {
             {ministries.map(m => <option key={m} value={m}>{m}</option>)}
           </select></FF>
         </div>
+        {activeRooms.length > 0 && (
+          <FF label="Space (optional)">
+            <select style={inp} value={supForm.roomDocId} onChange={e=>handleSelectSpace(setSupForm, e.target.value)}>
+              <option value="">— Not in a reservable space —</option>
+              {activeRooms.map(r => <option key={r._docId} value={r._docId}>{r.name}</option>)}
+            </select>
+            <div style={{ fontSize:12, color:B.textLight, marginTop:4 }}>Link to a room to track what's stocked in each space.</div>
+          </FF>
+        )}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
           <FF label="Starting Qty"><input style={inp} type="number" min="0" value={supForm.quantity} onChange={e=>setSupForm({...supForm, quantity:e.target.value})}/></FF>
           <FF label="Min Qty (alert)"><input style={inp} type="number" min="0" value={supForm.minQuantity} onChange={e=>setSupForm({...supForm, minQuantity:e.target.value})}/></FF>
@@ -462,6 +494,15 @@ export function SuppliesPage({ store, userProfile }) {
             {ministries.map(m => <option key={m} value={m}>{m}</option>)}
           </select></FF>
         </div>
+        {activeRooms.length > 0 && (
+          <FF label="Space (optional)">
+            <select style={inp} value={editSupForm.roomDocId} onChange={e=>handleSelectSpace(setEditSupForm, e.target.value)}>
+              <option value="">— Not in a reservable space —</option>
+              {activeRooms.map(r => <option key={r._docId} value={r._docId}>{r.name}</option>)}
+            </select>
+            <div style={{ fontSize:12, color:B.textLight, marginTop:4 }}>Link to a room to track what's stocked in each space.</div>
+          </FF>
+        )}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
           <FF label="Min Qty (alert)"><input style={inp} type="number" min="0" value={editSupForm.minQuantity} onChange={e=>setEditSupForm({...editSupForm, minQuantity:e.target.value})}/></FF>
           <FF label="Unit"><select style={inp} value={editSupForm.unit} onChange={e=>setEditSupForm({...editSupForm, unit:e.target.value})}>
@@ -563,6 +604,7 @@ export function SuppliesPage({ store, userProfile }) {
               <StockBar quantity={s.quantity || 0} minQuantity={s.minQuantity || 5} />
               <div style={{ marginTop:16, display:"flex", flexDirection:"column", gap:8 }}>
                 {s.location && <div style={{ display:"flex", gap:8, fontSize:13 }}><span style={{ color:B.textLight, minWidth:80, fontFamily:f1, fontWeight:600 }}>Location</span><span style={{ color:B.textDark }}>{s.location}</span></div>}
+                {s.roomName && <div style={{ display:"flex", gap:8, fontSize:13 }}><span style={{ color:B.textLight, minWidth:80, fontFamily:f1, fontWeight:600 }}>Space</span><span style={{ color:B.textDark }}>🏛️ {s.roomName}</span></div>}
                 {s.ministry && <div style={{ display:"flex", gap:8, fontSize:13 }}><span style={{ color:B.textLight, minWidth:80, fontFamily:f1, fontWeight:600 }}>Ministry</span><span style={{ color:B.textDark }}>{s.ministry}</span></div>}
                 {s.notes && <div style={{ display:"flex", gap:8, fontSize:13 }}><span style={{ color:B.textLight, minWidth:80, fontFamily:f1, fontWeight:600 }}>Notes</span><span style={{ color:B.textDark }}>{s.notes}</span></div>}
                 {s.lastRestocked && <div style={{ display:"flex", gap:8, fontSize:13 }}><span style={{ color:B.textLight, minWidth:80, fontFamily:f1, fontWeight:600 }}>Last Restock</span><span style={{ color:B.textDark }}>{s.lastRestocked.split("T")[0]}</span></div>}
@@ -570,7 +612,7 @@ export function SuppliesPage({ store, userProfile }) {
               </div>
               <div style={{ display:"flex", gap:8, marginTop:20, flexWrap:"wrap" }} onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>{setShowDetail(null);setShowHistory(s);}} style={{ ...btnS, flex:1, minWidth:80 }}>History</button>
-                {canManageSupply(userProfile, s) && <button onClick={()=>{setShowDetail(null);setEditSupForm({ supplyId:s.supplyId, description:s.description, location:s.location||"", ministry:s.ministry||"", quantity:s.quantity, minQuantity:s.minQuantity||5, unit:s.unit||"each", tags:s.tags||[] });setShowEditSupply(s);}} style={{ ...btnS, flex:1, minWidth:80 }}>Edit</button>}
+                {canManageSupply(userProfile, s) && <button onClick={()=>{setShowDetail(null);setEditSupForm({ supplyId:s.supplyId, description:s.description, location:s.location||"", roomDocId:s.roomDocId||"", roomName:s.roomName||"", ministry:s.ministry||"", quantity:s.quantity, minQuantity:s.minQuantity||5, unit:s.unit||"each", tags:s.tags||[] });setShowEditSupply(s);}} style={{ ...btnS, flex:1, minWidth:80 }}>Edit</button>}
                 <button onClick={()=>{setShowDetail(null);setUseForm({ qty:"1", purpose:"" });setShowUse(s);}} style={{ ...btnS, flex:1, minWidth:80 }}>Use</button>
                 <button onClick={()=>{setShowDetail(null);setRestockForm({ qty:"", source:"" });setShowRestock(s);}} style={{ ...btnP, flex:1, minWidth:80 }}>Restock</button>
               </div>

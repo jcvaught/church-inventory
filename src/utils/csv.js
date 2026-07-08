@@ -20,7 +20,7 @@ export function exportItemsCSV(items) {
 }
 
 export function exportSuppliesCSV(supplies) {
-  const cols = ['supplyId','description','location','ministry','quantity','minQuantity','unit'];
+  const cols = ['supplyId','description','location','roomName','ministry','quantity','minQuantity','unit'];
   const header = cols.join(',');
   const rows = supplies.map(s => cols.map(c => {
     const v = s[c];

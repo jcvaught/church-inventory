@@ -4,6 +4,12 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-07-08',
+    tag: 'New',
+    title: 'Link supplies to a room, just like items',
+    body: "Supplies can now live in a Space too. If your church uses reservable rooms, adding or editing a supply lets you pick its Space — then filter the supplies list by room, see the room on the supply's detail card, and get it in your CSV export. Moving a supply to Inventory carries the room link with it. Like the item version, it's optional and only appears once you've set up Spaces.",
+  },
+  {
     date: '2026-06-24',
     tag: 'New',
     title: 'Know what equipment lives in each room',

@@ -4,6 +4,19 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-07-08 — Supplies gain the Shape A room link (parity with Items)
+
+The "trivial future extension" flagged in the 2026-06-24 Shape A entry, built exactly as scoped in `docs/backlog.md` (2026-06-26): a pure client-side mirror of the ItemsPage pattern into `SuppliesPage.jsx`.
+
+- **Model (additive, no migration):** supplies gain optional `roomDocId` + denormalized `roomName`.
+- **Add/edit forms:** a **"Space (optional)"** dropdown (active rooms only, shown only when spaces exist) via `handleSelectSpace(setForm, docId)` — parameterized on the setter since SuppliesPage has separate add/edit form states; denormalizes `roomName` + prefills free-text Location if empty. Both `setEditSupForm` seed sites (card Edit + detail-modal Edit) carry the fields.
+- **Filters/detail/export:** a **"Space" filter** persisted as `sup_spaceFilter` (shown only when rooms exist); **🏛️ Space** row in the supply detail modal; `roomName` column in `exportSuppliesCSV`.
+- **Move to Inventory** hands `roomDocId`/`roomName` through to the created item.
+- **No rules/functions deploy** — `addSupply` spreads all fields and the `supplies` rules have no field whitelist (re-verified at scoping).
+- **Verified:** build + lint clean (0 errors, warning count unchanged vs. baseline).
+
+---
+
 ## 2026-06-24 — Room-scoped inventory (Shape A: optional item↔space link)
 
 Follow-on to the room-calendar moat. An **additive** link from inventory items to reservable spaces — chosen over a full `rooms`↔`settings.locations` convergence after a prod-data check showed the migration would buy little (biggest church has 14 location strings; **0 rooms exist anywhere yet**, so there's nothing to converge and no demand). Shape A gets ~80% of the value for ~20% of the cost and keeps the free-text `location` untouched.
