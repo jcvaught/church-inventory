@@ -1,5 +1,94 @@
 export const BLOG_POSTS = [
   {
+    slug: 'when-the-one-person-who-knows-everything-leaves',
+    title: 'When the One Person Who Knows Everything Leaves',
+    description: "Every church has one — the facilities deacon, the sound guy, the kitchen coordinator whose head holds the whole building. When they retire, move, or get sick, decades of institutional knowledge can vanish overnight. Here's how to recognize a single point of failure, audit what only they know, and move that knowledge into a system the church owns — before the exit, or after it.",
+    date: '2026-07-08',
+    keywords: 'church institutional knowledge, church single point of failure, key church volunteer leaves, church facilities deacon retires, church knowledge transfer, church succession planning volunteers, church operations continuity, when church volunteer retires, church bus factor',
+    related: ['volunteer-role-handoff-knowledge-transfer-church', 'stewardship-includes-stuff-theology-of-church-operations', 'church-facilities-management-guide'],
+    content: `
+## The Tuesday the Boiler Won't Start
+
+It's a cold Tuesday in January, the boiler won't start, and there's a funeral at eleven. For twenty years the answer to this exact moment has been two words: call Ray. Ray knows the boiler has to be reset twice. Ray knows the guy at the supply house who answers before seven. Ray knows the shutoff is behind the paneling that doesn't look like it opens.
+
+But Ray moved to Arizona in October to be near his daughter. And the church is discovering, one cold room and one locked closet at a time, that it never actually had a facilities system. It had Ray.
+
+We wrote earlier about [how to hand off a single volunteer role well](/blog/volunteer-role-handoff-knowledge-transfer-church) — the planned transition, where someone gives notice and you have weeks to capture what they know. This post is about the deeper version of the problem: the person whose head holds not one role but the *whole building*. The twenty-year facilities deacon. The sound guy who wired the booth himself in 2009. The kitchen coordinator who knows which oven runs hot and which vendor delivers on Saturdays. When that person retires, moves, gets sick, or quietly burns out, there is no two-week overlap window — there's a hole where the church's operational memory used to be.
+
+## This Is a System Failure, Never a Person Failure
+
+Let's get one thing straight before anything practical, because it shapes everything else: the person at the center of this problem is almost never the problem.
+
+The volunteer whose head holds the building is usually the most faithful servant in it. Nobody assigned Ray the boiler, the roof, and the mystery breaker. He picked them up one at a time, over decades, because things needed doing and he kept showing up. The knowledge concentrated in him precisely *because* he was dependable. His faithfulness is not a flaw — it's a gift the church leaned on harder every year without ever building anything underneath it.
+
+The failure belongs to the system — or rather, to the absence of one. Scripture is blunt about this pattern. When Jethro watched Moses judging every dispute alone, his verdict wasn't "what a faithful man." It was: *"What you are doing is not good. You and the people with you will certainly wear yourselves out"* (Exodus 18). The load was legitimate; the architecture wasn't. And Paul points the same direction: entrust what you've received *"to faithful men, who will be able to teach others also"* (2 Timothy 2:2). Knowledge that stops in one person — however faithful — was never meant to stop there.
+
+So this is not about trusting people less. It's about honoring them better. The truest way to honor two decades of quiet service is to make sure the work survives the servant — that what Ray built keeps blessing the church long after Ray is watching his grandkids play in the Arizona sun. [Operations is a ministry of stewardship](/blog/stewardship-includes-stuff-theology-of-church-operations), and stewardship of *knowledge* is part of it: what only one person knows, the church doesn't really own yet.
+
+## The "Who Would We Call?" Test
+
+Most churches don't know they have a single point of failure until it fails. Here's a ten-minute exercise for a board meeting or a staff huddle that surfaces it early. Ask, out loud:
+
+- The heat dies on a Sunday morning. **Who would we call?** Now: who would we call *if that person didn't pick up?*
+- The soundboard won't pass signal at 9:40. Same two questions.
+- We need into the records closet, the AV loft, the kitchen storage. Who has keys? Is there a second name?
+- A vendor invoice arrives for something nobody recognizes. Who knows what it's for?
+- The big Easter setup has to happen and our usual person is in the hospital. Could anyone else run it from something written down?
+
+If any question produces exactly one name — and the follow-up produces silence — you've found a single point of failure. Write the name down. Most churches doing this honestly end up with a short list of two or three people on whom disproportionate amounts of the operation silently rest. Often the [volunteer coordinator](/blog/volunteer-coordinator-role-guide) is one of them — the person managing everyone else's coverage frequently has none.
+
+The point of the test isn't alarm. It's a to-do list. Each name is a knowledge audit waiting to happen.
+
+## The Knowledge Audit: Mapping What Only They Know
+
+For each person on your list, sit down with them — framed as honor, not audit, because that's what it is: *"You carry more of this church in your head than anyone. Help us make sure it outlives all of us."* Most long-serving volunteers find this conversation a relief — many have quietly worried about it for years and didn't know how to raise it without sounding self-important.
+
+Then walk five territories together:
+
+**The vendors and relationships.** Not just names and numbers — the *why*. Which HVAC company answers on weekends. Which plumber knows the building. Which supplier gives a discount because of a friendship formed in 1998, and whether the discount survives the friendship. Capture account numbers and billing arrangements too.
+
+**The quirks of the building.** Every old building has folklore: the breaker that trips if the coffee urns and the space heater run together, the valve you have to open slowly, the door that needs a hip check, the thermostat that lies by four degrees. This is the knowledge that looks trivial until 7 AM on Christmas Eve. Walk the building with them and write down everything they say, especially the things they wave off as obvious.
+
+**Where things actually are.** The spare projector bulb, the extra communion trays, the water shutoff, the ladder that fits the sanctuary lights. If the church keeps [a real inventory](/blog/why-churches-need-inventory-management), reconcile it against their memory — you'll be amazed what the record is missing.
+
+**The undocumented rhythms.** What they do weekly, monthly, seasonally, without anyone asking. When the filters get changed. When the gutters get cleared. What gets checked before every wedding. Much of a veteran's value is a maintenance calendar that exists nowhere but in habit — get it into [a written maintenance log](/blog/free-church-equipment-maintenance-log-template) with dates and intervals.
+
+**Access: keys, codes, passwords.** Every key they hold, every code they know, every account registered to their personal email. This one has a security edge — when anyone leaves, the church needs to know exactly what needs reassigning — but it's also the fastest category to lose completely. A combination known by one person is one memory away from a locksmith bill.
+
+## From a Person to a System of Record
+
+An audit that ends in a legal pad has only moved the single point of failure from Ray's head to a notebook that will get lost. The destination matters: the knowledge has to land somewhere **church-owned, shared, and findable** — a system of record, not a person of record.
+
+That means procedures and quirks in shared documents the whole team can open; vendors in a shared contact list; equipment, locations, and service history in [a facilities record the church controls](/blog/church-facilities-management-guide); keys and access in a tracked assignment list. A tool like ChurchOpsHub holds all of that in one place — inventory, maintenance schedules, vendor contacts, key assignments — so the answer to "who knows?" becomes "the system, and everyone in it." But the tool matters less than the ownership: on church infrastructure, under church accounts, reachable without calling anyone.
+
+Two disciplines keep it alive. First, **capture at the source**: when the veteran arranges a repair or learns something new about the building, it goes in the record that week, not in their head. Second, **use the record on purpose** — when someone has a question the veteran could answer, have them look it up first. A record nobody reads drifts back into fiction, and everyone quietly reverts to calling Ray.
+
+## Build the Overlap Before the Exit
+
+Documentation captures facts. Judgment transfers only person-to-person — which is why the second half of the fix is apprenticeship, started *years* before any exit is in view.
+
+Give every load-bearing veteran an apprentice: someone who works alongside them, holds a copy of the keys, and gradually takes real responsibility — not a shadow, an understudy who actually performs. Rotate real tasks to them; let them run a season while the veteran spots. Most veterans, asked well, are glad to teach — what wears them down is not the work but the loneliness of being the only one who can do it. An apprentice is a gift, not a threat, and often the beginning of the next twenty-year servant.
+
+## When They're Already Gone: The Recovery Playbook
+
+Sometimes the phone call comes first — the sudden illness, the abrupt move, the resignation that was really a burnout nobody saw. If the knowledge has already walked out the door, salvage in this order:
+
+1. **Secure access first.** Keys, codes, accounts, anything registered to their personal email. Rekey or reset what you can't account for.
+2. **Ask for a graceful debrief — gently.** If they're willing and able, an hour of their time is worth a month of reverse-engineering. Honor the circumstances: a burned-out volunteer may need weeks before that ask is kind, and many will help gladly once the pressure of *doing* the job is off them.
+3. **Walk the building with fresh eyes and a notebook.** Open every closet. Photograph every mechanical room. Label what you find. You're rebuilding the map.
+4. **Call the vendors.** They often know the building — and the history — better than anyone left inside it. "We used to work with Ray; can you tell us what you've serviced here?" rebuilds surprising amounts of the record.
+5. **Write everything down as you relearn it.** Every rediscovery goes straight into the system of record, so the church only pays this price once.
+6. **Split the role before refilling it.** Do not recruit a new Ray. Twenty years of accretion is not a job description; it's a warning. Break it into pieces a team can hold.
+
+## Honoring the Legacy
+
+Somewhere in your church right now is a person carrying more of the building in their head than anyone realizes — and probably wondering, in quieter moments, what happens when they can't anymore. The kindest thing you can do for them is not another thank-you note, though write that too. It's to sit down and start moving what they know into something that will outlast them — so that decades from now, when the boiler stalls on a cold Tuesday, the person who fixes it is still, in a real sense, being helped by Ray.
+
+That's what a legacy is, operationally speaking: not being irreplaceable, but leaving behind a church permanently strengthened because you served it. Faithful servants deserve systems worthy of their faithfulness. Build one while they're still here to help.
+    `.trim(),
+  },
+
+  {
     slug: 'stewardship-includes-stuff-theology-of-church-operations',
     title: 'The Theology of the Supply Closet: Why Stewardship Includes Stuff',
     description: "Somebody restocks the communion cups. Somebody labels the AV cables and knows where the spare projector bulb lives. That work is not lesser ministry — it's stewardship, the quiet discipline that lets everything else happen. Here's why caring for the church's stuff is caring for the church's people, and why systems are an act of love.",

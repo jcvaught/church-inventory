@@ -8,14 +8,15 @@ ChurchOpsHub has 21 published posts as of 2026-05-26 but no prior backlog memory
 
 Through-line set 2026-07-03: COH's message is **"operations is a ministry of stewardship — the quiet work that lets everything else happen."** Manifesto post published 2026-07-03 (see below); future posts should link back to it.
 
-1. **When the One Person Who Knows Everything Leaves** — institutional bus-factor; sequel to the volunteer-handoff post.
-2. **The Sunday Morning Pre-Flight: A 20-Minute Facilities Walkthrough** — run-it-from-the-page checklist.
-3. **Borrowed, Broken, or Just Gone: A Grace-Filled System for Equipment That Leaves the Building** — check-out/accountability, servant-hearted framing.
-4. **What to Do the Week After a Big Event** — teardown/restock/notes-for-next-year; closes the event loop.
-5. **Volunteer Roles Nobody Wants (And How to Make Them Wanted)** — deepens volunteer-ops cluster around the coordinator-guide sleeper.
-6. **Easter & Christmas Communion Supply Planning Checklist** — seasonal; queue for Q4.
+1. **The Sunday Morning Pre-Flight: A 20-Minute Facilities Walkthrough** — run-it-from-the-page checklist.
+2. **Borrowed, Broken, or Just Gone: A Grace-Filled System for Equipment That Leaves the Building** — check-out/accountability, servant-hearted framing.
+3. **What to Do the Week After a Big Event** — teardown/restock/notes-for-next-year; closes the event loop.
+4. **Volunteer Roles Nobody Wants (And How to Make Them Wanted)** — deepens volunteer-ops cluster around the coordinator-guide sleeper.
+5. **Easter & Christmas Communion Supply Planning Checklist** — seasonal; queue for Q4.
 
 ## Published Posts (since this memory created)
+
+- 2026-07-08: When the One Person Who Knows Everything Leaves (slug `when-the-one-person-who-knows-everything-leaves`) — (was backlog #1) institutional bus-factor; the sequel to `volunteer-role-handoff-knowledge-transfer-church` (that one = planned handoff of one role; this one = the 20-year facilities deacon whose head holds the whole building, unplanned exits). Grace-filled system-failure-not-person-failure framing per the through-line; Exodus 18 (Jethro) + 2 Tim 2:2 kept light. Spine: "who would we call?" test → 5-territory knowledge audit (vendors/quirks/locations/rhythms/access) → church-owned system of record → apprenticeship before the exit → 6-step recovery playbook when they're already gone. 1,827 words. `related: [volunteer-role-handoff-knowledge-transfer-church, stewardship-includes-stuff-theology-of-church-operations, church-facilities-management-guide]`; 6 inline links all slug-verified (those 3 + volunteer-coordinator-role-guide, why-churches-need-inventory-management, free-church-equipment-maintenance-log-template) — links back to the manifesto explicitly. Sitemap entry added. Written on `main` (branch confirmed pre-work).
 
 - 2026-07-03: The Theology of the Supply Closet: Why Stewardship Includes Stuff (slug `stewardship-includes-stuff-theology-of-church-operations`) — the MANIFESTO post; ops as ministry of stewardship (talents parable, Luke 16:10, extended Acts 6 section, "systems are how a congregation says thank you"). 1,658 words. `related: [why-churches-need-inventory-management, volunteer-coordinator-role-guide, church-facilities-management-guide]`; 6 inline links all slug-verified (adds free-church-equipment-maintenance-log-template, volunteer-role-handoff-knowledge-transfer-church, quarterly-church-inventory-audit-checklist). Sitemap entry added. Written on `main` (branch confirmed). Commit 579fda1; Vercel auto-deploy on push. Link future posts back to this one.
 
