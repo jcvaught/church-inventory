@@ -1,5 +1,74 @@
 export const BLOG_POSTS = [
   {
+    slug: 'volunteer-roles-nobody-wants',
+    title: 'Volunteer Roles Nobody Wants (And How to Make Them Wanted)',
+    description: "The worship team signup fills in a day. Parking lot, nursery check-in, and teardown sit blank for weeks. It isn't laziness — the unwanted roles share five specific design flaws, and every one is fixable. Why the hidden jobs are the load-bearing walls of a church, what Acts 6 says about dignifying logistics, and six changes that turn the roles nobody wants into roles people ask for.",
+    date: '2026-07-13',
+    keywords: 'church volunteer roles nobody wants, recruiting church volunteers hard roles, church parking team volunteers, church nursery volunteers recruiting, church teardown crew, unpopular church volunteer positions, how to recruit church volunteers, church volunteer burnout prevention, honoring church volunteers',
+    related: ['stewardship-includes-stuff-theology-of-church-operations', 'volunteer-coordinator-role-guide', 'church-volunteer-scheduling-system-that-lasts'],
+    content: `
+## Two Signup Sheets
+
+Put two signup sheets in the church lobby on the same Sunday. One says *"Worship team — vocalists and musicians."* The other says *"Teardown crew — chairs and tables after second service."*
+
+You already know how this experiment ends. The first sheet fills by Tuesday. The second sheet is still mostly blank in three weeks, carrying the same two names it has carried for years — and one of those names wrote themselves in out of guilt while setting the sheet out.
+
+Every church has its version of the second sheet. Nursery check-in. Parking lot on rainy mornings. Kitchen cleanup after the potluck. Counting and locking up. The sound booth — invisible every week it goes right, infamous the week it doesn't. These are the roles your [volunteer coordinator](/blog/volunteer-coordinator-role-guide) quietly dreads recruiting for, the ones filled by arm-twisting and martyrdom, the ones where one faithful person serves for a decade because no one else will and then leaves a crater [when they finally step away](/blog/when-the-one-person-who-knows-everything-leaves).
+
+Here's the claim of this post: **nobody-wants-it is not a fact about the role. It's a fact about how the role has been designed and honored.** People are not too proud to park cars — this is church; half your congregation would scrub floors if asked rightly. The unwanted roles share a handful of specific, fixable design flaws. Fix them, and the second sheet starts filling too.
+
+## Why Nobody Signs Up: An Honest Diagnosis
+
+Before the fixes, the diagnosis — because the usual explanation ("people just want to be seen") is both uncharitable and wrong. Watch what the unwanted roles have in common:
+
+**They're invisible — except in failure.** The worship team is seen doing the work. The parking team is only ever noticed when the work *doesn't* happen. Nobody has ever walked out of a service saying "the chairs were stacked so well" — but everyone notices the Sunday the nursery check-in line backs into the foyer. A role whose only visibility is negative offers a strange bargain: do it perfectly and be unseen, slip once and be discussed.
+
+**They have no finish line and no story.** Sing on Easter and you have a memory. Wipe down tables for the forty-third consecutive week and you have... week forty-four. The unwanted roles are usually maintenance roles — genuinely endless by nature — and we hand them out as if endlessness were part of the deal: *"Can you take the kitchen? Great. Forever, presumably."*
+
+**Their scope is a fog.** "Just help out with teardown" has no start time, no end time, and no definition of done. People hesitate to grab a rope when they can't see the other end of it. Vague roles feel infinite, and infinite feels like a trap.
+
+**They're lonely.** The nursery hallway during the sermon. The parking lot at 7:45. The sound booth at the back. Many unwanted roles physically remove you from the very community you came to church for — and then we wonder why people decline them. Half the dread of these roles is not the work; it's doing the work *alone*.
+
+**They're treated as slots, not ministries.** Listen to how we recruit for them: "we just need a warm body for the nursery." Nobody says that about the preaching rotation. The language tells volunteers exactly how the church ranks the work — and volunteers believe what they're told.
+
+Notice that none of these flaws is *the work itself*. Cars must be parked; toddlers must be checked in; chairs must be stacked. The work is fixed. Everything else — visibility, duration, scope, company, honor — is a design choice.
+
+## The Bible Is Weirdly Specific About This
+
+If this all sounds like modern volunteer-management technique, it's worth noticing that Scripture gets there first, and more bluntly.
+
+When the food-distribution logistics broke down in Acts 6 — the first operations crisis in church history — the apostles did not tape up a signup sheet asking for warm bodies. They asked the congregation to choose people *"full of the Spirit and of wisdom"* for the work, and then they prayed and laid hands on them. Read that again: the church's first named serving team — spreadsheet-and-supply-line work, waiting on tables — got the same public commissioning as the preachers. And one of those table-waiters was Stephen, who becomes the towering figure of the next two chapters. Luke does not treat logistics as the minor leagues. [We've made the longer case that operations is a ministry of stewardship](/blog/stewardship-includes-stuff-theology-of-church-operations) — Acts 6 is the founding precedent.
+
+Paul goes further, and aims directly at our two signup sheets: *"the parts of the body that seem to be weaker are indispensable, and on those parts of the body that we think less honorable we bestow the greater honor"* (1 Corinthians 12:22–23). That's not a consolation prize for the unglamorous. It's an instruction with a direction of flow: the *less visible* the part, the *more deliberate* the honor. A church that celebrates its vocalists by name and thanks "everyone who helped out" generically has the biblical gradient exactly backwards.
+
+So making the unwanted roles wanted isn't marketing. It's obedience to a fairly explicit design principle — and it happens to work.
+
+## Six Changes That Make the Second Sheet Fill
+
+**1. Give the role a real name and a written edge.** "Teardown help" becomes the *Reset Team: Sundays 12:15–12:50, sanctuary returned to Wednesday configuration, checklist on the wall, done means the photos match.* A named role with a start, an end, and a definition of done is *joinable* — people can see the whole rope before they grab it. Write one page per role: what it is, when it runs, what done looks like, who to call when something's weird. (You'll find that page pays for itself again the day the role [changes hands](/blog/volunteer-role-handoff-knowledge-transfer-church).)
+
+**2. Serve in seasons, not sentences.** The honest reason people won't take the kitchen is that the kitchen is a life sentence with no parole board. So abolish the sentence: recruit for a named term — *the fall season, eight Sundays* — with a scheduled end and a genuine, guilt-free exit. It is a hundred times easier to say yes to eight weeks than to forever, and a [rotation that's actually planned](/blog/church-volunteer-scheduling-system-that-lasts) beats a hero who's slowly burning out. The paradox every coordinator learns: people re-up for roles they were free to leave.
+
+**3. Never schedule anyone alone.** Pair every unwanted role, every time — two on the lot, two in the nursery hallway, two closing up. Yes, it doubles the recruiting math; it more than doubles the yes-rate, because you've removed the loneliness that was half the dread ("serve with a friend" is the easiest ask in church life). And it quietly builds the redundancy that saves you [when one person moves to Arizona](/blog/when-the-one-person-who-knows-everything-leaves).
+
+**4. Report the work as ministry — because it is.** The parking team doesn't park cars; it gives every visitor their first thirty seconds of welcome. Nursery check-in isn't paperwork; it's the reason a first-time mom hears an entire sermon. Say *that*, out loud, from the front, with the same specificity you'd use for the mission trip: "Because the Reset Team served, the seniors' Bible study walked into a ready room Wednesday morning." The work was always ministry. The only question is whether the church says so where volunteers can hear it.
+
+**5. Commission the parking team like you commission the band.** Once a year, put the hidden teams at the front, name the names, and pray over them — Acts 6 liturgy for Acts 6 work. It costs one service's ten minutes. It re-prices every unwanted role in the building, because the congregation watches what gets blessed and concludes, accurately, what the church believes matters.
+
+**6. Give them tools that say "this matters."** The AV volunteer scrounging for the one working adapter, the kitchen crew guessing what's in the unlabeled closet, the setup team rediscovering the table count every single event — each is receiving a message: *this work isn't worth the church's attention.* Decent equipment, labeled storage, a checklist that isn't in one person's head, [an inventory the whole team can see](/blog/why-churches-need-inventory-management) — these aren't operational niceties. They're honor, expressed in logistics. Stewardship of the stuff *is* stewardship of the people who handle it.
+
+## The Load-Bearing Walls
+
+Here's the reframe to leave with, the one worth saying to your board: **the roles nobody wants are the load-bearing walls of the church.** Preaching, music, and teaching are what a church is *for* — but nursery check-in, parking, sound, setup, and cleanup are what let all of it happen, every single week, for everyone else. A church can survive a mediocre sermon. It cannot survive, for long, a nursery no one trusts or a building no one resets.
+
+Which means the blank signup sheet is not a recruiting problem to grind through. It's a reading on how the church has priced its own hidden work — and the price is set by design choices you control: edges, seasons, pairs, honor, commissioning, tools.
+
+The goal isn't to fill the second sheet by guilt. It's to build a church where the second sheet doesn't exist — where the Reset Team has a name, a term, a partner, a checklist, and an annual Sunday when the congregation prays over them by name. In that church, stacking chairs is not what you get stuck with.
+
+It's what you get *asked into* — and there's a short waiting list.
+`,
+  },
+  {
     slug: 'when-the-one-person-who-knows-everything-leaves',
     title: 'When the One Person Who Knows Everything Leaves',
     description: "Every church has one — the facilities deacon, the sound guy, the kitchen coordinator whose head holds the whole building. When they retire, move, or get sick, decades of institutional knowledge can vanish overnight. Here's how to recognize a single point of failure, audit what only they know, and move that knowledge into a system the church owns — before the exit, or after it.",
