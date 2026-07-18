@@ -3465,13 +3465,30 @@ exports.syncShepherdPeople = onSchedule(
   async () => withScheduledRun('syncShepherdPeople', async () => {
     const db = getFirestore();
     const roster = await getShepherdRoster(db);
-    return await syncShepherdPeople(db, FieldValue, {
-      churchId: SHEPHERD_CHURCH_ID,
-      appId: PCO_APP_ID.value(),
-      secret: PCO_SECRET.value(),
-      source: 'scheduled',
-      roster,
-    });
+    try {
+      return await syncShepherdPeople(db, FieldValue, {
+        churchId: SHEPHERD_CHURCH_ID,
+        appId: PCO_APP_ID.value(),
+        secret: PCO_SECRET.value(),
+        source: 'scheduled',
+        roster,
+      });
+    } catch (err) {
+      // onSchedule delivers at-least-once; a duplicate invocation losing the
+      // ROB-3 sync mutex is the guard working, not a failure (seen live
+      // 2026-07-18: duplicate fired 21s after the real run, which completed
+      // fine). Warn instead of error so it doesn't page, and record a benign
+      // summary. The manual "Save & re-sync" callable below deliberately keeps
+      // throwing — there the message is user-facing feedback.
+      if (err?.code === 'shepherd-sync/already-running') {
+        Sentry.captureMessage('shepherd-sync: duplicate scheduled invocation skipped (lock held)', {
+          level: 'warning',
+          tags: { scheduledJob: 'syncShepherdPeople', area: 'shepherd-sync', reason: 'duplicate-delivery', lockSource: err.lockSource },
+        });
+        return { skipped: 'duplicate-delivery', lockSource: err.lockSource };
+      }
+      throw err;
+    }
   })
 );
 

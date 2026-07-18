@@ -245,7 +245,12 @@ async function syncShepherdPeople(db, FieldValue, opts) {
     const d = (await tx.get(syncDocRef)).data() || {};
     const lockedAt = d.syncLockAt?.toMillis?.() || 0;
     if (d.syncRunning === true && (syncGeneration - lockedAt) < LOCK_TTL_MS) {
-      throw new Error(`shepherd-sync: another sync is already running (source=${d.syncLockSource || '?'})`);
+      const err = new Error(`shepherd-sync: another sync is already running (source=${d.syncLockSource || '?'})`);
+      // Machine-readable marker so callers can tell lock contention (expected
+      // under onSchedule's at-least-once duplicate delivery) from real failures.
+      err.code = 'shepherd-sync/already-running';
+      err.lockSource = d.syncLockSource || '?';
+      throw err;
     }
     tx.set(syncDocRef, { syncRunning: true, syncLockAt: FieldValue.serverTimestamp(), syncLockSource: source }, { merge: true });
   });
