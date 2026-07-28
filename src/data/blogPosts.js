@@ -1,5 +1,69 @@
 export const BLOG_POSTS = [
   {
+    slug: 'sunday-morning-church-facilities-walkthrough',
+    title: 'The Sunday Morning Pre-Flight: A 20-Minute Facilities Walkthrough',
+    description: "The AC was set, the coffee was on, and nobody noticed a thing — versus the sound desk dead at 9:55. The difference wasn't luck; it was whether someone walked the building at 7:40. A copy-it-yourself 20-minute facilities checklist, run like a pre-flight: catch problems on the ground, where they're a task, not in the air, where they're an emergency.",
+    date: '2026-07-28',
+    keywords: 'church facilities checklist, sunday morning church checklist, church walkthrough checklist, church opening checklist, church facilities manager checklist, pre-service checklist church, church safety walkthrough, church AV checklist',
+    related: ['church-facilities-management-guide', 'stewardship-includes-stuff-theology-of-church-operations', 'quarterly-church-inventory-audit-checklist'],
+    content: `
+## Two Sunday Mornings
+
+Here's the first one. The AC has been running since 6 AM, so the sanctuary is already at temperature instead of racing to catch up while two hundred bodies raise it. The coffee's on. The lobby lights are in the right scene, not the half-lit "cleaning crew left at midnight" scene. In the sound booth, the board is powered up, the wireless mics have fresh batteries, and the lyrics deck is loaded to the first slide. Nobody in the congregation notices any of this, because nothing about it is noticeable. That's the whole point.
+
+Here's the second one. The sound desk is dead at 9:55. Not "having an issue" — dead, no power light, and the only person who knows where the breaker is happens to be out of town. The praise team is on stage mouthing lyrics to a silence that is going to be very audible in four minutes. Somewhere in the building a first-time guest is standing in a hallway, because the sign that should have pointed her to the nursery got moved during Wednesday's setup and never got moved back.
+
+Both of these are ordinary churches. Nothing separates them — no budget gap, no better staff, no more committed volunteers. The difference is whether someone walked the building at 7:40. A problem found at 7:40 is a task: swap the wireless mic battery, prop the propped-shut door, grab the extra coffee filters from the closet. A problem found at 9:55 is an emergency, and it's an emergency in front of everyone.
+
+Pilots have a name for the discipline that keeps their 7:40 from turning into an in-flight emergency: the pre-flight walkthrough. It's worth borrowing not just the checklist but the *reasoning* behind it. Pilots don't inspect the aircraft because they expect it to fail. They inspect it because the tarmac is a forgiving place to discover a problem, and the air is not. Nothing about the inspection assumes incompetence. It assumes gravity — and that catching a bad tire on the ground beats catching it at altitude.
+
+Your building works the same way. At 7:40, a dead sound board is a five-minute fix with nobody watching. At 9:55, it's a crisis with three hundred witnesses. The walkthrough doesn't create the problem — the problem was already there, quietly, since Thursday. It just decides *when* you find out about it, and puts that decision back in your hands instead of leaving it to whichever Sunday the mic battery finally dies mid-sermon.
+
+This is, at bottom, the same case we've made [for treating operations as a ministry of stewardship](/blog/stewardship-includes-stuff-theology-of-church-operations) rather than an afterthought to it: faithfulness in small, unglamorous things is not a lesser calling standing next to the "real" ministry of Sunday morning. It *is* the ministry that makes Sunday morning possible. Twenty quiet minutes with a clipboard, walked by someone nobody will thank, is exactly the kind of small faithfulness that sermon was talking about.
+
+## The 20-Minute Route
+
+The walkthrough works best as a *route*, not a list you check off in random order while wandering the building. Start at the doors, move inward, and finish with a final sweep — roughly twenty minutes if the building's in decent shape, longer the first few times until it becomes muscle memory. Copy the table below into whatever you already use — a shared doc, a laminated card clipped to a lanyard, a checklist inside [ChurchOpsHub](/blog/church-facilities-management-guide) — and adjust the minute marks to your building's size.
+
+| Time | Stop | What to Check |
+|---|---|---|
+| 0:00–3:00 | **Exterior & Entry** | Doors unlocked and propped correctly (not propped where they shouldn't be); walkway clear of ice, wet leaves, or trip hazards; parking-lot and directional signage in place and legible; exterior lights off if it's daylight, working if it isn't; trash cans not overflowing from Saturday's setup crew. |
+| 3:00–5:00 | **HVAC & House Lights** | Thermostat set to arrival temperature, not still on Saturday-night setback; air actually moving at a vent (don't just trust the display); every lighting zone in the lobby and hallways on the correct "service" scene; no burned-out bulbs at the entrance — first impressions happen in a dim hallway too. |
+| 5:00–11:00 | **Worship Space & AV** | Soundboard powered on, channels unmuted, main output live; wireless mics have fresh batteries (don't guess — check); stage monitors working; projector on, correct lyrics deck loaded to slide one; livestream camera and encoder connected with a live preview, not just "plugged in"; stage lighting scene set; instruments in place and any that need tuning are tuned. |
+| 11:00–15:00 | **Kids' Areas** | Check-in station powered on, tablet charged, label printer loaded with tape; every room unlocked and arranged for today's lesson; a quick safety scan — outlet covers in place, gates latched, exits unobstructed; roster printed or synced; supplies stocked per your policy (diapers, wipes, snacks, first-aid kit present). |
+| 15:00–17:00 | **Restrooms** | Toilet paper, soap, and paper towels or hand dryers stocked in every restroom, not just the nearest one; floors clean, no standing water; no running toilets or dripping faucets; lights on and working. |
+| 17:00–18:30 | **Kitchen & Coffee** | Coffee brewing or urns on and timed to be ready, not started at the last minute; cups, creamer, and sugar stocked at the serving station; kitchen left clean from the last use — nothing in the sink from Wednesday; dishwasher run and emptied if last night's crew didn't get to it. |
+| 18:30–20:00 | **Final Sweep** | One more pass for visible trash anywhere on the route just walked; lost-and-found items from the week gathered into one pile, not scattered across three rooms; thermostat re-checked now that the building has been open a few minutes and the front doors have been opening and closing; a last look at the exterior for anyone who arrived while you were inside. |
+
+Twenty minutes, seven stops, one person walking a route they could do half-asleep by the fifth week. That's the entire trick: it isn't a deep inspection. It's a *fast, wide* pass designed to catch the handful of things that are actually likely to go wrong between Thursday and Sunday — a dead battery, an unset thermostat, an unstocked restroom — not a forensic audit of the building. Save that for the [quarterly walk-through where you reconcile the whole inventory](/blog/quarterly-church-inventory-audit-checklist) or [do a full physical audit](/blog/how-to-do-a-church-physical-audit). This is the pre-flight, not the annual inspection, and it should feel light enough that skipping it never seems easier than doing it.
+
+## Log, Don't Fix
+
+The single biggest way a 20-minute walkthrough turns into a 90-minute walkthrough — and then quietly stops happening at all — is the temptation to *fix everything you find*, on the spot, right then.
+
+Resist it. At 7:40 AM, you fix only what actively blocks the 9 AM service: the dead mic, the locked door that should be open, the thermostat that's off. Everything else — the burned-out hallway bulb that isn't blocking anything, the restroom running low on paper towels but not empty yet, the wobbly chair in the fellowship hall, the flickering exit sign — gets *captured*, not chased. Write it down. That's it. That's the whole move.
+
+This sounds too simple to be the fix, but it's the difference between a walkthrough that survives six months and one that quietly dies. If every burned bulb becomes a five-minute detour, twenty minutes becomes an hour, and an hour becomes "I'll do the full walk next week when I have more time" — which becomes never. Meanwhile, a mental note — "I'll mention the paper towels to someone" — evaporates by the time you're back at your car. Nobody's lying when they say they'll remember. Nobody remembers.
+
+A shared system beats a mental note every time, for the same reason a [maintenance log beats a binder or a memory](/blog/free-church-equipment-maintenance-log-template): the value isn't in the observation, it's in the observation surviving long enough for someone to act on it. Whatever you use — a shared note, a quick ticket in your maintenance board, a text to the facilities group chat — the rule is the same: fix what's on fire, log what isn't, and trust the system to route the rest to whoever owns it. The walkthrough's job is triage, not repair. Let the rest of the week's schedule handle the repairs.
+
+## Make It a Named Role, Not a Vibe
+
+Here's where most churches quietly lose the walkthrough, even after they've built a good checklist: nobody actually owns it. It happens most weeks, because whoever gets to the building early does it out of habit or guilt, and it doesn't happen the week that person is sick, traveling, or just assumes someone else has it covered. A checklist owned by "whoever gets there first" is a checklist owned by no one, and no-one's checklist is the one that's blank the morning it mattered most.
+
+Fix that the same way you'd fix any other volunteer role that keeps slipping through the cracks: name it. "Building Walkthrough Lead" is a real role with a real time slot — 7:40 to 8:00, every Sunday — not an unspoken expectation attached to whoever happens to be there. Write the one-page definition of done: what gets checked, what gets fixed on the spot, what gets logged, who to text if something's actually broken. A role this concrete and this bounded is, not coincidentally, exactly the kind of role [that's easy to say yes to](/blog/volunteer-roles-nobody-wants) — twenty minutes, a clear finish line, done by 8:00, home in time for the second cup of coffee.
+
+Two more things make it durable. First, never schedule it solo. Pair the walkthrough the same way you'd pair any early-morning, low-visibility role — one person on the interior route, one on exterior and kids' areas, or simply two people covering the same route together. It's faster, it catches more (four eyes beat two), and it means the walkthrough survives one person's flat tire on the way to church. Second, rotate it seasonally rather than parking one faithful volunteer in it permanently. A role that lives in one person's habits — the one who's done it for four years and never written any of it down — is the exact bus-factor problem that shows up [the week that person finally leaves](/blog/when-the-one-person-who-knows-everything-leaves), and the building suddenly has no walkthrough and no written route to fall back on. Written down and rotated, the role survives any one person's Sunday off, sick season, or eventual move across the country.
+
+## The Invisible Ministry
+
+Nobody is ever going to compliment the walkthrough. There's no version of a congregation member stopping someone in the lobby to say "I really appreciated how set the thermostat was this morning" or "the mic batteries were so fresh today." That kind of feedback doesn't exist, and it never will, because the entire purpose of the walkthrough is to produce a Sunday morning where nobody has anything to notice at all — no AV scramble, no cold sanctuary, no stranded first-time guest, nothing but a service that simply starts on time and runs the way it was supposed to.
+
+That invisibility isn't a flaw in the role. It's the whole point of it, and it's worth saying plainly to whoever takes it on: the fruit of this ministry is an *ordinary* Sunday. Not a rescued one, not a dramatic one — just ordinary, undistracted, unremarkable in exactly the way that lets everyone else's attention go where it's supposed to go. Twenty quiet minutes with a clipboard, walked by someone nobody will ever thank by name, so that the two hundred people who show up an hour later never have to think about any of it at all.
+    `.trim(),
+  },
+
+  {
     slug: 'volunteer-roles-nobody-wants',
     title: 'Volunteer Roles Nobody Wants (And How to Make Them Wanted)',
     description: "The worship team signup fills in a day. Parking lot, nursery check-in, and teardown sit blank for weeks. It isn't laziness — the unwanted roles share five specific design flaws, and every one is fixable. Why the hidden jobs are the load-bearing walls of a church, what Acts 6 says about dignifying logistics, and six changes that turn the roles nobody wants into roles people ask for.",
