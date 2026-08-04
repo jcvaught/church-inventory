@@ -18,6 +18,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/SHEPHERD-HUB-PLAN.md` — **Shepherd Hub** (FXCC-only elders' hub) spec + phase status. P1–P4 SHIPPED (live); only Level-2 note encryption remains. The doc to resume from.
 - `docs/SHEPHERD-HUB-AUDIT-2026-06-11.md` — **Shepherd Hub audit tracker** (Fable 5 findings): **✅ CLOSED 2026-06-11** — all phases shipped, every Critical/High/Medium resolved (incl. SEC-1 elder-role escalation + SEC-2/SEC-3), decisions D1–D6 all recorded. Rules guarded by 7 emulator unit tests (`npm run test:rules`). **Accepted/not done:** UX-7 (household grouping), CQ-5 (EmojiIcon), **SEC-7 (Level-2 note encryption — D5, the one deferred item)**. Start here for any further Shepherd hardening.
 - `docs/SHEPHERD-HUB-PRIVACY.md` — plain-language privacy/confidentiality promise shown to elders in-app (🔒 Privacy link → `PrivacyModal`). Keep the two in sync.
+- `docs/SHEPHERD-HUB-LAUNCH-AUDIT-2026-08-04.md` — **launch-readiness audit** run before the elder rollout email. Key open item: **LNCH-1** (first-session volunteer-shell trap — profile not re-read after the first elder-claim grant) must be fixed before elders sign up; LNCH-2 (Cesone's PCO assignments mostly inactive) is a pastoral data call; §4 lists easy usage wins (log-a-contact tap, auto-open hub, first-visit privacy modal, Monday elder digest).
+- `docs/SHEPHERD-HUB-LAUNCH-PLAN-2026-08-04.md` — **the execution plan for the audit's findings**: Phase 1 F1/F2 launch blockers + fresh-signup dry-run gate · Phase 2 F3/F4 landing polish · Phase 3 F5 log-a-contact, F6 Monday elder digest, F7 cosmetics · Phase 4 rollout steps (Cesone data call, invite email). Track item status here.
 
 ## Commands
 
