@@ -6,11 +6,28 @@ with the rollout email as the finish line.
 
 **Status legend:** ⬜ open · 🟨 in progress · ✅ done.
 
+> **STATUS 2026-08-04:** Phases 1+2 (F1–F4) **✅ SHIPPED** (commit `637009b`, deployed)
+> and the **fresh-signup dry run PASSED end-to-end** against prod with
+> `jcvaught+eldertest@gmail.com` on the Mills roster entry (email/password path):
+> unverified → F2 banner shown, claim withheld; after verify + re-sign-in → claim
+> granted, `allowedHubs: []`, **same-session** standard shell (F1), auto-landed in
+> My Flock (55 people, F3), privacy modal auto-opened (F4), person detail + private
+> note + care thread rendered, "← All Hubs" reaches the picker without bouncing;
+> roster removal → claim self-revoked on next sign-in ("This hub is for elders
+> only"). Test account, profile, audit rows fully cleaned up; roster restored.
+> Findings from the run, folded into F7: PCO avatars were CSP-blocked
+> (`img-src` fix shipped alongside); the pre-existing signup read-race briefly
+> showed the "Account incomplete" recovery screen (self-heals on reload — watch
+> for it if an elder emails); 3 benign `insufficient permissions` console errors
+> at sign-in from role-gated `useFirestore` subscriptions (pre-existing for any
+> `role:user` account, Sentry-visible — F7 candidate).
+> **Remaining:** Phase 3 (F5/F6/F7) + Phase 4 (D-1 Cesone, D-2 rollout email, D-3).
+
 ---
 
 ## Phase 1 — Launch blockers (gate: nothing ships to elders before these)
 
-### F1 ⬜ LNCH-1 — re-read the profile after the first elder-claim grant
+### F1 ✅ LNCH-1 — re-read the profile after the first elder-claim grant
 
 **File:** `src/useAuth.js` (~line 114–123, the `claimElderRole` block inside
 `onAuthStateChanged`).
@@ -30,7 +47,7 @@ existing catch → `setIsElder(false)` + Sentry behavior.
 with no manual reload, in the standard shell with the Shepherd card visible
 (and Phase 2's auto-route, once merged, lands them inside the hub).
 
-### F2 ⬜ LNCH-3 — surface the "rostered but unverified" state
+### F2 ✅ LNCH-3 — surface the "rostered but unverified" state
 
 **Files:** `src/useAuth.js`, `src/App.jsx`.
 
@@ -61,7 +78,7 @@ Google signup never does.
 
 ## Phase 2 — Landing experience (small; do before the email if possible)
 
-### F3 ⬜ LNCH-4 — shepherd-only users land in the hub, not the Dashboard
+### F3 ✅ LNCH-4 — shepherd-only users land in the hub, not the Dashboard
 
 **Files:** `src/pages/HubsPage.jsx` (~line 196–207 `autoRouteKey`), `src/App.jsx`
 (~line 529 initial-tab logic).
@@ -85,7 +102,7 @@ doesn't bounce them back in (auto-route only fires when arriving with no hub
 open, same as today's single-hub behavior — verify the existing
 `onOpenHub(null)` escape works for the volunteer case and mirror it).
 
-### F4 ⬜ First-visit privacy modal
+### F4 ✅ First-visit privacy modal
 
 **File:** `src/pages/hubs/ShepherdHubPage.jsx`.
 
