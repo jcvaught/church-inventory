@@ -328,12 +328,16 @@ export function ShepherdHubPage({ userProfile, isElder }) {
     if (!activeKey) return [];
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const out = [];
+    // F7: Feb-29 birthdates roll to Mar 1 in non-leap years unless clamped.
+    const isLeap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
     const consider = (p, dateStr, icon, label) => {
       const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr || '');
       if (!m) return;
       const mo = +m[2] - 1, da = +m[3];
-      let next = new Date(today.getFullYear(), mo, da);
-      if (next < today) next = new Date(today.getFullYear() + 1, mo, da);
+      const clampDa = (y) => (mo === 1 && da === 29 && !isLeap(y)) ? 28 : da;
+      let year = today.getFullYear();
+      let next = new Date(year, mo, clampDa(year));
+      if (next < today) { year += 1; next = new Date(year, mo, clampDa(year)); }
       const days = Math.round((next - today) / 86400000);
       if (days <= 6) out.push({ key: `${p._id}-${label}`, name: p.name, icon, when: next, days });
     };
@@ -858,6 +862,14 @@ function AssignmentEditor({ person, activeElders, onClose, onSaved }) {
 }
 
 // Private note (owner-only) + shared care thread for one person.
+// F5 one-tap "Log a contact" presets — hoisted so the array isn't rebuilt
+// every render (mirrors the Tab/chip hoist above).
+const CARE_CHIPS = [
+  { text: '📞 Phone call', label: '📞 Call' },
+  { text: '🏠 Visit', label: '🏠 Visit' },
+  { text: '✉️ Message', label: '✉️ Message' },
+];
+
 function NotesSection({ person, userProfile }) {
   const base = `churches/${SHEPHERD_CHURCH_ID}/shepherdPeople/${person._id}`;
   const CARE_BASE = `churches/${SHEPHERD_CHURCH_ID}/shepherdCare`;
@@ -927,22 +939,31 @@ function NotesSection({ person, userProfile }) {
     setUndoText(null);
   }
 
-  async function postEntry() {
-    const text = draft.trim();
-    if (!text) return;
+  // Shared write path for both the free-text composer and the F5 quick-log
+  // chips: same addDoc + authorUid pinning, same lastCareAt stamp, same
+  // append_care audit row. Returns success so callers can decide what to
+  // clear (e.g. the draft textarea only clears on a successful post).
+  async function postCare(text) {
     setPosting(true);
     try {
       const ref = await addDoc(collection(db, `${base}/careThread`), {
         text, authorUid: userProfile.uid, authorName: userProfile.name || null, createdAt: serverTimestamp(),
       });
       setThread(t => [...t, { _id: ref.id, text, authorUid: userProfile.uid, authorName: userProfile.name, createdAt: new Date() }]);
-      setDraft('');
       // UX-2: stamp last-contact (separate doc the sync never overwrites).
       await setDoc(doc(db, `${CARE_BASE}/${person._id}`), { lastCareAt: serverTimestamp(), lastCareByName: userProfile.name || null }, { merge: true });
       logShepherdAudit('append_care', person, userProfile);
+      return true;
     } catch (e) {
       Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'notes-post-care' } });
+      return false;
     } finally { setPosting(false); }
+  }
+
+  async function postEntry() {
+    const text = draft.trim();
+    if (!text) return;
+    if (await postCare(text)) setDraft('');
   }
 
   async function deleteEntry(entry) {
@@ -997,6 +1018,15 @@ function NotesSection({ person, userProfile }) {
           </div>
         ))}
         {loaded && thread.length === 0 && <div style={{ fontSize: 13, color: B.textLight }}>No entries yet.</div>}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+        <span style={{ fontSize: 11, color: B.textLight, fontFamily: f1, fontWeight: 600 }}>Quick log:</span>
+        {CARE_CHIPS.map(({ text, label }) => (
+          <button key={text} onClick={() => postCare(text)} disabled={posting}
+            style={{ ...btnS, padding: '5px 12px', borderRadius: 999, fontSize: 12, opacity: posting ? 0.5 : 1 }}>
+            {label}
+          </button>
+        ))}
       </div>
       <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={2} placeholder="Add to the care thread…" style={{ ...inp, resize: 'vertical', minHeight: 56 }} />
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>

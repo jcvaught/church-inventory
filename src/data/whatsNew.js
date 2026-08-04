@@ -4,6 +4,12 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-08-04',
+    tag: 'New',
+    title: 'Shepherd Hub: log a contact in one tap',
+    body: "Elders: opening someone in your flock now shows Quick log buttons — 📞 Call, 🏠 Visit, ✉️ Message. One tap records the contact in the shared care thread and updates their \"last touched\" stamp, so the Needs Attention sort always knows who's been waiting longest. The free-text care thread is still there for anything that needs more words. A weekly Monday-morning email digest of your flock (birthdays, anniversaries, and who's gone longest without a logged contact) is also ready — it switches on once the eldership opts in.",
+  },
+  {
     date: '2026-07-08',
     tag: 'New',
     title: 'Link supplies to a room, just like items',

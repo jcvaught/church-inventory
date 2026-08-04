@@ -442,8 +442,8 @@ service cloud.firestore {
     }
 
     // ── Shared care thread — any elder reads/appends; entries are author-owned
-    //    (author or, for cleanup, a church admin may edit/delete). Admins do not
-    //    read by default (elders-only space). ─────────────────────────────────
+    //    (only the authoring elder may edit/delete their own entry — no admin
+    //    edit/delete path). Admins do not read by default (elders-only space). ──
     match /churches/{churchId}/shepherdPeople/{personId}/careThread/{entryId} {
       allow read:   if isElder();
       allow create: if isElder() && request.resource.data.authorUid == request.auth.uid;

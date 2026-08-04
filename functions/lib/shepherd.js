@@ -354,6 +354,113 @@ async function syncShepherdPeople(db, FieldValue, opts) {
   return { ...summary, lastSyncAt: syncGeneration };
 }
 
+// ── Weekly elder digest builder (F6) ─────────────────────────────────────────
+// Pure, zero-I/O twin of the client's `flockUpcoming` (ShepherdHubPage.jsx
+// ~lines 305-324): given one elder's flock (shepherdPeople docs matched by
+// elderKeys, BEFORE the active/removed filter — this function applies it) plus
+// a personId -> lastCareAt-millis map (from shepherdCare) and a `now` Date,
+// returns the digest content for sendWeeklyShepherdDigest. Deliberately
+// name/date/recency-only — never touches pastoral/medical/private/care-thread
+// fields, so the email can never leak them by construction.
+//
+// Differs from the client version in one respect: a Feb 29 birthdate/
+// anniversary is clamped to Feb 28 in a non-leap target year (the client has a
+// known cosmetic bug here — F7 — where the JS Date constructor silently rolls
+// Feb 29 to Mar 1 in a non-leap year; the server twin fixes it rather than
+// copying the bug forward).
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function isLeapYear(y) {
+  return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+}
+
+// Next occurrence of month/day (0-indexed month) on/after `today` (a
+// midnight-normalized Date), clamping Feb 29 -> Feb 28 in a non-leap year.
+function nextMonthDayOccurrence(mo, da, today) {
+  const clampedDay = (year) => (mo === 1 && da === 29 && !isLeapYear(year)) ? 28 : da;
+  const makeDate = (year) => new Date(year, mo, clampedDay(year));
+  let next = makeDate(today.getFullYear());
+  if (next < today) next = makeDate(today.getFullYear() + 1);
+  return next;
+}
+
+// "never" / "today" / "yesterday" / "N days/weeks/months/years ago" — a
+// plain-language recency label for the digest email (distinct from the
+// client's compact `relativeTime`, which renders "3mo ago" for in-app chips).
+function contactRecencyLabel(lastCareAtMs, nowMs) {
+  if (lastCareAtMs == null) return 'never';
+  const days = Math.floor((nowMs - lastCareAtMs) / 86400000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+  if (days < 31) { const w = Math.floor(days / 7); return `${w} week${w === 1 ? '' : 's'} ago`; }
+  if (days < 365) { const m = Math.floor(days / 30); return `${m} month${m === 1 ? '' : 's'} ago`; }
+  const y = Math.floor(days / 365);
+  return `${y} year${y === 1 ? '' : 's'} ago`;
+}
+
+const NINETY_DAYS_MS = 90 * 86400000;
+
+// flock: shepherdPeople docs (raw, elderKeys-matched — NOT yet filtered to
+//   active/non-removed; that filter is applied here) — each needs at least
+//   { id|_id|pcoId, name, status, removedFromPco, birthdate, anniversary }.
+// careByPersonId: { [personId]: lastCareAtMillis|null } from shepherdCare.
+// now: a Date (injectable for tests).
+function buildElderDigest({ flock, careByPersonId, now }) {
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const nowMs = now.getTime();
+  const care = careByPersonId || {};
+
+  const considered = (flock || []).filter(p => p && p.status === 'active' && !p.removedFromPco);
+
+  // Upcoming birthdays/anniversaries in the next 7 days (days 0-6), sorted soonest-first.
+  const upcoming = [];
+  const considerDate = (p, dateStr, kind) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr || '');
+    if (!m) return;
+    const mo = Number(m[2]) - 1, da = Number(m[3]);
+    const next = nextMonthDayOccurrence(mo, da, today);
+    const days = Math.round((next - today) / 86400000);
+    if (days <= 6) {
+      upcoming.push({
+        name: p.name || '(no name)',
+        kind,
+        dateLabel: `${MONTH_ABBR[next.getMonth()]} ${next.getDate()}`,
+        days,
+      });
+    }
+  };
+  considered.forEach(p => {
+    considerDate(p, p.birthdate, 'birthday');
+    considerDate(p, p.anniversary, 'anniversary');
+  });
+  upcoming.sort((a, b) => a.days - b.days || a.name.localeCompare(b.name));
+
+  // Longest since a logged contact: never-contacted first, then oldest lastCareAt.
+  const withCare = considered.map(p => {
+    const id = p.id ?? p._id ?? p.pcoId;
+    const raw = care[id];
+    return { name: p.name || '(no name)', lastCareAtMs: raw == null ? null : raw };
+  });
+  const sortedByStalest = [...withCare].sort((a, b) => {
+    const av = a.lastCareAtMs == null ? -Infinity : a.lastCareAtMs;
+    const bv = b.lastCareAtMs == null ? -Infinity : b.lastCareAtMs;
+    return av - bv;
+  });
+  const stalest = sortedByStalest.slice(0, 3).map(p => ({
+    name: p.name,
+    lastContactLabel: contactRecencyLabel(p.lastCareAtMs, nowMs),
+  }));
+
+  // empty = nothing upcoming AND nobody uncontacted-or-stale-90d+ (checked over
+  // the FULL considered flock, not just the top-3 `stalest` slice above).
+  const hasStaleOrNever = withCare.some(p => p.lastCareAtMs == null || (nowMs - p.lastCareAtMs) >= NINETY_DAYS_MS);
+  const empty = upcoming.length === 0 && !hasStaleOrNever;
+
+  return { upcoming, stalest, empty };
+}
+
 // ── Elder Assigned write-back (the one mutation against PCO) ────────────────
 // Writes a CLEAN canonical value (never appends to the dirty free-text), then
 // reads it back to confirm the write took. `value` must be non-empty (the
@@ -398,4 +505,5 @@ async function setPcoElderAssignment(appId, secret, personId, value, fieldId) {
 module.exports = {
   syncShepherdPeople,
   setPcoElderAssignment,
+  buildElderDigest,
 };

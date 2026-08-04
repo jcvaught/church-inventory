@@ -22,6 +22,16 @@ with the rollout email as the finish line.
 > at sign-in from role-gated `useFirestore` subscriptions (pre-existing for any
 > `role:user` account, Sentry-visible — F7 candidate).
 > **Remaining:** Phase 3 (F5/F6/F7) + Phase 4 (D-1 Cesone, D-2 rollout email, D-3).
+>
+> **STATUS UPDATE (later 2026-08-04):** Phase 3 **✅ SHIPPED** — F5 quick-log chips,
+> F6 `sendWeeklyShepherdDigest` (deployed dark; flip `config/settings.
+> shepherdDigestEnabled` to activate — that's D-3's job), F7 both halves
+> (careThread comment + Feb-29 clamp; the sign-in permission-noise candidate was
+> deliberately left alone — cross-cutting `useFirestore` change, not worth the risk
+> now). 13 new unit tests (102 total green). D-1 resolved 2026-08-04: John says
+> Cesone's stale assignments are the elders' own job — not a launch gate.
+> **Remaining:** D-2 rollout email (John, in progress — framed as "use this or
+> stick with PCO") · D-3 post-launch checklist.
 
 ---
 
@@ -116,7 +126,7 @@ shared device).
 
 ## Phase 3 — Usage wins (post-launch fast-follows)
 
-### F5 ⬜ One-tap "Log a contact"
+### F5 ✅ One-tap "Log a contact"
 
 **File:** `src/pages/hubs/ShepherdHubPage.jsx` (`NotesSection`).
 
@@ -130,7 +140,7 @@ posting. (Chips + free-text composer coexist; chips are the one-tap fast path.)
 **Acceptance:** one tap logs the touch; row shows "touched today"; "Sort: Needs
 attention" reorders accordingly.
 
-### F6 ⬜ Monday elder digest email (`sendWeeklyShepherdDigest`)
+### F6 ✅ Monday elder digest email (`sendWeeklyShepherdDigest`)
 
 **Files:** `functions/index.js` (+ optionally `functions/lib/shepherd.js` for the
 pure digest-builder, unit-testable).
@@ -162,7 +172,7 @@ sign-in email; sent via `sendEmailSafe`/Brevo, suppression-aware):
 **Acceptance:** with the flag on, each elder gets one Monday-morning email with
 their own flock's items; no email when empty; no pastoral/medical content.
 
-### F7 ⬜ Cosmetic sweep (bundle with any Phase-3 commit)
+### F7 ✅ Cosmetic sweep (bundle with any Phase-3 commit)
 
 - `firestore.rules` careThread comment: drop the "or a church admin may
   edit/delete" clause (rule grants no admin path — comment drift only).

@@ -9,7 +9,7 @@ const { getMessaging } = require('firebase-admin/messaging');
 const { shiftsToOccurrences, reservationsToOccurrences, maintenanceToOccurrences, buildCalendar } = require('./lib/occurrences');
 const { calculateNextDue } = require('./lib/recurrence');
 const { buildDigestSignals } = require('./lib/attention');
-const { syncShepherdPeople, setPcoElderAssignment } = require('./lib/shepherd');
+const { syncShepherdPeople, setPcoElderAssignment, buildElderDigest } = require('./lib/shepherd');
 const { resolveRoster, isElderEmail, buildNormalizer } = require('./lib/roster');
 
 // Read the editable elder roster (config/shepherdRoster) for the Shepherd
@@ -2129,6 +2129,110 @@ ${personBlocks.join('\n')}
   return { processed };
 }));
 
+// ── sendWeeklyShepherdDigest ──────────────────────────────────────────────
+// Same hourly + church-local-Monday-8am skeleton as the digests above, but
+// **FXCC-only** (Shepherd Hub is single-church — SHEPHERD_CHURCH_ID, no
+// church loop) and per-ELDER rather than per-admin. Opt-in via
+// config/settings.shepherdDigestEnabled (default off — John flips it once
+// the elder rollout is done). For each active roster elder with a sign-in
+// email, computes their flock's birthdays/anniversaries this week + the
+// longest-since-contact list via the pure buildElderDigest (functions/lib/
+// shepherd.js — mirrors the client's flockUpcoming, with a Feb-29 clamp),
+// and emails them one digest. Elders with nothing to report are skipped
+// (empty-digest skip, like the other senders). STRICT content rule: the
+// email carries names/dates/contact-recency labels ONLY — buildElderDigest
+// never touches pastoral/medical/private-note/care-thread text, so there is
+// nothing sensitive for this sender to leak.
+exports.sendWeeklyShepherdDigest = onSchedule({ schedule: '0 * * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendWeeklyShepherdDigest', async () => {
+  if (!emailConfigured()) { console.warn('sendWeeklyShepherdDigest: Brevo not configured, skipping.'); return { skipped: 'no-email-key' }; }
+  const db = getFirestore();
+  const churchId = SHEPHERD_CHURCH_ID;
+
+  // One settings read serves both the opt-in gate and (via getChurchTimeZone
+  // below, same helper the other digest senders use) the timezone gate.
+  let settings;
+  try { settings = (await db.doc(`churches/${churchId}/config/settings`).get()).data() || {}; }
+  catch (err) { console.error('sendWeeklyShepherdDigest: settings read failed', { err: err.message }); Sentry.captureException(err); return { skipped: 'settings-read-failed' }; }
+  if (settings.shepherdDigestEnabled !== true) return { skipped: 'disabled', sent: 0, elders: 0 };
+
+  const parts = localPartsFor(await getChurchTimeZone(db, churchId, {}));
+  if (!(parts.weekday === 1 && parts.hour === 8)) return { skipped: 'not-monday-8am', sent: 0, elders: 0 };
+
+  const roster = await getShepherdRoster(db);
+  const elders = (roster.elders || []).filter(e => e.active !== false && (e.emails || []).length > 0);
+  if (elders.length === 0) return { sent: 0, skipped: 0, elders: 0 };
+
+  let peopleSnap, careSnap;
+  try {
+    [peopleSnap, careSnap] = await Promise.all([
+      db.collection(`churches/${churchId}/shepherdPeople`).get(),
+      db.collection(`churches/${churchId}/shepherdCare`).get(),
+    ]);
+  } catch (err) {
+    console.error('sendWeeklyShepherdDigest: data read failed', { err: err.message });
+    Sentry.captureException(err);
+    return { skipped: 'data-read-failed', sent: 0, elders: elders.length };
+  }
+
+  const people = peopleSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const careByPersonId = {};
+  careSnap.docs.forEach(d => {
+    const v = d.data()?.lastCareAt;
+    careByPersonId[d.id] = v && typeof v.toMillis === 'function' ? v.toMillis() : (typeof v === 'number' ? v : null);
+  });
+
+  const now = nowDate();
+  let sent = 0, skipped = 0;
+  for (const elder of elders) {
+    const flock = people.filter(p => (p.elderKeys || []).includes(elder.key));
+    const digest = buildElderDigest({ flock, careByPersonId, now });
+    if (digest.empty) { skipped++; continue; }
+
+    const toEmail = elder.emails[0];
+    const birthdayCount = digest.upcoming.filter(u => u.kind === 'birthday').length;
+    const checkOnCount = digest.stalest.length;
+    const subject = `Your flock this week — ${birthdayCount} birthday${birthdayCount === 1 ? '' : 's'}, ${checkOnCount} to check on`;
+
+    const sections = [];
+    if (digest.upcoming.length) {
+      sections.push(`<h3 style="font-size:14px;color:#1B2A4A;margin:18px 0 6px">This week in your flock</h3>
+<ul style="padding-left:20px;margin:0">${digest.upcoming.map(u =>
+        `<li style="margin-bottom:4px">${u.kind === 'birthday' ? '🎂' : '💍'} ${escapeHtml(u.name)} — <strong>${escapeHtml(u.dateLabel)}</strong></li>`).join('')}</ul>`);
+    }
+    if (digest.stalest.length) {
+      sections.push(`<h3 style="font-size:14px;color:#1B2A4A;margin:18px 0 6px">Longest since a logged contact</h3>
+<ul style="padding-left:20px;margin:0">${digest.stalest.map(s =>
+        `<li style="margin-bottom:4px">${escapeHtml(s.name)} — <strong>${escapeHtml(s.lastContactLabel)}</strong></li>`).join('')}</ul>`);
+    }
+
+    const html = `<p>Hi ${escapeHtml(elder.name || '')}, here's this week's snapshot of your flock:</p>
+${sections.join('\n')}
+<p style="margin-top:18px"><a href="https://churchopshub.com">Open ChurchOpsHub</a> → Shepherd Hub — log a call, visit, or message there and it'll show up here next week.</p>
+<p style="font-size:12px;color:#888">You're getting the weekly Shepherd Hub digest as an active elder. Reply to John to turn it off.</p>`;
+
+    const textLines = [];
+    if (digest.upcoming.length) {
+      textLines.push('This week in your flock:');
+      digest.upcoming.forEach(u => textLines.push(`  - ${u.kind === 'birthday' ? 'Birthday' : 'Anniversary'}: ${u.name} — ${u.dateLabel}`));
+    }
+    if (digest.stalest.length) {
+      textLines.push('Longest since a logged contact:');
+      digest.stalest.forEach(s => textLines.push(`  - ${s.name} — ${s.lastContactLabel}`));
+    }
+    const text = `Your flock this week\n\n${textLines.join('\n')}\n\nOpen churchopshub.com → Shepherd Hub to log a contact.\n`;
+
+    try {
+      const result = await sendEmailSafe({ to: toEmail, from: FROM, subject, html, text });
+      if (result?.skipped) skipped++; else sent++;
+    } catch (err) {
+      console.error('sendWeeklyShepherdDigest: email failed', { elder: elder.key, reason: err.message });
+      Sentry.captureException(err, { tags: { fn: 'sendWeeklyShepherdDigest' } });
+      skipped++;
+    }
+  }
+  return { sent, skipped, elders: elders.length };
+}));
+
 // ── sendEmptyJobMorningAlert ──────────────────────────────────────────────
 // Hourly; fires at each church's local 7am. For churches with the Jobs hub
 // active and config/settings.emptyJobAlertEnabled === true, emails all admins
@@ -3753,6 +3857,7 @@ const SCHEDULED_JOB_REGISTRY = [
   { name: 'sendWeeklyInsightsDigest',      cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendWeeklyComplianceDigest',    cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendWeeklyAttentionDigest',     cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
+  { name: 'sendWeeklyShepherdDigest',      cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendJobReminders',              cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendNewJobsDigest',             cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'sendEmptyJobMorningAlert',      cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
