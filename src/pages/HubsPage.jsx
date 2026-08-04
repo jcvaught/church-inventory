@@ -1,4 +1,4 @@
-import { useContext, useEffect, Suspense } from 'react';
+import { useContext, useEffect, useState, Suspense } from 'react';
 import { B, f1, f2, btnP } from '../components/brand/tokens.js';
 import { UpgradeGate } from '../components/primitives/UpgradeGate.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
@@ -193,17 +193,35 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
   // Single-hub users (volunteers + anyone whose admin scoped them to exactly
   // one hub they have access to) skip the picker grid — auto-route them into
   // that hub. Admins/managers and multi-hub users still see the picker.
+  // Shepherd-only elders (allowedHubs: [], the Shepherd-scoping default set by
+  // claimElderRole's first grant) get the same treatment (F3/LNCH-4) — straight
+  // into My Flock. Shepherd is `special:true` (no paid-hub UpgradeGate), so
+  // this branch skips the hasHub/userCanSeeHub checks the single-hub branch
+  // needs; canSeeShepherd (elder claim + FXCC, computed in App.jsx) is the
+  // real gate. The two conditions can't overlap (length 1 vs 0), so the
+  // single-hub branch keeps precedence for free.
   const allowedHubs = userProfile?.allowedHubs;
+  // Fire at most once per mount. Without this, clicking "← All Hubs" (which
+  // nulls hubKey) would recompute a truthy target on the very next render and
+  // the effect below would route straight back in — the breadcrumb would
+  // never actually reach the picker for these users.
+  const [autoRouted, setAutoRouted] = useState(false);
   const autoRouteKey = (!hubKey
     && !subscriptionLoading
+    && !autoRouted
     && Array.isArray(allowedHubs)
-    && allowedHubs.length === 1
-    && hasHub(allowedHubs[0])
-    && userCanSeeHub?.(allowedHubs[0]))
-    ? allowedHubs[0]
+    && (
+      (allowedHubs.length === 1 && hasHub(allowedHubs[0]) && userCanSeeHub?.(allowedHubs[0]))
+      || (allowedHubs.length === 0 && canSeeShepherd)
+    ))
+    ? (allowedHubs.length === 1 ? allowedHubs[0] : 'shepherd')
     : null;
   useEffect(() => {
-    if (autoRouteKey) onOpenHub(autoRouteKey);
+    if (autoRouteKey) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAutoRouted(true);
+      onOpenHub(autoRouteKey);
+    }
   }, [autoRouteKey, onOpenHub]);
 
   // ── Active hub view ──

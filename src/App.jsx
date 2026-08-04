@@ -511,12 +511,23 @@ function ProfileMissingScreen({ authHook }) {
 }
 
 function AppShell({ authHook }) {
-  const { user, userProfile, isElder, logout, resendVerification, deleteAccount } = authHook;
+  const { user, userProfile, isElder, elderUnverified, logout, resendVerification, deleteAccount } = authHook;
   const [verifyBannerDismissed, setVerifyBannerDismissed] = useState(false);
   const [resentVerify, setResentVerify] = useState(false);
+  const [elderUnverifiedBannerDismissed, setElderUnverifiedBannerDismissed] = useState(false);
+  const [elderVerifyResent, setElderVerifyResent] = useState(false);
   const store = useFirestore(userProfile.churchId);
   const { subscription, loading: subscriptionLoading, hasHub, canAddUser, trialDaysRemaining } = useSubscription(userProfile.churchId);
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false);
+  // Volunteers (role:user, allowedHubs=['jobs']) get a jobs-first shell — see
+  // isVolunteerOnly. Shepherd Hub is FXCC-only, gated by the elder custom
+  // claim (rules enforce the real boundary) plus John as admin. Computed
+  // early — before the tab initial-tab effect below, which needs
+  // canSeeShepherd, and that only resolves once the async elder-claim
+  // callable returns (useAuth.js).
+  const volunteerMode = isVolunteerOnly(userProfile);
+  const canSeeShepherd = userProfile?.churchId === SHEPHERD_CHURCH_ID
+    && (isElder || isOwnerEmail(userProfile?.email)) && !volunteerMode;
   const [tab, setTab] = useState(() => {
     // Inventory/Supplies/Reservations are now hubs, not tabs (2026-06-23) — a
     // ?item= deep link and any pre-deploy lastTab pointing at one route to Hubs.
@@ -539,6 +550,24 @@ function AppShell({ authHook }) {
   });
   const [jobsInitialView, setJobsInitialView] = useState(null);
   useEffect(() => { localStorage.setItem('lastTab', tab); }, [tab]);
+  // F3/LNCH-4: shepherd-only elders (allowedHubs: [], the Shepherd-scoping
+  // default set by claimElderRole's first grant) land on the Hubs tab like
+  // volunteers do, instead of the Dashboard — zero clicks to My Flock.
+  // canSeeShepherd only resolves after the async elder-claim callable
+  // returns, so the `tab` useState above can't know it at mount time. Redirect
+  // once it flips true, but ONLY while `tab` is still the mount-time default —
+  // initialTabRef freezes that default, so a user who's already clicked
+  // elsewhere (or a prior run of this same effect) is never yanked away, and
+  // this never fights the `lastTab` localStorage restore (a returning user
+  // already lands on 'hubs' via that path).
+  const initialTabRef = useRef(tab);
+  useEffect(() => {
+    if (tab !== initialTabRef.current) return;
+    if (Array.isArray(userProfile?.allowedHubs) && userProfile.allowedHubs.length === 0 && canSeeShepherd) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTab('hubs');
+    }
+  }, [canSeeShepherd, userProfile?.allowedHubs, tab]);
   const [menuOpen, setMenuOpen] = useState(false);
   const accountTriggerRef = useRef(null);
   const accountMenuRef = useRef(null);
@@ -718,16 +747,12 @@ function AppShell({ authHook }) {
   // Mobile bottom nav + desktop tabs. Volunteers (role:user, allowedHubs=['jobs'])
   // get a 4-tab jobs-first shell; everyone else gets the standard 7-tab admin shell.
   // The "Hubs" key stays the same — for volunteers it just auto-routes into Jobs.
-  const volunteerMode = isVolunteerOnly(userProfile);
+  // (volunteerMode/canSeeShepherd are computed earlier in this component now —
+  // see the initial-tab redirect effect below, which needs canSeeShepherd.)
   // Event Day is an admin/manager ops console (not a paid hub) — it spans
   // jobs/reservations/maintenance, with reservations on the free base, so it's
   // useful to any admin/manager. Shown in the standard shell only.
   const showEventDay = (userProfile?.role === 'admin' || userProfile?.role === 'manager') && !volunteerMode;
-  // Shepherd Hub is FXCC-only and gated by the elder custom claim (rules enforce
-  // the real boundary), plus John as admin. Not a paid hub — it appears as a
-  // special non-subscription card inside HubsPage (not a top-level tab).
-  const canSeeShepherd = userProfile?.churchId === SHEPHERD_CHURCH_ID
-    && (isElder || isOwnerEmail(userProfile?.email)) && !volunteerMode;
   const mobileTabs = volunteerMode
     ? [["dashboard","Home","🏠"], ["hubs","Jobs","💼"], ["log","Activity","📋"], ["settings","Settings","⚙️"]]
     : [["dashboard","Home","🏠"], ...(showEventDay ? [["eventday","Event","🗓️"]] : []), ["hubs","Hubs","🔌"], ["log","Log","📋"], ["settings","Settings","⚙️"]];
@@ -846,6 +871,26 @@ function AppShell({ authHook }) {
               {resentVerify ? "Sent!" : "Resend"}
             </button>
             <button onClick={() => setVerifyBannerDismissed(true)}
+              style={{ background:"none", border:"none", color:"#96750E", cursor:"pointer", fontSize:18, lineHeight:1, fontFamily:f1 }}>×</button>
+          </div>
+        </div>
+      )}
+
+      {/* Shepherd Hub — rostered-but-unverified banner (F2/LNCH-3): a rostered
+          FXCC email/password account whose email isn't verified gets the
+          claim withheld server-side. Google sign-in is always verified, so
+          this never fires for that path. */}
+      {elderUnverified && !elderUnverifiedBannerDismissed && (
+        <div style={{ background:B.goldLight, borderBottom:"1px solid "+B.gold, padding:"10px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+          <span style={{ fontSize:13, color:"#7A5800", fontFamily:f1 }}>
+            Verify your email to unlock the Shepherd Hub — we sent a link to {user.email}. After verifying, sign out and back in.
+          </span>
+          <div style={{ display:"flex", gap:10, alignItems:"center", flexShrink:0 }}>
+            <button onClick={async () => { await resendVerification(); setElderVerifyResent(true); setTimeout(() => setElderVerifyResent(false), 4000); }}
+              style={{ background:"none", border:"none", color:"#7A5800", fontWeight:700, cursor:"pointer", fontSize:13, fontFamily:f1, textDecoration:"underline" }}>
+              {elderVerifyResent ? "Sent!" : "Resend link"}
+            </button>
+            <button onClick={() => setElderUnverifiedBannerDismissed(true)} aria-label="Dismiss verification banner"
               style={{ background:"none", border:"none", color:"#96750E", cursor:"pointer", fontSize:18, lineHeight:1, fontFamily:f1 }}>×</button>
           </div>
         </div>

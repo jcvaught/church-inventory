@@ -157,6 +157,16 @@ export function ShepherdHubPage({ userProfile, isElder }) {
     } finally { setExportingNotes(false); }
   }
 
+  // Close the privacy modal, stamping the per-account "seen" flag so the
+  // auto-open (above) never fires again for this uid. Covers BOTH the
+  // auto-opened and the manually-opened (header 🔒) paths — they share this
+  // one close handler. Re-stamping on a manual close is harmless.
+  function closePrivacy() {
+    setShowPrivacy(false);
+    if (!userProfile?.uid) return;
+    try { localStorage.setItem('shepherd_privacy_seen_' + userProfile.uid, '1'); } catch { /* ignore */ }
+  }
+
   // Merge a reassignment result into local state (list + open detail).
   function patchPerson(personId, patch) {
     setPeople(ps => ps.map(p => p._id === personId ? { ...p, ...patch } : p));
@@ -208,6 +218,18 @@ export function ShepherdHubPage({ userProfile, isElder }) {
   }, [myEmail]);
 
   useEffect(() => { load(); }, [load]);
+
+  // First-visit privacy modal (F4, usage-win #3): every elder reads the
+  // privacy promise once per account without being asked. Per-account (the
+  // uid, not just "have I seen it on this device") so John's demo account
+  // doesn't suppress an elder's own first view on a shared device. The
+  // header 🔒 button stays the manual re-open.
+  useEffect(() => {
+    if (!userProfile?.uid) return;
+    try {
+      if (!localStorage.getItem('shepherd_privacy_seen_' + userProfile.uid)) setShowPrivacy(true);
+    } catch { /* localStorage unavailable — skip the auto-open; manual 🔒 still works */ }
+  }, [userProfile?.uid]);
 
   // Reset the render cap whenever the visible set changes (UX-1). Done during
   // render — React's "adjust state when a value changes" pattern — rather than
@@ -481,7 +503,7 @@ export function ShepherdHubPage({ userProfile, isElder }) {
         onClose={() => setSelected(null)} />}
 
       {showRoster && <RosterManager roster={roster} onClose={() => setShowRoster(false)} onSaved={setRoster} onResynced={load} />}
-      {showPrivacy && <PrivacyModal onClose={() => setShowPrivacy(false)} />}
+      {showPrivacy && <PrivacyModal onClose={closePrivacy} />}
     </div>
   );
 }

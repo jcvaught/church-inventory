@@ -94,6 +94,11 @@ export function useAuth() {
   // is present on the signed-in token. Drives hub visibility in P3; Firestore
   // rules enforce the real boundary regardless of this flag.
   const [isElder, setIsElder] = useState(false);
+  // True when claimElderRole returns `unverified: true` — a rostered
+  // email/password account whose email isn't verified yet, so the server
+  // withholds the grant (LNCH-3). Google sign-in is always verified, so this
+  // never fires for that path.
+  const [elderUnverified, setElderUnverified] = useState(false);
 
   // Listen to auth state
   useEffect(() => {
@@ -115,14 +120,36 @@ export function useAuth() {
               try {
                 const claimFn = httpsCallable(getFunctions(), 'claimElderRole');
                 const res = await claimFn();
-                if (res.data?.changed) await firebaseUser.getIdToken(true);
+                if (res.data?.changed) {
+                  await firebaseUser.getIdToken(true);
+                  // LNCH-1: the claim grant/revoke rewrites `allowedHubs`
+                  // server-side (first-grant Shepherd-only scoping, or the
+                  // revoke restore), but `profileData` above was read BEFORE
+                  // the claim ran — it's now stale. Re-read so the in-memory
+                  // profile reflects the write in THIS session; otherwise a
+                  // new elder's first session still renders the volunteer/
+                  // jobs shell because isVolunteerOnly sees the signup
+                  // default. Guard: on a failed re-read, keep the stale
+                  // profile (don't null it out) — it self-heals on reload.
+                  try {
+                    const freshDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+                    if (freshDoc.exists()) {
+                      setUserProfile({ id: firebaseUser.uid, uid: firebaseUser.uid, ...freshDoc.data() });
+                    }
+                  } catch (reReadErr) {
+                    Sentry.captureException(reReadErr, { tags: { flow: 'claimElderRole-reread' } });
+                  }
+                }
                 setIsElder(!!res.data?.elder);
+                setElderUnverified(res.data?.unverified === true);
               } catch (e) {
                 setIsElder(false);
+                setElderUnverified(false);
                 Sentry.captureException(e, { tags: { flow: 'claimElderRole' } });
               }
             } else {
               setIsElder(false);
+              setElderUnverified(false);
             }
           } else {
             // Authenticated but no Firestore profile — the half-signed-up
@@ -153,6 +180,7 @@ export function useAuth() {
         setUserProfile(null);
         setProfileMissing(false);
         setIsElder(false);
+        setElderUnverified(false);
       }
       setLoading(false);
     });
@@ -543,6 +571,7 @@ export function useAuth() {
     user,
     userProfile,
     isElder,
+    elderUnverified,
     profileMissing,
     loading,
     error,
