@@ -1,5 +1,96 @@
 export const BLOG_POSTS = [
   {
+    slug: 'week-after-a-big-event-church-closeout',
+    title: 'The Week After: Closing the Loop on a Big Event Before You Forget It',
+    description:
+      "The Monday after VBS, the fall festival, or Easter, everyone is too tired to do the one thing that would make next year dramatically easier. Teardown gets 80% done, the tubs sit in the hallway, and everything the event taught you evaporates inside two weeks. A 72-hour closeout routine — return before restore, restock what actually ran out, log the damage without drama, and write the next-year note while you still remember — so the church doesn't pay for the same event twice.",
+    date: '2026-08-15',
+    keywords: 'church event teardown checklist, after church event cleanup, church event debrief, church event planning notes, vbs teardown restock, church event supply restock, church event follow up, church facilities after event',
+    related: ['vbs-supply-planning-checklist', 'stewardship-includes-stuff-theology-of-church-operations', 'church-equipment-checkout-system-grace'],
+    content: `
+## Monday
+
+The event was Saturday. It went well — genuinely well, the kind of well where people are still talking about it in the parking lot. Attendance beat last year. The weather held. The one thing everybody was worried about turned out fine.
+
+It is now Monday evening, and the building is about eighty percent back to normal.
+
+The sanctuary is reset. The big stuff is put away, because the big stuff is obvious and somebody always handles the obvious. But there are six plastic tubs stacked in the hallway outside the fellowship hall that nobody has claimed, and at least two of them are half full of things that belong to three different ministries. There's a folding table leaning against the wall with a wobbly leg that somebody noticed Saturday morning. The kitchen has a case and a half of leftover water bottles and zero of the good coffee, which ran out at 9:15 and sent a volunteer to the store mid-event. Somebody has the sound gear. Probably the guy who ran it. Almost certainly.
+
+And everybody involved — every single person who knows any of this — is exhausted and has a normal job tomorrow.
+
+So the tubs stay in the hallway. The wobbly table goes back on the rack with the good ones. Nobody writes down that the coffee ran out at 9:15. And in about ten days, all of it will be gone from everyone's memory except as a vague sense that the event went fine.
+
+Then next March, planning starts again from a blank page.
+
+## An Event Isn't Over When It's Over
+
+Churches are good at the event and bad at the closeout, and it's worth being honest about why: the event has a deadline and an audience, and the closeout has neither. Nobody is waiting on the closeout. Nothing visibly fails if it doesn't happen. It is the definition of the quiet work that [stewardship of the supply closet](/blog/stewardship-includes-stuff-theology-of-church-operations) is actually about — the part with no applause attached, that determines whether the next round of ministry runs smoothly or limps.
+
+Skipping it costs a church twice, in two different currencies.
+
+The first cost is physical, and it's the one people vaguely expect. Supplies don't get restocked, so the next ministry that needs them discovers the shortage at the worst possible moment. Equipment doesn't get checked back in, so three weeks later a projector is unfindable and [the group text goes out](/blog/church-equipment-checkout-system-grace). Damage doesn't get logged, so the wobbly table goes back on the rack and gets handed to somebody at a funeral reception. Things migrate to the wrong rooms and quietly stay there. None of it is catastrophic. All of it is friction, paid in small installments by people who weren't at your event and don't know why the closet is like this.
+
+The second cost is the expensive one, and almost nobody counts it: **you lose everything the event taught you.**
+
+## The Knowledge Is the Perishable Part
+
+Right now, on Monday, your tired volunteers collectively hold a set of facts that are worth real money to next year's version of this event. Not opinions — facts. The coffee ran out at 9:15. The check-in line backed up for the first twenty minutes and then never again. You bought 400 glow sticks and used maybe 150. The 4-year-old room needed one more adult and the 8-year-old room needed one fewer. The parking volunteers were done and standing around by 6:40. Somebody's mom brought a folding wagon that turned out to be the single most useful object on the property.
+
+Every one of those facts is going to be completely gone in two weeks.
+
+This is the part that makes the closeout urgent rather than merely tidy. Physical stuff is patient — a tub in a hallway will still be a tub in a hallway in April, annoying but recoverable. Knowledge isn't patient at all. It decays fast, it decays silently, and it decays worst in exactly the people who were most involved, because they were too busy running the thing to consciously note what they were learning.
+
+And here's the part that stings: next year, somebody will sit down in a planning meeting and *guess* at all of it. How many glow sticks? Better get 400, that's what we got last time. How many adults in the 4-year-old room? Whatever we did last year, probably. The guesses will be wrong in the same ways they were wrong this year, and the church will pay for the same lesson a second time. That's not a planning failure. It's a documentation failure that shows up disguised as a planning failure eleven months later.
+
+## The 72-Hour Closeout
+
+The fix is not elaborate, but it does have to happen fast — inside about three days, while the details are still recoverable. Here's the whole routine.
+
+**Return before restore.** The first move isn't cleaning, it's accounting for what left the building. Before anybody starts organizing closets, find out what's out — the sound gear, the coolers, the wagon, the extension cords, the box of decorations somebody took home to store. If your church logs equipment on the way out, this is a two-minute read of the list. If it doesn't, this is the moment to ask in the group thread while people still remember what's in their trunk, and to notice that you're doing it by memory again.
+
+**Give every unclaimed tub a home or a person.** The hallway pile is unclaimed because it belongs to more than one ministry, or to none. Resolve it now, in one pass, with the rule that nothing leaves the pile without a destination: it goes back to a labeled home location, or it goes home with the person who owns that ministry, or it gets thrown away on purpose. What you're preventing is the third state — the pile that slowly becomes furniture, gets shoved into a closet in November, and is rediscovered as a mystery next spring.
+
+**Restock what actually ran out, this week.** Not what you think you'll need. What ran out, in the specific quantities you noticed running out, while you can still name them. This is the highest-value thirty minutes in the entire closeout, because it's the one that catches [supply gaps](/blog/why-churches-need-inventory-management) at the only moment the whole church knows about them. The coffee shortage is common knowledge on Monday. By Thursday it's one person's private memory. By the following month it's a surprise again.
+
+**Log the damage without drama.** The wobbly table, the mic that cut out, the cracked tub lid, the extension cord with the bent prong. Write them onto the [maintenance list](/blog/free-church-equipment-maintenance-log-template) rather than back onto the rack. And treat the reporting the way you'd want it treated: someone who says "hey, I think I broke this" is doing the church a favor, not making a confession. Wear and tear is a budget line. Greet it like one, or people stop mentioning it and you find out at the next wedding.
+
+**Write the next-year note.** More on this below, because it's the one that actually compounds.
+
+## Write It to a Stranger
+
+The next-year note is short — half a page is plenty — and the discipline that makes it useful is writing it to somebody who wasn't there.
+
+That sounds like a stylistic choice. It isn't. In a volunteer church, the person running this event next year may genuinely be someone else. People move, roles rotate, the coordinator who held all of this in her head takes a season off. [When the one person who knows everything steps away](/blog/when-the-one-person-who-knows-everything-leaves), a note written in shorthand to your own future self is worth almost nothing, because it assumed context that walked out the door. Write it so a stranger could run the event from it.
+
+Four things belong in it:
+
+- **Real numbers.** Actual attendance, actual quantities used, actual volunteer count per station. Not estimates you'll round off later — the numbers as they were.
+- **The thing that went wrong.** One or two sentences, stated as a system fact rather than a person: "check-in backed up for the first twenty minutes; two stations weren't enough at the start," not "check-in was a mess."
+- **The thing you'd cut.** Every event has a piece that consumed a lot of effort and produced very little. It is obvious right now and completely invisible in March. Name it while you can see it.
+- **Who saved it.** The person who quietly fixed the thing nobody else noticed. This matters next year for staffing, and it matters this week for a different reason.
+
+Store it wherever your church actually keeps things it will find again — attached to the event's record, in the shared folder with the [planning checklist](/blog/vbs-supply-planning-checklist), somewhere that isn't one person's inbox. A note nobody can locate in eleven months is a note you didn't write.
+
+## Thank the Teardown Crew Specifically
+
+One last thing, and it belongs in the closeout rather than after it.
+
+The people who set up get thanked at the event. The people who tore down get thanked, if at all, in a general "thanks to everyone who helped" from the front on Sunday. The teardown crew is reliably the least-thanked group in the entire operation, for the structural reason that [the least visible work draws the least deliberate honor](/blog/volunteer-roles-nobody-wants) — exactly backwards from how it should run.
+
+Fix it with specificity, which costs nothing and works far better than volume. Not "thanks to all our amazing volunteers" but "Dave and Marcus stayed until 10:30 breaking down the sound system, and Beth restocked the entire kitchen on Monday morning before work." Specific thanks is how a church says *we saw what you actually did* — and the people who stack chairs after everyone else goes home have usually never once heard it.
+
+## The Invisible Fruit
+
+Nobody will ever compliment your closeout. There is no version of this where someone stops you in the lobby to say the post-event restock was handled beautifully. That's the nature of the work — done well, it produces nothing but the absence of problems.
+
+What people will notice, without knowing why, is next year: a planning meeting that starts from a document instead of from four people's competing memories. A supply closet that has what the checklist says it has. A wagon somebody thought to buy because it was in the notes. An event that runs about fifteen percent smoother than last year's for reasons nobody can quite point to.
+
+That's the whole return. You spend three tired days closing the loop, and the payoff arrives eleven months later, in a room you're not in, to people who will never know it was you.
+
+Which is more or less the job description.
+`,
+  },
+  {
     slug: 'church-equipment-checkout-system-grace',
     title: 'Borrowed, Broken, or Just Gone: A Grace-Filled System for Equipment That Leaves the Building',
     description: "Nobody stole the projector — it's in someone's trunk, or shelved in the wrong room, and the group text is already flying. Church equipment loss is almost never theft; it's the missing moment of record. Here's a grace-filled checkout system where accountability protects the borrower instead of accusing them, because a written record is grace built into structure, not the alternative to it.",
