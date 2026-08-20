@@ -4,6 +4,19 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-08-20 — New tasks default to Private + assigned to me
+
+Flipped the built-in create default in the Tasks Hub: a new task now starts **Visibility = Private** with the **creator pre-assigned**, matching the dominant use (my own to-do) instead of broadcasting to the whole staff.
+
+- **All three create paths** in `WorkBoard.jsx`: **+ New Task** form prefill, kanban **inline quick-add**, and **Paste Tasks** import (a pasted row that names an assignee keeps it; bare rows get the creator). New `selfAssignee()` helper returns a fresh `[{uid,name}]` per call.
+- **Visibility fallbacks** flipped `'team' → 'private'` only on *create* surfaces: `getEmptyTask()`, the `taskDefaults`/`defaultsForm` seeds, and the `handleAddTask` payload guard.
+- **Per-user defaults still win** — a saved `taskDefaultVisibility` overrides the built-in. Added the missing sync effect so a late-arriving `userProfile` can't leave a user who chose Team stuck on the new `private` fallback (the lazy `useState` seed never re-ran).
+- **Deliberately untouched:** `taskToEdits()` and the `useFirestore.addTask` write fallback (legacy-doc normalizers — flipping them would silently privatize old visibility-less tasks on edit-save, and ReservationsPage relies on the write fallback), recurrence clones and the `generateRecurringTemplateTasks` CF (both inherit the source), `JobsPage` "Convert to Task" (staff-facing work stays Team), and Maintenance tickets (no visibility model, no assignee prefill).
+- **Docs:** HelpPage "Creating a task" / "Visibility control" / "Task defaults" accordions, `DATA_MODEL.md` `taskDefaultVisibility`, `CLAUDE.md` Tasks line.
+- **Verified:** lint (0 errors, no new warnings) + prod build clean; manual pass on all three create paths, per-user Team override, second-user invisibility, and the unchanged Maintenance form.
+
+---
+
 ## 2026-07-08 — Supplies gain the Shape A room link (parity with Items)
 
 The "trivial future extension" flagged in the 2026-06-24 Shape A entry, built exactly as scoped in `docs/backlog.md` (2026-06-26): a pure client-side mirror of the ItemsPage pattern into `SuppliesPage.jsx`.

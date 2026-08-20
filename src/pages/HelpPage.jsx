@@ -783,11 +783,12 @@ export function HelpPage({ onBack }) {
                 'Name and description',
                 'Priority — High, Medium, or Low',
                 'Due date and recurrence',
-                'Assignees — one or more team members',
+                'Assignees — one or more team members (you are pre-selected)',
                 'Tags — searchable labels',
-                'Visibility — Team, Private, or Shared (see below)',
+                'Visibility — Team, Private, or Shared (starts on Private — see below)',
                 'Photos and notes',
               ]} />
+              <P>A new task starts <strong>Private</strong> and assigned to you — change either before you save if the task belongs to someone else or the whole team.</P>
               <P>Tasks are auto-numbered (TSK-001, TSK-002, …). Status starts at Backlog and moves through: Backlog → Planning → In Progress → On Hold → Complete → Cancelled.</P>
               <Tip>Click <strong>From Template</strong> to pre-fill the form from a saved template. Templates appear once an admin or manager has saved at least one.</Tip>
             </Accordion>
@@ -795,8 +796,8 @@ export function HelpPage({ onBack }) {
             <Accordion title="Visibility control">
               <P>Each task has a <strong>Visibility</strong> setting that controls who can see it:</P>
               <UL items={[
-                'Team — visible to everyone with Tasks Hub access (default)',
-                'Private — visible only to you. Even admins cannot see private tasks. Enforced server-side.',
+                'Team — visible to everyone with Tasks Hub access',
+                'Private — visible only to you (the default for new tasks). Even admins cannot see private tasks. Enforced server-side.',
                 'Shared — visible to you plus specific people you choose (enforced client-side)',
               ]} />
               <P>Assignees always see their tasks regardless of visibility. Cards show a 🔒 icon for private tasks and 👥 for shared tasks.</P>
@@ -804,7 +805,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Task defaults">
-              <P>Click the <strong>⚙ Defaults</strong> button (next to the view toggle) to set your personal defaults for new tasks. You can choose a default visibility and a default share-with list so you don't have to re-select them every time you create a task.</P>
+              <P>Click the <strong>⚙ Defaults</strong> button (next to the view toggle) to set your personal defaults for new tasks. New tasks start Private unless you save a different default visibility here; you can also save a default share-with list so you don't have to re-select it every time you create a task.</P>
               <Tip>If you almost always share tasks with the same person, save them as your default share-with. They'll be pre-filled whenever you open the New Task form.</Tip>
             </Accordion>
 

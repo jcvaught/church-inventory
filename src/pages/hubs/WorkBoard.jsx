@@ -580,7 +580,7 @@ function PastePanel({ pasteText, setPasteText, taskHubUsers, pasteSaving, pasteP
   );
 }
 
-const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', status:'Backlog', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'team', sharedWith:[], notes:'', checklist:[], linkedItemDocId:null, linkedTicketDocId:null, estimatedHours:null, actualHours:null, ministry:'', vendorId:'', estimatedCost:'' });
+const getEmptyTask = () => ({ name:'', description:'', priority:'Medium', status:'Backlog', tags:[], dueDate:'', recurrence:'', assignees:[], visibility:'private', sharedWith:[], notes:'', checklist:[], linkedItemDocId:null, linkedTicketDocId:null, estimatedHours:null, actualHours:null, ministry:'', vendorId:'', estimatedCost:'' });
 const getEmptyVendor = () => ({ name:'', phone:'', email:'', specialty:'', notes:'' });
 
 // One board engine, two categories. `type` selects tasks vs maintenance: the
@@ -702,15 +702,23 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
 
   // ── Task defaults (per-user, persisted to users/{uid}) ──
   const [taskDefaults, setTaskDefaults] = useState(() => ({
-    visibility: userProfile?.taskDefaultVisibility || 'team',
+    visibility: userProfile?.taskDefaultVisibility || 'private',
     sharedWith: userProfile?.taskDefaultSharedWith || [],
   }));
   const [showDefaultsModal, setShowDefaultsModal] = useState(false);
   const [defaultsForm, setDefaultsForm] = useState(() => ({
-    visibility: userProfile?.taskDefaultVisibility || 'team',
+    visibility: userProfile?.taskDefaultVisibility || 'private',
     sharedWith: userProfile?.taskDefaultSharedWith || [],
   }));
   const [savingDefaults, setSavingDefaults] = useState(false);
+
+  // The state above is seeded once; re-sync if the profile arrives (or changes)
+  // after mount, so a user who saved 'team' isn't left on the built-in 'private'.
+  const profileDefaultVisibility = userProfile?.taskDefaultVisibility;
+  const profileDefaultSharedJson = JSON.stringify(userProfile?.taskDefaultSharedWith || []);
+  useEffect(() => {
+    setTaskDefaults({ visibility: profileDefaultVisibility || 'private', sharedWith: JSON.parse(profileDefaultSharedJson) });
+  }, [profileDefaultVisibility, profileDefaultSharedJson]);
 
   const [showTemplates, setShowTemplates] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
@@ -822,6 +830,10 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
 
   // ── Helpers ──
   function flash(text, isError = false) { setMsg({ text, isError }); setTimeout(() => setMsg(null), 5000); }
+
+  // New tasks start assigned to their creator (tasks only — tickets have no
+  // assignee default). Returned fresh each call so callers can't share an array.
+  function selfAssignee() { return userId ? [{ uid: userId, name: userName }] : []; }
 
   async function handleSaveDefaults() {
     setSavingDefaults(true);
@@ -1008,7 +1020,7 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
           actualCost: null };
       } else {
         payload = { ...base,
-          visibility: taskForm.visibility || 'team',
+          visibility: taskForm.visibility || 'private',
           sharedWith: taskForm.visibility === 'shared' ? taskForm.sharedWith : [],
           linkedItemDocId: taskForm.linkedItemDocId || null,
           linkedTicketDocId: taskForm.linkedTicketDocId || null };
@@ -1065,11 +1077,11 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
           tags: [],
           dueDate: row.dueDate || null,
           recurrence: null,
-          assignees: row.assignees || [],
+          assignees: row.assignees?.length ? row.assignees : selfAssignee(),
           checklist: [],
           photos: [],
           notes: null,
-          visibility: taskDefaults.visibility || 'team',
+          visibility: taskDefaults.visibility || 'private',
           sharedWith: taskDefaults.visibility === 'shared' ? taskDefaults.sharedWith : [],
           completedAt: null,
           linkedItemDocId: null,
@@ -1448,11 +1460,11 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
         tags: [],
         dueDate: null,
         recurrence: null,
-        assignees: [],
+        assignees: selfAssignee(),
         checklist: [],
         photos: [],
         notes: null,
-        visibility: taskDefaults.visibility || 'team',
+        visibility: taskDefaults.visibility || 'private',
         sharedWith: taskDefaults.visibility === 'shared' ? (taskDefaults.sharedWith || []) : [],
         completedAt: null,
         linkedItemDocId: null,
@@ -1770,7 +1782,7 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
             </button>
           )}
           {canCreate && (
-            <button onClick={() => { setTaskForm(isMaint ? getEmptyTask() : { ...getEmptyTask(), visibility: taskDefaults.visibility, sharedWith: [...taskDefaults.sharedWith] }); setPhotoFiles([]); setPhotoPreviews([]); setShowAdd(true); }} style={btnP}>
+            <button onClick={() => { setTaskForm(isMaint ? getEmptyTask() : { ...getEmptyTask(), visibility: taskDefaults.visibility, sharedWith: [...taskDefaults.sharedWith], assignees: selfAssignee() }); setPhotoFiles([]); setPhotoPreviews([]); setShowAdd(true); }} style={btnP}>
               + New {Noun}
             </button>
           )}
@@ -1901,7 +1913,7 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
         {!isMaint && (
           <button
             type="button"
-            onClick={() => { setDefaultsForm({ visibility: userProfile?.taskDefaultVisibility || 'team', sharedWith: userProfile?.taskDefaultSharedWith || [] }); setShowDefaultsModal(true); }}
+            onClick={() => { setDefaultsForm({ visibility: userProfile?.taskDefaultVisibility || 'private', sharedWith: userProfile?.taskDefaultSharedWith || [] }); setShowDefaultsModal(true); }}
             style={{ padding:'7px 14px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.textMid, fontSize:13, fontFamily:f1, cursor:'pointer', fontWeight:500, display:'flex', alignItems:'center', gap:5 }}
           >
             ⚙ Defaults
