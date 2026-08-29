@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Shared Agent Coordination
+
+Before planning, reviewing, or changing the repository, read `AGENTS.md` and
+`docs/AI-WORKBOARD.md`. `AGENTS.md` contains the shared safety, ownership,
+verification, and handoff rules used by both Claude and Codex. Follow the active
+task assignment and do not edit another agent's branch or worktree.
+
 ## Further Reading
 
 - `docs/DATA_MODEL.md` — Firestore collection schemas and rules summary
