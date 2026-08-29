@@ -10,7 +10,9 @@ Closed the four owner-approved authorization gaps from the COH-001 threat model.
 
 - Firestore membership now rejects an explicit `users.active:false`; missing `active` remains allowed for legacy profiles (`get('active', true)`).
 - People Access reads are full-hub only for admins/managers. Ordinary members subscribe only to their own linked `accessPeople` document(s) and matching `accessRecords`, keeping Settings → My Compliance self-only.
+- Self-scoped compliance listeners are bounded to 100 records per linked person. Ordinary members also receive an intentional empty `timeEntries` array; that collection was already admin/manager-only in rules, and the old listener only produced permission errors.
 - Activity-log creates pin the actor uid and profile name to the authenticated user and require trusted server time. The client now writes `serverTimestamp()` and reads both historical ISO strings and new Firestore Timestamps during the compatibility period.
+- Activity callers now use the profile-name fallback (`?? ''`) required by the rule, preventing silent audit loss for missing or empty names. The E2E seeder derives one canonical account name and writes it to both Auth and Firestore.
 - Removed the four obsolete `tasks` and `maintenanceTickets` document/comment rule blocks after the completed `workItems` cutover; preserved `taskTemplates` and canonical `workItems` rules.
 - Rule-emulator coverage includes inactive/legacy profiles, actor and timestamp spoofing, self-only People Access reads and queries, privileged access, and denial across every retired path.
 

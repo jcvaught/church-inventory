@@ -163,7 +163,7 @@ export function ReservationsPage({ store, userProfile, userCanSeeHub }) {
   const { confirm, ConfirmHost } = useConfirm();
 
   const userId = userProfile?.id || userProfile?.uid;
-  const userName = userProfile?.name || "Unknown";
+  const userName = userProfile?.name ?? '';
   const isAdmin = userProfile?.role === "admin";
   const isManager = userProfile?.role === "manager";
   const managedMinistries = userProfile?.managedMinistries || [];

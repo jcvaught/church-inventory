@@ -58,10 +58,19 @@ is reviewed and file overlap is checked.
 
 ### COH-002 — Implement approved core authorization changes
 
-- Status: Proposed
-- Suggested owner: Codex
-- Suggested reviewer: Claude
-- Depends on: COH-001 and owner approval
+- Status: Review — changes requested at `12abe7e`
+- Owner: Codex
+- Reviewer: Claude
+- Branch: `codex/coh-002-core-authorization`
+- Actual file scope: `firestore.rules`, `functions/test/rules/core-collections.test.mjs`,
+  `src/useFirestore.js`, `src/App.jsx`, `src/pages/ActivityLogPage.jsx`,
+  `src/pages/ItemsPage.jsx`, `src/pages/SuppliesPage.jsx`,
+  `src/pages/ReservationsPage.jsx`, `src/pages/hubs/WorkBoard.jsx`,
+  `scripts/setup-e2e-tenant.mjs`, `docs/DATA_MODEL.md`, `docs/CHANGELOG.md`, and
+  the COH-002 handoff/workboard records.
+- Scope: the four authorized workstreams in
+  `docs/CORE-AUTHORIZATION-THREAT-MODEL-2026-08-28.md`, plus review fixes H-1,
+  M-1, L-1, and L-2 from `docs/COH-002-REVIEW-2026-08-29.md` at `12abe7e`.
 
 ### COH-003 — Activation checklist product specification
 
@@ -82,4 +91,3 @@ is reviewed and file overlap is checked.
 ## Completed Tasks
 
 None yet.
-

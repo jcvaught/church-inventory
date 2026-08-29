@@ -358,7 +358,11 @@ export function useFirestore(churchId, userProfile) {
           };
           people.forEach(person => {
             recordUnsubs.push(onSnapshot(
-              query(collection(db, 'churches', churchId, 'accessRecords'), where('personId', '==', person._docId)),
+              query(
+                collection(db, 'churches', churchId, 'accessRecords'),
+                where('personId', '==', person._docId),
+                limit(100),
+              ),
               recordSnap => {
                 recordsByPerson.set(person._docId, recordSnap.docs.map(d => ({ _docId: d.id, ...d.data() })));
                 publishRecords();

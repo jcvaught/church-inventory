@@ -601,7 +601,7 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
   const isMobile = useContext(MobileCtx);
 
   const userId = userProfile?.id || userProfile?.uid;
-  const userName = userProfile?.name || 'Unknown';
+  const userName = userProfile?.name ?? '';
   const churchId = userProfile?.churchId;
   const isAdmin = userProfile?.role === 'admin';
   const isManager = userProfile?.role === 'manager';
