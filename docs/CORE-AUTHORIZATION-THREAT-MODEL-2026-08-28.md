@@ -20,8 +20,9 @@ The highest-risk findings are:
    authentication plus `churchId`, but not `user.active`. A signed-in account
    marked `active:false` can continue reading and, where member rules allow,
    writing church data until another mechanism disables Auth or removes/changes
-   its profile. Storage already requires `active:true`, so the two layers do not
-   agree.
+   its profile. Storage requires `active:true` only for writes; its read rule
+   also omits active status, so a deactivated session retains Firestore and
+   Storage read access.
 2. **People Access confidentiality is UI-only.** Every member can read
    `accessPeople` and `accessRecords` directly, including contact, notes,
    background-check dates, certification dates, key identifiers, and custom
@@ -118,11 +119,12 @@ blocks remain writable in `firestore.rules`. They no longer feed the current
 application, yet a stale client or direct SDK caller can create a parallel set
 of task/maintenance documents under the older, broadly permissive rules.
 
-COH-002 must not harden `workItems` while leaving these blocks unchanged. The
-preferred remediation is to delete both legacy rule blocks so unmatched paths
-fall through to denial. If rollback requirements still exist outside the
-documented P2 design, the alternative is identical hardening plus explicit
-tests. This is owner decision D-10.
+COH-002 will delete all four legacy blocks so unmatched paths fall through to
+denial: `maintenanceTickets/{docId}`, its comments subcollection,
+`tasks/{docId}`, and its comments subcollection. The live
+`taskTemplates/{docId}` block sits between the legacy task blocks and must be
+kept. The live `workItems` blocks must also be kept. This is accepted owner
+decision D-10.
 
 ### Role/action matrix: current behavior
 
@@ -342,6 +344,8 @@ policy.
    which maintenance fields assigned ordinary members may change. Do not guess
    and do not introduce the `assigneeUids` migration in COH-002. Track this as a
    separate task after an owner-authorized, read-only activity/role analysis.
+   **Residual risk:** until that task lands, AC-07 remains substantially open:
+   any active member retains the current broad maintenance update authority.
 5. May admins/managers read another creator's private task for support,
    safeguarding, or continuity? Current rules say no.
 6. Is selected-person task sharing a real confidentiality feature, or should it
@@ -355,9 +359,31 @@ policy.
    the separate restricted `shepherdAudit` collection. Skip detail minimization
    and schema work. Fix authenticity only by pinning actor/time and bounding the
    existing payload, following the `shepherdAudit` actor-pinning pattern.
-10. Delete the legacy `tasks/` and `maintenanceTickets/` rule blocks (preferred)
-    or harden them identically? The collections and rollback flag are gone, but
-    owner approval is still required before removing their rule surface.
+10. **D-10 — Accepted:** delete exactly four legacy rule blocks:
+    `maintenanceTickets/{docId}`, `maintenanceTickets/{ticketId}/comments`,
+    `tasks/{docId}`, and `tasks/{taskId}/comments`. Keep the intervening live
+    `taskTemplates/{docId}` block and the live `workItems` blocks.
+
+### Final authorized COH-002 scope
+
+COH-002 contains exactly these four workstreams:
+
+1. Add active-user enforcement to the Firestore membership predicate, with a
+   pre-cutover check for legitimate profiles missing `active:true`.
+2. Restrict raw People Access reads to manager/admin, make client subscriptions
+   role-aware, and preserve ordinary users' self-only My Compliance experience
+   through a minimized authorized path.
+3. Pin activity-log actor identity and trusted time using the existing
+   `shepherdAudit` rule pattern while retaining all-member reads and the current
+   nonpastoral detail shape.
+4. Delete the four D-10 legacy task/maintenance rule blocks, preserving
+   `taskTemplates` and `workItems`, with emulator mutation probes for every
+   removed path.
+
+D-2, D-3, D-5, D-6, D-7, and D-8 remain unanswered and are out of COH-002.
+D-4 remains deferred in a separate future task. COH-002 must not tighten item,
+supply, reservation, task-sharing/private-task, People Access write-type, or
+maintenance-update policy under the authority granted here.
 
 ## Changes by Enforcement Type
 
@@ -365,20 +391,19 @@ policy.
 
 - Add `userData().get('active', false) == true` to the common membership
   predicate after verifying all legitimate profiles have `active:true`.
-- Delete or identically harden the legacy `tasks/` and `maintenanceTickets/`
-  rule blocks after D-10 is answered; add direct probes that prove neither is an
-  unhardened bypass.
+- Delete exactly the four D-10 legacy task/maintenance blocks while preserving
+  the intervening `taskTemplates` block and subsequent `workItems` blocks; add
+  direct mutation probes for all four removed paths.
 - Restrict raw People Access reads to admin/manager.
-- Pin comment author UID, allowlist fields, cap text, and make attribution/time
-  immutable.
-- Add field allowlists and actor pinning to activity creates as an interim
-  integrity improvement. This does not make the log atomic.
-- Protect immutable maintenance identifiers and creator fields while the full
-  operator model is designed.
+- Pin activity actor UID/name and trusted time following `shepherdAudit`; bound
+  the current payload without introducing D-9 minimization/schema work.
 
 These are “rule-focused,” not “deploy immediately.” They still require emulator
 coverage, data-shape queries, and UI listener changes where newly denied global
 subscriptions would otherwise produce errors.
+
+Other rule-focused recommendations in this threat model are explicitly outside
+COH-002 until their corresponding owner decisions are answered.
 
 ### Requires application/query changes
 
@@ -387,28 +412,26 @@ subscriptions would otherwise produce errors.
   and could hold global loading/error state open.
 - Subscribe to sensitive collections by role and only when a consuming surface
   is active.
-- Align item/supply UI actions with new action-specific permissions.
-- Separate ordinary reservation edits from privileged approval transitions.
 - Add a self-only compliance projection for Settings → My Compliance.
 
 ### Requires callable functions or trusted backend transitions
 
-- Atomic checkout/return plus authoritative audit entry.
-- Atomic supply consume/restock plus authoritative audit entry.
-- Reservation approval/denial when authorization depends on managed ministries
-  or `rooms.approverUids`.
-- Immediate user offboarding if it includes Auth disable/token revocation.
-- High-assurance activity creation for mutations that must be auditable.
+- Auth disable plus token revocation remains a post-COH-002 offboarding
+  follow-up from D-1.
+- Callable transitions for inventory, supplies, and reservations remain outside
+  COH-002 pending D-2, D-3, and D-8.
 
 ### Requires data-model or migration work
 
-- `sharedWithUids` (or access projection) for selected-person sharing.
+- `sharedWithUids` (or access projection) for selected-person sharing remains
+  outside COH-002 pending D-6.
 - Normalized `assigneeUids` belongs to the separate post-COH-002 D-4 task if the
   eventual assigned-member policy requires it. Current nested `{uid,name}`
   object arrays are awkward to authorize.
 - Self-only compliance summaries if raw access records are manager/admin-only.
-- Server timestamps and schema normalization for legacy records where strict
-  field/type validation would reject existing documents.
+- Broader schema normalization remains outside COH-002. The activity workstream
+  may change how new log timestamps are written only as required for trusted
+  time enforcement; it must not migrate or minimize `details` under D-9.
 
 ## UI and Workflow Dependencies
 
@@ -492,9 +515,10 @@ isolated staging data, never live customer records.
 - Private task is denied to noncreator, including comment get/list/create.
 - Selected-shared behavior matches the owner-approved product decision.
 - Pin comment author; reject attribution/time mutation and excessive text.
-- Reject creates, updates, and deletes through legacy `tasks/` and
-  `maintenanceTickets/` paths after deletion, or apply the complete approved
-  matrix if D-10 chooses hardening.
+- Reject creates, updates, and deletes through each of the four removed legacy
+  task/maintenance paths.
+- Confirm `taskTemplates` read/write behavior and `workItems` behavior are
+  unchanged after the noncontiguous deletion.
 
 ### People Access
 
@@ -510,8 +534,8 @@ isolated staging data, never live customer records.
 
 ### Stage 0 — Decide and inventory
 
-1. Product owner answers the unresolved policy questions above. D-1 and D-9 are
-   settled; D-4 is deferred into its own task and does not block COH-002.
+1. Treat the four-workstream scope above as closed. Unanswered D-2/D-3/D-5/D-6/
+   D-7/D-8 are non-blocking because they are out of scope; D-4 is deferred.
 2. Query every production user profile for missing/null `active`, role, and
    church identifiers without changing data.
 3. Inventory legacy document shapes and fields before adding strict allowlists.
@@ -551,8 +575,8 @@ isolated staging data, never live customer records.
 1. Hold the compatibility client until the observation window passes.
 2. Remove compatibility direct writes only after traffic confirms callable
    adoption. Legacy `tasks/` and `maintenanceTickets/` rule blocks are a
-   separate bypass surface governed by D-10 and must be removed or hardened at
-   the COH-002 rules cutover, not left for traffic observation.
+   separate bypass surface governed by D-10 and must be deleted at the COH-002
+   rules cutover, not left for traffic observation.
 3. Update `docs/DATA_MODEL.md`, Help, privacy language, changelog, and threat
    model decisions.
 
@@ -578,7 +602,8 @@ isolated staging data, never live customer records.
 2. Make People Access subscriptions role-aware, then restrict raw reads.
 3. Establish trustworthy actor/time validation for activity and comments.
 4. Harden reservations and core inventory/supply transitions.
-5. Remove or harden the two legacy task/maintenance rule paths.
+5. Delete the four legacy task/maintenance rule blocks while preserving
+   `taskTemplates` and `workItems`.
 6. Resolve selected-person task sharing honestly in product and rules.
 7. Evaluate paid-hub entitlement enforcement separately from confidentiality.
 8. Scope assigned-member maintenance operations as a separate task after D-4's
@@ -587,9 +612,9 @@ isolated staging data, never live customer records.
 ## COH-001 Boundaries
 
 This document intentionally makes no code, rules, test, migration, deployment,
-or production-data change. COH-002 must not begin until the product owner
-approves the target permission model and resolves the remaining in-scope policy
-questions. D-4 is deliberately deferred and cannot expand COH-002 scope.
+or production-data change. COH-002's four workstreams are now authorized for
+scoping. Unanswered D-2/D-3/D-5/D-6/D-7/D-8 cannot expand it; D-4 is deliberately
+deferred and cannot expand it.
 Per the coordination decision, COH-002 blocks COH-003 and COH-004 because those
 role-gated specifications should be written against the approved permission
 model rather than revised after implementation.
