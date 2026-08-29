@@ -122,5 +122,25 @@ results in the handoff.
 
 A task is not complete until its acceptance criteria are met, relevant tests
 pass, documentation is current, the handoff is written, and known limitations
-are disclosed. Only the owner decides when to merge or deploy.
+are disclosed. Only the product owner decides when to merge or deploy, with one
+standing exception below.
+
+### Documentation merge exception (Claude only)
+
+Claude may merge and push **documentation-only** changes to `main` without
+asking. This is a Claude-specific grant; Codex has no equivalent permission and
+should not infer one.
+
+It covers `.md` files and nothing else. Before any such merge, verify the change
+introduces no code:
+
+```bash
+git diff --stat <base> HEAD -- firestore.rules storage.rules src/ functions/ \
+  scripts/ e2e/ package.json
+```
+
+Empty output is the precondition. If that command prints anything, the merge is
+not documentation-only and requires the product owner. Merging code, rules,
+tests, or configuration to `main`, and every production deploy, remain the
+product owner's decision.
 

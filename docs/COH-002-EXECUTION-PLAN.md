@@ -6,22 +6,21 @@ close of COH-001. Scope is the four authorized workstreams in
 
 **Owners:** John = product owner · Codex = implementation · Claude = reviewer
 
+Ownership reflects DEC-2026-002: Claude merges and pushes documentation-only
+changes to `main` unasked. Code, rules, test, and configuration merges — COH-002's
+own merge included — and every production deploy remain John's decision. Where a
+step is mechanical execution of a decision John has already made, Claude runs it
+and John does not need to be at the keyboard.
+
 ---
 
 ## Phase 1 — Close COH-001 (now, nothing in flight)
 
 | # | Owner | Step |
 |---|---|---|
-| 1 | **John** | Merge both branches to `main` and push. Verified clean in a disposable worktree — file sets are disjoint. |
-| 2 | **John** | Decide the reviewer verification worktree (protocol §2.2): may Claude `git worktree add --detach` at the handoff SHA and run `npm run test:rules`? Without it, review of COH-002 is read-only. |
-| 3 | **John** | Relay to Codex: branch COH-002 from current `main`; fold `3dda1f0` into workstream 1. |
-
-```bash
-cd ~/apps/church-inventory
-git merge --no-edit codex/coh-001-core-authorization-model
-git merge --no-edit claude/work
-git push
-```
+| 1 | ~~Claude~~ | **DONE** — both branches merged to `main` at `45c24e1` and pushed. Documentation only; no code, rules, or tests changed. |
+| 2 | **John** | Decide the reviewer verification worktree (protocol §2.2): may Claude `git worktree add --detach` at the handoff SHA and run `npm run test:rules`? Without it, review of COH-002 is read-only. A permission question — cannot be delegated. |
+| 3 | **John** | Relay to Codex: branch COH-002 from current `main`; fold `3dda1f0` into workstream 1. John is the only channel to Codex. |
 
 ## Phase 2 — Build
 
@@ -40,7 +39,7 @@ git push
 | 9 | **Claude** | Review at the pinned SHA. If step 2 authorizes it, run `npm run test:rules` against the actual rules changes plus independent adversarial probes — including the cases from the pre-COH-001 baseline, which must now **fail**. |
 | 10 | **Claude** | Report findings by severity into the handoff's Reviewer Findings section, on `claude/work`. |
 | 11 | **Codex** | Address findings; re-pin a new SHA if the deliverable changes. |
-| 12 | **John** | Approve, or send back. |
+| 12 | **John** | Approve the deliverable, or send it back. A judgment call, not delegated. |
 
 ## Phase 4 — Cutover
 
@@ -50,14 +49,15 @@ every member.
 
 | # | Owner | Step |
 |---|---|---|
-| 13 | **John** | Confirm whether pushing `main` auto-deploys the client via Vercel. This determines whether step 14 is automatic or manual, and the whole ordering depends on it. |
-| 14 | **John** | Merge COH-002 to `main` and push → **client deploys first**. Rules are untouched at this point, so the old permissive rules still back the new role-aware client. Nothing breaks. |
-| 15 | **John** | Verify the client on production before touching rules: ordinary member loads the app, Settings → My Compliance renders, no console errors. |
-| 16 | **John** | Deploy rules: `./node_modules/.bin/firebase deploy --only firestore:rules`. Confirm `.firebaserc` targets `church-inventory-9615c` first. |
-| 17 | **John** | Post-cutover verification: admin, manager, and ordinary member each load the app; confirm an ordinary member no longer receives People Access payloads; confirm nobody is locked out. |
-| 18 | **John** | Optional: run `npm run test:e2e` against the `e2e-test-church` tenant. Those accounts carry `active: true` (`scripts/setup-e2e-tenant.mjs:153`), so the suite exercises the new predicate. |
+| 13 | **Claude** | Resolve whether pushing `main` auto-deploys the client via Vercel. Everything downstream depends on the answer; Claude can determine it from the Vercel project settings. |
+| 14 | **John decides · Claude may execute** | Merge COH-002 to `main` and push → **client deploys first**, still backed by the old permissive rules, so nothing breaks. **This is a code merge and is NOT covered by DEC-2026-002** — it needs John's explicit go-ahead, after which Claude can run it. |
+| 15 | **Claude** | Verify the client on production before rules change: ordinary member loads the app, Settings → My Compliance renders, no console errors. Read-only browser verification. |
+| 16 | **John — explicit approval required each time** | Deploy rules: `./node_modules/.bin/firebase deploy --only firestore:rules`, after confirming `.firebaserc` targets `church-inventory-9615c`. A production change with real blast radius; `AGENTS.md` reserves it and DEC-2026-002 does not touch it. Claude may run the command once John says deploy, and never infers it. |
+| 17 | **Claude** | Post-cutover verification: admin, manager, and ordinary member each load the app; confirm an ordinary member no longer receives People Access payloads; confirm nobody is locked out. Report results; do not remediate unilaterally. |
+| 18 | **John authorizes · Claude runs** | Optional: `npm run test:e2e` against the `e2e-test-church` tenant, whose accounts carry `active: true` (`scripts/setup-e2e-tenant.mjs:153`), so the suite exercises the new predicate. `AGENTS.md` treats the production E2E tenant as production access, so it needs authorization. |
 
-**Rollback:** redeploy the previous `firestore.rules` commit. Time-bound it —
+**Rollback:** John's call to invoke; Claude may execute. Redeploy the previous
+`firestore.rules` commit. Time-bound it —
 rolling back reopens the People Access exposure. Do not roll the client back to a
 version that assumes raw People Access reads while restrictive rules are live.
 
