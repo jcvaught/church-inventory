@@ -43,6 +43,10 @@ The highest-risk findings are:
    rule-equivalent to team visibility. All members may read work-item comments,
    including comments under private tasks, and comment identity is forgeable on
    create.
+7. **Legacy write paths remain live.** The deleted-data-era `tasks/` and
+   `maintenanceTickets/` rule blocks still accept client writes even though the
+   application now uses `workItems`. Hardening only `workItems` would leave a
+   parallel path with the old permissions.
 
 No evidence found in this review indicates a cross-church rules bypass. The
 threat is an authenticated current or former member using the Firebase SDK or
@@ -105,6 +109,20 @@ to every rule. Billing enforcement, internal confidentiality, and operational
 authorization are separate policies. Mixing them in one emergency change would
 increase lockout risk. COH-002 should first enforce active membership and
 role/data sensitivity; entitlement parity can be a separately approved task.
+
+### Legacy task and maintenance paths
+
+The P2 cutover deleted the legacy `tasks` and `maintenanceTickets` production
+collections and removed the feature-flag rollback path, but both collection
+blocks remain writable in `firestore.rules`. They no longer feed the current
+application, yet a stale client or direct SDK caller can create a parallel set
+of task/maintenance documents under the older, broadly permissive rules.
+
+COH-002 must not harden `workItems` while leaving these blocks unchanged. The
+preferred remediation is to delete both legacy rule blocks so unmatched paths
+fall through to denial. If rollback requirements still exist outside the
+documented P2 design, the alternative is identical hardening plus explicit
+tests. This is owner decision D-10.
 
 ### Role/action matrix: current behavior
 
@@ -311,14 +329,19 @@ policy.
 | Write People Access person/key/custom record | No | Yes | Yes | Existing role rule plus field validation |
 | Write certification/background-check record | No | Owner decision; UI currently makes certification admin-only | Yes | Rules must match approved policy |
 
-### Product decisions required before COH-002
+### Product decisions and current owner answers
 
-1. Does setting `active:false` need immediate access revocation, and should the
-   admin workflow also disable Firebase Auth/revoke refresh tokens?
+1. **D-1 — Accepted:** add `active:true` to the Firestore member predicate in
+   COH-002. Auth disable plus refresh-token revocation is a follow-up task. No
+   profiles have yet been deactivated in production, so this is a confirmed
+   latent exposure rather than a known live offboarding incident.
 2. May managers delete inventory, or should deletion remain admin-only as much
    of the UI currently suggests?
 3. May ordinary trusted members restock supplies, or only consume them?
-4. Which maintenance changes may an assigned ordinary member perform?
+4. **D-4 — Deferred out of COH-002:** insufficient evidence exists to decide
+   which maintenance fields assigned ordinary members may change. Do not guess
+   and do not introduce the `assigneeUids` migration in COH-002. Track this as a
+   separate task after an owner-authorized, read-only activity/role analysis.
 5. May admins/managers read another creator's private task for support,
    safeguarding, or continuity? Current rules say no.
 6. Is selected-person task sharing a real confidentiality feature, or should it
@@ -328,7 +351,13 @@ policy.
 8. Should managers approve reservations only for `managedMinistries`, only when
    listed as room approvers, or both? How should a reservation with no ministry
    be delegated?
-9. Which activity-log details are appropriate for all-member readership?
+9. **D-9 — Closed:** keep all-member read access to `activityLog`; Shepherd uses
+   the separate restricted `shepherdAudit` collection. Skip detail minimization
+   and schema work. Fix authenticity only by pinning actor/time and bounding the
+   existing payload, following the `shepherdAudit` actor-pinning pattern.
+10. Delete the legacy `tasks/` and `maintenanceTickets/` rule blocks (preferred)
+    or harden them identically? The collections and rollback flag are gone, but
+    owner approval is still required before removing their rule surface.
 
 ## Changes by Enforcement Type
 
@@ -336,6 +365,9 @@ policy.
 
 - Add `userData().get('active', false) == true` to the common membership
   predicate after verifying all legitimate profiles have `active:true`.
+- Delete or identically harden the legacy `tasks/` and `maintenanceTickets/`
+  rule blocks after D-10 is answered; add direct probes that prove neither is an
+  unhardened bypass.
 - Restrict raw People Access reads to admin/manager.
 - Pin comment author UID, allowlist fields, cap text, and make attribution/time
   immutable.
@@ -371,8 +403,9 @@ subscriptions would otherwise produce errors.
 ### Requires data-model or migration work
 
 - `sharedWithUids` (or access projection) for selected-person sharing.
-- Normalized `assigneeUids` if assigned-member maintenance updates are enforced
-  in rules. Current nested `{uid,name}` object arrays are awkward to authorize.
+- Normalized `assigneeUids` belongs to the separate post-COH-002 D-4 task if the
+  eventual assigned-member policy requires it. Current nested `{uid,name}`
+  object arrays are awkward to authorize.
 - Self-only compliance summaries if raw access records are manager/admin-only.
 - Server timestamps and schema normalization for legacy records where strict
   field/type validation would reject existing documents.
@@ -396,12 +429,30 @@ subscriptions would otherwise produce errors.
 Every case should include active member, manager, admin, inactive same-church
 user, and cross-tenant user where applicable.
 
+### Emulator list-denial limitation
+
+Do **not** treat a Firestore emulator `list`-denial pass as proof that a
+production query is contained. This repository has observed the emulator fail
+to reproduce production list authorization faithfully. The mandatory emulator
+suite therefore uses single-document `get` plus create/update/delete probes for
+negative authorization. Where list containment is essential, use a
+rule-readable pointer/projection subcollection pattern that makes authorized
+queries structurally possible and test its document reads; otherwise mark the
+list denial as requiring a separately approved real-project/staging check.
+
+No production-project denial test may be run merely to satisfy COH-002. It
+requires explicit owner authorization and must use a nonproduction project or
+isolated staging data, never live customer records.
+
 ### Membership/offboarding
 
 - Active same-church role receives its intended access.
 - `active:false` user cannot read or write any church-scoped core collection.
 - Missing `active` is denied after a production shape audit/migration decision.
-- Cross-tenant get, list, create, update, and delete remain denied.
+- Cross-tenant get, create, update, and delete remain denied by emulator probes.
+- Cross-tenant list containment uses the pointer/projection pattern or is
+  separately verified in an owner-approved nonproduction project; an emulator
+  list denial is not accepted as evidence.
 
 ### Items
 
@@ -441,10 +492,16 @@ user, and cross-tenant user where applicable.
 - Private task is denied to noncreator, including comment get/list/create.
 - Selected-shared behavior matches the owner-approved product decision.
 - Pin comment author; reject attribution/time mutation and excessive text.
+- Reject creates, updates, and deletes through legacy `tasks/` and
+  `maintenanceTickets/` paths after deletion, or apply the complete approved
+  matrix if D-10 chooses hardening.
 
 ### People Access
 
-- Ordinary member cannot get or list raw people/access records.
+- Ordinary member cannot get a known raw people/access record in emulator
+  probes. Query/list containment must use the pointer/projection design or an
+  owner-approved nonproduction verification; emulator list denial alone is not
+  a release gate.
 - Manager/admin access matches the approved record-type policy.
 - Self-only compliance endpoint returns only the caller's minimized fields.
 - Linked and unlinked user edge cases do not disclose another person.
@@ -453,7 +510,8 @@ user, and cross-tenant user where applicable.
 
 ### Stage 0 — Decide and inventory
 
-1. Product owner answers the nine policy questions above.
+1. Product owner answers the unresolved policy questions above. D-1 and D-9 are
+   settled; D-4 is deferred into its own task and does not block COH-002.
 2. Query every production user profile for missing/null `active`, role, and
    church identifiers without changing data.
 3. Inventory legacy document shapes and fields before adding strict allowlists.
@@ -477,6 +535,8 @@ user, and cross-tenant user where applicable.
    assigned maintenance, My Compliance, comments, and offboarding in emulators.
 4. Use a staging project or isolated nonproduction tenant; do not validate
    restrictive rules first against live churches.
+5. Treat emulator list-denial results as non-evidence; use the documented
+   pointer/projection technique or an owner-approved nonproduction check.
 
 ### Stage 3 — Rules cutover
 
@@ -489,7 +549,10 @@ user, and cross-tenant user where applicable.
 ### Stage 4 — Stabilize and remove compatibility paths
 
 1. Hold the compatibility client until the observation window passes.
-2. Remove legacy direct writes only after traffic confirms callable adoption.
+2. Remove compatibility direct writes only after traffic confirms callable
+   adoption. Legacy `tasks/` and `maintenanceTickets/` rule blocks are a
+   separate bypass surface governed by D-10 and must be removed or hardened at
+   the COH-002 rules cutover, not left for traffic observation.
 3. Update `docs/DATA_MODEL.md`, Help, privacy language, changelog, and threat
    model decisions.
 
@@ -515,16 +578,18 @@ user, and cross-tenant user where applicable.
 2. Make People Access subscriptions role-aware, then restrict raw reads.
 3. Establish trustworthy actor/time validation for activity and comments.
 4. Harden reservations and core inventory/supply transitions.
-5. Define and enforce assigned-member maintenance operations.
+5. Remove or harden the two legacy task/maintenance rule paths.
 6. Resolve selected-person task sharing honestly in product and rules.
 7. Evaluate paid-hub entitlement enforcement separately from confidentiality.
+8. Scope assigned-member maintenance operations as a separate task after D-4's
+   owner-authorized evidence gathering; do not include it in COH-002.
 
 ## COH-001 Boundaries
 
 This document intentionally makes no code, rules, test, migration, deployment,
 or production-data change. COH-002 must not begin until the product owner
-approves the target permission model and resolves the listed policy questions.
+approves the target permission model and resolves the remaining in-scope policy
+questions. D-4 is deliberately deferred and cannot expand COH-002 scope.
 Per the coordination decision, COH-002 blocks COH-003 and COH-004 because those
 role-gated specifications should be written against the approved permission
 model rather than revised after implementation.
-
