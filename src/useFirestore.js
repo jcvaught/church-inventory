@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   doc, setDoc, getDoc, deleteDoc, getDocs,
-  collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction, writeBatch, startAfter
+  collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction, writeBatch, startAfter,
+  serverTimestamp, Timestamp
 } from 'firebase/firestore';
 import * as Sentry from '@sentry/react';
 import { db, storage } from './firebase.js';
@@ -26,6 +27,20 @@ import { excludeTestAccounts } from './utils/testAccounts.js';
 // what we surface/return for linking.
 const stripWorkPrefix = (id) => id.replace(/^(?:task|mnt)_/, '');
 
+// Activity-log writes use Firestore server timestamps so the rules can pin
+// chronology to request.time. Keep the store's public shape as an ISO string so
+// existing dashboards, exports, filters, and date formatting remain unchanged.
+function activityDoc(d) {
+  const data = d.data();
+  const rawTimestamp = data.timestamp;
+  return {
+    _docId: d.id,
+    ...data,
+    timestamp: rawTimestamp?.toDate ? rawTimestamp.toDate().toISOString() : rawTimestamp,
+    _timestampCursor: rawTimestamp,
+  };
+}
+
 function taskDocRef(churchId, bareId) {
   return doc(db, 'churches', churchId, 'workItems', `task_${bareId}`);
 }
@@ -42,7 +57,7 @@ function newTicketDocRef(churchId) {
   return { ref: doc(db, 'churches', churchId, 'workItems', `mnt_${id}`), id };
 }
 
-export function useFirestore(churchId) {
+export function useFirestore(churchId, userProfile) {
   const [settings, setSettings] = useState(null);
   const [config, setConfig] = useState(null);
   const [items, setItems] = useState([]);
@@ -137,7 +152,9 @@ export function useFirestore(churchId) {
     const unsubs = [];
     let loaded = 0;
     // Tasks + maintenance come from one `workItems` subscription (split by type).
-    const totalSubs = 20;
+    // People Access and time-entry subscriptions are role-aware in the
+    // dedicated effect below. They must not block the rest of app startup.
+    const totalSubs = 17;
     const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
     // Config
@@ -172,7 +189,7 @@ export function useFirestore(churchId) {
     unsubs.push(onSnapshot(
       query(collection(db, 'churches', churchId, 'activityLog'), orderBy('timestamp', 'desc'), limit(100)),
       (snap) => {
-        const logs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+        const logs = snap.docs.map(activityDoc);
         setActivityLog(logs);
         checkDone();
       },
@@ -223,26 +240,6 @@ export function useFirestore(churchId) {
       const reqs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
       reqs.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       setPublicRequests(reqs);
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
-
-    // Access People
-    unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'accessPeople'), orderBy('name')), (snap) => {
-      setAccessPeople(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
-
-    // Access Records
-    unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'accessRecords'), orderBy('createdAt', 'desc')), (snap) => {
-      setAccessRecords(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
-
-    // Time Entries (contractor / labor hours) — sorted newest-first; the
-    // Timesheet view filters by person + date range client-side (church-scale
-    // volumes are small, so no composite index is needed).
-    unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'timeEntries'), orderBy('date', 'desc')), (snap) => {
-      setTimeEntries(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
@@ -302,6 +299,81 @@ export function useFirestore(churchId) {
 
     return () => unsubs.forEach(u => u());
   }, [churchId]);
+
+  // People Access is manager/admin-readable, while ordinary users receive only
+  // their linked tracked-person document(s) and those people's compliance
+  // records for Settings → My Compliance. This effect intentionally lives
+  // outside the core subscription counter so a compliance listener cannot hold
+  // the whole application on its loading screen.
+  useEffect(() => {
+    if (!churchId || !userProfile?.uid) {
+      setAccessPeople([]);
+      setAccessRecords([]);
+      setTimeEntries([]);
+      return undefined;
+    }
+
+    const elevated = userProfile.role === 'admin' || userProfile.role === 'manager';
+    const unsubs = [];
+
+    if (elevated) {
+      unsubs.push(onSnapshot(
+        query(collection(db, 'churches', churchId, 'accessPeople'), orderBy('name')),
+        snap => setAccessPeople(snap.docs.map(d => ({ _docId: d.id, ...d.data() }))),
+        err => handleErr(err, { listener: true, hub: 'people_access' }),
+      ));
+      unsubs.push(onSnapshot(
+        query(collection(db, 'churches', churchId, 'accessRecords'), orderBy('createdAt', 'desc')),
+        snap => setAccessRecords(snap.docs.map(d => ({ _docId: d.id, ...d.data() }))),
+        err => handleErr(err, { listener: true, hub: 'people_access' }),
+      ));
+      unsubs.push(onSnapshot(
+        query(collection(db, 'churches', churchId, 'timeEntries'), orderBy('date', 'desc')),
+        snap => setTimeEntries(snap.docs.map(d => ({ _docId: d.id, ...d.data() }))),
+        err => handleErr(err, { listener: true, hub: 'people_access' }),
+      ));
+    } else {
+      setTimeEntries([]);
+      let recordUnsubs = [];
+      const recordsByPerson = new Map();
+      const clearRecordSubscriptions = () => {
+        recordUnsubs.forEach(unsub => unsub());
+        recordUnsubs = [];
+        recordsByPerson.clear();
+      };
+      unsubs.push(onSnapshot(
+        query(collection(db, 'churches', churchId, 'accessPeople'), where('userId', '==', userProfile.uid)),
+        snap => {
+          clearRecordSubscriptions();
+          const people = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+          setAccessPeople(people);
+          if (people.length === 0) {
+            setAccessRecords([]);
+            return;
+          }
+          const publishRecords = () => {
+            const all = [...recordsByPerson.values()].flat();
+            all.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+            setAccessRecords(all);
+          };
+          people.forEach(person => {
+            recordUnsubs.push(onSnapshot(
+              query(collection(db, 'churches', churchId, 'accessRecords'), where('personId', '==', person._docId)),
+              recordSnap => {
+                recordsByPerson.set(person._docId, recordSnap.docs.map(d => ({ _docId: d.id, ...d.data() })));
+                publishRecords();
+              },
+              err => handleErr(err, { listener: true, hub: 'people_access' }),
+            ));
+          });
+        },
+        err => handleErr(err, { listener: true, hub: 'people_access' }),
+      ));
+      unsubs.push(clearRecordSubscriptions);
+    }
+
+    return () => unsubs.forEach(unsub => unsub());
+  }, [churchId, userProfile?.role, userProfile?.uid]);
 
   // ── Settings ──
   const updateSettings = useCallback(async (updates) => {
@@ -503,7 +575,7 @@ export function useFirestore(churchId) {
         itemId,
         performedBy: userId,
         performedByName: userName,
-        timestamp: new Date().toISOString(),
+        timestamp: serverTimestamp(),
         details
       });
     } catch (err) {
@@ -1389,7 +1461,7 @@ export function useFirestore(churchId) {
         limit(batchSize)
       );
       const snap = await getDocs(q);
-      return snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+      return snap.docs.map(activityDoc);
     } catch (err) { handleErr(err); return []; }
   }, [churchId]);
 
@@ -1403,23 +1475,36 @@ export function useFirestore(churchId) {
   const loadActivityLogSince = useCallback(async (sinceTimestamp, { batchSize = 500, maxEntries = 5000 } = {}) => {
     if (!churchId || !sinceTimestamp) return [];
     try {
-      const out = [];
-      let cursor = null;
-      for (;;) {
-        const clauses = [
-          collection(db, 'churches', churchId, 'activityLog'),
-          where('timestamp', '>=', sinceTimestamp),
-          orderBy('timestamp', 'asc'),
-          limit(batchSize),
-        ];
-        if (cursor) clauses.splice(3, 0, startAfter(cursor));
-        const snap = await getDocs(query(...clauses));
-        if (snap.empty) break;
-        out.push(...snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
-        if (snap.size < batchSize || out.length >= maxEntries) break;
-        cursor = snap.docs[snap.docs.length - 1].data().timestamp;
+      // Historical rows store ISO strings; COH-002 rows store Firestore
+      // Timestamps. Query both type lanes during the compatibility period and
+      // merge them into the store's ISO-string shape.
+      async function fetchLane(startValue) {
+        const lane = [];
+        let cursor = null;
+        for (;;) {
+          const clauses = [
+            collection(db, 'churches', churchId, 'activityLog'),
+            where('timestamp', '>=', startValue),
+            orderBy('timestamp', 'asc'),
+            limit(batchSize),
+          ];
+          if (cursor) clauses.splice(3, 0, startAfter(cursor));
+          const snap = await getDocs(query(...clauses));
+          if (snap.empty) break;
+          lane.push(...snap.docs.map(activityDoc));
+          if (snap.size < batchSize || lane.length >= maxEntries) break;
+          cursor = snap.docs[snap.docs.length - 1].data().timestamp;
+        }
+        return lane;
       }
-      return out;
+
+      const [legacy, current] = await Promise.all([
+        fetchLane(sinceTimestamp),
+        fetchLane(Timestamp.fromDate(new Date(sinceTimestamp))),
+      ]);
+      return [...legacy, ...current]
+        .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''))
+        .slice(0, maxEntries);
     } catch (err) { handleErr(err); return []; }
   }, [churchId]);
 
