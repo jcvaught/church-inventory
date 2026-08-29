@@ -228,4 +228,36 @@ and that flag was stripped in Part C, so it no longer exists.
 **Recommendation:** Delete both blocks in COH-002. Removes ~45 lines of rule
 surface and one whole class of bypass.
 
-**Decision:**
+**Owner answer (2026-08-29):** Delete.
+
+**Verified before acting.** No code in `src/` or `functions/` reads or writes the
+legacy Firestore collections. Every `'tasks'` hit in the codebase is the *hub
+key* (`allowedHubs`, `HUB_DEFS`, `userCanSeeHub`), not a collection path;
+`useFirestore.js:16` and `:250` confirm the hook still exposes `tasks` and
+`maintenanceTickets` arrays but derives them from `workItems` via the `type`
+discriminator. The migrated Cloud Function reads `collectionGroup('workItems')`
+(`functions/index.js:1741`). There is no `collectionGroup('tasks')` or
+`collectionGroup('maintenanceTickets')` anywhere.
+
+**Implementation footgun — the blocks are NOT contiguous.** Four blocks are
+deleted and one live block sits in the middle of them:
+
+| Lines | Block | Action |
+|---|---|---|
+| 190–196 | `maintenanceTickets/{docId}` | delete |
+| 197–206 | `maintenanceTickets/{ticketId}/comments` | delete |
+| 208–234 | `tasks/{docId}` | delete |
+| **236–244** | **`taskTemplates/{docId}`** | **KEEP — live** |
+| 246–257 | `tasks/{taskId}/comments` | delete |
+| 259+ | `workItems/{docId}` | KEEP — live |
+
+`taskTemplates` is a current collection: the client subscribes to it
+(`useFirestore.js:298`) and writes it (`:754`, `:766`), and
+`generateRecurringTemplateTasks` reads it (`functions/index.js:3455`). A naive
+"delete lines 190–257" removes its rule block and breaks the templates feature
+for every user. Line numbers are against `464772f` and must be re-derived if the
+file moves.
+
+**Decision:** **Delete.** Four blocks as tabulated; `taskTemplates` and
+`workItems` untouched. Add emulator probes proving all four legacy paths deny
+create/update/delete after removal.
