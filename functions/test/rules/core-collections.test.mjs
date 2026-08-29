@@ -12,7 +12,10 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import {
+  collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp,
+  setDoc, updateDoc, where,
+} from 'firebase/firestore';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const RULES = readFileSync(join(here, '../../../firestore.rules'), 'utf8');
@@ -46,8 +49,19 @@ async function seedMembers() {
   await seed('users/mgrA', { churchId: CHURCH, role: 'manager', name: 'Mgr A', active: true });
   await seed('users/memberA', { churchId: CHURCH, role: 'user', name: 'Member A', active: true });
   await seed('users/memberB', { churchId: CHURCH, role: 'user', name: 'Member B', active: true });
+  await seed('users/inactiveA', { churchId: CHURCH, role: 'user', name: 'Inactive A', active: false });
+  await seed('users/legacyA', { churchId: CHURCH, role: 'user', name: 'Legacy A' });
   await seed('users/outsider', { churchId: OTHER, role: 'admin', name: 'Outsider', active: true });
 }
+
+// ── Active membership — explicit false revokes; missing stays compatible ────
+test('membership: inactive users are denied while a missing legacy active field defaults true', async () => {
+  await seedMembers();
+  await seed(P('items/i-active'), { name: 'Projector' });
+  await assertFails(getDoc(doc(ctx('inactiveA'), P('items/i-active'))));
+  await assertFails(updateDoc(doc(ctx('inactiveA'), P('items/i-active')), { status: 'Checked Out' }));
+  await assertSucceeds(getDoc(doc(ctx('legacyA'), P('items/i-active'))));
+});
 
 // ── Items — members read+update; admins/managers create/delete ───────────────
 test('items: member can read + update, but not create or delete', async () => {
@@ -71,31 +85,57 @@ test('items: a member of another church is denied (tenant isolation)', async () 
   await assertFails(getDoc(doc(anon(), P('items/i1'))));
 });
 
-// ── Activity log — members create; nobody can modify (immutable audit) ───────
-test('activityLog: member creates, but updates/deletes are denied for everyone', async () => {
+// ── Activity log — actor/time pinned; nobody can modify (immutable audit) ───
+test('activityLog: member creates with pinned actor/server time; spoofing is denied', async () => {
   await seedMembers();
-  await assertSucceeds(setDoc(doc(ctx('memberA'), P('activityLog/a1')), { action: 'checkout', itemId: 'i1' }));
+  const valid = {
+    action: 'checkout', itemId: 'i1', performedBy: 'memberA',
+    performedByName: 'Member A', timestamp: serverTimestamp(), details: {},
+  };
+  await assertSucceeds(setDoc(doc(ctx('memberA'), P('activityLog/a1')), valid));
+  await assertFails(setDoc(doc(ctx('memberA'), P('activityLog/spoof-uid')), {
+    ...valid, performedBy: 'adminA', timestamp: serverTimestamp(),
+  }));
+  await assertFails(setDoc(doc(ctx('memberA'), P('activityLog/spoof-name')), {
+    ...valid, performedByName: 'Admin A', timestamp: serverTimestamp(),
+  }));
+  await assertFails(setDoc(doc(ctx('memberA'), P('activityLog/client-time')), {
+    ...valid, timestamp: '2026-01-01T00:00:00.000Z',
+  }));
+  await assertFails(setDoc(doc(ctx('inactiveA'), P('activityLog/inactive')), {
+    action: 'checkout', itemId: 'i1', performedBy: 'inactiveA',
+    performedByName: 'Inactive A', timestamp: serverTimestamp(), details: {},
+  }));
+});
+test('activityLog: updates/deletes are denied for everyone', async () => {
+  await seedMembers();
   await seed(P('activityLog/a2'), { action: 'x', itemId: 'i2' });
   await assertFails(updateDoc(doc(ctx('adminA'), P('activityLog/a2')), { action: 'tampered' }));
   await assertFails(deleteDoc(doc(ctx('adminA'), P('activityLog/a2'))));
 });
 
-// ── Tasks — private tasks readable only by their creator ─────────────────────
-test('tasks: a private task is readable only by its creator', async () => {
+// ── Legacy Tasks/Maintenance — all four obsolete rule paths are denied ───────
+test('legacy task and maintenance paths deny create/update/delete', async () => {
   await seedMembers();
-  await seed(P('tasks/t1'), { createdBy: 'memberA', visibility: 'private', title: 'secret' });
-  await assertSucceeds(getDoc(doc(ctx('memberA'), P('tasks/t1'))));
-  await assertFails(getDoc(doc(ctx('memberB'), P('tasks/t1'))));
+  const paths = [
+    P('maintenanceTickets/m1'),
+    P('maintenanceTickets/m1/comments/c1'),
+    P('tasks/t1'),
+    P('tasks/t1/comments/c1'),
+  ];
+  for (const path of paths) {
+    await assertFails(setDoc(doc(ctx('adminA'), path), { title: 'legacy' }));
+    await seed(path, { title: 'seeded legacy' });
+    await assertFails(updateDoc(doc(ctx('adminA'), path), { title: 'changed' }));
+    await assertFails(deleteDoc(doc(ctx('adminA'), path)));
+  }
 });
-test('tasks: a team task is readable by any member', async () => {
+
+test('taskTemplates remains live after the noncontiguous legacy deletion', async () => {
   await seedMembers();
-  await seed(P('tasks/t2'), { createdBy: 'memberA', visibility: 'team', title: 'shared' });
-  await assertSucceeds(getDoc(doc(ctx('memberB'), P('tasks/t2'))));
-});
-test('tasks: create pins createdBy to the caller (no impersonation)', async () => {
-  await seedMembers();
-  await assertSucceeds(setDoc(doc(ctx('memberA'), P('tasks/t3')), { createdBy: 'memberA', visibility: 'team' }));
-  await assertFails(setDoc(doc(ctx('memberA'), P('tasks/t4')), { createdBy: 'memberB', visibility: 'team' }));
+  await assertSucceeds(setDoc(doc(ctx('mgrA'), P('taskTemplates/tpl1')), { name: 'Sunday setup' }));
+  await assertSucceeds(getDoc(doc(ctx('memberA'), P('taskTemplates/tpl1'))));
+  await assertSucceeds(updateDoc(doc(ctx('mgrA'), P('taskTemplates/tpl1')), { name: 'Sunday reset' }));
 });
 
 // ── Work items — maintenance is admin/manager-create; tasks are member-create ─
@@ -108,6 +148,42 @@ test('workItems: a task item is member-create with createdBy pinned', async () =
   await seedMembers();
   await assertSucceeds(setDoc(doc(ctx('memberA'), P('workItems/w3')), { type: 'task', createdBy: 'memberA', visibility: 'team' }));
   await assertFails(setDoc(doc(ctx('memberA'), P('workItems/w4')), { type: 'task', createdBy: 'memberB', visibility: 'team' }));
+});
+
+// ── People Access — full hub manager/admin; ordinary member self-only ────────
+test('People Access: member reads only their linked person and compliance records', async () => {
+  await seedMembers();
+  await seed(P('accessPeople/pA'), { name: 'Member A', userId: 'memberA' });
+  await seed(P('accessPeople/pB'), { name: 'Member B', userId: 'memberB' });
+  await seed(P('accessRecords/rA'), { personId: 'pA', type: 'background_check' });
+  await seed(P('accessRecords/rB'), { personId: 'pB', type: 'certification' });
+
+  await assertSucceeds(getDoc(doc(ctx('memberA'), P('accessPeople/pA'))));
+  await assertFails(getDoc(doc(ctx('memberA'), P('accessPeople/pB'))));
+  await assertSucceeds(getDoc(doc(ctx('memberA'), P('accessRecords/rA'))));
+  await assertFails(getDoc(doc(ctx('memberA'), P('accessRecords/rB'))));
+  await assertFails(getDoc(doc(ctx('inactiveA'), P('accessRecords/rA'))));
+  await assertFails(updateDoc(doc(ctx('memberA'), P('accessRecords/rA')), { type: 'custom' }));
+
+  // Positive query coverage for the exact self-only client path. Emulator list
+  // denials are not treated as containment evidence; negative cases stay getDoc.
+  await assertSucceeds(getDocs(query(
+    collection(ctx('memberA'), P('accessPeople')),
+    where('userId', '==', 'memberA'),
+  )));
+  await assertSucceeds(getDocs(query(
+    collection(ctx('memberA'), P('accessRecords')),
+    where('personId', '==', 'pA'),
+  )));
+});
+
+test('People Access: manager/admin retain full reads and manager writes', async () => {
+  await seedMembers();
+  await seed(P('accessPeople/pA'), { name: 'Member A', userId: 'memberA' });
+  await seed(P('accessRecords/rA'), { personId: 'pA', type: 'background_check' });
+  await assertSucceeds(getDoc(doc(ctx('mgrA'), P('accessPeople/pA'))));
+  await assertSucceeds(getDoc(doc(ctx('adminA'), P('accessRecords/rA'))));
+  await assertSucceeds(updateDoc(doc(ctx('mgrA'), P('accessRecords/rA')), { type: 'custom' }));
 });
 
 // ── Jobs Hub — listings gated on an active subscription; roster read-gated ───

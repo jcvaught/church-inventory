@@ -1448,7 +1448,8 @@ export function useFirestore(churchId, userProfile) {
   }, [churchId]);
 
   // Pair with the capped activityLog subscription. Returns the next N
-  // entries strictly OLDER than the supplied beforeTimestamp via a one-shot
+  // entries strictly OLDER than the supplied raw cursor (legacy ISO string or
+  // Firestore Timestamp) via a one-shot
   // getDocs (no live updates — those would re-introduce the unbounded-read
   // cost the cap exists to prevent).
   const loadOlderActivityLog = useCallback(async (beforeTimestamp, batchSize = 100) => {
@@ -1478,17 +1479,18 @@ export function useFirestore(churchId, userProfile) {
       // Historical rows store ISO strings; COH-002 rows store Firestore
       // Timestamps. Query both type lanes during the compatibility period and
       // merge them into the store's ISO-string shape.
-      async function fetchLane(startValue) {
+      async function fetchLane(startValue, upperExclusive = null) {
         const lane = [];
         let cursor = null;
         for (;;) {
           const clauses = [
             collection(db, 'churches', churchId, 'activityLog'),
             where('timestamp', '>=', startValue),
+            ...(upperExclusive ? [where('timestamp', '<', upperExclusive)] : []),
             orderBy('timestamp', 'asc'),
             limit(batchSize),
           ];
-          if (cursor) clauses.splice(3, 0, startAfter(cursor));
+          if (cursor) clauses.splice(clauses.length - 1, 0, startAfter(cursor));
           const snap = await getDocs(query(...clauses));
           if (snap.empty) break;
           lane.push(...snap.docs.map(activityDoc));
@@ -1499,7 +1501,9 @@ export function useFirestore(churchId, userProfile) {
       }
 
       const [legacy, current] = await Promise.all([
-        fetchLane(sinceTimestamp),
+        // Firestore orders strings before Timestamps. The upper bound keeps the
+        // legacy lane from also returning every Timestamp regardless of date.
+        fetchLane(sinceTimestamp, Timestamp.fromMillis(0)),
         fetchLane(Timestamp.fromDate(new Date(sinceTimestamp))),
       ]);
       return [...legacy, ...current]
