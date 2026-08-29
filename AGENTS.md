@@ -55,6 +55,44 @@ tracks agent ownership, handoffs, and review status for selected tasks.
   product or architecture decisions only in chat.
 - Complete a handoff using `docs/AI-HANDOFF-TEMPLATE.md` before review.
 
+### Direct handoff to Codex (Claude only, one direction)
+
+Claude may invoke Codex directly to hand off a completed review, instead of
+routing the message through the product owner:
+
+```bash
+codex exec -C /Users/johnvaught/apps/church-inventory-codex "<message>"
+```
+
+`codex exec resume --last` may be used to preserve Codex's session context, but
+the message must be written so a cold session would also succeed — always cite
+the commit SHA and path of the artifact it refers to.
+
+**Preconditions.** The referenced artifact must already be committed and pushed,
+so Codex can read it independently. The message must be fully derivable from that
+artifact: a pointer plus a mechanical instruction, nothing that is not already
+written down.
+
+**The message may not contain:**
+
+- any product or policy decision the product owner has not already recorded in
+  `docs/DECISIONS.md` or `docs/COH-001-OWNER-DECISIONS.md`;
+- any expansion of an authorized task scope;
+- any authorization to merge, deploy, run production tests, or touch production
+  data.
+
+If the next step requires a decision that is not already recorded, Claude stops
+and asks the product owner. Handing an unanswered question to Codex to break a
+deadlock is exactly what this grant does not permit.
+
+**Limits.** One invocation per completed review. No polling, no scheduled
+invocation, no re-invoking to chase a response — those would make this an
+autonomous loop, which is not what is authorized here. Claude reports the exact
+command and message to the product owner in the same turn, so every agent-to-agent
+message stays visible.
+
+This is Claude-only and one-directional. Codex has no reciprocal grant.
+
 ### Reviewer verification worktree
 
 A reviewer may create a **temporary detached worktree at the handoff SHA** to run

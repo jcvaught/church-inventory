@@ -94,3 +94,31 @@ in an agent conversation.
   granted anywhere.
 - Follow-up: None. Closes protocol §2.2.
 
+### DEC-2026-004 — Claude may hand off directly to Codex after a completed review
+
+- Date: 2026-08-29
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: `AGENTS.md`, COH-002
+- Context: The product owner was the transport for every agent-to-agent message.
+  The Codex CLI supports non-interactive invocation (`codex exec`), so the
+  review-to-rework handoff can be made directly. Three levels were considered:
+  direct one-directional invocation, a polling loop, and a git-ref daemon.
+- Decision: Adopt the first only. Claude may invoke `codex exec` to hand off a
+  completed, committed review. The message must be derivable from the committed
+  artifact, may not carry an unrecorded owner decision or any production
+  authorization, and is limited to one invocation per review with no polling.
+  Claude reports the exact command and message to the owner in the same turn.
+- Alternatives considered: A polling loop or watcher daemon — rejected for now.
+  The relay was never the bottleneck; owner decisions were. Removing the human
+  from the loop entirely would leave two agents iterating unsupervised on the
+  authorization rules of a live production application, and agreement between two
+  similarly-trained agents is weaker evidence of correctness than it appears.
+- Consequences: Mechanical rework handoffs stop waiting on the owner. Decisions
+  and anything reaching production still stop at the owner, matching the line
+  drawn by DEC-2026-002 and DEC-2026-003. Risk accepted: an incorrect handoff
+  message wastes Codex effort, which is visible and recoverable because every
+  message is reported and every artifact is committed.
+- Follow-up: Revisit if the one-invocation limit proves too tight in practice.
+  Do not extend to polling without an explicit new decision.
+
