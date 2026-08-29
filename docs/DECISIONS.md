@@ -68,3 +68,29 @@ in an agent conversation.
 - Follow-up: Ownership in `docs/COH-002-EXECUTION-PLAN.md` updated accordingly.
   COH-002's own merge is a code merge and is explicitly NOT covered.
 
+### DEC-2026-003 — Reviewers may verify in a temporary detached worktree
+
+- Date: 2026-08-29
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: `AGENTS.md`, `docs/AI-PROTOCOL-NOTES-2026-08-28.md` §2.2,
+  COH-002
+- Context: `AGENTS.md` forbids editing another agent's branch or worktree, which
+  read strictly would prevent a reviewer from executing the code under review.
+  COH-001 was analysis, so review by reading plus external probes was sufficient.
+  COH-002 changes `firestore.rules`, `src/useFirestore.js`, and
+  `src/pages/SettingsPage.jsx`; its client changes cannot be verified without a
+  working tree.
+- Decision: A reviewer may create a temporary detached worktree at the handoff
+  SHA, run tests there, and remove it. Never pushed, never committed to, never
+  the counterpart's branch.
+- Alternatives considered: Review by reading only (leaves the client changes
+  unverified, and those are the ones that break the app for every member if
+  wrong); reviewing rules via `git show` into an external harness (works for
+  rules, covers neither the client changes nor the owner's own test file).
+- Consequences: Security review can assert real behavior rather than intent. The
+  reviewer's pre-COH-001 baseline probes become a regression suite — cases that
+  previously passed as exposures must now fail. No additional write access is
+  granted anywhere.
+- Follow-up: None. Closes protocol §2.2.
+

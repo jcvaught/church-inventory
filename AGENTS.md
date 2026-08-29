@@ -55,6 +55,26 @@ tracks agent ownership, handoffs, and review status for selected tasks.
   product or architecture decisions only in chat.
 - Complete a handoff using `docs/AI-HANDOFF-TEMPLATE.md` before review.
 
+### Reviewer verification worktree
+
+A reviewer may create a **temporary detached worktree at the handoff SHA** to run
+tests against the work under review:
+
+```bash
+git worktree add --detach /tmp/<task>-review <handoff-sha>
+cd /tmp/<task>-review && npm run test:rules   # lint/build as the change warrants
+cd - && git worktree remove --force /tmp/<task>-review
+```
+
+This is a read-only checkout, not an edit to the counterpart's branch or
+worktree. It must never be pushed or committed to, and must be removed when the
+review ends. Reuse an existing `node_modules` by symlink rather than installing a
+second copy.
+
+Reviewing a change that alters application code, rules, or tests without
+executing it is a weaker review than the change warrants, and security work in
+particular must be verified against real behavior rather than read.
+
 ### Counterpart branch check
 
 Both agents work in separate worktrees off one repository and share its object
