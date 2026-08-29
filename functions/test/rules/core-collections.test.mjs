@@ -114,6 +114,18 @@ test('activityLog: updates/deletes are denied for everyone', async () => {
   await assertFails(deleteDoc(doc(ctx('adminA'), P('activityLog/a2'))));
 });
 
+test('activityLog: a name-less profile realistic client payload fails closed', async () => {
+  await seedMembers();
+  await seed('users/namelessA', { churchId: CHURCH, role: 'user', active: true });
+  await assertFails(setDoc(doc(ctx('namelessA'), P('activityLog/nameless')), {
+    action: 'checkout', itemId: 'i1', performedBy: 'namelessA',
+    // `logActivity` intentionally has no display-name fallback. Its undefined
+    // value is rejected by the Web SDK; this serialized missing-field form also
+    // verifies that the rule itself fails closed for direct-SDK callers.
+    timestamp: serverTimestamp(), details: {},
+  }));
+});
+
 // ── Legacy Tasks/Maintenance — all four obsolete rule paths are denied ───────
 test('legacy task and maintenance paths deny create/update/delete', async () => {
   await seedMembers();

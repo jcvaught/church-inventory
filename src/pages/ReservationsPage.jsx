@@ -477,7 +477,7 @@ export function ReservationsPage({ store, userProfile, userCanSeeHub }) {
   async function handleApprove(res) {
     setSaving(true);
     await updateReservation(res._docId, { status:RES_STATUS.APPROVED, approvedBy:userId, approvedByName:userName, approvedAt:new Date().toISOString() });
-    await logActivity("reservation_approved", res.itemId || res.roomDocId, userId, userName, { eventName:res.eventName, requestedBy:res.requestedByName });
+    await logActivity("reservation_approved", res.itemId || res.roomDocId, userId, { eventName:res.eventName, requestedBy:res.requestedByName });
     const requester = (users||[]).find(u => u.id === res.requestedBy);
     sendReservationEmail(requester?.email, res.requestedByName, 'approved', {
       eventName: res.eventName, resourceDesc: res.itemDesc || res.roomName || '',
@@ -492,7 +492,7 @@ export function ReservationsPage({ store, userProfile, userCanSeeHub }) {
   async function handleDeny(res) {
     setSaving(true);
     await updateReservation(res._docId, { status:RES_STATUS.DENIED, deniedBy:userId, deniedByName:userName, deniedAt:new Date().toISOString() });
-    await logActivity("reservation_denied", res.itemId || res.roomDocId, userId, userName, { eventName:res.eventName, requestedBy:res.requestedByName });
+    await logActivity("reservation_denied", res.itemId || res.roomDocId, userId, { eventName:res.eventName, requestedBy:res.requestedByName });
     const requester = (users||[]).find(u => u.id === res.requestedBy);
     sendReservationEmail(requester?.email, res.requestedByName, 'denied', {
       eventName: res.eventName, resourceDesc: res.itemDesc || res.roomName || '',
@@ -521,7 +521,7 @@ export function ReservationsPage({ store, userProfile, userCanSeeHub }) {
     if (targets.length === 0) { setCancelScopeRes(null); return; }
     setSaving(true);
     await Promise.all(targets.map(t => updateReservation(t._docId, { status: RES_STATUS.CANCELLED })));
-    await logActivity("reservation_cancelled", res.itemId || res.roomDocId, userId, userName, { eventName: res.eventName, scope, count: targets.length });
+    await logActivity("reservation_cancelled", res.itemId || res.roomDocId, userId, { eventName: res.eventName, scope, count: targets.length });
     flash(`Cancelled ${targets.length} reservation${targets.length !== 1 ? 's' : ''}.`);
     setCancelScopeRes(null);
     setShowDetail(null);

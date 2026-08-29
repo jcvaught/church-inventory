@@ -393,7 +393,7 @@ export function useFirestore(churchId, userProfile) {
   }, [churchId]);
 
   // ── Items ──
-  const addItem = useCallback(async (item, userId, userName) => {
+  const addItem = useCallback(async (item, userId, _userName) => {
     try {
       const ref = await addDoc(collection(db, 'churches', churchId, 'items'), {
         ...item,
@@ -401,22 +401,22 @@ export function useFirestore(churchId, userProfile) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
-      await logActivity('add_item', item.itemId, userId, userName, { description: item.description });
+      await logActivity('add_item', item.itemId, userId, { description: item.description });
       return ref.id;
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const updateItem = useCallback(async (docId, updates, userId, userName) => {
+  const updateItem = useCallback(async (docId, updates, userId, _userName) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'items', docId), {
         ...updates,
         updatedAt: new Date().toISOString()
       });
-      await logActivity('edit_item', updates.itemId || docId, userId, userName, { description: updates.description });
+      await logActivity('edit_item', updates.itemId || docId, userId, { description: updates.description });
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const checkOutItem = useCallback(async (docId, data, userId, userName) => {
+  const checkOutItem = useCallback(async (docId, data, userId, _userName) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'items', docId), {
         status: 'Checked Out',
@@ -425,7 +425,7 @@ export function useFirestore(churchId, userProfile) {
         expectedReturn: data.returnDate,
         updatedAt: new Date().toISOString()
       });
-      await logActivity('check_out', data.itemId, userId, userName, {
+      await logActivity('check_out', data.itemId, userId, {
         person: data.person,
         purpose: data.purpose,
         ministry: data.ministry,
@@ -434,7 +434,7 @@ export function useFirestore(churchId, userProfile) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const returnItem = useCallback(async (docId, data, userId, userName) => {
+  const returnItem = useCallback(async (docId, data, userId, _userName) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'items', docId), {
         status: 'Available',
@@ -444,21 +444,21 @@ export function useFirestore(churchId, userProfile) {
         condition: data.condition,
         updatedAt: new Date().toISOString()
       });
-      await logActivity('return', data.itemId, userId, userName, {
+      await logActivity('return', data.itemId, userId, {
         condition: data.condition,
         returnedBy: data.person
       });
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const deleteItem = useCallback(async (docId, itemId, userId, userName) => {
+  const deleteItem = useCallback(async (docId, itemId, userId, _userName) => {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'items', docId));
-      await logActivity('delete_item', itemId, userId, userName);
+      await logActivity('delete_item', itemId, userId);
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const retireItem = useCallback(async (docId, data, userId, userName) => {
+  const retireItem = useCallback(async (docId, data, userId, _userName) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'items', docId), {
         status: 'Disposed',
@@ -469,14 +469,14 @@ export function useFirestore(churchId, userProfile) {
         recoveryValue: data.recoveryValue || null,
         updatedAt: new Date().toISOString()
       });
-      await logActivity('dispose', data.itemId, userId, userName, {
+      await logActivity('dispose', data.itemId, userId, {
         reason: data.reason,
         notes: data.notes
       });
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const markRepair = useCallback(async (docId, data, userId, userName) => {
+  const markRepair = useCallback(async (docId, data, userId, _userName) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'items', docId), {
         status: 'Under Repair',
@@ -485,14 +485,14 @@ export function useFirestore(churchId, userProfile) {
         repairExpectedDate: data.expectedDate,
         updatedAt: new Date().toISOString()
       });
-      await logActivity('mark_repair', data.itemId, userId, userName, {
+      await logActivity('mark_repair', data.itemId, userId, {
         issue: data.issue,
         handler: data.handler
       });
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const markRepaired = useCallback(async (docId, data, userId, userName) => {
+  const markRepaired = useCallback(async (docId, data, userId, _userName) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'items', docId), {
         status: 'Available',
@@ -501,23 +501,23 @@ export function useFirestore(churchId, userProfile) {
         repairExpectedDate: '',
         updatedAt: new Date().toISOString()
       });
-      await logActivity('mark_repaired', data.itemId, userId, userName, {});
+      await logActivity('mark_repaired', data.itemId, userId, {});
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
   // ── Supplies ──
-  const addSupply = useCallback(async (supply, userId, userName) => {
+  const addSupply = useCallback(async (supply, userId, _userName) => {
     try {
       await addDoc(collection(db, 'churches', churchId, 'supplies'), {
         ...supply,
         createdBy: userId,
         createdAt: new Date().toISOString()
       });
-      await logActivity('add_supply', supply.supplyId, userId, userName, { description: supply.description });
+      await logActivity('add_supply', supply.supplyId, userId, { description: supply.description });
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const useSupply = useCallback(async (docId, data, userId, userName) => {
+  const useSupply = useCallback(async (docId, data, userId, _userName) => {
     try {
       const ref = doc(db, 'churches', churchId, 'supplies', docId);
       let current, newQty;
@@ -529,7 +529,7 @@ export function useFirestore(churchId, userProfile) {
         tx.update(ref, { quantity: newQty });
       });
       if (!current) return;
-      await logActivity('use_supply', current.supplyId, userId, userName, {
+      await logActivity('use_supply', current.supplyId, userId, {
         quantityUsed: Number(data.qty),
         purpose: data.purpose,
         remaining: newQty
@@ -537,7 +537,7 @@ export function useFirestore(churchId, userProfile) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const restockSupply = useCallback(async (docId, data, userId, userName) => {
+  const restockSupply = useCallback(async (docId, data, userId, _userName) => {
     try {
       const ref = doc(db, 'churches', churchId, 'supplies', docId);
       let current, newQty;
@@ -549,7 +549,7 @@ export function useFirestore(churchId, userProfile) {
         tx.update(ref, { quantity: newQty, lastRestocked: new Date().toISOString() });
       });
       if (!current) return;
-      await logActivity('restock', current.supplyId, userId, userName, {
+      await logActivity('restock', current.supplyId, userId, {
         quantityAdded: Number(data.qty),
         source: data.source,
         newTotal: newQty
@@ -557,28 +557,32 @@ export function useFirestore(churchId, userProfile) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const updateSupply = useCallback(async (docId, updates, userId, userName) => {
+  const updateSupply = useCallback(async (docId, updates, userId, _userName) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'supplies', docId), updates);
-      await logActivity('edit_supply', updates.supplyId || docId, userId, userName, { description: updates.description });
+      await logActivity('edit_supply', updates.supplyId || docId, userId, { description: updates.description });
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
-  const deleteSupply = useCallback(async (docId, supplyId, userId, userName) => {
+  const deleteSupply = useCallback(async (docId, supplyId, userId, _userName) => {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'supplies', docId));
-      await logActivity('delete_supply', supplyId, userId, userName);
+      await logActivity('delete_supply', supplyId, userId);
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
   // ── Activity Log ──
-  const logActivity = useCallback(async (action, itemId, userId, userName, details = {}) => {
+  // Actor display text has one source: the authenticated profile loaded by
+  // useAuth. Callers cannot supply a divergent name that the rules would reject
+  // (DEC-2026-005). Intentionally no fallback: a malformed name-less profile
+  // fails closed instead of creating a misleading audit row.
+  const logActivity = useCallback(async (action, itemId, userId, details = {}) => {
     try {
       await addDoc(collection(db, 'churches', churchId, 'activityLog'), {
         action,
         itemId,
         performedBy: userId,
-        performedByName: userName,
+        performedByName: userProfile?.name,
         timestamp: serverTimestamp(),
         details
       });
@@ -589,7 +593,7 @@ export function useFirestore(churchId, userProfile) {
       // toast over the operation they just successfully completed.
       handleErr(err, { op: 'logActivity', silent: true });
     }
-  }, [churchId]);
+  }, [churchId, userProfile?.name]);
 
   // ── Reservations ──
   const addReservation = useCallback(async (res, userId, userName) => {
@@ -649,7 +653,7 @@ export function useFirestore(churchId, userProfile) {
           completedAt: null
         });
       });
-      await logActivity('add_ticket', ticket.linkedItemId || ticketNumber, userId, userName, { name: ticket.name, priority: ticket.priority });
+      await logActivity('add_ticket', ticket.linkedItemId || ticketNumber, userId, { name: ticket.name, priority: ticket.priority });
       return newId;
     } catch (err) { handleErr(err); }
   }, [churchId]);
@@ -739,7 +743,7 @@ export function useFirestore(churchId, userProfile) {
       });
       const addLogDetails = { priority: task.priority };
       if (task.visibility !== 'private' && task.visibility !== 'shared') addLogDetails.name = task.name;
-      await logActivity('add_task', taskNumber, userId, userName, addLogDetails);
+      await logActivity('add_task', taskNumber, userId, addLogDetails);
       return newId;
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
@@ -756,12 +760,12 @@ export function useFirestore(churchId, userProfile) {
         const action = safe.status === 'Complete' ? 'complete_task' : 'update_task';
         const updateLogDetails = { ...(safe.status ? { status: safe.status } : {}) };
         if (safe.name && safe.visibility !== 'private' && safe.visibility !== 'shared') updateLogDetails.name = safe.name;
-        await logActivity(action, taskNumber || docId, userId, userName, updateLogDetails);
+        await logActivity(action, taskNumber || docId, userId, updateLogDetails);
       }
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
-  const deleteTask = useCallback(async (docId, task, userId, userName) => {
+  const deleteTask = useCallback(async (docId, task, userId, _userName) => {
     try {
       const taskNumber = typeof task === 'string' ? task : (task?.taskNumber || docId);
       const photoUrls = typeof task === 'object' ? (task?.photos || []) : [];
@@ -788,7 +792,7 @@ export function useFirestore(churchId, userProfile) {
       if (linkedReservationDocId) {
         updateDoc(doc(db, 'churches', churchId, 'reservations', linkedReservationDocId), { linkedSetupTaskDocId: null }).catch(() => {});
       }
-      if (userId) await logActivity('delete_task', taskNumber, userId, userName, {});
+      if (userId) await logActivity('delete_task', taskNumber, userId, {});
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
@@ -833,14 +837,14 @@ export function useFirestore(churchId, userProfile) {
         createdByName: userName,
         createdAt: new Date().toISOString(),
       });
-      await logActivity('create_template', template.name || ref.id, userId, userName, { recurrence: template.recurrence });
+      await logActivity('create_template', template.name || ref.id, userId, { recurrence: template.recurrence });
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
-  const deleteTaskTemplate = useCallback(async (docId, userId, userName) => {
+  const deleteTaskTemplate = useCallback(async (docId, userId, _userName) => {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'taskTemplates', docId));
-      if (userId) await logActivity('delete_template', docId, userId, userName, {});
+      if (userId) await logActivity('delete_template', docId, userId, {});
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
@@ -1128,7 +1132,7 @@ export function useFirestore(churchId, userProfile) {
           });
         });
       });
-      await logActivity('post_job', `${firstJobNumber} (series ×${dates.length})`, userId, userName, { title: job.title, recurrenceFreq });
+      await logActivity('post_job', `${firstJobNumber} (series ×${dates.length})`, userId, { title: job.title, recurrenceFreq });
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
@@ -1154,7 +1158,7 @@ export function useFirestore(churchId, userProfile) {
           updatedAt: new Date().toISOString()
         });
       });
-      await logActivity('post_job', jobNumber, userId, userName, { title: job.title });
+      await logActivity('post_job', jobNumber, userId, { title: job.title });
       return newDocRef.id; // callers (e.g. task → Job convert) need the new id to write the backref
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
@@ -1193,7 +1197,7 @@ export function useFirestore(churchId, userProfile) {
           updatedAt: new Date().toISOString()
         });
       }
-      if (userId) await logActivity('update_job', jobNumberForLog || docId, userId, userName, { title: updates.title, status: updates.status });
+      if (userId) await logActivity('update_job', jobNumberForLog || docId, userId, { title: updates.title, status: updates.status });
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
@@ -1207,14 +1211,14 @@ export function useFirestore(churchId, userProfile) {
         updateDoc(taskDocRef(churchId, linkedTaskDocId), { linkedJobDocId: null }).catch(() => {});
       }
       await clearJobSwapRequests([docId]);
-      if (userId) await logActivity('delete_job', jobNumber || docId, userId, userName, {});
+      if (userId) await logActivity('delete_job', jobNumber || docId, userId, {});
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
   // Updates all series jobs with scheduledDate >= fromDate atomically via runTransaction.
   // Returns { count, affected: [{docId, signupCount}] } so callers can fan out
   // per-job side effects (e.g. firing sendJobCancelledEmails on a series cancel).
-  const updateJobListingSeries = useCallback(async (groupId, fromDate, updates, userId, userName) => {
+  const updateJobListingSeries = useCallback(async (groupId, fromDate, updates, userId, _userName) => {
     try {
       const {
         createdBy: _cb, createdByName: _cbn, jobNumber: _jn,
@@ -1251,7 +1255,7 @@ export function useFirestore(churchId, userProfile) {
           affected.push({ docId: d.id, signupCount: (d.data().signupCount || 0) });
         });
       });
-      await logActivity('update_job', `${updates.title || groupId} (series ×${refs.length})`, userId, userName, { title: updates.title });
+      await logActivity('update_job', `${updates.title || groupId} (series ×${refs.length})`, userId, { title: updates.title });
       return { count: refs.length, affected };
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
@@ -1295,7 +1299,7 @@ export function useFirestore(churchId, userProfile) {
   }
 
   // Deletes all jobs in a recurring series from a given date onward.
-  const deleteJobListingSeriesFrom = useCallback(async (groupId, fromDate, userId, userName) => {
+  const deleteJobListingSeriesFrom = useCallback(async (groupId, fromDate, userId, _userName) => {
     try {
       const snap = await getDocs(query(
         collection(db, 'churches', churchId, 'jobListings'),
@@ -1308,12 +1312,12 @@ export function useFirestore(churchId, userProfile) {
       snap.docs.forEach(d => batch.delete(d.ref));
       await batch.commit();
       await clearJobSwapRequests(snap.docs.map(d => d.id));
-      await logActivity('delete_job', `series from ${fromDate} ×${snap.size}`, userId, userName, {});
+      await logActivity('delete_job', `series from ${fromDate} ×${snap.size}`, userId, {});
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
   // Deletes all jobs in a recurring series.
-  const deleteJobListingSeries = useCallback(async (groupId, userId, userName) => {
+  const deleteJobListingSeries = useCallback(async (groupId, userId, _userName) => {
     try {
       const snap = await getDocs(query(
         collection(db, 'churches', churchId, 'jobListings'),
@@ -1325,7 +1329,7 @@ export function useFirestore(churchId, userProfile) {
       snap.docs.forEach(d => batch.delete(d.ref));
       await batch.commit();
       await clearJobSwapRequests(snap.docs.map(d => d.id));
-      await logActivity('delete_job', `series ×${snap.size}`, userId, userName, {});
+      await logActivity('delete_job', `series ×${snap.size}`, userId, {});
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
@@ -1333,7 +1337,7 @@ export function useFirestore(churchId, userProfile) {
   // protected per-uid subcollections written exclusively by Cloud Functions,
   // which enforce compliance/waiver/capacity server-side. These wrappers call
   // those functions; activity logging stays client-side as before.
-  const signUpForJob = useCallback(async (docId, userId, userName, waiverAccepted, jobNumber) => {
+  const signUpForJob = useCallback(async (docId, userId, _userName, waiverAccepted, jobNumber) => {
     try {
       const fn = httpsCallable(getFunctions(), 'jobSignUp');
       const { data } = await fn({ churchId, jobDocId: docId, waiverAccepted: !!waiverAccepted });
@@ -1344,10 +1348,10 @@ export function useFirestore(churchId, userProfile) {
       // vs. waiver without regex-matching the message.
       if (data?.error) return { error: data.error, code: data.code || 'unknown' };
       if (data?.wasWaitlisted) {
-        await logActivity('signup_job', jobNumber || docId, userId, userName, { waitlisted: true });
+        await logActivity('signup_job', jobNumber || docId, userId, { waitlisted: true });
         return { wasWaitlisted: true };
       }
-      await logActivity('signup_job', jobNumber || docId, userId, userName, {});
+      await logActivity('signup_job', jobNumber || docId, userId, {});
       return { success: true };
     } catch (err) {
       handleErr(err, { op: 'signUpForJob', hub: 'jobs' });
@@ -1355,7 +1359,7 @@ export function useFirestore(churchId, userProfile) {
     }
   }, [churchId]);
 
-  const withdrawFromJob = useCallback(async (docId, uid, actorId, actorName, jobNumber) => {
+  const withdrawFromJob = useCallback(async (docId, uid, actorId, _actorName, jobNumber) => {
     try {
       const fn = httpsCallable(getFunctions(), 'jobWithdraw');
       const { data } = await fn({ churchId, jobDocId: docId, uid });
@@ -1363,7 +1367,7 @@ export function useFirestore(churchId, userProfile) {
       const wasOnWaitlist = !!data?.wasOnWaitlist;
       if (wasSignedUp && actorId) {
         const action = actorId !== uid ? 'admin_remove_job' : 'withdraw_job';
-        await logActivity(action, jobNumber || docId, actorId, actorName, { removedUid: uid });
+        await logActivity(action, jobNumber || docId, actorId, { removedUid: uid });
       }
       return { wasSignedUp, wasOnWaitlist };
     } catch (err) { handleErr(err, { op: 'withdrawFromJob', hub: 'jobs' }); throw err; }
@@ -1430,24 +1434,24 @@ export function useFirestore(churchId, userProfile) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
-      await logActivity('post_announcement', ref.id, userId, userName, { title: ann.title });
+      await logActivity('post_announcement', ref.id, userId, { title: ann.title });
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
-  const updateJobAnnouncement = useCallback(async (docId, updates, userId, userName) => {
+  const updateJobAnnouncement = useCallback(async (docId, updates, userId, _userName) => {
     try {
       await updateDoc(doc(db, 'churches', churchId, 'jobAnnouncements', docId), {
         ...updates,
         updatedAt: new Date().toISOString()
       });
-      if (userId) await logActivity('update_announcement', docId, userId, userName, { title: updates.title });
+      if (userId) await logActivity('update_announcement', docId, userId, { title: updates.title });
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
-  const deleteJobAnnouncement = useCallback(async (docId, userId, userName) => {
+  const deleteJobAnnouncement = useCallback(async (docId, userId, _userName) => {
     try {
       await deleteDoc(doc(db, 'churches', churchId, 'jobAnnouncements', docId));
-      if (userId) await logActivity('delete_announcement', docId, userId, userName, {});
+      if (userId) await logActivity('delete_announcement', docId, userId, {});
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
