@@ -55,6 +55,26 @@ tracks agent ownership, handoffs, and review status for selected tasks.
   product or architecture decisions only in chat.
 - Complete a handoff using `docs/AI-HANDOFF-TEMPLATE.md` before review.
 
+### Counterpart branch check
+
+Both agents work in separate worktrees off one repository and share its object
+store, so each can read the other's work without checking out a branch or
+entering the other's worktree.
+
+At the start of any task, and again after delivering or receiving a handoff,
+check the counterpart's branch for new commits:
+
+```bash
+git log --oneline -5 <counterpart-branch>   # what is new
+git show <sha>:<path>                        # read a file at a commit
+git diff main...<counterpart-branch>         # what the branch changed
+```
+
+Claude works on `claude/work`. Codex works on the task branch named in
+`docs/AI-WORKBOARD.md`. Write one commit per message to the counterpart so "the
+newest commit" is unambiguous. Never check out, edit, or commit to the
+counterpart's branch.
+
 ## Safety and Production Boundaries
 
 - Never deploy, modify production data, run a production migration, change
