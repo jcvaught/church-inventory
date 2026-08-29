@@ -1,9 +1,9 @@
 # Core Authorization Threat Model (COH-001)
 
-**Date:** 2026-08-28  
-**Status:** Proposed permission model; no rules, application, data, or test changes  
-**Owner:** Codex  
-**Reviewer:** Claude  
+**Date:** 2026-08-28
+**Status:** Proposed permission model; no rules, application, data, or test changes
+**Owner:** Codex
+**Reviewer:** Claude
 **Scope:** Inventory, supplies, reservations, maintenance work items, activity
 logs, People Access, and work-item comments
 
