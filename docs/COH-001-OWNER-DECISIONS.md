@@ -35,6 +35,45 @@ after — but it no longer justifies emergency handling ahead of the other work.
 **Decision:** Accepted as recommended — add `active` to the member predicate in
 COH-002; Auth disable + token revoke as a follow-up task.
 
+### D-1 addendum (2026-08-29) — the Stage 0 lockout check is near-moot, and the rule should default the other way
+
+The threat model proposes `userData().get('active', false) == true`. That default
+means any user document *missing* the field is denied everything — a silent,
+total lockout — which is why Stage 0 calls for a production audit first.
+
+**Determined from code and git history, without production access:**
+
+- All three user-creation paths in `useAuth.js` write `active: true`
+  (`:243` church creation, `:351` register/join, `:490` Google register).
+- That field was introduced in `06aa189` (2026-03-12) — the *first commit that
+  ever touched `useAuth.js`*.
+- The repo root is `b5c692d` (2026-03-11), one day earlier, and the pre-rebrand
+  `App.jsx` referenced no `users` collection at all. There was no user-profile
+  system before the rebrand, so there is no window in which a profile could have
+  been created without the field.
+- No Cloud Function creates user documents — every `users` reference in
+  `functions/index.js` is a get, update, count, or where.
+- There is no admin-side creation path in the UI; invites hand out a code or
+  link and the recipient self-registers through `useAuth`.
+- `scripts/backfill-sms-consent.cjs` uses `.update()`, which cannot drop fields.
+- `scripts/setup-e2e-tenant.mjs:153` sets `active: true`.
+
+**Conclusion:** no user document has ever been created without `active: true`.
+The at-risk population is almost certainly zero. Code cannot rule out a
+hand-edited or console-created document, which is the only remaining path.
+
+**Better remediation — invert the default.** Use
+`userData().get('active', true) == true` instead. Deactivation always writes an
+explicit `active: false` (`SettingsPage.jsx:1062`) and reactivation writes
+`true` (`:1065`, `:1083`); the field is never deleted. So defaulting a *missing*
+field to active does not weaken the control at all — a deactivated user is
+denied identically — while a legacy or hand-created document keeps working
+instead of locking someone out of the entire app.
+
+This turns the Stage 0 production query from a prerequisite into an optional
+sanity check. Recommend running it anyway (read-only, one aggregate) but not
+gating COH-002 on it.
+
 ---
 
 ## D-2 — May managers delete inventory items?
