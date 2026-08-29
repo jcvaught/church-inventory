@@ -122,3 +122,36 @@ in an agent conversation.
 - Follow-up: Revisit if the one-invocation limit proves too tight in practice.
   Do not extend to polling without an explicit new decision.
 
+### DEC-2026-005 — Keep the activity-log `performedByName` pin; remove the client divergence point
+
+- Date: 2026-08-29
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: `docs/COH-002-REVIEW-2026-08-29.md` (H-1), COH-002
+- Context: COH-002 pins `performedByName` to `userData().get('name','')`, but the
+  four consuming pages send `userProfile?.name || "Unknown"`. Profiles without a
+  name have every audit write silently denied, and
+  `scripts/setup-e2e-tenant.mjs` creates the three E2E accounts with no `name`,
+  breaking `e2e/authenticated/crud.spec.js:14`.
+- Decision: Keep the pin. Fix the cause rather than the four symptoms —
+  `logActivity` derives the actor name itself from a single source with no
+  fallback, and the pages stop computing and passing a name string. Also give the
+  E2E tenant script a `name`, and add a rules probe asserting that a name-less
+  profile's realistic client payload is denied.
+- Alternatives considered: Dropping the pin and relying on the `performedBy` uid
+  pin alone. Rejected — every UI surface displays `performedByName`, not the uid,
+  so an unpinned name lets a member write a row with a correct uid and a
+  misleading display name that no reader would catch. That half-reopens AC-03,
+  trading a narrow fixable failure for a permanent invisible one. Patching the
+  four call sites without the refactor was also rejected: it closes today's
+  trigger but leaves the class, and any future call site reintroduces a silent
+  failure.
+- Consequences: The audit row's display name is guaranteed to match the user
+  document at write time, and there is no per-page string left to drift. The pin
+  stays consistent with the existing `jobSwapRequests` precedent, so the rules
+  file keeps one pattern.
+- Follow-up: The stale-session case remains open and accepted —
+  `useAuth.js:110` loads `userProfile` with a one-shot `getDoc`, so a name
+  changed out of band breaks that session's audit writes until re-login. No UI
+  path triggers it; document rather than build for it.
+
