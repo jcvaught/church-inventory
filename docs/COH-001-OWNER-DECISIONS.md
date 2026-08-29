@@ -25,11 +25,15 @@ revocation needs Auth disable + token revoke in the offboarding workflow.
 first (cheap, immediate, closes the Firestore path), then add Auth-disable to the
 admin offboarding action as a follow-up task.
 
-**Worth knowing first:** have you actually deactivated anyone in production? If
-the answer is "never," this is a latent bug rather than a live exposure, and the
-urgency drops accordingly.
+**Owner answer (2026-08-28):** No one has been deactivated in production yet,
+but it can happen.
 
-**Decision:**
+**Status:** Confirmed latent, not a live exposure. The fix stays in COH-002 —
+it is cheap and it must be in place *before* the first real offboarding, not
+after — but it no longer justifies emergency handling ahead of the other work.
+
+**Decision:** Accepted as recommended — add `active` to the member predicate in
+COH-002; Auth disable + token revoke as a follow-up task.
 
 ---
 
@@ -85,11 +89,20 @@ comments, photos, actual hours; never cost, assignment, identity, or recurrence.
 Non-assignees get read + comment. Accept that this needs the `assigneeUids`
 migration, and treat it as the one item in COH-002 that carries data-model work.
 
-**Worth knowing first:** do volunteers currently close their own maintenance
-tickets, or does a manager always do it? That decides whether an interim
-manager-only rule is safe.
+**Owner answer (2026-08-28):** Not enough evidence to decide yet.
 
-**Decision:**
+**Status:** Deferred, deliberately. This is the only item carrying a data-model
+migration, so it sequences last regardless. Do not guess it — an interim
+manager-only rule would silently break volunteers if they do close their own
+tickets, and an interim any-member rule leaves the exposure open.
+
+**How to settle it with data:** query `activityLog` for
+`action in ['mark_repair','mark_repaired']`, group by `performedBy`, and
+cross-reference each uid's role in `users`. If closures are all admin/manager,
+the interim manager-only rule is safe. Read-only aggregate on the production
+church; needs owner authorization before running.
+
+**Decision:** Deferred — carve D-4 out of COH-002 scope into its own task.
 
 ---
 
@@ -179,10 +192,25 @@ shared information and the log is a transparency feature. Fix authenticity
 instead: pin actor and server timestamp, allowlist fields, cap sizes. Skip
 minimization unless you know of sensitive content in `details`.
 
-**Worth knowing first:** does anything write free-text into `details` that you'd
-not want every member reading?
+**Owner answer (2026-08-28):** No — except Shepherd Hub.
 
-**Decision:**
+**Verified:** Shepherd Hub does not write to `activityLog` at all. Its logging
+goes to a separate `shepherdAudit` collection with far tighter rules
+(`firestore.rules:468`): read is owner-only — *elders cannot even read it* —
+create requires elder/owner, and update/delete are denied outright. The 27
+distinct `logActivity` actions in `src/` are all inventory, supplies, tasks,
+reservations, and jobs operations. No pastoral content reaches the general log.
+
+**Status:** The concern is already structurally handled. No minimization work
+needed; the readability half of this question is closed.
+
+**Reusable pattern for AC-03:** `shepherdAudit` already pins
+`request.resource.data.actorUid == request.auth.uid` on create — exactly the
+actor-pinning the general `activityLog` lacks. COH-002 should copy this rule
+shape rather than design a new one.
+
+**Decision:** Keep all-member read on `activityLog`. Skip minimization. Fix
+authenticity only, following the `shepherdAudit` pattern.
 
 ---
 
