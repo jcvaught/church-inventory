@@ -155,3 +155,28 @@ in an agent conversation.
   changed out of band breaks that session's audit writes until re-login. No UI
   path triggers it; document rather than build for it.
 
+### DEC-2026-006 — Member-editable maintenance work is intended behavior; AC-07 is accepted, not deferred
+
+- Date: 2026-08-29
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: COH-001 AC-07, D-4, `docs/COH-001-OWNER-DECISIONS.md`
+- Context: The COH-001 threat model rated AC-07 High — any church member can
+  change a maintenance work item's status, cost, assignment, completion
+  chronology, and recurrence. D-4 was recorded as "deferred pending usage
+  evidence," which framed it as an unanswered question.
+- Decision: It is not a question. Any active member updating maintenance work is
+  the intended product behavior and will not change. D-4 is closed, not
+  deferred. The `assigneeUids` migration it implied is cancelled, and no
+  follow-up task is needed.
+- Alternatives considered: Restricting updates to assignees or manager/admin —
+  rejected. In a single congregation the people doing the work are volunteers,
+  and requiring elevated roles to close a ticket would break the actual
+  workflow the hub exists to serve.
+- Consequences: AC-07 stays open at the rules layer permanently and by
+  intention. COH-002's pinning of `createdBy`, `taskNumber`, and `createdAt`
+  remains, so identity and numbering are still protected — only operational
+  fields are member-writable. Any future threat model should list this as
+  accepted rather than re-raising it.
+- Follow-up: None.
+

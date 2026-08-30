@@ -135,9 +135,14 @@ counterpart's branch.
 
 ## Safety and Production Boundaries
 
-- Never deploy, modify production data, run a production migration, change
+- Codex must never deploy, modify production data, run a production migration,
+  change
   Firebase/Google Cloud/Vercel/Stripe/Brevo/Twilio/Planning Center settings, or
-  rotate credentials without explicit owner approval.
+  rotate credentials without explicit owner approval. Claude follows the
+  product owner's established operational practice for this repository, which
+  includes running Firebase deploys; it does not need per-deploy approval, and
+  still verifies project targeting first. Neither agent touches billing,
+  Stripe, Twilio, Brevo, or Planning Center settings without explicit approval.
 - Prefer the Firebase emulators for data and rules work. Treat the documented
   production E2E tenant as production access and use it only when the task and
   owner authorization specifically require it.
