@@ -221,9 +221,12 @@ in an agent conversation.
 - Decision: A task set to `visibility: 'shared'` must be readable only by the
   people the creator specifies (plus the creator and assignees). Disclosure-only
   options were rejected; the feature should do what it says.
-- Why this is not a rule change: Firestore evaluates read rules per document on
-  a query and **rejects the entire query** if any matched document is
-  unreadable — it does not filter. `src/useFirestore.js:250` subscribes to the
+- Why this is not a rule change (**CORRECTED 2026-08-30** — the original
+  premise was wrong; see DEC-2026-009): Firestore does **not** reject an
+  unconstrained list query containing unreadable documents. It admits the query
+  and returns them. Content-based read rules are enforced on `get` and on
+  queries whose constraints provably target denied documents, but not
+  per-document on an unconstrained list. `src/useFirestore.js:250` subscribes to the
   whole `workItems` collection with no `where` clause, so enforcing per-document
   visibility requires restructuring how the client queries work items, not just
   editing `firestore.rules`. Storage also changes: `sharedWith` is
@@ -237,3 +240,42 @@ in an agent conversation.
 - Follow-up: verify the private-task/listener interaction against production
   before scoping COH-006.
 
+### DEC-2026-009 — Private task visibility is not enforced on list queries in production
+
+- Date: 2026-08-30
+- Status: Accepted (finding recorded; remediation not yet scoped)
+- Deciders: Product owner directed the verification; reviewer measured it
+- Related tasks/docs: COH-001 AC-10, DEC-2026-008, `src/useFirestore.js:250`
+
+**Measured against production** (`church-inventory-9615c`, `e2e-test-church`
+tenant, two real accounts, Playwright + client SDK):
+
+| Operation as a non-creator | Result |
+|---|---|
+| `getDoc` of another member's private task | **DENIED** |
+| Unfiltered `getDocs` of `workItems` | **ALLOWED — private doc returned** |
+| `getDocs` with `where('visibility','==','private')` | **DENIED** |
+| Cross-tenant `getDocs` | **DENIED** |
+
+- Finding: an unconstrained list over `workItems` returns another member's
+  `visibility:'private'` task. `src/useFirestore.js:250` performs exactly that
+  query, so every member's client receives every private task in their church
+  and only the UI hides them. Private tasks are UI-only privacy, the same as
+  `shared`.
+- The tenant boundary is intact — cross-church reads remain denied. Exposure is
+  within a single congregation.
+- Not introduced by COH-002; the `workItems` read rule is unchanged by it.
+- Contradicts `CLAUDE.md` ("visibility … no admin override — truly private") and
+  the Help Center's description of Private. Both should be corrected to match
+  reality until this is fixed.
+- Why no test caught it: the rules emulator fails open on list queries, and
+  production also returns the documents rather than erroring, so neither
+  `test:rules` nor any single-document probe can see it. Only a two-account
+  production list query exposes it. The product owner directed that test after
+  the reviewer's static reasoning produced a confident but wrong prediction that
+  the query would be rejected.
+- Remediation direction (not yet scoped): the client must issue constrained
+  queries the rules can prove safe — e.g. separate subscriptions for team items,
+  own items, and shared-with-me items — or the data must be partitioned so
+  unreadable documents are not in the queried collection. This applies equally
+  to DEC-2026-008's shared-visibility work; both are the same problem.
