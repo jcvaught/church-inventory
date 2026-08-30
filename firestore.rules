@@ -10,7 +10,10 @@ service cloud.firestore {
     function userChurchId()         { return userData().churchId; }
     function userIsAdmin()          { return userData().role == 'admin'; }
     function userIsAdminOrManager() { return userData().role == 'admin' || userData().role == 'manager'; }
-    function isMember(churchId)     { return request.auth != null && userChurchId() == churchId; }
+    // D-1 / COH-002: an explicit active:false revokes Firestore membership.
+    // Missing defaults to true for legacy/hand-created profiles; every normal
+    // creation path has written active:true since user profiles were introduced.
+    function isMember(churchId)     { return request.auth != null && userData().get('active', true) == true && userChurchId() == churchId; }
     function isChurchAdmin(churchId)          { return isMember(churchId) && userIsAdmin(); }
     function isChurchAdminOrManager(churchId) { return isMember(churchId) && userIsAdminOrManager(); }
 
@@ -171,10 +174,15 @@ service cloud.firestore {
       allow update:         if isMember(churchId);
     }
 
-    // ── Activity log — immutable audit trail; members create, nobody modifies ──
+    // ── Activity log — immutable, authenticated audit trail ─────────────────
     match /churches/{churchId}/activityLog/{docId} {
       allow read:          if isMember(churchId);
-      allow create:        if isMember(churchId);
+      // COH-002: mirror shepherdAudit's actor pin and require a server timestamp
+      // (`serverTimestamp()` resolves to request.time during rule evaluation).
+      allow create:        if isMember(churchId)
+                           && request.resource.data.performedBy == request.auth.uid
+                           && request.resource.data.performedByName == userData().get('name', '')
+                           && request.resource.data.timestamp == request.time;
       allow update, delete: if false;
     }
 
@@ -186,52 +194,6 @@ service cloud.firestore {
       allow delete: if isChurchAdminOrManager(churchId);
     }
 
-    // ── Maintenance tickets ───────────────────────────────────────────────────
-    match /churches/{churchId}/maintenanceTickets/{docId} {
-      allow read:           if isMember(churchId);
-      allow create, delete: if isChurchAdminOrManager(churchId);
-      allow update:         if isMember(churchId);
-    }
-
-    // ── Ticket comments — any member can add; authors can edit/delete own; admins+mgrs can edit/delete any ─────
-    match /churches/{churchId}/maintenanceTickets/{ticketId}/comments/{commentId} {
-      allow read:          if isMember(churchId);
-      allow create:        if isMember(churchId);
-      allow update, delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && request.auth.uid == resource.data.authorId);
-    }
-
-    // ── Tasks ─────────────────────────────────────────────────────────────────
-    // Private tasks are only readable by their creator.
-    // Shared/team tasks are readable by all members (shared-with enforcement is client-side,
-    // as Firestore rules cannot iterate object arrays to check nested uid fields — 'shared'
-    // tasks are treated as team-readable at the rule layer; the client filters by sharedWith).
-    match /churches/{churchId}/tasks/{docId} {
-      allow read: if isMember(churchId) && (
-        !resource.data.keys().hasAny(['visibility']) ||
-        resource.data.visibility == 'team' ||
-        resource.data.visibility == 'shared' ||
-        resource.data.createdBy == request.auth.uid
-      );
-      // create: enforce createdBy to prevent impersonation
-      allow create: if isMember(churchId) && request.resource.data.createdBy == request.auth.uid;
-      // update: members can update team/shared tasks; private tasks only by their creator.
-      // Non-creators cannot escalate visibility to 'private'.
-      // createdBy, taskNumber, and createdAt are immutable.
-      // Known limitation: members can update team/shared tasks they didn't create (no
-      // assignee-array check possible in rules — same pattern as Jobs Hub signups).
-      allow update: if isMember(churchId) && (
-        (resource.data.visibility != 'private' && request.resource.data.visibility != 'private')
-        || resource.data.createdBy == request.auth.uid
-      ) && (
-        request.resource.data.visibility == resource.data.visibility
-        || resource.data.createdBy == request.auth.uid
-        || isChurchAdminOrManager(churchId)
-      ) && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.taskNumber == resource.data.taskNumber
-        && request.resource.data.createdAt == resource.data.createdAt;
-      allow delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && resource.data.createdBy == request.auth.uid);
-    }
-
     // ── Task templates — members read; admins+mgrs create/delete ─────────────
     match /churches/{churchId}/taskTemplates/{docId} {
       allow read:           if isMember(churchId);
@@ -239,21 +201,10 @@ service cloud.firestore {
       allow update:         if isChurchAdminOrManager(churchId);
     }
 
-    // ── Task comments — any member can add; authors can edit/delete own; admins+mgrs can edit/delete any ─────
-    // NOTE: comment reads are scoped to church members only; they are not further restricted
-    // by parent task visibility (Firestore cannot do parent doc lookups in subcollection rules
-    // without an extra get(), which would exceed the single-get() budget used by this ruleset).
-    match /churches/{churchId}/tasks/{taskId}/comments/{commentId} {
-      allow read:           if isMember(churchId);
-      allow create:         if isMember(churchId);
-      allow update, delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && request.auth.uid == resource.data.authorId);
-    }
-
     // ── Work items — unified Tasks + Maintenance (Work Unification Phase 2) ────
-    //    Additive: the `tasks` and `maintenanceTickets` blocks above stay live
-    //    until the read path flips in a maintenance window. A workItems doc is a
-    //    verbatim copy of its source plus `type: 'task' | 'maintenance'`, so the
-    //    gates below reproduce the two source rule sets switched on that field:
+    //    Canonical collection after the completed cutover; COH-002 removed the
+    //    obsolete tasks/maintenanceTickets rule paths. A workItems doc carries
+    //    `type: 'task' | 'maintenance'`, so the gates below switch on that field:
     //      task        → the visibility/immutability rules from the tasks block
     //      maintenance → admin/manager create+delete, any-member update (no field guards)
     match /churches/{churchId}/workItems/{docId} {
@@ -411,14 +362,21 @@ service cloud.firestore {
     }
 
     // ── Access People ─────────────────────────────────────────────────────────
+    // Managers/admins read the full hub. Ordinary members may read only tracked
+    // person docs linked to their own uid for Settings → My Compliance.
     match /churches/{churchId}/accessPeople/{docId} {
-      allow read:  if isMember(churchId);
+      allow read:  if isChurchAdminOrManager(churchId)
+                   || (isMember(churchId) && resource.data.userId == request.auth.uid);
       allow write: if isChurchAdminOrManager(churchId);
     }
 
     // ── Access Records ────────────────────────────────────────────────────────
+    // Self reads follow the linked accessPeople parent; the client queries by
+    // personId after resolving only its own userId-linked person docs.
     match /churches/{churchId}/accessRecords/{docId} {
-      allow read:  if isMember(churchId);
+      allow read:  if isChurchAdminOrManager(churchId)
+                   || (isMember(churchId)
+                       && get(/databases/$(database)/documents/churches/$(churchId)/accessPeople/$(resource.data.personId)).data.userId == request.auth.uid);
       allow write: if isChurchAdminOrManager(churchId);
     }
 

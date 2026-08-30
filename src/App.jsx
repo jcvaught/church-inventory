@@ -516,7 +516,7 @@ function AppShell({ authHook }) {
   const [resentVerify, setResentVerify] = useState(false);
   const [elderUnverifiedBannerDismissed, setElderUnverifiedBannerDismissed] = useState(false);
   const [elderVerifyResent, setElderVerifyResent] = useState(false);
-  const store = useFirestore(userProfile.churchId);
+  const store = useFirestore(userProfile.churchId, userProfile);
   const { subscription, loading: subscriptionLoading, hasHub, canAddUser, trialDaysRemaining } = useSubscription(userProfile.churchId);
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false);
   // Volunteers (role:user, allowedHubs=['jobs']) get a jobs-first shell — see

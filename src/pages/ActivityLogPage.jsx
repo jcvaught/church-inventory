@@ -56,7 +56,7 @@ export function ActivityLogPage({ store, userProfile }) {
     const oldest = allEntries[allEntries.length - 1];
     if (!oldest?.timestamp) { setReachedEnd(true); return; }
     setLoadingOlder(true);
-    const next = await loadOlderActivityLog(oldest.timestamp, 100);
+    const next = await loadOlderActivityLog(oldest._timestampCursor || oldest.timestamp, 100);
     setLoadingOlder(false);
     if (next.length === 0) { setReachedEnd(true); return; }
     setOlderEntries(prev => [...prev, ...next]);

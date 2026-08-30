@@ -156,7 +156,7 @@ export function ItemsPage({ store, userProfile, initialItemId, scannedItemId, on
   const ministries = settings?.ministries || [];
   const tagOptions = settings?.tags || [];
   const userId = userProfile?.id || userProfile?.uid;
-  const userName = userProfile?.name || "Unknown";
+  const userName = userProfile?.name ?? '';
 
   // Filter logic
   const displayItems = useMemo(() => (showDisposed ? disposedItems : activeItems).filter(item => {

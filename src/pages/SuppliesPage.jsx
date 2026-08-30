@@ -71,7 +71,7 @@ export function SuppliesPage({ store, userProfile }) {
   const ministries = settings?.ministries || [];
   const tagOptions = settings?.tags || [];
   const userId = userProfile?.id || userProfile?.uid;
-  const userName = userProfile?.name || "Unknown";
+  const userName = userProfile?.name ?? '';
   const isAdmin = userProfile?.role === "admin";
   const isManager = userProfile?.role === "manager";
 
