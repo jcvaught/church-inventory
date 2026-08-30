@@ -22,6 +22,28 @@ None active.
 
 ## Proposed Queue
 
+### COH-005 — Remaining core authorization policy (D-3, D-7, D-8)
+
+- Status: Proposed
+- Suggested owner: Codex
+- Suggested reviewer: Claude
+- Authorized by: DEC-2026-007
+- Scope:
+  1. **D-3 supplies** — members may adjust `quantity` only, result must stay
+     >= 0; `name`, `reorderPoint`, and `location` become manager/admin-only.
+     Expressible in rules; no callable needed.
+  2. **D-7 certifications** — loosen the UI so managers can record every access
+     type (`PeopleAccessPage.jsx:249`, `:858`, `:961`). Rules already allow it.
+  3. **D-8 reservations** — approve/deny restricted to manager/admin; members may
+     create and edit only their own pending requests, and cannot change another
+     member's. Ordinary rule change; no callable, because approval is any
+     manager rather than a per-room or per-ministry lookup.
+- Not in scope: D-2 and D-5 were answered "no change." D-4/AC-07 is closed as
+  intended behavior (DEC-2026-006). D-6 is still under discussion.
+- Acceptance criteria: adversarial emulator coverage for each rule change,
+  including that a member cannot approve their own reservation or set an
+  arbitrary supply quantity; lint/build/test:rules recorded; SHA-pinned handoff.
+
 These are candidates, not assignments. Promote one only after the current task
 is reviewed and file overlap is checked.
 

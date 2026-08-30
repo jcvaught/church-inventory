@@ -180,3 +180,35 @@ in an agent conversation.
   accepted rather than re-raising it.
 - Follow-up: None.
 
+### DEC-2026-007 — Remaining core authorization policy answers
+
+- Date: 2026-08-29
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: `docs/COH-001-OWNER-DECISIONS.md` D-2/D-3/D-5/D-7/D-8,
+  `docs/CORE-AUTHORIZATION-THREAT-MODEL-2026-08-28.md`
+- Context: Five of the six policy questions left open after COH-002.
+- Decisions:
+  - **D-2 — Managers keep delete on inventory.** No change. Restricting deletion
+    to admins would bottleneck every removal on the single admin; the reviewer's
+    recommendation of admin-only delete is rejected on that ground.
+  - **D-3 — Supply changes become add/subtract.** Ordinary members may adjust
+    quantity but not assign an arbitrary value, and may not edit identity fields
+    (name, reorder point, location). Manager/admin unrestricted.
+  - **D-5 — Private tasks stay private.** No change; admins still cannot read
+    another member's private task. Confirms the existing deliberate behavior.
+  - **D-7 — Managers may record every access type, certifications included.**
+    The rules already permit this; the *UI* is the stricter layer and should be
+    loosened to match (`PeopleAccessPage.jsx:249`, `:858`, `:961` currently gate
+    certification on `isAdmin`). The reviewer's recommendation to tighten rules
+    to the UI is inverted by this decision.
+  - **D-8 — Managers approve reservations.** Approve/deny becomes a
+    manager/admin action at the rules layer. Members may create and edit their
+    own pending requests but cannot approve them or alter another member's.
+- Consequences: D-2 and D-5 need no work. D-3, D-7, and D-8 define a follow-up
+  implementation task. Notably D-8 is far cheaper than the threat model assumed:
+  because approval is *any* manager rather than a per-ministry or per-room
+  lookup, it is an ordinary rule change and needs no callable function.
+- Open: D-6 (task "Shared" visibility) remains under discussion.
+- Follow-up: COH-005 proposed on the workboard.
+
