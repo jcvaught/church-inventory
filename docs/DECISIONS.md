@@ -212,3 +212,28 @@ in an agent conversation.
 - Open: D-6 (task "Shared" visibility) remains under discussion.
 - Follow-up: COH-005 proposed on the workboard.
 
+### DEC-2026-008 — "Shared" task visibility must be genuinely enforced
+
+- Date: 2026-08-29
+- Status: Accepted (implementation blocked on an open question — see below)
+- Deciders: Product owner
+- Related tasks/docs: COH-001 D-6 / AC-10
+- Decision: A task set to `visibility: 'shared'` must be readable only by the
+  people the creator specifies (plus the creator and assignees). Disclosure-only
+  options were rejected; the feature should do what it says.
+- Why this is not a rule change: Firestore evaluates read rules per document on
+  a query and **rejects the entire query** if any matched document is
+  unreadable — it does not filter. `src/useFirestore.js:250` subscribes to the
+  whole `workItems` collection with no `where` clause, so enforcing per-document
+  visibility requires restructuring how the client queries work items, not just
+  editing `firestore.rules`. Storage also changes: `sharedWith` is
+  `[{uid, name}]`, and rules cannot search inside an object array — a plain uid
+  array is required, with a migration for existing tasks.
+- Open question raised by this analysis: the same constraint already applies to
+  `visibility: 'private'`, which IS rule-enforced today against the same
+  unfiltered listener. Whether that is currently failing in production is
+  unverified — and cannot be verified by the test suite, because the Firestore
+  emulator fails open on list queries. See the COH-006 note on the workboard.
+- Follow-up: verify the private-task/listener interaction against production
+  before scoping COH-006.
+
