@@ -797,7 +797,7 @@ export function HelpPage({ onBack }) {
               <P>Each task has a <strong>Visibility</strong> setting that controls who can see it:</P>
               <UL items={[
                 'Team — visible to everyone with Tasks Hub access',
-                'Private — visible only to you (the default for new tasks). Even admins cannot see private tasks. Enforced server-side.',
+                'Private — visible only to you (the default for new tasks). Hidden from other people\'s task lists in the app, but not encrypted.',
                 'Shared — visible to you plus specific people you choose (enforced client-side)',
               ]} />
               <P>Assignees always see their tasks regardless of visibility. Cards show a 🔒 icon for private tasks and 👥 for shared tasks.</P>
