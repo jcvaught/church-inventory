@@ -75,6 +75,14 @@ in which Codex cannot write its review, commit it, or even fast-forward its own
 branch — it will report the workspace as read-only and stop without changing
 anything (observed 2026-08-31).
 
+Even with `-s workspace-write`, Codex can write files in its worktree but cannot
+commit from it: a linked worktree's Git metadata lives under the primary repo's
+`.git/worktrees/`, which is outside the sandbox, so `index.lock` creation fails
+(observed 2026-08-31). **Codex therefore writes its review as an untracked file
+and Claude commits it**, unmodified, attributing Codex as the author in the
+commit message. Ask Codex for a path, not a commit. Claude must not edit the
+content of a review it commits.
+
 `codex exec resume --last` may be used to preserve Codex's session context, but
 the message must be written so a cold session would also succeed — always cite
 the commit SHA and path of the artifact it refers to.
