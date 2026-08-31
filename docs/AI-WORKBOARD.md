@@ -20,24 +20,45 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-006 — Enforce private and shared task visibility
 
-- Status: Ready
+- Status: Ready (**amended 2026-08-31** after Codex's pre-implementation review —
+  `docs/COH-006-PREIMPLEMENTATION-REVIEW-2026-08-31.md`, verdict "plan changes
+  required". All seven findings verified against the code and accepted; the three
+  needing an owner call are recorded in **DEC-2026-010**.)
 - Owner: Codex
 - Reviewer: Claude
-- Branch: `codex/coh-006-task-visibility` (branch from current `main`)
-- Authorized by: DEC-2026-008 (shared must be enforced) and DEC-2026-009
-  (private is not enforced against an unconstrained list). Owner decision
-  2026-08-31: **one task, not staged** — the deploy is already staged
-  client-then-rules as in COH-002, and the backfill is a separately approved
-  migration step regardless of task boundaries.
+- Branch: `codex/coh-006-task-visibility` (branch from current `main`, which now
+  carries the interim store filter and the skipped spec — see "Already landed")
+- Authorized by: DEC-2026-008 (shared must be enforced), DEC-2026-009 (private is
+  not enforced against an unconstrained list), DEC-2026-010 (review dispositions).
+  Owner decision 2026-08-31: **one task, not staged** — the deploy is already
+  staged client-then-rules as in COH-002, and the backfill is a separately
+  approved migration step regardless of task boundaries. One task, four deploy
+  gates: see Rollout.
 - Problem: `src/useFirestore.js` subscribes to the whole `workItems` collection
   with no constraints. Measured in production: a direct `get` of another
   member's private task is denied, but the unconstrained list and `onSnapshot`
   both deliver it (`fromCache=false`). Private and shared are therefore UI-level
-  only. The tenant boundary is intact.
+  only. The tenant boundary is intact. Treat the *mechanism* (disjunctive,
+  content-dependent read predicate) as a hypothesis, not a measured fact — the
+  deployed ruleset was never pinned (DEC-2026-009 second addendum). Verify it
+  before relying on the causal story.
+- Already landed on `main` (Claude, commit `9c0f862`) — do not redo, and read
+  before touching the central file:
+  - `src/utils/taskVisibility.js` `canSeeTask()` — the visibility predicate,
+    extracted from `WorkBoard` unchanged.
+  - An **interim** application of it at the store boundary in `useFirestore.js`,
+    so private/shared tasks stay out of Global Search, Event Day, exports, and
+    the attention panel. Not authorization. **Remove it at gate 3** so the
+    constrained queries are the single enforcement path.
+  - `e2e/authenticated/private-visibility-listener.spec.js` carries `test.skip`.
+  - Help Centre and `CLAUDE.md` state that visibility is not yet a security
+    boundary and that comments are member-readable regardless of it.
 - File scope: `src/useFirestore.js` (**declared central file**),
-  `src/pages/hubs/WorkBoard.jsx`, `firestore.rules`,
-  `firestore.indexes.json`, a backfill script under `scripts/`,
-  `functions/test/rules/`, `e2e/authenticated/`, `docs/DATA_MODEL.md`.
+  `src/pages/hubs/WorkBoard.jsx`, `src/utils/taskVisibility.js`,
+  `firestore.rules`, `firestore.indexes.json`, a backfill script under
+  `scripts/`, `functions/index.js`, `functions/lib/attention.js`,
+  `functions/test/attention.test.mjs`, `functions/test/rules/`,
+  `e2e/authenticated/`, `docs/DATA_MODEL.md`.
 - Required work:
   1. Add `sharedWithUids` and `assigneeUids` (plain uid arrays — rules cannot
      search the existing `[{uid,name}]` object arrays). Written by **every**
@@ -45,7 +66,8 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
      generation, templates, and reservation-created setup tasks.
   2. Backfill both fields on existing tasks and normalise missing `visibility`.
      Production migration — backup, dry run, validation queries, rollback, and
-     explicit owner approval before execution.
+     explicit owner approval before execution. The backfill must be idempotent,
+     and a delta pass must cover documents created during the transition.
   3. Replace the single unconstrained subscription with rule-compatible
      constrained queries (team / own / shared-with-me / assigned-to-me), merged
      and de-duplicated, preserving maintenance delivery from the same
@@ -53,22 +75,86 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   4. Update the `workItems` read rule to honour `sharedWithUids` and
      `assigneeUids`; the Help Centre states assignees always see their tasks,
      which the current rule does not honour.
-  5. Add the Firestore indexes the new queries require, and probe them against
+  5. **Close the update-rule self-grant path (review H-1).** `firestore.rules`
+     currently lets any active member update any task whose existing and
+     resulting visibility are both non-private, so a member who learns a shared
+     task's ID can write their own uid into either projection and then satisfy
+     the new read rule. Write authorization does not imply read authorization.
+     Pinning the projections against their `[{uid,name}]` sources is not
+     expressible — rules cannot map over an object array. Require instead that
+     the caller is **already authorized on `resource.data`** (creator, assignee,
+     shared recipient, or team) before any update is allowed; self-grant then
+     fails because the pre-update document does not authorize the caller.
+     Document the residual: an already-authorized recipient can widen sharing.
+     Adversarial rules tests for self-grant through both projection fields,
+     including a direct update by a member who cannot read the task.
+  6. **Gate work-item comments on parent visibility (review H-2, owner decision
+     DEC-2026-010 — in scope).** `firestore.rules` lets every active member read
+     and create comments under every `workItems` document, so private task
+     discussion stays readable even after the parent read is fixed. Gate
+     read/create/update/delete on authorization to the parent doc via a rules
+     `get()` — deterministic from the `itemId` path variable, so it also holds
+     for the subcollection list. Preserve the maintenance-comment workflow:
+     maintenance items have no visibility model and stay member-readable.
+     Direct-SDK tests proving an unauthorized member can neither read nor create
+     a comment under a private/shared task. If comment author identity and
+     security-sensitive timestamps are not pinned in this task, record that as an
+     explicitly accepted residual.
+  7. **Stop private task titles reaching the weekly attention digest (finding
+     C-1, DEC-2026-010).** `gatherAttentionSignals` (`functions/index.js`) reads
+     the entire `workItems` collection with the Admin SDK and passes overdue task
+     titles into `buildDigestSignals` → `examples`, which is emailed to church
+     admins and sent to the Claude API. Cloud Functions bypass rules, so items
+     3-6 do not close this. The digest is one payload for all admins, so
+     per-recipient filtering does not apply — exclude private and shared tasks
+     outright. `functions/test/attention.test.mjs` pins the digest shape
+     byte-for-byte and will need updating; overdue/dueThisWeek counts change.
+  8. Add the Firestore indexes the new queries require, and probe them against
      production after deploy — `firebase deploy --only firestore:indexes`
      silently skips two index kinds (see CLAUDE.md Known Pitfalls).
+- Rollout — four gates inside this one task (review H-3). No existing document
+  carries the uid projections, so a combined writer+reader deployment would hide
+  legacy shared and assigned tasks until the backfill finished, and running the
+  backfill first races documents created before the deploy:
+  1. Deploy the additive projection writers **and the indexes**, keeping the
+     current read path.
+  2. Back up → dry run → execute the idempotent backfill → validate, then a delta
+     validation for documents created during the transition.
+  3. Cut clients over to the constrained, merged read path only once projection
+     coverage is complete, and remove the interim store filter in the same
+     change. If gates 1 and 3 cannot be separate client deployments, a feature
+     flag or equivalent cutover gate is required.
+  4. Deploy the restrictive rules once the compatible client is live.
+  Rollback must account for clients on both sides of the gate-3 cutover.
 - Downstream consumers that must not regress: Global Search, Event Day,
   occurrence/ICS generation, the attention engine, Reservations' linked setup
   tasks, Timesheet's maintenance links, CSV and calendar exports, and
   `WorkBoard`'s per-detail listeners after a visibility or assignment change.
 - Acceptance criteria:
-  - `e2e/authenticated/private-visibility-listener.spec.js` (on `claude/work`,
-    commit `21375df`) passes. It currently fails by design.
+  - Unauthorized members cannot self-grant access by writing either uid
+    projection, proven by adversarial rules tests.
+  - Parent visibility governs work-item comment reads and writes, proven by
+    direct-SDK tests.
+  - Private and shared task titles no longer reach the attention digest.
+  - Legacy and transition-period documents stay visible to their legitimate
+    creator, recipients, and assignees throughout the rollout.
+  - `e2e/authenticated/private-visibility-listener.spec.js` is rewritten and
+    unskipped, and it exercises the **new** query set rather than only proving
+    the obsolete unconstrained query no longer returns the probe. It must
+    (review M-1): assert exact expected outcomes and error codes instead of
+    treating every error as non-disclosure; fail on listener timeout and assert
+    the expected completion mode; assert server-backed metadata; retain the
+    direct-get and cross-tenant controls; add positive cases proving team,
+    creator-owned, explicitly shared, and assigned tasks ARE delivered; and add
+    negative cases for private tasks and for shared tasks where the caller is not
+    a recipient.
   - Emulator rules coverage for the new predicates, with the documented caveat
     that emulator list results are not containment evidence.
   - A two-account production verification, owner-authorized, covering both
     `getDocsFromServer` and `onSnapshot`.
-  - Client commits precede rules commits; lint/build/test:rules recorded;
-    SHA-pinned handoff.
+  - The default Playwright project is green at handoff, with no skip remaining.
+  - Client commits precede rules commits; lint/build/test:rules/test:unit
+    recorded; SHA-pinned handoff that records the four deploy gates separately.
 - Not in scope: D-2, D-5 (answered "no change"), AC-07/D-4 (closed as intended
   behaviour), and COH-005's D-3/D-7/D-8.
 
