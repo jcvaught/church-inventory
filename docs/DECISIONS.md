@@ -155,3 +155,166 @@ in an agent conversation.
   changed out of band breaks that session's audit writes until re-login. No UI
   path triggers it; document rather than build for it.
 
+### DEC-2026-006 — Member-editable maintenance work is intended behavior; AC-07 is accepted, not deferred
+
+- Date: 2026-08-29
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: COH-001 AC-07, D-4, `docs/COH-001-OWNER-DECISIONS.md`
+- Context: The COH-001 threat model rated AC-07 High — any church member can
+  change a maintenance work item's status, cost, assignment, completion
+  chronology, and recurrence. D-4 was recorded as "deferred pending usage
+  evidence," which framed it as an unanswered question.
+- Decision: It is not a question. Any active member updating maintenance work is
+  the intended product behavior and will not change. D-4 is closed, not
+  deferred. The `assigneeUids` migration it implied is cancelled, and no
+  follow-up task is needed.
+- Alternatives considered: Restricting updates to assignees or manager/admin —
+  rejected. In a single congregation the people doing the work are volunteers,
+  and requiring elevated roles to close a ticket would break the actual
+  workflow the hub exists to serve.
+- Consequences: AC-07 stays open at the rules layer permanently and by
+  intention. COH-002's pinning of `createdBy`, `taskNumber`, and `createdAt`
+  remains, so identity and numbering are still protected — only operational
+  fields are member-writable. Any future threat model should list this as
+  accepted rather than re-raising it.
+- Follow-up: None.
+
+### DEC-2026-007 — Remaining core authorization policy answers
+
+- Date: 2026-08-29
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: `docs/COH-001-OWNER-DECISIONS.md` D-2/D-3/D-5/D-7/D-8,
+  `docs/CORE-AUTHORIZATION-THREAT-MODEL-2026-08-28.md`
+- Context: Five of the six policy questions left open after COH-002.
+- Decisions:
+  - **D-2 — Managers keep delete on inventory.** No change. Restricting deletion
+    to admins would bottleneck every removal on the single admin; the reviewer's
+    recommendation of admin-only delete is rejected on that ground.
+  - **D-3 — Supply changes become add/subtract.** Ordinary members may adjust
+    quantity but not assign an arbitrary value, and may not edit identity fields
+    (name, reorder point, location). Manager/admin unrestricted.
+  - **D-5 — Private tasks stay private.** No change; admins still cannot read
+    another member's private task. Confirms the existing deliberate behavior.
+  - **D-7 — Managers may record every access type, certifications included.**
+    The rules already permit this; the *UI* is the stricter layer and should be
+    loosened to match (`PeopleAccessPage.jsx:249`, `:858`, `:961` currently gate
+    certification on `isAdmin`). The reviewer's recommendation to tighten rules
+    to the UI is inverted by this decision.
+  - **D-8 — Managers approve reservations.** Approve/deny becomes a
+    manager/admin action at the rules layer. Members may create and edit their
+    own pending requests but cannot approve them or alter another member's.
+- Consequences: D-2 and D-5 need no work. D-3, D-7, and D-8 define a follow-up
+  implementation task. Notably D-8 is far cheaper than the threat model assumed:
+  because approval is *any* manager rather than a per-ministry or per-room
+  lookup, it is an ordinary rule change and needs no callable function.
+- Open: D-6 (task "Shared" visibility) remains under discussion.
+- Follow-up: COH-005 proposed on the workboard.
+
+### DEC-2026-008 — "Shared" task visibility must be genuinely enforced
+
+- Date: 2026-08-29
+- Status: Accepted (implementation blocked on an open question — see below)
+- Deciders: Product owner
+- Related tasks/docs: COH-001 D-6 / AC-10
+- Decision: A task set to `visibility: 'shared'` must be readable only by the
+  people the creator specifies (plus the creator and assignees). Disclosure-only
+  options were rejected; the feature should do what it says.
+- Why this is not a rule change (**CORRECTED twice** — see DEC-2026-009 and its
+  2026-08-31 addendum): the original premise, that Firestore rejects an
+  unconstrained list query containing unreadable documents, is not what happens
+  here. Nor is the first correction's broad claim that Firestore generally
+  returns unreadable documents — Firebase documents queries as all-or-nothing.
+  What is measured is specific to this rule's disjunctive, content-dependent
+  predicate: the unconstrained query is admitted and its documents delivered,
+  while a `get` and a constraint-targeted query are both denied. `src/useFirestore.js:250` subscribes to the
+  whole `workItems` collection with no `where` clause, so enforcing per-document
+  visibility requires restructuring how the client queries work items, not just
+  editing `firestore.rules`. Storage also changes: `sharedWith` is
+  `[{uid, name}]`, and rules cannot search inside an object array — a plain uid
+  array is required, with a migration for existing tasks.
+- Open question raised by this analysis: the same constraint already applies to
+  `visibility: 'private'`, which IS rule-enforced today against the same
+  unfiltered listener. Whether that is currently failing in production is
+  unverified — and cannot be verified by the test suite, because the Firestore
+  emulator fails open on list queries. See the COH-006 note on the workboard.
+- Follow-up: verify the private-task/listener interaction against production
+  before scoping COH-006.
+
+### DEC-2026-009 — Private task visibility is not enforced on list queries in production
+
+- Date: 2026-08-30
+- Status: Accepted (finding recorded; remediation not yet scoped)
+- Deciders: Product owner directed the verification; reviewer measured it
+- Related tasks/docs: COH-001 AC-10, DEC-2026-008, `src/useFirestore.js:250`
+
+**Measured against production** (`church-inventory-9615c`, `e2e-test-church`
+tenant, two real accounts, Playwright + client SDK):
+
+| Operation as a non-creator | Result |
+|---|---|
+| `getDoc` of another member's private task | **DENIED** |
+| Unfiltered `getDocs` of `workItems` | **ALLOWED — private doc returned** |
+| `getDocs` with `where('visibility','==','private')` | **DENIED** |
+| Cross-tenant `getDocs` | **DENIED** |
+
+- Finding: an unconstrained list over `workItems` returns another member's
+  `visibility:'private'` task. `src/useFirestore.js:250` performs exactly that
+  query, so every member's client receives every private task in their church
+  and only the UI hides them. Private tasks are UI-only privacy, the same as
+  `shared`.
+- The tenant boundary is intact — cross-church reads remain denied. Exposure is
+  within a single congregation.
+- Not introduced by COH-002; the `workItems` read rule is unchanged by it.
+- Contradicts `CLAUDE.md` ("visibility … no admin override — truly private") and
+  the Help Center's description of Private. Both should be corrected to match
+  reality until this is fixed.
+- Why no test caught it: the rules emulator fails open on list queries, and
+  production also returns the documents rather than erroring, so neither
+  `test:rules` nor any single-document probe can see it. Only a two-account
+  production list query exposes it. The product owner directed that test after
+  the reviewer's static reasoning produced a confident but wrong prediction that
+  the query would be rejected.
+- Remediation direction (not yet scoped): the client must issue constrained
+  queries the rules can prove safe — e.g. separate subscriptions for team items,
+  own items, and shared-with-me items — or the data must be partitioned so
+  unreadable documents are not in the queried collection. This applies equally
+  to DEC-2026-008's shared-visibility work; both are the same problem.
+
+#### DEC-2026-009 addendum (2026-08-31) — re-verified under adversarial review, and the mechanism claim narrowed
+
+Codex reviewed the finding and accepted the leak while rejecting the general
+claim about Firestore, correctly noting that Firebase documents queries as
+all-or-nothing. It also identified real methodology gaps: the first probe used
+`getDocs` rather than a server-forced read, never asserted
+`snapshot.metadata.fromCache`, shared one Firebase app and Firestore instance
+across sign-ins, did not assert the two UIDs were distinct and non-null, and
+characterised `getDocs` when the application uses `onSnapshot`.
+
+The probe was rebuilt to close every one of those and re-run against production:
+
+| Operation as member-b vs member-a's private task | Result |
+|---|---|
+| `getDocFromServer` | DENIED (`permission-denied`) |
+| `getDocsFromServer`, unconstrained | **ALLOWED — 1 doc, `fromCache=false`, probe INCLUDED** |
+| `getDocsFromServer` with `where('visibility','==','private')` | DENIED |
+| `onSnapshot`, unconstrained — the real code path | **DELIVERED — probe INCLUDED** |
+| Cross-tenant `getDocsFromServer` | DENIED |
+
+UIDs asserted distinct and non-null; a dedicated Firebase app per run; the
+server-forced read reported `fromCache=false`. **The leak is confirmed and the
+cache explanation is eliminated.**
+
+**But the mechanism claim is narrowed.** This is not "Firestore returns
+unreadable documents." It is specific to a disjunctive, content-dependent read
+predicate (`type == 'maintenance' || !has visibility || visibility == 'team' ||
+visibility == 'shared' || createdBy == uid`). The rule can be satisfied by
+*some* documents in the collection, the unconstrained query is admitted on that
+basis, and per-document content filtering does not then occur. Remediation
+should therefore be read as "this rule shape is not safely enforceable against
+an unconstrained list," not as a defect in Firestore.
+
+Consequence for remediation: unchanged in direction. The client must issue
+constrained queries whose shape the rules can prove safe, or the data must be
+partitioned.

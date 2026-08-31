@@ -18,52 +18,31 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ## Active Tasks
 
-### COH-002 — Implement approved core authorization changes
-
-- Status: Ready
-- Owner: Codex
-- Reviewer: Claude
-- Branch: `codex/coh-002-core-authorization` (branch from current `main`)
-- Authorized scope: the four workstreams in
-  `docs/CORE-AUTHORIZATION-THREAT-MODEL-2026-08-28.md` at `981054d`, as refined
-  by `3dda1f0`. Execution plan: `docs/COH-002-EXECUTION-PLAN.md`.
-- File scope:
-  - `firestore.rules`
-  - `src/useFirestore.js` (**declared central file** — no other task may touch it
-    concurrently)
-  - `src/pages/SettingsPage.jsx`
-  - `functions/test/rules/core-collections.test.mjs`
-- Workstreams:
-  1. Active-user enforcement in the membership predicate, using
-     `userData().get('active', true) == true` per `3dda1f0` — the inverted
-     default fails safe on a document missing the field. Stage 0's production
-     query is an optional confirmation, not a prerequisite.
-  2. Restrict raw People Access reads to manager/admin; make the
-     `useFirestore.js:230,236` subscriptions role-aware; preserve ordinary users'
-     self-only My Compliance through a minimized path.
-  3. Pin activity-log actor identity and trusted time following the existing
-     `shepherdAudit` rule pattern; retain all-member reads and the current
-     detail shape.
-  4. Delete the four legacy blocks — `maintenanceTickets/{docId}`, its comments,
-     `tasks/{docId}`, its comments — **preserving `taskTemplates` at
-     `firestore.rules:236–244`**, which sits between them and is live.
-- Acceptance criteria:
-  - Client change commits precede rules commits, so branch history mirrors the
-    safe cutover order.
-  - Adversarial emulator coverage for every changed path, including probes that
-    the four removed legacy paths now deny, and that `taskTemplates` and
-    `workItems` behavior is unchanged.
-  - Emulator `list`-denial results are not accepted as containment evidence.
-  - `npm run lint`, `npm run build`, `npm run test:rules` recorded with results.
-  - Handoff pins a SHA and names the deliverable path.
-- Out of scope — must not creep in: D-2, D-3, D-5, D-6, D-7, D-8 are unanswered
-  and excluded; D-4 is deferred to its own task. **AC-07 remains substantially
-  open after COH-002** — any active member retains broad maintenance update
-  authority. Accepted and documented.
-- Dependencies: none outstanding. Owner decisions D-1, D-9, D-10 answered; scope
-  authorized.
+None active.
 
 ## Proposed Queue
+
+### COH-005 — Remaining core authorization policy (D-3, D-7, D-8)
+
+- Status: Proposed
+- Suggested owner: Codex
+- Suggested reviewer: Claude
+- Authorized by: DEC-2026-007
+- Scope:
+  1. **D-3 supplies** — members may adjust `quantity` only, result must stay
+     >= 0; `name`, `reorderPoint`, and `location` become manager/admin-only.
+     Expressible in rules; no callable needed.
+  2. **D-7 certifications** — loosen the UI so managers can record every access
+     type (`PeopleAccessPage.jsx:249`, `:858`, `:961`). Rules already allow it.
+  3. **D-8 reservations** — approve/deny restricted to manager/admin; members may
+     create and edit only their own pending requests, and cannot change another
+     member's. Ordinary rule change; no callable, because approval is any
+     manager rather than a per-room or per-ministry lookup.
+- Not in scope: D-2 and D-5 were answered "no change." D-4/AC-07 is closed as
+  intended behavior (DEC-2026-006). D-6 is still under discussion.
+- Acceptance criteria: adversarial emulator coverage for each rule change,
+  including that a member cannot approve their own reservation or set an
+  arbitrary supply quantity; lint/build/test:rules recorded; SHA-pinned handoff.
 
 These are candidates, not assignments. Promote one only after the current task
 is reviewed and file overlap is checked.
@@ -85,6 +64,34 @@ is reviewed and file overlap is checked.
   source data, and success measures before implementation.
 
 ## Completed Tasks
+
+### COH-002 — Implement approved core authorization changes
+
+- Status: **Complete** (2026-08-29) — merged to `main`; **rules not yet deployed**
+- Owner: Codex · Reviewer: Claude
+- Implementation SHA: `47ecd6d`; handoff `75dcc8a`
+- Delivered: the four authorized workstreams — active-membership enforcement
+  (`get('active', true)`, failing safe for legacy profiles), People Access reads
+  narrowed to manager/admin with self-only access preserved for My Compliance,
+  activity-log actor and server-time pinning on the `shepherdAudit` pattern, and
+  removal of the four legacy `tasks`/`maintenanceTickets` rule blocks with
+  `taskTemplates` and `workItems` preserved.
+- Actual file scope: `firestore.rules`, `src/useFirestore.js`, `src/App.jsx`,
+  `src/pages/ActivityLogPage.jsx`, `src/pages/ItemsPage.jsx`,
+  `src/pages/SuppliesPage.jsx`, `src/pages/ReservationsPage.jsx`,
+  `src/pages/hubs/WorkBoard.jsx`, `scripts/setup-e2e-tenant.mjs`,
+  `functions/test/rules/core-collections.test.mjs`, `docs/DATA_MODEL.md`,
+  `docs/CHANGELOG.md`. `SettingsPage.jsx` was not needed — My Compliance consumes
+  the scoped store arrays directly.
+- Review: `docs/COH-002-REVIEW-2026-08-29.md` (changes requested — H-1 silent
+  audit-row loss) then `docs/COH-002-REVIEW-ROUND2-2026-08-29.md` (approved).
+  Verified by 33/33 owner tests plus 18 independent adversarial probes; every
+  pre-COH-001 exposure in scope re-run as a regression check and confirmed closed.
+- **Still open by owner decision:** AC-07 — any active member retains broad
+  maintenance update authority pending D-4. D-2/D-3/D-5/D-6/D-7/D-8 unanswered.
+- **Remaining action:** the client is deployed; `firebase deploy --only
+  firestore:rules` has NOT been run, so the exposures are not yet closed in
+  production. Owner-gated.
 
 ### COH-001 — Core authorization threat model
 

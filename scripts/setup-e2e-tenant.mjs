@@ -38,6 +38,8 @@ const ACCOUNTS = [
   { key: 'volunteer', email: 'e2e-volunteer@churchopshub.com', password: 'E2eTestPass123!', role: 'user',  firstName: 'E2E', lastName: 'Volunteer', allowedHubs: ['jobs'] },
 ];
 
+const accountName = acc => `${acc.firstName} ${acc.lastName}`;
+
 function init() {
   if (admin.apps.length) return;
   const key = require(pathResolve(__dirname, 'serviceAccountKey.json'));
@@ -70,7 +72,7 @@ async function main() {
     uids[acc.key] = await ensureAuthUser({
       email: acc.email,
       password: acc.password,
-      displayName: `${acc.firstName} ${acc.lastName}`,
+      displayName: accountName(acc),
     });
   }
   const adminUid = uids.admin;
@@ -144,7 +146,7 @@ async function main() {
     // treats the user as "legacy full access".
     const allowedHubsValue = Array.isArray(acc.allowedHubs) ? acc.allowedHubs : FIELD_DELETE;
     await db.doc(`users/${uids[acc.key]}`).set({
-      name: `${acc.firstName} ${acc.lastName}`,
+      name: accountName(acc),
       firstName: acc.firstName,
       lastName: acc.lastName,
       email: acc.email,

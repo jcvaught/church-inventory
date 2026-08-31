@@ -141,7 +141,10 @@ cross-reference each uid's role in `users`. If closures are all admin/manager,
 the interim manager-only rule is safe. Read-only aggregate on the production
 church; needs owner authorization before running.
 
-**Decision:** Deferred — carve D-4 out of COH-002 scope into its own task.
+**Decision (2026-08-29): CLOSED — not a question.** Member-editable maintenance
+work is intended behavior and will not change. See DEC-2026-006. The
+`assigneeUids` migration is cancelled and no follow-up task is needed. AC-07 is
+permanently accepted, not an open risk.
 
 ---
 
