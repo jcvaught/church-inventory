@@ -18,7 +18,59 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ## Active Tasks
 
-None active.
+### COH-006 — Enforce private and shared task visibility
+
+- Status: Ready
+- Owner: Codex
+- Reviewer: Claude
+- Branch: `codex/coh-006-task-visibility` (branch from current `main`)
+- Authorized by: DEC-2026-008 (shared must be enforced) and DEC-2026-009
+  (private is not enforced against an unconstrained list). Owner decision
+  2026-08-31: **one task, not staged** — the deploy is already staged
+  client-then-rules as in COH-002, and the backfill is a separately approved
+  migration step regardless of task boundaries.
+- Problem: `src/useFirestore.js` subscribes to the whole `workItems` collection
+  with no constraints. Measured in production: a direct `get` of another
+  member's private task is denied, but the unconstrained list and `onSnapshot`
+  both deliver it (`fromCache=false`). Private and shared are therefore UI-level
+  only. The tenant boundary is intact.
+- File scope: `src/useFirestore.js` (**declared central file**),
+  `src/pages/hubs/WorkBoard.jsx`, `firestore.rules`,
+  `firestore.indexes.json`, a backfill script under `scripts/`,
+  `functions/test/rules/`, `e2e/authenticated/`, `docs/DATA_MODEL.md`.
+- Required work:
+  1. Add `sharedWithUids` and `assigneeUids` (plain uid arrays — rules cannot
+     search the existing `[{uid,name}]` object arrays). Written by **every**
+     creation path: New Task modal, kanban quick-add, paste-import, recurring
+     generation, templates, and reservation-created setup tasks.
+  2. Backfill both fields on existing tasks and normalise missing `visibility`.
+     Production migration — backup, dry run, validation queries, rollback, and
+     explicit owner approval before execution.
+  3. Replace the single unconstrained subscription with rule-compatible
+     constrained queries (team / own / shared-with-me / assigned-to-me), merged
+     and de-duplicated, preserving maintenance delivery from the same
+     collection and collapsing to one loading-readiness signal.
+  4. Update the `workItems` read rule to honour `sharedWithUids` and
+     `assigneeUids`; the Help Centre states assignees always see their tasks,
+     which the current rule does not honour.
+  5. Add the Firestore indexes the new queries require, and probe them against
+     production after deploy — `firebase deploy --only firestore:indexes`
+     silently skips two index kinds (see CLAUDE.md Known Pitfalls).
+- Downstream consumers that must not regress: Global Search, Event Day,
+  occurrence/ICS generation, the attention engine, Reservations' linked setup
+  tasks, Timesheet's maintenance links, CSV and calendar exports, and
+  `WorkBoard`'s per-detail listeners after a visibility or assignment change.
+- Acceptance criteria:
+  - `e2e/authenticated/private-visibility-listener.spec.js` (on `claude/work`,
+    commit `21375df`) passes. It currently fails by design.
+  - Emulator rules coverage for the new predicates, with the documented caveat
+    that emulator list results are not containment evidence.
+  - A two-account production verification, owner-authorized, covering both
+    `getDocsFromServer` and `onSnapshot`.
+  - Client commits precede rules commits; lint/build/test:rules recorded;
+    SHA-pinned handoff.
+- Not in scope: D-2, D-5 (answered "no change"), AC-07/D-4 (closed as intended
+  behaviour), and COH-005's D-3/D-7/D-8.
 
 ## Proposed Queue
 
