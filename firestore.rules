@@ -208,13 +208,30 @@ service cloud.firestore {
     //      task        → the visibility/immutability rules from the tasks block
     //      maintenance → admin/manager create+delete, any-member update (no field guards)
     match /churches/{churchId}/workItems/{docId} {
-      // read: maintenance is member-readable; tasks are visibility-gated (private = creator only).
+      // read: maintenance is member-readable; tasks are visibility-gated.
+      //
+      // ⚠️ COH-006 TRANSITIONAL RULE (gate 1). This is deliberately additive and
+      // still NOT an authorization boundary: `shared` remains readable by any
+      // member, and an unconstrained list over this collection is admitted and
+      // delivers private tasks (DEC-2026-009). The restrictive replacement lands
+      // at gate 4, once every document carries the uid projections and the
+      // clients issue constrained queries.
+      //
+      // The assignee arm is the one addition, and it is required before gate 3
+      // (COH-006 round-2 review H-1): the gate-3 client subscribes with
+      // where('assigneeUids','array-contains',uid), and without this arm that
+      // query is not provably safe for a private task assigned to someone other
+      // than its creator, so it would be denied for the whole gate-3-to-gate-4
+      // interval. It also delivers what the Help Centre has always promised —
+      // assignees see their tasks regardless of visibility — which the rule did
+      // not previously honour.
       allow read: if isMember(churchId) && (
         resource.data.type == 'maintenance'
         || !resource.data.keys().hasAny(['visibility'])
         || resource.data.visibility == 'team'
         || resource.data.visibility == 'shared'
         || resource.data.createdBy == request.auth.uid
+        || ('assigneeUids' in resource.data && request.auth.uid in resource.data.assigneeUids)
       );
       // create: maintenance is admin/manager-only; tasks are any member, enforcing createdBy.
       allow create: if isMember(churchId) && (

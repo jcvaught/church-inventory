@@ -801,6 +801,7 @@ export function HelpPage({ onBack }) {
                 'Shared — shown to you plus the specific people you choose.',
               ]} />
               <P>Assignees always see their tasks regardless of visibility. Cards show a 🔒 icon for private tasks and 👥 for shared tasks.</P>
+              <P>Anyone who can see a private or shared task can also add other people to it — an assignee can bring in a helper without asking you first. The activity log records it.</P>
               <Note>Visibility is not a security boundary yet. Private and Shared control what the app displays, and today the underlying task data is still sent to every member's browser even though it is never shown to them — so a determined person with developer tools could read it. We are fixing that. Until then, don't put anything in a task that would be harmful for another member of your church to see, and note that comments on a task are readable by any member regardless of the task's visibility.</Note>
               <Tip>Use Private for your own to-do items, Shared for tasks you're collaborating on with one other person, and Team for anything the whole staff should see.</Tip>
             </Accordion>

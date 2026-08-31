@@ -162,6 +162,52 @@ test('workItems: a task item is member-create with createdBy pinned', async () =
   await assertFails(setDoc(doc(ctx('memberA'), P('workItems/w4')), { type: 'task', createdBy: 'memberB', visibility: 'team' }));
 });
 
+// ── COH-006 gate 1: the transitional assignee read arm ───────────────────────
+// The gate-3 client subscribes with where('assigneeUids','array-contains',uid).
+// This arm has to exist before that cutover or the query is denied for a private
+// task assigned to a non-creator (round-2 review H-1). NOTE: the emulator fails
+// open on list queries (see CLAUDE.md), so these are single-document reads —
+// containment of a list result is not something this suite can prove.
+test('workItems: an assignee can read a private task they did not create', async () => {
+  await seedMembers();
+  await seed(P('workItems/task_p1'), {
+    type: 'task', createdBy: 'memberA', visibility: 'private',
+    assignees: [{ uid: 'memberB', name: 'Member B' }], assigneeUids: ['memberB'],
+  });
+  await assertSucceeds(getDoc(doc(ctx('memberB'), P('workItems/task_p1'))));
+  await assertSucceeds(getDoc(doc(ctx('memberA'), P('workItems/task_p1'))));
+});
+test('workItems: a non-assignee still cannot read someone else\'s private task', async () => {
+  await seedMembers();
+  await seed(P('workItems/task_p2'), {
+    type: 'task', createdBy: 'memberA', visibility: 'private',
+    assignees: [{ uid: 'memberA', name: 'Member A' }], assigneeUids: ['memberA'],
+  });
+  await assertFails(getDoc(doc(ctx('memberB'), P('workItems/task_p2'))));
+  // An admin has no override on a private task, and never has.
+  await assertFails(getDoc(doc(ctx('adminA'), P('workItems/task_p2'))));
+});
+test('workItems: a legacy private task with no assigneeUids field is unaffected', async () => {
+  await seedMembers();
+  await seed(P('workItems/task_p3'), { type: 'task', createdBy: 'memberA', visibility: 'private' });
+  await assertSucceeds(getDoc(doc(ctx('memberA'), P('workItems/task_p3'))));
+  await assertFails(getDoc(doc(ctx('memberB'), P('workItems/task_p3'))));
+});
+test('workItems: an empty assigneeUids array grants nobody', async () => {
+  await seedMembers();
+  await seed(P('workItems/task_p4'), {
+    type: 'task', createdBy: 'memberA', visibility: 'private', assignees: [], assigneeUids: [],
+  });
+  await assertFails(getDoc(doc(ctx('memberB'), P('workItems/task_p4'))));
+});
+test('workItems: the assignee arm does not cross the tenant boundary', async () => {
+  await seedMembers();
+  await seed(P('workItems/task_p5'), {
+    type: 'task', createdBy: 'memberA', visibility: 'private', assigneeUids: ['outsider'],
+  });
+  await assertFails(getDoc(doc(ctx('outsider'), P('workItems/task_p5'))));
+});
+
 // ── People Access — full hub manager/admin; ordinary member self-only ────────
 test('People Access: member reads only their linked person and compliance records', async () => {
   await seedMembers();

@@ -267,7 +267,34 @@ function buildDigestSignals(data, todayStr) {
   return sig;
 }
 
+// ── Digest visibility + cache policy — SERVER-ONLY, no client twin ───────────
+// The client's attention panel reads the per-user store, which is already
+// visibility-filtered. The digest has no such luxury: it runs on the Admin SDK,
+// which bypasses rules, and one cached payload is emailed to every admin, so it
+// cannot honour recipient-specific visibility. COH-006 C-1 therefore excludes
+// private and shared tasks outright. Legacy tasks with no `visibility` are team
+// tasks. These two are exempt from the KEEP-IN-SYNC rule at the top of the file.
+
+// Bump when a change alters WHAT may appear in a digest, not merely how it reads.
+// A payload cached under an older policy misses and is rebuilt, so the change
+// takes effect immediately instead of at the start of the next ISO week. Cost of
+// a bump: one extra Claude call per church, once.
+const DIGEST_POLICY_VERSION = 2;
+
+function digestVisibleTasks(tasks) {
+  if (!Array.isArray(tasks)) return [];
+  return tasks.filter(t => t && (!t.visibility || t.visibility === 'team'));
+}
+
+// A cached digest is reusable only if it is this ISO week AND was built under the
+// current policy. A payload with no policyVersion predates COH-006 and may name
+// another member's private task.
+function isDigestCacheUsable(cached, weekKey) {
+  return !!cached && cached.weekKey === weekKey && cached.policyVersion === DIGEST_POLICY_VERSION;
+}
+
 module.exports = {
+  DIGEST_POLICY_VERSION, digestVisibleTasks, isDigestCacheUsable,
   THRESHOLDS, EXPIRY_CRITICAL_DAYS, EXPIRY_WARNING_DAYS,
   ATTENTION_KINDS, ATTENTION_SEVERITIES, ymdAddDays,
   collectItemOverdue, collectLowStock, collectReservationsPending, collectWarranty,

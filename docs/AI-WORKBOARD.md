@@ -129,6 +129,14 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   8. Add the Firestore indexes the new queries require, and probe them against
      production after deploy — `firebase deploy --only firestore:indexes`
      silently skips two index kinds (see CLAUDE.md Known Pitfalls).
+     Expectation, **unverified and not to be trusted without the probe**: each
+     gate-3 query carries a single constraint (`type=='maintenance'`,
+     `visibility=='team'`, `createdBy==uid`, `assigneeUids array-contains uid`,
+     `sharedWithUids array-contains uid`), and `firestore.indexes.json` exempts
+     none of those fields from automatic single-field indexing, so no composite
+     index should be required. If a query shape gains a second constraint or an
+     `orderBy`, that changes. Confirm against production before gate 3 removes
+     the old reader — a missing index fails the query outright.
 - Rollout — four gates inside this one task (review H-3). No existing document
   carries the uid projections, so a combined writer+reader deployment would hide
   legacy shared and assigned tasks until the backfill finished, and running the

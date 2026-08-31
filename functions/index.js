@@ -8,7 +8,7 @@ const { getAuth } = require('firebase-admin/auth');
 const { getMessaging } = require('firebase-admin/messaging');
 const { shiftsToOccurrences, reservationsToOccurrences, maintenanceToOccurrences, buildCalendar } = require('./lib/occurrences');
 const { calculateNextDue } = require('./lib/recurrence');
-const { buildDigestSignals } = require('./lib/attention');
+const { buildDigestSignals, digestVisibleTasks, isDigestCacheUsable, DIGEST_POLICY_VERSION } = require('./lib/attention');
 const { syncShepherdPeople, setPcoElderAssignment, buildElderDigest } = require('./lib/shepherd');
 const { resolveRoster, isElderEmail, buildNormalizer } = require('./lib/roster');
 
@@ -2388,7 +2388,12 @@ async function gatherAttentionSignals(db, churchId, todayStr) {
   ]);
   const withId = (snap) => (snap ? snap.docs.map(d => ({ _docId: d.id, ...d.data() })) : []);
   const allWork = withId(workItemsSnap);
-  const taskData = allWork.filter(w => w.type === 'task').map(w => ({ ...w, type: 'task' }));
+  // COH-006 C-1: this runs on the Admin SDK, which bypasses Firestore rules, and
+  // the task names it collects are emailed to every admin and sent to Claude.
+  // digestVisibleTasks drops private and shared tasks — see the policy note in
+  // functions/lib/attention.js.
+  const taskData = digestVisibleTasks(allWork.filter(w => w.type === 'task'))
+    .map(w => ({ ...w, type: 'task' }));
   const maintData = allWork.filter(w => w.type === 'maintenance').map(w => ({ ...w, type: 'maintenance' }));
   const has = (h) => subHasHub(subSnap.data() || {}, h);
 
@@ -2414,7 +2419,8 @@ async function buildAttentionDigest(db, churchId, churchName, todayStr, { force 
   const cacheRef = db.doc(`churches/${churchId}/aiDigests/current`);
   if (!force) {
     const cached = await cacheRef.get();
-    if (cached.exists && cached.data()?.weekKey === weekKey) return cached.data();
+    const data = cached.exists ? cached.data() : null;
+    if (isDigestCacheUsable(data, weekKey)) return data;
   }
 
   const signals = await gatherAttentionSignals(db, churchId, todayStr);
@@ -2422,7 +2428,7 @@ async function buildAttentionDigest(db, churchId, churchName, todayStr, { force 
 
   let payload;
   if (!hasAny) {
-    payload = { weekKey, generatedAt: new Date().toISOString(), empty: true, summary: 'Nothing needs your attention this week — everything looks current.', items: [] };
+    payload = { weekKey, policyVersion: DIGEST_POLICY_VERSION, generatedAt: new Date().toISOString(), empty: true, summary: 'Nothing needs your attention this week — everything looks current.', items: [] };
   } else {
     const system = `You are an operations assistant for a church using ChurchOpsHub. You are given this week's flagged signals across the church's tools. Write a brief, warm, plain-language "what needs attention this week" briefing for the church admin. Be specific and reference the real numbers/names given. Prioritize by urgency. Do NOT invent anything not in the data. Respond ONLY with minified JSON of the form {"summary":"one or two sentences","items":[{"priority":"high|medium|low","text":"one actionable line"}]}. Keep to at most 8 items.`;
     const user = `Church: ${churchName}\nToday: ${todayStr}\nSignals:\n${JSON.stringify(signals, null, 2)}`;
@@ -2438,6 +2444,7 @@ async function buildAttentionDigest(db, churchId, churchName, todayStr, { force 
     }
     payload = {
       weekKey,
+      policyVersion: DIGEST_POLICY_VERSION,
       generatedAt: new Date().toISOString(),
       empty: false,
       summary: String(parsed.summary || '').slice(0, 600),
