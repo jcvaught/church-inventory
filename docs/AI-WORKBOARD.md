@@ -9,6 +9,8 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 - A task may enter **In progress** only after it has one owner, acceptance
   criteria, a branch, and no unresolved file-scope conflict.
+- Default assignment (DEC-2026-011): **Claude implements, Codex reviews** — the
+  plan before implementation, the implementation before it reaches the owner.
 - The owner completes `docs/AI-HANDOFF-TEMPLATE.md` before moving a task to
   **Review**.
 - The reviewer reports findings by severity. Ownership stays with the
@@ -24,10 +26,14 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   `docs/COH-006-PREIMPLEMENTATION-REVIEW-2026-08-31.md`, verdict "plan changes
   required". All seven findings verified against the code and accepted; the three
   needing an owner call are recorded in **DEC-2026-010**.)
-- Owner: Codex
-- Reviewer: Claude
-- Branch: `codex/coh-006-task-visibility` (branch from current `main`, which now
-  carries the interim store filter and the skipped spec — see "Already landed")
+- Owner: **Claude** (reassigned 2026-08-31, DEC-2026-011 — Claude implements,
+  Codex reviews)
+- Reviewer: Codex — reviews the plan before implementation and the
+  implementation before it reaches the product owner
+- Branch: `claude/coh-006-task-visibility`, from `main` at `f370abc`, which
+  already carries the interim store filter and the skipped spec (see "Already
+  landed"). The abandoned `codex/coh-006-task-visibility` is an ancestor of
+  `main` and holds no unmerged work.
 - Authorized by: DEC-2026-008 (shared must be enforced), DEC-2026-009 (private is
   not enforced against an unconstrained list), DEC-2026-010 (review dispositions).
   Owner decision 2026-08-31: **one task, not staged** — the deploy is already
@@ -163,8 +169,8 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 ### COH-005 — Remaining core authorization policy (D-3, D-7, D-8)
 
 - Status: Proposed
-- Suggested owner: Codex
-- Suggested reviewer: Claude
+- Suggested owner: Claude
+- Suggested reviewer: Codex
 - Authorized by: DEC-2026-007
 - Scope:
   1. **D-3 supplies** — members may adjust `quantity` only, result must stay

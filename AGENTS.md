@@ -40,6 +40,12 @@ tracks agent ownership, handoffs, and review status for selected tasks.
 
 - One task has one implementation owner and, when practical, a different
   reviewer.
+- **Standing division of labour (owner decision 2026-08-31, DEC-2026-011):
+  Claude implements, Codex reviews.** Codex reviews the plan before
+  implementation starts, and reviews the implementation before it is handed to
+  the product owner. Claude writes the code, the tests, and the verification.
+  This is the default for new tasks; the workboard entry still names the owner
+  and reviewer for each task, and the owner may assign otherwise.
 - Work only on the task assigned to you in `docs/AI-WORKBOARD.md`.
 - Use a dedicated branch and worktree. Do not edit another agent's active
   branch or worktree.
@@ -61,8 +67,13 @@ Claude may invoke Codex directly to hand off a completed review, instead of
 routing the message through the product owner:
 
 ```bash
-codex exec -C /Users/johnvaught/apps/church-inventory-codex "<message>"
+codex exec -s workspace-write -C /Users/johnvaught/apps/church-inventory-codex "<message>"
 ```
+
+`-s workspace-write` is required. `codex exec` defaults to a read-only sandbox,
+in which Codex cannot write its review, commit it, or even fast-forward its own
+branch — it will report the workspace as read-only and stop without changing
+anything (observed 2026-08-31).
 
 `codex exec resume --last` may be used to preserve Codex's session context, but
 the message must be written so a cold session would also succeed — always cite
@@ -85,11 +96,16 @@ If the next step requires a decision that is not already recorded, Claude stops
 and asks the product owner. Handing an unanswered question to Codex to break a
 deadlock is exactly what this grant does not permit.
 
-**Limits.** One invocation per completed review. No polling, no scheduled
-invocation, no re-invoking to chase a response — those would make this an
-autonomous loop, which is not what is authorized here. Claude reports the exact
-command and message to the product owner in the same turn, so every agent-to-agent
-message stays visible.
+**Limits.** One invocation per handoff — a plan ready for review, an
+implementation ready for review, or a review Claude has acted on. Under
+DEC-2026-011 that is normally twice per task: plan review, then implementation
+review. No polling, no scheduled invocation, no re-invoking to chase a response
+— those would make this an autonomous loop, which is not what is authorized
+here. If Codex fails for an environmental reason (a read-only sandbox, a lock
+file, a missing dependency), Claude fixes the invocation and may retry that same
+handoff once; it does not re-send the handoff to get a different answer. Claude
+reports the exact command and message to the product owner in the same turn, so
+every agent-to-agent message stays visible.
 
 This is Claude-only and one-directional. Codex has no reciprocal grant.
 
@@ -136,10 +152,13 @@ git show <sha>:<path>                        # read a file at a commit
 git diff main...<counterpart-branch>         # what the branch changed
 ```
 
-Claude works on `claude/work`. Codex works on the task branch named in
-`docs/AI-WORKBOARD.md`. Write one commit per message to the counterpart so "the
-newest commit" is unambiguous. Never check out, edit, or commit to the
-counterpart's branch.
+Under DEC-2026-011 Claude works on the task branch named in
+`docs/AI-WORKBOARD.md` (or `claude/work` for unassigned work), and Codex works on
+a `codex/<task>-review` branch carrying only its review documents. Write one
+commit per message to the counterpart so "the newest commit" is unambiguous.
+Never check out, edit, or commit to the counterpart's branch — including
+fast-forwarding it. If the counterpart's branch is behind, say so in the handoff
+and let it reconcile its own branch.
 
 ## Safety and Production Boundaries
 
