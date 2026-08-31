@@ -25,16 +25,30 @@
  * prep and again immediately before the gate-3 cutover to catch documents
  * created in between (the delta pass the plan requires).
  *
+ * Rollback is manifest-based, not backup-based (gate-2 review H-1). `--execute`
+ * records, for every document it actually writes, the before-image AND the
+ * after-image it wrote. `--rollback` restores a document only when its three
+ * fields still equal that after-image, transactionally; anything a user has
+ * touched since is reported and REFUSED rather than overwritten. Restoring an
+ * old value blindly would revert sharing edits made after the run, including on
+ * documents the migration never changed.
+ *
  * Usage:
  *   node scripts/backfill-task-visibility.cjs                      → DRY RUN (default)
- *   node scripts/backfill-task-visibility.cjs --backup out.json    → write the rollback file (no changes)
- *   node scripts/backfill-task-visibility.cjs --execute            → write to the EMULATOR
- *   node scripts/backfill-task-visibility.cjs --execute --prod     → write to PRODUCTION (guarded)
- *   node scripts/backfill-task-visibility.cjs --verify             → validation / delta report
- *   node scripts/backfill-task-visibility.cjs --rollback out.json --execute --prod
+ *   node scripts/backfill-task-visibility.cjs --backup out.json    → full pre-migration snapshot (no changes)
+ *   node scripts/backfill-task-visibility.cjs --execute --manifest m.json          → EMULATOR
+ *   node scripts/backfill-task-visibility.cjs --execute --prod --manifest m.json   → PRODUCTION (guarded)
+ *   node scripts/backfill-task-visibility.cjs --verify [--baseline n]  → validation / delta report
+ *   node scripts/backfill-task-visibility.cjs --rollback m.json --execute --prod
  *
  * Order for a production run (each step is the product owner's to trigger):
- *   --backup → --verify → --execute --prod → --verify (expect 0 outstanding)
+ *   --backup → --verify → --execute --prod --manifest → --verify --baseline <n>
+ *
+ * `--verify` proves per-document consistency for the documents it observes. It
+ * is NOT by itself proof that coverage will still be complete at cutover: a
+ * stale client can create an unprojected task in a church this scan has already
+ * passed (gate-2 review H-2). Closing that needs either the gate-4 create-shape
+ * rule live before the final scan, or an enforced write freeze. See the workboard.
  *
  * Against the emulator, prefix with FIRESTORE_EMULATOR_HOST=127.0.0.1:8080.
  */
@@ -51,6 +65,31 @@ const argAfter = (flag) => {
 };
 const BACKUP_TO = argAfter('--backup');
 const ROLLBACK_FROM = argAfter('--rollback');
+const MANIFEST_TO = argAfter('--manifest');
+const BASELINE = argAfter('--baseline') ? Number(argAfter('--baseline')) : null;
+
+// Never clobber a rollback artifact: a second invocation that reused the path
+// would destroy the only record of how to undo the first one.
+function refuseIfExists(path, what) {
+  if (path && fs.existsSync(path)) {
+    console.error(`✋ ${what} already exists at ${path}. Refusing to overwrite it — choose a new path.`);
+    process.exit(1);
+  }
+}
+
+// JSON has no way to say "this field was absent" that a stored null cannot also
+// mean (gate-2 review L-1), so presence is recorded explicitly.
+const FIELDS = ['visibility', 'assigneeUids', 'sharedWithUids'];
+const imageOf = (data) => Object.fromEntries(FIELDS.map((f) => [f, f in data ? { present: true, value: data[f] } : { present: false }]));
+const sameValue = (a, b) => (Array.isArray(a) || Array.isArray(b) ? sameArray(a, b) : a === b);
+const matchesImage = (data, image) => FIELDS.every((f) => {
+  const want = image[f];
+  if (!want.present) return !(f in data);
+  return f in data && sameValue(data[f], want.value);
+});
+const applyImage = (image) => Object.fromEntries(FIELDS.map(
+  (f) => [f, image[f].present ? image[f].value : admin.firestore.FieldValue.delete()],
+));
 
 const PROJECT_ID = 'church-inventory-9615c';
 
@@ -116,14 +155,17 @@ function batcher() {
   };
 }
 
+// listDocuments(), not get(): a church whose parent document was deleted can
+// still hold a workItems subcollection, and get() would not return it
+// (gate-2 review M-1). listDocuments returns the reference either way.
 async function eachTask(fn) {
-  const churches = await db.collection('churches').get();
-  for (const church of churches.docs) {
-    const snap = await db.collection(`churches/${church.id}/workItems`).get();
+  const churches = await db.collection('churches').listDocuments();
+  for (const church of churches) {
+    const snap = await church.collection('workItems').get();
     const tasks = snap.docs.filter((d) => d.data().type === 'task');
     await fn(church.id, tasks);
   }
-  return churches.size;
+  return churches.length;
 }
 
 // ── Backup — only the three fields this script can change, plus a marker for
@@ -133,71 +175,113 @@ async function backup(path) {
   const churches = await eachTask(async (churchId, tasks) => {
     for (const d of tasks) {
       const data = d.data();
-      rows.push({
-        churchId,
-        docId: d.id,
-        visibility: 'visibility' in data ? data.visibility : null,
-        assigneeUids: 'assigneeUids' in data ? data.assigneeUids : null,
-        sharedWithUids: 'sharedWithUids' in data ? data.sharedWithUids : null,
-      });
+      rows.push({ churchId, docId: d.id, before: imageOf(data) });
     }
   });
   fs.writeFileSync(path, JSON.stringify({
-    takenAt: new Date().toISOString(), target: TARGET, churches, count: rows.length, rows,
+    kind: 'backup', takenAt: new Date().toISOString(), target: TARGET, churches, count: rows.length, rows,
   }, null, 2));
   console.log(`\n💾 Backup → ${path}\n   ${rows.length} task(s) across ${churches} church(es) from ${TARGET}.`);
-  console.log('   Contains the pre-migration value of visibility/assigneeUids/sharedWithUids only');
-  console.log('   (null = the field was absent, which --rollback restores by deleting it).');
+  console.log('   A full pre-migration snapshot of visibility/assigneeUids/sharedWithUids, with an');
+  console.log('   explicit presence bit per field. This is the audit record and the input to a');
+  console.log('   manual repair; the thing --rollback consumes is the --execute manifest.');
 }
 
+// Manifest-based, conditional, and transactional (gate-2 review H-1). A document
+// is restored only if its three fields still hold exactly what this migration
+// wrote. Anything a user has changed since is reported and left alone: reverting
+// a projection while its object array moved on would silently drop or resurrect
+// a reader, which is the class of bug this whole task exists to remove.
 async function rollback(path) {
   const file = JSON.parse(fs.readFileSync(path, 'utf8'));
-  console.log(`\n${EXECUTE ? '↩️  ROLLBACK' : '🔎 ROLLBACK DRY RUN'} → ${TARGET}`);
-  console.log(`   From ${path}, taken ${file.takenAt} against ${file.target} (${file.count} rows).`);
-  if (file.target !== TARGET) {
-    console.error(`✋ Backup was taken against ${file.target}, refusing to restore it into ${TARGET}.`);
+  if (file.kind !== 'manifest') {
+    console.error(`✋ ${path} is ${file.kind === 'backup' ? 'a --backup snapshot' : 'not a recognised artifact'}, not an --execute manifest.`);
+    console.error('   Rollback consumes the manifest written by --execute, so it can tell what this run actually changed.');
     process.exit(1);
   }
-  const b = batcher();
+  if (file.target !== TARGET) {
+    console.error(`✋ Manifest was written against ${file.target}, refusing to apply it to ${TARGET}.`);
+    process.exit(1);
+  }
+  console.log(`\n${EXECUTE ? '↩️  ROLLBACK' : '🔎 ROLLBACK DRY RUN'} → ${TARGET}`);
+  console.log(`   From ${path}, written ${file.writtenAt} (${file.rows.length} document(s) changed by that run).`);
+
+  const skipped = [];
   let restored = 0;
+  let missing = 0;
   for (const row of file.rows) {
     const ref = db.doc(`churches/${row.churchId}/workItems/${row.docId}`);
-    const del = admin.firestore.FieldValue.delete();
-    const updates = {
-      visibility: row.visibility === null ? del : row.visibility,
-      assigneeUids: row.assigneeUids === null ? del : row.assigneeUids,
-      sharedWithUids: row.sharedWithUids === null ? del : row.sharedWithUids,
-    };
-    restored++;
-    if (EXECUTE) await b.update(ref, updates);
+    if (!EXECUTE) {
+      const snap = await ref.get();
+      if (!snap.exists) { missing++; skipped.push(`${row.churchId}/${row.docId} (deleted)`); continue; }
+      if (!matchesImage(snap.data(), row.after)) { skipped.push(`${row.churchId}/${row.docId} (changed since the run)`); continue; }
+      restored++;
+      continue;
+    }
+    // One transaction per document: read-compare-write cannot interleave with a
+    // user's write, and a refusal on one document does not abort the others.
+    const outcome = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) return 'missing';
+      if (!matchesImage(snap.data(), row.after)) return 'changed';
+      t.update(ref, applyImage(row.before));
+      return 'restored';
+    });
+    if (outcome === 'restored') restored++;
+    else if (outcome === 'missing') { missing++; skipped.push(`${row.churchId}/${row.docId} (deleted)`); }
+    else skipped.push(`${row.churchId}/${row.docId} (changed since the run)`);
   }
-  if (EXECUTE) await b.flush();
-  console.log(`   ${restored} task(s) ${EXECUTE ? 'restored' : 'would be restored'}.`);
+
+  console.log(`   ${restored} ${EXECUTE ? 'restored' : 'would be restored'}, ${skipped.length} refused (${missing} deleted).`);
+  if (skipped.length) {
+    console.log('   REFUSED — these no longer match what the migration wrote, so they were left untouched:');
+    for (const line of skipped.slice(0, 20)) console.log(`     ${line}`);
+    if (skipped.length > 20) console.log(`     …and ${skipped.length - 20} more`);
+    console.log('   Repair these by hand against the --backup snapshot if they need it.');
+  }
   if (!EXECUTE) console.log('   Dry run — nothing written.');
 }
 
 async function run() {
   console.log(`\n${EXECUTE ? '✍️  EXECUTE' : '🔎 DRY RUN'} → ${TARGET}`);
+  if (EXECUTE && !MANIFEST_TO) {
+    console.error('✋ --execute requires --manifest <path>. Without the manifest of what this run');
+    console.error('   actually changed, --rollback cannot tell a migration write from a user edit.');
+    process.exit(1);
+  }
+  const manifest = [];
   let grand = { tasks: 0, changed: 0, vis: 0, asg: 0, shr: 0 };
   const churches = await eachTask(async (churchId, tasks) => {
     const b = batcher();
     const per = { tasks: tasks.length, changed: 0, vis: 0, asg: 0, shr: 0 };
     for (const d of tasks) {
-      const updates = plan(d.data());
+      const data = d.data();
+      const updates = plan(data);
       if (!updates) continue;
       per.changed++;
       if ('visibility' in updates) per.vis++;
       if ('assigneeUids' in updates) per.asg++;
       if ('sharedWithUids' in updates) per.shr++;
-      if (EXECUTE) await b.update(d.ref, updates);
+      if (EXECUTE) {
+        manifest.push({ churchId, docId: d.id, before: imageOf(data), after: imageOf({ ...data, ...updates }) });
+        await b.update(d.ref, updates);
+      }
     }
     if (EXECUTE) await b.flush();
     console.log(`  ${churchId}: ${per.tasks} task(s), ${per.changed} ${EXECUTE ? 'written' : 'to write'} ` +
       `(visibility ${per.vis}, assigneeUids ${per.asg}, sharedWithUids ${per.shr})`);
     for (const k of Object.keys(grand)) grand[k] += per[k];
   });
+  if (EXECUTE) {
+    fs.writeFileSync(MANIFEST_TO, JSON.stringify({
+      kind: 'manifest', writtenAt: new Date().toISOString(), target: TARGET,
+      churches, scanned: grand.tasks, rows: manifest,
+    }, null, 2));
+    console.log(`\n📝 Manifest → ${MANIFEST_TO} (${manifest.length} document(s) changed by this run).`);
+    console.log('   Keep it. --rollback consumes it and refuses anything edited since.');
+  }
   console.log(`\nTotal across ${churches} church(es): ${grand.tasks} task(s), ${grand.changed} ${EXECUTE ? 'written' : 'to write'}.`);
-  if (!EXECUTE) console.log('Dry run — nothing written. Re-run with --execute (emulator) or --execute --prod.');
+  if (!EXECUTE) console.log('Dry run — nothing written. Re-run with --execute --manifest <path> (emulator) or --execute --prod --manifest <path>.');
 }
 
 // ── Verify / delta — the gate before the reader cutover. Anything outstanding
@@ -236,16 +320,34 @@ async function verify() {
     process.exitCode = 1;
     return;
   }
-  if (grand.outstanding === 0) {
-    console.log('✅ Projection coverage is complete. Safe to proceed to the gate-3 reader cutover.');
-  } else {
+  // A baseline the operator approves out of band turns "nonempty" into "the size
+  // I expected" (gate-2 review M-1). Without it, an unexpectedly small scan — a
+  // wrong but populated target, a partial read — still looks green.
+  if (BASELINE !== null && grand.tasks !== BASELINE) {
+    console.log(`⛔ Expected ${BASELINE} task(s) from --baseline, scanned ${grand.tasks}. Population does not match.`);
+    process.exitCode = 1;
+    return;
+  }
+  if (grand.outstanding !== 0) {
     console.log('⛔ Do NOT cut the readers over. Re-run the backfill, then verify again.');
     process.exitCode = 1;
+    return;
   }
+  console.log('✅ Every task this scan observed is fully projected.');
+  if (BASELINE === null) console.log('   Re-run with --baseline <expected task count> to also check the population size.');
+  // Stated every time, because this is the sentence an operator is most likely
+  // to over-read (gate-2 review H-2).
+  console.log('\n⚠️  This is NOT proof that coverage will still be complete at cutover.');
+  console.log('   The scan walks churches in sequence, so a stale client can create an unprojected');
+  console.log('   task in a church already passed, and a write immediately after the last snapshot');
+  console.log('   has the same effect. Closing that race needs the gate-4 create-shape rule live');
+  console.log('   before this scan, or an enforced write freeze through the reader cutover.');
 }
 
 (async () => {
   try {
+    refuseIfExists(BACKUP_TO, 'A backup');
+    refuseIfExists(MANIFEST_TO, 'A manifest');
     if (BACKUP_TO) await backup(BACKUP_TO);
     else if (ROLLBACK_FROM) await rollback(ROLLBACK_FROM);
     else if (VERIFY) await verify();
