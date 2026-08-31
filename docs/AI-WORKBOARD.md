@@ -22,10 +22,12 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-006 — Enforce private and shared task visibility
 
-- Status: Ready (**amended 2026-08-31** after Codex's pre-implementation review —
-  `docs/COH-006-PREIMPLEMENTATION-REVIEW-2026-08-31.md`, verdict "plan changes
-  required". All seven findings verified against the code and accepted; the three
-  needing an owner call are recorded in **DEC-2026-010**.)
+- Status: **In progress** (Claude). Amended twice from Codex reviews:
+  `docs/COH-006-PREIMPLEMENTATION-REVIEW-2026-08-31.md` (seven findings, all
+  verified and accepted; owner calls in **DEC-2026-010**) and
+  `docs/COH-006-PLAN-REVIEW-ROUND2-2026-08-31.md` (four further amendments, all
+  accepted; the sharing-policy call is **DEC-2026-012**). Codex approved the
+  comment design, the digest policy, and the gate-3 filter removal as written.
 - Owner: **Claude** (reassigned 2026-08-31, DEC-2026-011 — Claude implements,
   Codex reviews)
 - Reviewer: Codex — reviews the plan before implementation and the
@@ -91,9 +93,12 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
      the caller is **already authorized on `resource.data`** (creator, assignee,
      shared recipient, or team) before any update is allowed; self-grant then
      fails because the pre-update document does not authorize the caller.
-     Document the residual: an already-authorized recipient can widen sharing.
-     Adversarial rules tests for self-grant through both projection fields,
-     including a direct update by a member who cannot read the task.
+     **DEC-2026-012**: an already-authorized person may widen access, so the
+     rule deliberately does not pin the projections to their object-array
+     sources, and the uid arrays are canonical for authorization. Adversarial
+     rules tests must cover an outsider, an existing recipient, an assignee, a
+     creator, and a team member **separately**, including a direct update by a
+     member who cannot read the task.
   6. **Gate work-item comments on parent visibility (review H-2, owner decision
      DEC-2026-010 — in scope).** `firestore.rules` lets every active member read
      and create comments under every `workItems` document, so private task
@@ -115,6 +120,12 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
      per-recipient filtering does not apply — exclude private and shared tasks
      outright. `functions/test/attention.test.mjs` pins the digest shape
      byte-for-byte and will need updating; overdue/dueThisWeek counts change.
+     **Filtering the inputs is not enough** (round-2 M-2): the generated digest
+     is cached at `churches/{churchId}/aiDigests/current` and reused for the rest
+     of the ISO week, so a payload built under the old policy stays eligible.
+     Add a policy version to the cache-eligibility check so an old-version cache
+     misses and is rebuilt. No production-data edit is needed. Deploy this in
+     gate 1 — it is additive and independent of the projections.
   8. Add the Firestore indexes the new queries require, and probe them against
      production after deploy — `firebase deploy --only firestore:indexes`
      silently skips two index kinds (see CLAUDE.md Known Pitfalls).
@@ -122,16 +133,39 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   carries the uid projections, so a combined writer+reader deployment would hide
   legacy shared and assigned tasks until the backfill finished, and running the
   backfill first races documents created before the deploy:
-  1. Deploy the additive projection writers **and the indexes**, keeping the
-     current read path.
+  1. Deploy the additive projection writers, the indexes the new queries need,
+     the attention-digest fix with its cache version, **and a transitional
+     additive read rule**. The transitional rule is required (round-2 H-1): the
+     current rule authorizes a private task to its creator only, so the gate-3
+     assigned-to-me query would be denied for a private task assigned to a
+     non-creator during the gate-3-to-gate-4 interval. It must admit every new
+     constrained query while remaining compatible with the old unconstrained
+     client. Identify the transitional and final rulesets separately in the
+     handoff, and test the gate-3 client against the **transitional** rules.
   2. Back up → dry run → execute the idempotent backfill → validate, then a delta
-     validation for documents created during the transition.
+     validation for documents created during the transition. Run the final delta
+     check immediately before the gate-3 cutover, and state the maximum interval
+     between gates 2, 3, and 4 — an old client left open keeps creating tasks
+     without projections until it reloads (round-2 H-2).
   3. Cut clients over to the constrained, merged read path only once projection
      coverage is complete, and remove the interim store filter in the same
      change. If gates 1 and 3 cannot be separate client deployments, a feature
-     flag or equivalent cutover gate is required.
-  4. Deploy the restrictive rules once the compatible client is live.
+     flag or equivalent cutover gate is required. Codex's conditions for removing
+     the interim filter: projection coverage passed including the final delta
+     check; transitional rules admit every query; every query has produced its
+     initial snapshot before the single loading signal resolves; and the merge
+     tracks membership per query source, so a document dropping out of its last
+     qualifying listener leaves the merged store rather than lingering in a
+     dedupe cache.
+  4. Deploy the restrictive rules once the compatible client is live. The final
+     **create** rule must require a normalized `visibility` and both uid
+     projections with the expected list types (round-2 H-2), which means a stale
+     client's task creates are denied until the user reloads — a deliberate,
+     documented behaviour, chosen over silently creating documents the new
+     readers cannot deliver to their recipients.
   Rollback must account for clients on both sides of the gate-3 cutover.
+  Transition tests must cover a gate-1 writer, a stale pre-gate-1 writer, and the
+  gate-3 reader.
 - Downstream consumers that must not regress: Global Search, Event Day,
   occurrence/ICS generation, the attention engine, Reservations' linked setup
   tasks, Timesheet's maintenance links, CSV and calendar exports, and
@@ -158,6 +192,9 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
     that emulator list results are not containment evidence.
   - A two-account production verification, owner-authorized, covering both
     `getDocsFromServer` and `onSnapshot`.
+  - A stale client's task create is denied at gate 4 rather than producing a
+    document the new readers cannot deliver.
+  - An attention digest cached under the old policy is rebuilt rather than reused.
   - The default Playwright project is green at handoff, with no skip remaining.
   - Client commits precede rules commits; lint/build/test:rules/test:unit
     recorded; SHA-pinned handoff that records the four deploy gates separately.

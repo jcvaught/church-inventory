@@ -437,3 +437,45 @@ code, so a blind spot in Claude's implementation is caught only by review, not b
 a second implementer's independent approach. Reviews must therefore be run
 against real behaviour — the reviewer verification worktree, the emulators, the
 tests — rather than by reading the diff.
+
+### DEC-2026-012 — Anyone who can see a task may share it further
+
+- Date: 2026-08-31
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: COH-006, DEC-2026-008, DEC-2026-010,
+  `docs/COH-006-PLAN-REVIEW-ROUND2-2026-08-31.md` (M-1)
+
+**Decision.** Once `assigneeUids` and `sharedWithUids` become authoritative for
+authorization, any person already authorized on a task — the creator, an
+assignee, a selected recipient, or any member of a `team` task — may add other
+people to it. Access widening is not restricted to the creator.
+
+**Why this needed a decision.** Codex's round-2 review observed that requiring
+the caller to be authorized on the *pre-update* document closes the outsider
+self-grant (an unrelated member cannot write their own uid in), but leaves a
+softer case open: someone already inside the task can bring in someone else.
+DEC-2026-008 described shared readers as "the people the creator specifies,"
+which reads as creator-controlled. The owner chose the collaborative reading
+instead: a task you can see is a task you can pass on.
+
+**What this costs, recorded deliberately.** "Shared with Dennis" is not a
+guarantee that only Dennis sees it — Dennis may add someone else, and the
+activity log is the only record that it happened. The alternative (creator plus
+admins/managers control sharing and assignment on private and shared tasks) was
+considered and rejected as too rigid for how a small church staff actually
+works. This does not weaken the boundary the leak was about: a member who cannot
+already see a task still cannot grant themselves access, because authorization
+is decided from the pre-update document.
+
+**Consequences for implementation.**
+- The update rule keeps the pre-state authorization check. It does not
+  additionally pin `assigneeUids`/`sharedWithUids` to their `[{uid,name}]`
+  sources.
+- The uid arrays, not the object arrays, are canonical for authorization. A
+  write that changes one without the other is a client bug, not a rules
+  violation; `useFirestore` derives both centrally so no client path can do it.
+- Adversarial rules tests must cover an outsider, an existing recipient, an
+  assignee, a creator, and a team member separately — not one "can update" case.
+- The Help Centre must say plainly that anyone who can see a private or shared
+  task can add other people to it.
