@@ -393,3 +393,47 @@ close this path. It is opt-in per church (`config/settings.attentionDigestEnable
 so live exposure may currently be zero, but the promise is the same one. COH-006
 excludes private and shared tasks from the digest; the digest is one payload for
 all admins, so per-recipient filtering does not apply.
+
+### DEC-2026-011 — Claude implements, Codex reviews
+
+- Date: 2026-08-31
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: `AGENTS.md` (Agent Coordination, Direct handoff to Codex),
+  `docs/AI-WORKBOARD.md`, COH-006
+
+**Decision.** The standing division of labour between the two agents is
+inverted. Claude is the implementation owner; Codex is the reviewer. Codex
+reviews the plan before implementation begins and reviews the implementation
+before it reaches the product owner. Individual workboard entries may still
+assign otherwise, but this is the default, and COH-006 is reassigned to Claude
+under it.
+
+**Why.** Two reasons, one about capability and one about evidence.
+
+1. Codex's non-interactive entry point (`codex exec`) defaults to a read-only
+   sandbox. When it was handed COH-006 to implement on 2026-08-31 it accepted
+   the plan, then stopped: it could not fast-forward its own branch, let alone
+   write code. `-s workspace-write` fixes the invocation, but the episode makes
+   the asymmetry plain — Claude runs continuously in a worktree with write
+   access, the emulators, the Firebase CLI, and the deploy practice the product
+   owner has already established, and Codex does not.
+2. The review pass is where Codex has been most valuable. Its COH-006
+   pre-implementation review produced seven findings, all of which survived
+   verification against the code, including two the implementation plan would
+   otherwise have shipped without: a self-grant path through the update rule and
+   comment exposure under private tasks. Spending that capability on review of
+   every plan is a better use of it than alternating implementation ownership.
+
+**What does not change.** The reviewer still does not modify the
+implementation. Consequential decisions still go in this file. Handoffs still
+use `docs/AI-HANDOFF-TEMPLATE.md`. Codex still has no deploy, migration, or
+production-data authorization. The direct-handoff grant remains Claude-only and
+one-directional; its budget becomes one invocation per handoff, which under this
+decision is normally twice per task rather than once.
+
+**Residual risk, recorded deliberately.** One agent now writes nearly all the
+code, so a blind spot in Claude's implementation is caught only by review, not by
+a second implementer's independent approach. Reviews must therefore be run
+against real behaviour — the reviewer verification worktree, the emulators, the
+tests — rather than by reading the diff.
