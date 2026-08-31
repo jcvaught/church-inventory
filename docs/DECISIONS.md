@@ -485,3 +485,25 @@ is decided from the pre-update document.
   that did not yet exist (gate-1 review M-1). If that wording is to say the
   activity log records a widening, `updateTask` must log the person added; today
   it writes a generic `update_task` event.
+
+
+#### DEC-2026-011 addendum (2026-08-31) — review every stage, not just twice per task
+
+The original decision set the direct-handoff budget at one invocation per
+handoff, "normally twice per task." The product owner lifted that ceiling the
+same day: **send Codex every stage** — plan, implementation, re-review after
+findings are applied, a migration script before it runs, and each gate of a
+multi-gate rollout.
+
+The evidence for it is in this task. Codex's first review found a self-grant path
+through the update rule and comment exposure under private tasks. Its round-2
+review found that the gate-3 client would have been denied by the rules left live
+until gate 4. Its gate-1 review found that the shared-with-me listener was not
+rule-compatible at all and that the composite index this plan said was
+unnecessary is in fact required. None of those would have surfaced from a single
+review at the end.
+
+The anti-loop constraints are unchanged and are the reason this stays a tool
+rather than an autonomous loop: one invocation per stage, no polling, no
+scheduled invocation, no re-invoking to chase an answer, and every message
+reported to the product owner in the turn it is sent.

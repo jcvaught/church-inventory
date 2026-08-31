@@ -104,16 +104,27 @@ If the next step requires a decision that is not already recorded, Claude stops
 and asks the product owner. Handing an unanswered question to Codex to break a
 deadlock is exactly what this grant does not permit.
 
-**Limits.** One invocation per handoff — a plan ready for review, an
-implementation ready for review, or a review Claude has acted on. Under
-DEC-2026-011 that is normally twice per task: plan review, then implementation
-review. No polling, no scheduled invocation, no re-invoking to chase a response
-— those would make this an autonomous loop, which is not what is authorized
-here. If Codex fails for an environmental reason (a read-only sandbox, a lock
-file, a missing dependency), Claude fixes the invocation and may retry that same
-handoff once; it does not re-send the handoff to get a different answer. Claude
-reports the exact command and message to the product owner in the same turn, so
-every agent-to-agent message stays visible.
+**Limits.** One invocation per stage. **Owner directive 2026-08-31: send Codex
+every stage.** A stage is a plan ready for review, an implementation ready for
+review, a re-review after Claude has applied findings, a migration script before
+it is run, or each gate of a multi-gate rollout. The earlier "normally twice per
+task" ceiling is lifted: a second set of eyes at each stage has repeatedly caught
+things a single review at the end would not, and an extra review costs little
+against shipping an authorization defect.
+
+A stage means work that has reached a reviewable state — it builds, its tests
+pass, and a handoff describes it. Do not invoke Codex mid-stage, on work that
+does not yet run, or to think out loud.
+
+The anti-loop rules are unchanged, and they are what keep this from becoming an
+autonomous agent loop: no polling, no scheduled invocation, no re-invoking to
+chase a response. One invocation per stage, after which Claude either acts on
+what came back or reports to the product owner. If Codex fails for an
+environmental reason (a read-only sandbox, a lock file, a missing dependency),
+Claude fixes the invocation and may retry that same stage once; it does not
+re-send a stage to get a different answer. Claude reports the exact command and
+message to the product owner in the same turn, so every agent-to-agent message
+stays visible.
 
 This is Claude-only and one-directional. Codex has no reciprocal grant.
 
