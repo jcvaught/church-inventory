@@ -225,13 +225,19 @@ service cloud.firestore {
       // interval. It also delivers what the Help Centre has always promised —
       // assignees see their tasks regardless of visibility — which the rule did
       // not previously honour.
+      //
+      // `is list` is load-bearing (gate-1 review L-1): rules `in` also tests map
+      // KEYS, so without it a malformed `assigneeUids: {memberB: true}` would
+      // authorize a direct get on a document the array-contains listener could
+      // never deliver. Gate 4's create rule enforces the list type outright.
       allow read: if isMember(churchId) && (
         resource.data.type == 'maintenance'
         || !resource.data.keys().hasAny(['visibility'])
         || resource.data.visibility == 'team'
         || resource.data.visibility == 'shared'
         || resource.data.createdBy == request.auth.uid
-        || ('assigneeUids' in resource.data && request.auth.uid in resource.data.assigneeUids)
+        || ('assigneeUids' in resource.data && resource.data.assigneeUids is list
+            && request.auth.uid in resource.data.assigneeUids)
       );
       // create: maintenance is admin/manager-only; tasks are any member, enforcing createdBy.
       allow create: if isMember(churchId) && (

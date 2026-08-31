@@ -128,6 +128,13 @@ cd /tmp/<task>-review && npm run test:rules   # lint/build as the change warrant
 cd - && git worktree remove --force /tmp/<task>-review
 ```
 
+Codex cannot run `npm run test:rules` or `test:handlers` from `codex exec`: its
+sandbox refuses to bind local sockets, so the Firebase emulators fail to start
+(`EPERM` on 4400/4500/8080/9150/9199, observed 2026-08-31). It can run
+`test:unit` and `lint`. A Codex review must therefore say plainly that it could
+not reproduce a rules run rather than implying it verified one, and the
+implementation owner's rules results stand unreproduced.
+
 This is a read-only checkout, not an edit to the counterpart's branch or
 worktree. It must never be pushed or committed to, and must be removed when the
 review ends. Reuse an existing `node_modules` by symlink rather than installing a

@@ -200,6 +200,29 @@ test('workItems: an empty assigneeUids array grants nobody', async () => {
   });
   await assertFails(getDoc(doc(ctx('memberB'), P('workItems/task_p4'))));
 });
+test('workItems: a malformed map in assigneeUids authorizes nobody', async () => {
+  // Rules `in` also tests map KEYS, so without the `is list` guard this map would
+  // authorize a direct get on a document the array-contains listener could never
+  // deliver (gate-1 review L-1).
+  await seedMembers();
+  await seed(P('workItems/task_p6'), {
+    type: 'task', createdBy: 'memberA', visibility: 'private', assigneeUids: { memberB: true },
+  });
+  await assertFails(getDoc(doc(ctx('memberB'), P('workItems/task_p6'))));
+});
+test('workItems: a private task carrying a stale shared recipient stays creator-only', async () => {
+  // The shape behind gate-1 review H-1: switching a task to private does not
+  // necessarily clear sharedWith, and the gate-2 backfill will project whatever
+  // it finds. sharedWithUids must therefore never authorize on its own — which is
+  // why the gate-3 shared listener also constrains visibility == 'shared'.
+  await seedMembers();
+  await seed(P('workItems/task_p7'), {
+    type: 'task', createdBy: 'memberA', visibility: 'private',
+    sharedWith: [{ uid: 'memberB', name: 'Member B' }], sharedWithUids: ['memberB'],
+  });
+  await assertFails(getDoc(doc(ctx('memberB'), P('workItems/task_p7'))));
+  await assertSucceeds(getDoc(doc(ctx('memberA'), P('workItems/task_p7'))));
+});
 test('workItems: the assignee arm does not cross the tenant boundary', async () => {
   await seedMembers();
   await seed(P('workItems/task_p5'), {

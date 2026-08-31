@@ -478,4 +478,10 @@ is decided from the pre-update document.
 - Adversarial rules tests must cover an outsider, an existing recipient, an
   assignee, a creator, and a team member separately — not one "can update" case.
 - The Help Centre must say plainly that anyone who can see a private or shared
-  task can add other people to it.
+  task can add other people to it — **published at gate 4, not before**. The
+  sentence went in at gate 1 and was withdrawn: the UI exposes the sharing
+  controls only to the creator and admins/managers, and the transitional update
+  rule still refuses a private assignee's write, so it described a capability
+  that did not yet exist (gate-1 review M-1). If that wording is to say the
+  activity log records a widening, `updateTask` must log the person added; today
+  it writes a generic `update_task` event.

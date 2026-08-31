@@ -77,9 +77,17 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
      explicit owner approval before execution. The backfill must be idempotent,
      and a delta pass must cover documents created during the transition.
   3. Replace the single unconstrained subscription with rule-compatible
-     constrained queries (team / own / shared-with-me / assigned-to-me), merged
-     and de-duplicated, preserving maintenance delivery from the same
-     collection and collapsing to one loading-readiness signal.
+     constrained queries, merged and de-duplicated, preserving maintenance
+     delivery from the same collection and collapsing to one loading-readiness
+     signal. The query set, with the gate-1 review's H-1 correction:
+     `type == 'maintenance'`; `visibility == 'team'`; `createdBy == uid`;
+     `assigneeUids array-contains uid`; and **`visibility == 'shared'` AND
+     `sharedWithUids array-contains uid`** — the shared listener needs both,
+     because `sharedWithUids` alone can match a private task carrying a stale
+     recipient, and Firestore judges a query against its potential result set,
+     not against what the supported UI writers happen to produce. The gate-2
+     backfill will itself project stale `sharedWith` arrays onto private tasks,
+     so such documents will exist.
   4. Update the `workItems` read rule to honour `sharedWithUids` and
      `assigneeUids`; the Help Centre states assignees always see their tasks,
      which the current rule does not honour.
@@ -129,14 +137,16 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   8. Add the Firestore indexes the new queries require, and probe them against
      production after deploy — `firebase deploy --only firestore:indexes`
      silently skips two index kinds (see CLAUDE.md Known Pitfalls).
-     Expectation, **unverified and not to be trusted without the probe**: each
-     gate-3 query carries a single constraint (`type=='maintenance'`,
-     `visibility=='team'`, `createdBy==uid`, `assigneeUids array-contains uid`,
-     `sharedWithUids array-contains uid`), and `firestore.indexes.json` exempts
-     none of those fields from automatic single-field indexing, so no composite
-     index should be required. If a query shape gains a second constraint or an
-     `orderBy`, that changes. Confirm against production before gate 3 removes
-     the old reader — a missing index fails the query outright.
+     **Corrected by the gate-1 review (H-1).** An earlier version of this entry
+     expected no composite index, on the reasoning that every query carried a
+     single constraint. The shared listener needs two (`visibility == 'shared'`
+     plus `sharedWithUids array-contains uid`), so a COLLECTION-scope composite
+     on those fields is declared in `firestore.indexes.json` and ships in gate 1.
+     The other four queries remain single-constraint and should be served by
+     automatic single-field indexing. That last clause is still an expectation,
+     not a measurement: probe production before gate 3 removes the old reader —
+     a missing index fails the query outright, and COLLECTION-scope composites
+     are exactly the kind `firebase deploy` skips silently.
 - Rollout — four gates inside this one task (review H-3). No existing document
   carries the uid projections, so a combined writer+reader deployment would hide
   legacy shared and assigned tasks until the backfill finished, and running the
@@ -206,6 +216,14 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   - The default Playwright project is green at handoff, with no skip remaining.
   - Client commits precede rules commits; lint/build/test:rules/test:unit
     recorded; SHA-pinned handoff that records the four deploy gates separately.
+- Gate 4 must also publish the DEC-2026-012 wording in the Help Centre — that
+  anyone who can see a private or shared task may add others to it. It was
+  written at gate 1 and withdrawn (gate-1 review M-1): the UI still exposes the
+  sharing controls only to the creator and admins/managers, and the transitional
+  update rule still refuses a private assignee's write, so at gate 1 the sentence
+  described a capability that does not exist. If the wording is to claim the
+  activity log records a widening, `updateTask` must log the added person —
+  today it writes a generic `update_task` event.
 - Not in scope: D-2, D-5 (answered "no change"), AC-07/D-4 (closed as intended
   behaviour), and COH-005's D-3/D-7/D-8.
 
