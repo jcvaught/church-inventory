@@ -6,7 +6,7 @@
 // Run: npm run test:unit
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { canSeeTask } from '../../src/utils/taskVisibility.js';
+import { canSeeTask, uidsOf } from '../../src/utils/taskVisibility.js';
 
 const ME = 'uid-me';
 const OTHER = 'uid-other';
@@ -49,4 +49,29 @@ test('missing arrays, missing task, and missing uid are safe', () => {
   // An unauthenticated caller still sees team items — the store only reaches this
   // predicate inside an authenticated church session.
   assert.equal(canSeeTask({ visibility: 'team', createdBy: OTHER }, undefined), true);
+});
+
+// ── uidsOf — the rules-searchable projection of the [{uid,name}] arrays ───────
+
+test('uidsOf projects uids, deduped and sorted', () => {
+  assert.deepEqual(uidsOf([{ uid: 'b', name: 'B' }, { uid: 'a', name: 'A' }]), ['a', 'b']);
+  assert.deepEqual(uidsOf([{ uid: 'a' }, { uid: 'a' }]), ['a']);
+});
+
+test('uidsOf is stable for the same membership regardless of input order', () => {
+  const one = [{ uid: 'c' }, { uid: 'a' }, { uid: 'b' }];
+  const two = [{ uid: 'b' }, { uid: 'c' }, { uid: 'a' }];
+  assert.deepEqual(uidsOf(one), uidsOf(two));
+});
+
+test('uidsOf drops malformed entries rather than writing null into the array', () => {
+  // A null in the projection would make an array-contains query and any rules-side
+  // comparison behave unpredictably, so entries without a uid are dropped.
+  assert.deepEqual(uidsOf([{ name: 'no uid' }, null, undefined, { uid: '' }, { uid: 'a' }]), ['a']);
+});
+
+test('uidsOf returns an empty array for missing or non-array input', () => {
+  assert.deepEqual(uidsOf(undefined), []);
+  assert.deepEqual(uidsOf(null), []);
+  assert.deepEqual(uidsOf('not-an-array'), []);
 });

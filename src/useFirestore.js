@@ -10,7 +10,7 @@ import { ref as stRef, deleteObject } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { generateRecurrenceDates } from './utils/date.js';
 import { excludeTestAccounts } from './utils/testAccounts.js';
-import { canSeeTask } from './utils/taskVisibility.js';
+import { canSeeTask, uidsOf } from './utils/taskVisibility.js';
 
 // ── Work model (unified Tasks + Maintenance) ─────────────────────────────────
 // Tasks and maintenance tickets live in one `workItems` collection (a single
@@ -737,6 +737,10 @@ export function useFirestore(churchId, userProfile) {
           status: task.status || 'Backlog',
           visibility: task.visibility || 'team',
           sharedWith: task.sharedWith || [],
+          // COH-006 gate 1: uid projections of the object arrays, written by every
+          // creation path because they all funnel through here. Inert until gate 3.
+          sharedWithUids: uidsOf(task.sharedWith),
+          assigneeUids: uidsOf(task.assignees),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           completedAt: null
@@ -753,6 +757,12 @@ export function useFirestore(churchId, userProfile) {
     try {
       const { taskNumber: _tn, createdBy: _cb, createdByName: _cbn, createdAt: _ca, _docId, ...safe } = updates;
       const data = { ...safe, updatedAt: new Date().toISOString() };
+      // COH-006 gate 1: a write that changes either object array must move its uid
+      // projection in the same update, or the two drift and gate 4's rule reads a
+      // stale membership. Derived here rather than at the ~10 call sites that edit
+      // assignees or sharing, so no path can forget.
+      if ('sharedWith' in safe) data.sharedWithUids = uidsOf(safe.sharedWith);
+      if ('assignees' in safe) data.assigneeUids = uidsOf(safe.assignees);
       if (updates.status === 'Complete' && !updates.completedAt) {
         data.completedAt = new Date().toISOString();
       }

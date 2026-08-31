@@ -23,3 +23,18 @@ export function canSeeTask(t, uid) {
   if (t.visibility === 'shared' && t.sharedWith?.some(s => s.uid === uid)) return true;
   return false;
 }
+
+// Rules cannot search inside the `[{uid, name}]` object arrays the UI stores, so
+// every task also carries plain uid arrays — `assigneeUids` and `sharedWithUids`
+// — as a projection of `assignees` and `sharedWith`. COH-006 gate 1 writes them
+// on every creation and update path; gate 3's constrained queries and gate 4's
+// read rule are what finally make them load-bearing. Until then they are inert
+// extra fields.
+//
+// Deduped and sorted so the value is stable for a given membership: two writes of
+// the same people produce the same array, which keeps diffs and any future
+// rules-side comparison meaningful.
+export function uidsOf(people) {
+  if (!Array.isArray(people)) return [];
+  return [...new Set(people.map(p => p?.uid).filter(Boolean))].sort();
+}

@@ -12,6 +12,15 @@ const { buildDigestSignals } = require('./lib/attention');
 const { syncShepherdPeople, setPcoElderAssignment, buildElderDigest } = require('./lib/shepherd');
 const { resolveRoster, isElderEmail, buildNormalizer } = require('./lib/roster');
 
+// COH-006 gate 1 — server twin of uidsOf() in src/utils/taskVisibility.js.
+// Rules cannot search inside the `[{uid, name}]` arrays the UI stores, so every
+// task carries `assigneeUids` / `sharedWithUids` projections alongside them.
+// Deduped and sorted, so the same membership always produces the same array.
+function uidProjection(people) {
+  if (!Array.isArray(people)) return [];
+  return [...new Set(people.map(p => p && p.uid).filter(Boolean))].sort();
+}
+
 // Read the editable elder roster (config/shepherdRoster) for the Shepherd
 // church, falling back to the baked-in DEFAULT_ROSTER if the doc is
 // missing/malformed — so a bad config can never blank assignments or revoke
@@ -3509,6 +3518,11 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
           photos: [],
           visibility: template.visibility || 'team',
           sharedWith: template.sharedWith || [],
+          // COH-006 gate 1: uid projections of the two object arrays, which the
+          // rules can search and the object arrays cannot be searched. Server twin
+          // of uidsOf() in src/utils/taskVisibility.js — keep the two in step.
+          sharedWithUids: uidProjection(template.sharedWith),
+          assigneeUids: uidProjection(template.assignees),
           completedAt: null,
           linkedItemDocId: null,
           linkedTicketDocId: null,
