@@ -5,6 +5,7 @@ import { collection, doc, onSnapshot, query as fsQuery, orderBy, runTransaction,
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebase.js';
 import { notify } from '../../utils/notify.js';
+import { canSeeTask } from '../../utils/taskVisibility.js';
 import { MobileCtx } from '../../hooks/useMobile.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
 import { Modal } from '../../components/primitives/Modal.jsx';
@@ -654,17 +655,16 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
   }, [taskHubUsers, rawItems]);
 
   // ── Visibility filter — applied before any rendering ──
-  // Tasks can be private/shared (truly private: no admin override). Maintenance
-  // tickets have no visibility model — every maintenance-hub user sees them all.
+  // Tasks can be private/shared; maintenance tickets have no visibility model, so
+  // every maintenance-hub user sees them all. The predicate lives in
+  // utils/taskVisibility.js because useFirestore applies the same one to the store
+  // (DEC-2026-010) — this call is now belt-and-braces over an already-filtered
+  // array, and is kept so the board stays correct if the store filter is removed
+  // at COH-006's reader cutover. Neither filter is authorization: until COH-006
+  // deploys, private tasks still reach every member's browser (DEC-2026-009).
   const visibleTasks = useMemo(() => {
     if (isMaint) return rawItems;
-    return rawItems.filter(t => {
-      if (t.visibility === 'team' || !t.visibility) return true;
-      if (t.createdBy === userId) return true;
-      if (t.assignees?.some(a => a.uid === userId)) return true;
-      if (t.visibility === 'shared' && t.sharedWith?.some(s => s.uid === userId)) return true;
-      return false;
-    });
+    return rawItems.filter(t => canSeeTask(t, userId));
   }, [rawItems, isMaint, userId]);
 
   // Declared early — referenced in the pruning useEffect below (TDZ guard per CLAUDE.md Known Pitfalls)

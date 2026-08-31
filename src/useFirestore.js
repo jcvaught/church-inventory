@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   doc, setDoc, getDoc, deleteDoc, getDocs,
   collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction, writeBatch, startAfter,
@@ -10,6 +10,7 @@ import { ref as stRef, deleteObject } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { generateRecurrenceDates } from './utils/date.js';
 import { excludeTestAccounts } from './utils/testAccounts.js';
+import { canSeeTask } from './utils/taskVisibility.js';
 
 // ── Work model (unified Tasks + Maintenance) ─────────────────────────────────
 // Tasks and maintenance tickets live in one `workItems` collection (a single
@@ -1520,9 +1521,23 @@ export function useFirestore(churchId, userProfile) {
     } catch (err) { handleErr(err); return []; }
   }, [churchId]);
 
+  // ── Interim task-visibility filter (DEC-2026-010) ───────────────────────────
+  // The `workItems` listener above is unconstrained, and production delivers
+  // other members' private tasks over it (DEC-2026-009). Until COH-006 replaces
+  // it with constrained queries, filter at this single point every consumer
+  // reads, so private/shared tasks stay out of Global Search, Event Day, exports,
+  // and the attention panel — not just the Work board, which filtered its own
+  // list already. This is NOT authorization: the documents still reach the
+  // browser. Remove at COH-006's reader cutover so there is one enforcement path.
+  const visibleTasks = useMemo(
+    () => tasks.filter(t => canSeeTask(t, userProfile?.uid)),
+    [tasks, userProfile?.uid]
+  );
+
   return {
     config, settings, items, supplies, activityLog, reservations, users,
-    maintenanceTickets, vendors, bundles, notificationConfig, audits, tasks,
+    maintenanceTickets, vendors, bundles, notificationConfig, audits,
+    tasks: visibleTasks,
     loading, error,
     loadOlderActivityLog, loadActivityLogSince,
     updateSettings, updateConfig,

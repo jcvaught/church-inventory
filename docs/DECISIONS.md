@@ -318,3 +318,78 @@ an unconstrained list," not as a defect in Firestore.
 Consequence for remediation: unchanged in direction. The client must issue
 constrained queries whose shape the rules can prove safe, or the data must be
 partitioned.
+
+#### DEC-2026-009 second addendum (2026-08-31) — measured facts vs. mechanism hypothesis
+
+Codex's COH-006 pre-implementation review
+(`docs/COH-006-PREIMPLEMENTATION-REVIEW-2026-08-31.md`, M-4) is right that this
+record still blurs two different kinds of claim. Separating them:
+
+**Measured, in production, twice, by two independently constructed probes:**
+a non-creator's unconstrained `getDocsFromServer` and `onSnapshot` over
+`workItems` both deliver another member's `visibility: 'private'` task with
+`fromCache=false`, while a direct `getDocFromServer` and a
+`where('visibility','==','private')` query are both denied, and cross-tenant
+reads are denied.
+
+**Hypothesis, not measured:** that the cause is the disjunctive,
+content-dependent shape of the read predicate. The probe never pinned the
+ruleset actually deployed to `church-inventory-9615c` at the time it ran, and
+this repository separately records that the COH-002 rules on `main` have not
+been deployed. The explanation above is therefore inference from the rule text
+in the repository, not a verified account of the deployed rule.
+
+This changes neither the severity of the disclosure nor the remediation
+direction — constrained queries are required under either explanation. It does
+mean COH-006 must not treat the mechanism as established: verify the deployed
+ruleset before relying on the causal story, and do not generalise this to other
+collections without measuring them.
+
+### DEC-2026-010 — COH-006 review dispositions and the interim visibility filter
+
+- Date: 2026-08-31
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: COH-006, DEC-2026-008, DEC-2026-009,
+  `docs/COH-006-PREIMPLEMENTATION-REVIEW-2026-08-31.md`
+
+Codex reviewed the COH-006 plan before implementing it and returned "plan
+changes required." All seven findings were verified against the code and all
+seven were accepted. Three needed an owner decision:
+
+1. **Comment exposure (H-2) is in scope for COH-006.** `firestore.rules`
+   currently lets any active member read and create comments under every
+   `workItems` document regardless of the parent task's visibility, so fixing
+   only the task read rule would leave private task *discussion* readable.
+   COH-006 gates comment access on authorization to the parent work item.
+   Rejected alternative: ship COH-006 without it and document the residual —
+   rejected because "private" would still not mean private.
+
+2. **The interim exposure (M-3) is filtered now, not left until COH-006.**
+   The unfiltered `tasks` store also feeds Global Search (`GlobalSearch.jsx`),
+   Event Day (`EventDayPage.jsx`), the attention panel, and CSV/ICS export, none
+   of which had a visibility predicate — only the Work board filtered its own
+   list. `canSeeTask()` now lives in `src/utils/taskVisibility.js` and is applied
+   at the store boundary in `useFirestore.js`. **This is not authorization** —
+   the documents still reach the browser — and it is removed at COH-006's reader
+   cutover so the constrained queries are the single enforcement path.
+
+3. **The known-failing production spec (M-2) is skipped, not left red.**
+   `e2e/authenticated/private-visibility-listener.spec.js` asserts the desired
+   behaviour and therefore fails by design, in the default `authenticated`
+   project. A permanently red suite hides real regressions, so it carries
+   `test.skip` plus a note naming DEC-2026-009 and COH-006. COH-006 rewrites the
+   spec (review finding M-1: every error is stringified and a listener timeout
+   leaves the leak flag false, so infrastructure failure can pass green) and
+   removes the skip.
+
+**Additional finding recorded here (C-1), found while verifying the review and
+not present in it.** `gatherAttentionSignals` (`functions/index.js`) reads the
+entire `workItems` collection with the Admin SDK and passes overdue task titles
+into the weekly attention digest (`functions/lib/attention.js` `buildDigestSignals`
+→ `examples`), which is emailed to church admins and sent to the Claude API.
+Cloud Functions bypass Firestore rules, so COH-006's rules and client work do not
+close this path. It is opt-in per church (`config/settings.attentionDigestEnabled`),
+so live exposure may currently be zero, but the promise is the same one. COH-006
+excludes private and shared tasks from the digest; the digest is one payload for
+all admins, so per-recipient filtering does not apply.

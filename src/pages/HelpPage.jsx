@@ -797,10 +797,11 @@ export function HelpPage({ onBack }) {
               <P>Each task has a <strong>Visibility</strong> setting that controls who can see it:</P>
               <UL items={[
                 'Team — visible to everyone with Tasks Hub access',
-                'Private — visible only to you (the default for new tasks). Hidden from other people\'s task lists in the app, but not encrypted.',
-                'Shared — visible to you plus specific people you choose (enforced client-side)',
+                'Private — the default for new tasks. Shown only to you anywhere in the app: task lists, search, Event Day, and exports.',
+                'Shared — shown to you plus the specific people you choose.',
               ]} />
               <P>Assignees always see their tasks regardless of visibility. Cards show a 🔒 icon for private tasks and 👥 for shared tasks.</P>
+              <Note>Visibility is not a security boundary yet. Private and Shared control what the app displays, and today the underlying task data is still sent to every member's browser even though it is never shown to them — so a determined person with developer tools could read it. We are fixing that. Until then, don't put anything in a task that would be harmful for another member of your church to see, and note that comments on a task are readable by any member regardless of the task's visibility.</Note>
               <Tip>Use Private for your own to-do items, Shared for tasks you're collaborating on with one other person, and Team for anything the whole staff should see.</Tip>
             </Accordion>
 

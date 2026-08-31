@@ -109,6 +109,14 @@ worktree. It must never be pushed or committed to, and must be removed when the
 review ends. Reuse an existing `node_modules` by symlink rather than installing a
 second copy.
 
+Known artifact of that symlink: `npm run build` completes and
+`verify-prod-bundle` passes, but the `prerender-static` postbuild step fails
+every page with "Invalid hook call" / `Cannot read properties of null (reading
+'useState')`, because React resolves through the symlink to a second copy. This
+reproduces on unmodified `main`, so it is not evidence about the change under
+review. Judge such a build by the Vite output and `verify-prod-bundle`, or
+re-run it in the primary worktree.
+
 Reviewing a change that alters application code, rules, or tests without
 executing it is a weaker review than the change warrants, and security work in
 particular must be verified against real behavior rather than read.
