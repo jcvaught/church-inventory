@@ -221,12 +221,14 @@ in an agent conversation.
 - Decision: A task set to `visibility: 'shared'` must be readable only by the
   people the creator specifies (plus the creator and assignees). Disclosure-only
   options were rejected; the feature should do what it says.
-- Why this is not a rule change (**CORRECTED 2026-08-30** — the original
-  premise was wrong; see DEC-2026-009): Firestore does **not** reject an
-  unconstrained list query containing unreadable documents. It admits the query
-  and returns them. Content-based read rules are enforced on `get` and on
-  queries whose constraints provably target denied documents, but not
-  per-document on an unconstrained list. `src/useFirestore.js:250` subscribes to the
+- Why this is not a rule change (**CORRECTED twice** — see DEC-2026-009 and its
+  2026-08-31 addendum): the original premise, that Firestore rejects an
+  unconstrained list query containing unreadable documents, is not what happens
+  here. Nor is the first correction's broad claim that Firestore generally
+  returns unreadable documents — Firebase documents queries as all-or-nothing.
+  What is measured is specific to this rule's disjunctive, content-dependent
+  predicate: the unconstrained query is admitted and its documents delivered,
+  while a `get` and a constraint-targeted query are both denied. `src/useFirestore.js:250` subscribes to the
   whole `workItems` collection with no `where` clause, so enforcing per-document
   visibility requires restructuring how the client queries work items, not just
   editing `firestore.rules`. Storage also changes: `sharedWith` is
@@ -279,3 +281,40 @@ tenant, two real accounts, Playwright + client SDK):
   own items, and shared-with-me items — or the data must be partitioned so
   unreadable documents are not in the queried collection. This applies equally
   to DEC-2026-008's shared-visibility work; both are the same problem.
+
+#### DEC-2026-009 addendum (2026-08-31) — re-verified under adversarial review, and the mechanism claim narrowed
+
+Codex reviewed the finding and accepted the leak while rejecting the general
+claim about Firestore, correctly noting that Firebase documents queries as
+all-or-nothing. It also identified real methodology gaps: the first probe used
+`getDocs` rather than a server-forced read, never asserted
+`snapshot.metadata.fromCache`, shared one Firebase app and Firestore instance
+across sign-ins, did not assert the two UIDs were distinct and non-null, and
+characterised `getDocs` when the application uses `onSnapshot`.
+
+The probe was rebuilt to close every one of those and re-run against production:
+
+| Operation as member-b vs member-a's private task | Result |
+|---|---|
+| `getDocFromServer` | DENIED (`permission-denied`) |
+| `getDocsFromServer`, unconstrained | **ALLOWED — 1 doc, `fromCache=false`, probe INCLUDED** |
+| `getDocsFromServer` with `where('visibility','==','private')` | DENIED |
+| `onSnapshot`, unconstrained — the real code path | **DELIVERED — probe INCLUDED** |
+| Cross-tenant `getDocsFromServer` | DENIED |
+
+UIDs asserted distinct and non-null; a dedicated Firebase app per run; the
+server-forced read reported `fromCache=false`. **The leak is confirmed and the
+cache explanation is eliminated.**
+
+**But the mechanism claim is narrowed.** This is not "Firestore returns
+unreadable documents." It is specific to a disjunctive, content-dependent read
+predicate (`type == 'maintenance' || !has visibility || visibility == 'team' ||
+visibility == 'shared' || createdBy == uid`). The rule can be satisfied by
+*some* documents in the collection, the unconstrained query is admitted on that
+basis, and per-document content filtering does not then occur. Remediation
+should therefore be read as "this rule shape is not safely enforceable against
+an unconstrained list," not as a defect in Firestore.
+
+Consequence for remediation: unchanged in direction. The client must issue
+constrained queries whose shape the rules can prove safe, or the data must be
+partitioned.
