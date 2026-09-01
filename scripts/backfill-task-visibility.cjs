@@ -163,6 +163,13 @@ async function eachTask(fn) {
   for (const church of churches) {
     const snap = await church.collection('workItems').get();
     const tasks = snap.docs.filter((d) => d.data().type === 'task');
+    // Test-only: hold between the query snapshot and the writes so a concurrent
+    // client edit can be injected deterministically. Unset in every real run.
+    const pause = Number(process.env.COH006_PAUSE_AFTER_SCAN_MS || 0);
+    if (pause) {
+      console.log(`  ⏸  COH006_PAUSE_AFTER_SCAN_MS=${pause} — holding after the ${church.id} snapshot.`);
+      await new Promise((r) => setTimeout(r, pause));
+    }
     await fn(church.id, tasks);
   }
   return churches.length;
@@ -193,33 +200,55 @@ async function backup(path) {
 // a projection while its object array moved on would silently drop or resurrect
 // a reader, which is the class of bug this whole task exists to remove.
 async function rollback(path) {
-  const file = JSON.parse(fs.readFileSync(path, 'utf8'));
-  if (file.kind !== 'manifest') {
-    console.error(`✋ ${path} is ${file.kind === 'backup' ? 'a --backup snapshot' : 'not a recognised artifact'}, not an --execute manifest.`);
-    console.error('   Rollback consumes the manifest written by --execute, so it can tell what this run actually changed.');
+  // The manifest is an append-only JSONL journal, so a run interrupted mid-way
+  // still leaves a readable, truncation-tolerant record.
+  const lines = fs.readFileSync(path, 'utf8').split('\n').filter(Boolean);
+  const rows = [];
+  const applied = new Map();
+  let header = null;
+  let complete = false;
+  for (const line of lines) {
+    let row;
+    try { row = JSON.parse(line); } catch { continue; }   // a torn last line is expected after a crash
+    if (row.kind === 'manifest-header') header = row;
+    else if (row.kind === 'intent') rows.push(row);
+    else if (row.kind === 'applied' && row.before) applied.set(`${row.churchId}/${row.docId}`, row);
+    else if (row.kind === 'complete') complete = true;
+  }
+  if (!header) {
+    console.error(`✋ ${path} has no manifest header, so it is not an --execute journal.`);
+    console.error('   Rollback consumes the journal written by --execute. A --backup snapshot is not one.');
     process.exit(1);
   }
-  if (file.target !== TARGET) {
-    console.error(`✋ Manifest was written against ${file.target}, refusing to apply it to ${TARGET}.`);
+  if (header.target !== TARGET) {
+    console.error(`✋ Manifest was written against ${header.target}, refusing to apply it to ${TARGET}.`);
     process.exit(1);
   }
   console.log(`\n${EXECUTE ? '↩️  ROLLBACK' : '🔎 ROLLBACK DRY RUN'} → ${TARGET}`);
-  console.log(`   From ${path}, written ${file.writtenAt} (${file.rows.length} document(s) changed by that run).`);
+  console.log(`   From ${path}, written ${header.writtenAt} — ${rows.length} intended change(s)${complete ? '' : ', RUN DID NOT COMPLETE'}.`);
+  if (!complete) {
+    console.log('   The journal has no completion record, so that run was interrupted. Every intent is');
+    console.log('   still checked against the document: one that was never written simply refuses.');
+  }
 
+  // Every restore is conditional on the document still holding exactly what the
+  // migration wrote. An intent whose write never committed fails that check and
+  // is refused, which is why an interrupted run is still safe to roll back.
   const skipped = [];
   let restored = 0;
   let missing = 0;
-  for (const row of file.rows) {
+  for (const intent of rows) {
+    // An applied line supersedes its intent: if the write re-planned against
+    // fresher data, those are the images that describe what actually happened.
+    const row = applied.get(`${intent.churchId}/${intent.docId}`) || intent;
     const ref = db.doc(`churches/${row.churchId}/workItems/${row.docId}`);
     if (!EXECUTE) {
       const snap = await ref.get();
       if (!snap.exists) { missing++; skipped.push(`${row.churchId}/${row.docId} (deleted)`); continue; }
-      if (!matchesImage(snap.data(), row.after)) { skipped.push(`${row.churchId}/${row.docId} (changed since the run)`); continue; }
+      if (!matchesImage(snap.data(), row.after)) { skipped.push(`${row.churchId}/${row.docId} (changed since the run, or never written)`); continue; }
       restored++;
       continue;
     }
-    // One transaction per document: read-compare-write cannot interleave with a
-    // user's write, and a refusal on one document does not abort the others.
     const outcome = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
       if (!snap.exists) return 'missing';
@@ -229,7 +258,7 @@ async function rollback(path) {
     });
     if (outcome === 'restored') restored++;
     else if (outcome === 'missing') { missing++; skipped.push(`${row.churchId}/${row.docId} (deleted)`); }
-    else skipped.push(`${row.churchId}/${row.docId} (changed since the run)`);
+    else skipped.push(`${row.churchId}/${row.docId} (changed since the run, or never written)`);
   }
 
   console.log(`   ${restored} ${EXECUTE ? 'restored' : 'would be restored'}, ${skipped.length} refused (${missing} deleted).`);
@@ -238,22 +267,56 @@ async function rollback(path) {
     for (const line of skipped.slice(0, 20)) console.log(`     ${line}`);
     if (skipped.length > 20) console.log(`     …and ${skipped.length - 20} more`);
     console.log('   Repair these by hand against the --backup snapshot if they need it.');
+    // A partial rollback must not look like a completed one to an operator or a
+    // wrapper script (gate-2 re-review H-1).
+    console.log('⛔ Rollback is INCOMPLETE.');
+    process.exitCode = 1;
   }
   if (!EXECUTE) console.log('   Dry run — nothing written.');
+}
+
+// The forward pass is a write-ahead journal plus one transaction per document
+// (gate-2 re-review H-1). Two properties have to hold together:
+//
+//   durability — the record of a change must be on disk BEFORE the change is
+//     committed, or a crash leaves production altered with no way to undo it;
+//   accuracy — the before/after images must describe the state the write
+//     actually replaced, not a state read some seconds earlier.
+//
+// So each document is: write the intent line and fsync it, then run a
+// transaction that re-reads and applies only if the document still matches the
+// recorded before-image. A user edit in between makes the transaction refuse,
+// which a later re-run picks up. An intent line whose write never committed is
+// harmless: --rollback is conditional on the after-image, so it refuses a
+// document that was never changed.
+//
+// This costs a round trip per document instead of batching 400. At this data
+// size that is the right trade for being able to undo the run.
+function journal(path) {
+  const fd = fs.openSync(path, 'a');
+  return {
+    append(row) {
+      fs.writeSync(fd, JSON.stringify(row) + '\n');
+      fs.fsyncSync(fd);   // the whole point: durable before the commit it describes
+    },
+    close() { fs.closeSync(fd); },
+  };
 }
 
 async function run() {
   console.log(`\n${EXECUTE ? '✍️  EXECUTE' : '🔎 DRY RUN'} → ${TARGET}`);
   if (EXECUTE && !MANIFEST_TO) {
-    console.error('✋ --execute requires --manifest <path>. Without the manifest of what this run');
-    console.error('   actually changed, --rollback cannot tell a migration write from a user edit.');
+    console.error('✋ --execute requires --manifest <path>. Without a durable record of what this run');
+    console.error('   changed, --rollback cannot tell a migration write from a user edit.');
     process.exit(1);
   }
-  const manifest = [];
-  let grand = { tasks: 0, changed: 0, vis: 0, asg: 0, shr: 0 };
+  const jrnl = EXECUTE ? journal(MANIFEST_TO) : null;
+  if (jrnl) jrnl.append({ kind: 'manifest-header', writtenAt: new Date().toISOString(), target: TARGET });
+
+  let grand = { tasks: 0, changed: 0, applied: 0, replanned: 0, skipped: 0, vis: 0, asg: 0, shr: 0 };
+  const skippedIds = [];
   const churches = await eachTask(async (churchId, tasks) => {
-    const b = batcher();
-    const per = { tasks: tasks.length, changed: 0, vis: 0, asg: 0, shr: 0 };
+    const per = { tasks: tasks.length, changed: 0, applied: 0, replanned: 0, skipped: 0, vis: 0, asg: 0, shr: 0 };
     for (const d of tasks) {
       const data = d.data();
       const updates = plan(data);
@@ -262,25 +325,69 @@ async function run() {
       if ('visibility' in updates) per.vis++;
       if ('assigneeUids' in updates) per.asg++;
       if ('sharedWithUids' in updates) per.shr++;
-      if (EXECUTE) {
-        manifest.push({ churchId, docId: d.id, before: imageOf(data), after: imageOf({ ...data, ...updates }) });
-        await b.update(d.ref, updates);
+      if (!EXECUTE) continue;
+
+      const before = imageOf(data);
+      const after = imageOf({ ...data, ...updates });
+      jrnl.append({ kind: 'intent', churchId, docId: d.id, before, after });
+
+      // Test-only crash simulation. Set to a positive integer to abort after
+      // that many committed writes, which is how the crash-recovery case is
+      // exercised; unset in every real run.
+      const failAfter = Number(process.env.COH006_FAILPOINT_AFTER || 0);
+
+      // Re-plan inside the transaction rather than refusing a row a client touched
+      // since the scan. The images then describe the state actually replaced and
+      // produced, and no document is left behind for a later run to pick up —
+      // gate-2 re-review H-1's option (a), which also makes --verify meaningful
+      // immediately after the run instead of only after a second pass.
+      const outcome = await db.runTransaction(async (t) => {
+        const snap = await t.get(d.ref);
+        if (!snap.exists) return { state: 'gone' };
+        const cur = snap.data();
+        const fresh = plan(cur);
+        if (!fresh) return { state: 'already-current' };   // the client's write left it correct
+        const curBefore = imageOf(cur);
+        const curAfter = imageOf({ ...cur, ...fresh });
+        t.update(d.ref, applyImage(curAfter));
+        return { state: 'applied', before: curBefore, after: curAfter, replanned: !matchesImage(cur, before) };
+      });
+      if (outcome.state === 'applied') {
+        per.applied++;
+        if (outcome.replanned) per.replanned++;
+        // The applied line carries the images the transaction really used, which
+        // supersede the intent line's if a re-plan happened.
+        jrnl.append({ kind: 'applied', churchId, docId: d.id, before: outcome.before, after: outcome.after, replanned: outcome.replanned });
+        if (failAfter && (grand.applied + per.applied) >= failAfter) {
+          console.error(`\n💥 COH006_FAILPOINT_AFTER=${failAfter} — aborting after ${failAfter} committed write(s).`);
+          jrnl.close();
+          process.exit(70);
+        }
+      } else {
+        per.skipped++;
+        skippedIds.push(`${churchId}/${d.id} (${outcome.state === 'gone' ? 'deleted' : 'already current'})`);
+        jrnl.append({ kind: 'skipped', churchId, docId: d.id, reason: outcome.state });
       }
     }
-    if (EXECUTE) await b.flush();
-    console.log(`  ${churchId}: ${per.tasks} task(s), ${per.changed} ${EXECUTE ? 'written' : 'to write'} ` +
-      `(visibility ${per.vis}, assigneeUids ${per.asg}, sharedWithUids ${per.shr})`);
+    console.log(`  ${churchId}: ${per.tasks} task(s), ${per.changed} ${EXECUTE ? `to write → ${per.applied} applied, ${per.skipped} skipped` : 'to write'} ` +
+      `(visibility ${per.vis}, assigneeUids ${per.asg}, sharedWithUids ${per.shr}${per.replanned ? `, ${per.replanned} re-planned mid-run` : ''})`);
     for (const k of Object.keys(grand)) grand[k] += per[k];
   });
-  if (EXECUTE) {
-    fs.writeFileSync(MANIFEST_TO, JSON.stringify({
-      kind: 'manifest', writtenAt: new Date().toISOString(), target: TARGET,
-      churches, scanned: grand.tasks, rows: manifest,
-    }, null, 2));
-    console.log(`\n📝 Manifest → ${MANIFEST_TO} (${manifest.length} document(s) changed by this run).`);
-    console.log('   Keep it. --rollback consumes it and refuses anything edited since.');
+
+  if (jrnl) {
+    jrnl.append({ kind: 'complete', churches, scanned: grand.tasks, applied: grand.applied, skipped: grand.skipped });
+    jrnl.close();
+    console.log(`\n📝 Manifest → ${MANIFEST_TO} (${grand.applied} applied, ${grand.skipped} skipped).`);
+    console.log('   Written ahead of each change and fsynced, so it survives an interrupted run.');
   }
-  console.log(`\nTotal across ${churches} church(es): ${grand.tasks} task(s), ${grand.changed} ${EXECUTE ? 'written' : 'to write'}.`);
+  console.log(`\nTotal across ${churches} church(es): ${grand.tasks} task(s), ${grand.changed} needing work` +
+    (EXECUTE ? `, ${grand.applied} applied, ${grand.skipped} skipped.` : ' to write.'));
+  if (skippedIds.length) {
+    console.log('   SKIPPED — changed or deleted between the scan and the write; re-run to pick them up:');
+    for (const line of skippedIds.slice(0, 20)) console.log(`     ${line}`);
+    if (skippedIds.length > 20) console.log(`     …and ${skippedIds.length - 20} more`);
+    process.exitCode = 1;
+  }
   if (!EXECUTE) console.log('Dry run — nothing written. Re-run with --execute --manifest <path> (emulator) or --execute --prod --manifest <path>.');
 }
 
