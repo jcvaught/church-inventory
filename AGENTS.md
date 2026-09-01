@@ -79,8 +79,27 @@ routing the message through the product owner:
 ```bash
 codex exec -s workspace-write \
   -c 'sandbox_workspace_write.writable_roots=["/Users/johnvaught/apps/church-inventory-review/.git"]' \
-  -C /Users/johnvaught/apps/church-inventory-review "<message>"
+  -C /Users/johnvaught/apps/church-inventory-review "<message>" \
+  < /dev/null > <logfile> 2>&1
 ```
+
+**`< /dev/null` is mandatory, and its absence is silent.** When stdin is not a
+terminal, `codex exec` waits to read the prompt from it — even though the prompt
+was passed as an argument — and blocks forever. It prints one line,
+`Reading additional input from stdin...`, and then does nothing. Two reviews
+were lost to this on 2026-09-01: one sat for fifty minutes having never started
+work, and the failure looked exactly like a slow or hanging review.
+
+**Redirect to a file; never pipe to `tail`.** `... | tail -30` buffers the whole
+stream and emits nothing if the process is killed, so the one diagnostic line
+above is discarded precisely when it is needed. Codex writes progress to
+**stderr** and only the final answer to **stdout**, so `2>&1` into a file is
+what preserves the trace. `-o <file>` also persists the final message on its
+own, and `--json` streams JSONL events if a run needs closer watching.
+
+A killed run exits **143** (SIGTERM) or **137** (SIGKILL); the Bash tool's own
+timeout caps at ten minutes, which is shorter than a full review, so long
+reviews belong in a background task rather than a foreground call.
 
 `-s workspace-write` is required. `codex exec` defaults to a read-only sandbox,
 in which Codex cannot write its review, commit it, or even fast-forward its own
