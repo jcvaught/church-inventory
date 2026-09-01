@@ -57,6 +57,10 @@ Tell the reviewer where independent scrutiny is most valuable. For security
 work, include direct API/SDK abuse cases. For UI work, include mobile,
 accessibility, empty, loading, and failure states.
 
+Ask for findings as test cases wherever one can be written — the fixture and the
+assertion, not a description of them. The implementation owner integrates and
+runs them. A reviewer who cannot execute the suite can still design the attack.
+
 ## Reviewer Findings
 
 - Critical:

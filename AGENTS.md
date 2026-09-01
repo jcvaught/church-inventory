@@ -57,6 +57,16 @@ tracks agent ownership, handoffs, and review status for selected tasks.
 - The implementation owner writes code and verification. The reviewer reports
   findings and should not modify the implementation unless ownership is
   explicitly transferred.
+- **Reviewers write test cases, not just prose.** Where a finding can be
+  expressed as a failing test, the reviewer should write the case — the exact
+  fixture and assertion — and the implementation owner integrates and runs it.
+  The separation holds: the reviewer proposes tests and never edits
+  implementation code, and the owner remains responsible for the suite passing.
+  This matters most where the reviewer cannot execute: Codex cannot start the
+  emulators from `codex exec`, so an adversarial rules case it writes is worth
+  more than the same case described in a paragraph, and it puts an independent
+  mind on the attack surface rather than only on the diff. Every review handoff
+  should ask for this explicitly.
 - Record consequential decisions in `docs/DECISIONS.md`; do not leave durable
   product or architecture decisions only in chat.
 - Complete a handoff using `docs/AI-HANDOFF-TEMPLATE.md` before review.
