@@ -507,3 +507,41 @@ The anti-loop constraints are unchanged and are the reason this stays a tool
 rather than an autonomous loop: one invocation per stage, no polling, no
 scheduled invocation, no re-invoking to chase an answer, and every message
 reported to the product owner in the turn it is sent.
+
+### DEC-2026-013 — Enforce the task create shape early, rather than freezing writes
+
+- Date: 2026-08-31
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: COH-006, `docs/COH-006-GATE2-REVIEW-2026-08-31.md` (H-2)
+
+**The problem.** The backfill's coverage scan walks churches in sequence, so a
+browser tab running a pre-COH-006 bundle can create a task with no uid
+projections in a church the scan has already passed — and the run still reports
+"safe to proceed". A write immediately after the last snapshot has the same
+effect. Running the scan "immediately before" the reader cutover narrows that
+race; it does not close it. The result would be a task the constrained readers
+cannot deliver to the people it was shared with or assigned to.
+
+**Decision.** Move the task **create-shape rule** — normalised `visibility` plus
+both uid projections as lists — from gate 4 into gate 1, deployed before the
+final backfill scan. The alternative, an enforced write freeze across the final
+backfill, verification, the reader cutover, and the create-rule deploy, was
+rejected: it needs a scheduled window, an announcement, and actual enforcement,
+which is a lot of ceremony for a small church staff.
+
+**The cost, accepted deliberately.** A tab still running an old bundle has its
+task creates denied until it reloads. The plan already accepted that behaviour at
+gate 4 — choosing it over silently creating documents the new readers cannot
+deliver — so this only starts it earlier. In practice the exposure is small: the
+app polls `/version.json` every five minutes and on tab focus and shows an update
+banner, so live tabs are prompted well before the backfill runs. Deploy order
+within gate 1 still puts the client before the rules, so a freshly loaded tab is
+never denied.
+
+**What this does not fix.** It closes the create race only. A stale tab can still
+*update* a task's assignees or sharing without moving the projections, since the
+update rule does not enforce the shape. That write leaves the object arrays and
+the uid arrays disagreeing until the next write from a current client. The
+gate-3 delta scan will catch it if it happens before cutover; after cutover the
+canonical uid arrays simply lag. Recorded rather than solved.

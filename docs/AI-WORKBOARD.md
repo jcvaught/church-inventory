@@ -152,8 +152,12 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   legacy shared and assigned tasks until the backfill finished, and running the
   backfill first races documents created before the deploy:
   1. Deploy the additive projection writers, the indexes the new queries need,
-     the attention-digest fix with its cache version, **and a transitional
-     additive read rule**. The transitional rule is required (round-2 H-1): the
+     the attention-digest fix with its cache version, a transitional additive
+     read rule, **and the task create-shape rule** (DEC-2026-013 — moved here
+     from gate 4 to close the concurrent-create race the backfill scan cannot;
+     a stale tab's creates are denied until it reloads). Deploy order inside the
+     gate: Vercel client first, then indexes and functions, then rules — so a
+     freshly loaded tab is never denied by a rule its bundle cannot satisfy. The transitional rule is required (round-2 H-1): the
      current rule authorizes a private task to its creator only, so the gate-3
      assigned-to-me query would be denied for a private task assigned to a
      non-creator during the gate-3-to-gate-4 interval. It must admit every new
@@ -161,10 +165,12 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
      client. Identify the transitional and final rulesets separately in the
      handoff, and test the gate-3 client against the **transitional** rules.
   2. Back up → dry run → execute the idempotent backfill → validate, then a delta
-     validation for documents created during the transition. Run the final delta
-     check immediately before the gate-3 cutover, and state the maximum interval
-     between gates 2, 3, and 4 — an old client left open keeps creating tasks
-     without projections until it reloads (round-2 H-2).
+     validation for documents created during the transition. Because gate 1 now
+     enforces the create shape, no client can add an unprojected task once gate 1
+     is live, so the delta pass is closing a bounded set rather than racing an
+     open one. `--verify` still says on every run that it is not proof of
+     coverage at cutover; that caveat is now about stale *updates*, not creates
+     (DEC-2026-013's "what this does not fix").
   3. Cut clients over to the constrained, merged read path only once projection
      coverage is complete, and remove the interim store filter in the same
      change. If gates 1 and 3 cannot be separate client deployments, a feature
@@ -175,12 +181,9 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
      tracks membership per query source, so a document dropping out of its last
      qualifying listener leaves the merged store rather than lingering in a
      dedupe cache.
-  4. Deploy the restrictive rules once the compatible client is live. The final
-     **create** rule must require a normalized `visibility` and both uid
-     projections with the expected list types (round-2 H-2), which means a stale
-     client's task creates are denied until the user reloads — a deliberate,
-     documented behaviour, chosen over silently creating documents the new
-     readers cannot deliver to their recipients.
+  4. Deploy the restrictive **read**, **update**, and **comment** rules once the
+     compatible client is live. The create rule already shipped in gate 1 per
+     DEC-2026-013.
   Rollback must account for clients on both sides of the gate-3 cutover.
   Transition tests must cover a gate-1 writer, a stale pre-gate-1 writer, and the
   gate-3 reader.

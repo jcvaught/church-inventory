@@ -156,10 +156,46 @@ test('workItems: a maintenance item can only be created by admin/manager', async
   await assertFails(setDoc(doc(ctx('memberA'), P('workItems/w1')), { type: 'maintenance', title: 'Fix HVAC' }));
   await assertSucceeds(setDoc(doc(ctx('adminA'), P('workItems/w2')), { type: 'maintenance', title: 'Fix HVAC' }));
 });
+const newTask = (over = {}) => ({
+  type: 'task', createdBy: 'memberA', visibility: 'team', assigneeUids: [], sharedWithUids: [], ...over,
+});
+// The SDK rejects an explicit `undefined` before the rules ever see it, so an
+// omitted field has to be omitted, not set to undefined.
+const taskWithout = (field, over = {}) => {
+  const t = newTask(over);
+  delete t[field];
+  return t;
+};
 test('workItems: a task item is member-create with createdBy pinned', async () => {
   await seedMembers();
-  await assertSucceeds(setDoc(doc(ctx('memberA'), P('workItems/w3')), { type: 'task', createdBy: 'memberA', visibility: 'team' }));
-  await assertFails(setDoc(doc(ctx('memberA'), P('workItems/w4')), { type: 'task', createdBy: 'memberB', visibility: 'team' }));
+  await assertSucceeds(setDoc(doc(ctx('memberA'), P('workItems/w3')), newTask()));
+  await assertFails(setDoc(doc(ctx('memberA'), P('workItems/w4')), newTask({ createdBy: 'memberB' })));
+});
+
+// ── COH-006 / DEC-2026-013: the create shape, deployed early ─────────────────
+// A task created without the projections is one the gate-3 constrained readers
+// cannot deliver to its recipients, so the create is refused rather than
+// silently producing it. Costs a stale tab an error until it reloads.
+test('workItems: a task create must carry both uid projections as lists', async () => {
+  await seedMembers();
+  await assertFails(setDoc(doc(ctx('memberA'), P('workItems/w5')), { type: 'task', createdBy: 'memberA', visibility: 'team' }));
+  await assertFails(setDoc(doc(ctx('memberA'), P('workItems/w6')), taskWithout('assigneeUids')));
+  await assertFails(setDoc(doc(ctx('memberA'), P('workItems/w7')), taskWithout('sharedWithUids')));
+  await assertFails(setDoc(doc(ctx('memberA'), P('workItems/w8')), newTask({ assigneeUids: { memberA: true } })));
+  await assertFails(setDoc(doc(ctx('memberA'), P('workItems/w9')), newTask({ sharedWithUids: 'memberB' })));
+});
+test('workItems: a task create must carry a normalised visibility', async () => {
+  await seedMembers();
+  for (const v of ['team', 'private', 'shared']) {
+    await assertSucceeds(setDoc(doc(ctx('memberA'), P(`workItems/w-ok-${v}`)), newTask({ visibility: v })));
+  }
+  await assertFails(setDoc(doc(ctx('memberA'), P('workItems/w10')), newTask({ visibility: '' })));
+  await assertFails(setDoc(doc(ctx('memberA'), P('workItems/w11')), newTask({ visibility: 'secret' })));
+  await assertFails(setDoc(doc(ctx('memberA'), P('workItems/w12')), taskWithout('visibility')));
+});
+test('workItems: maintenance creates are unaffected by the task create shape', async () => {
+  await seedMembers();
+  await assertSucceeds(setDoc(doc(ctx('adminA'), P('workItems/w13')), { type: 'maintenance', title: 'Fix HVAC' }));
 });
 
 // ── COH-006 gate 1: the transitional assignee read arm ───────────────────────
