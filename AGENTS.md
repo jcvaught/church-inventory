@@ -77,7 +77,9 @@ Claude may invoke Codex directly to hand off a completed review, instead of
 routing the message through the product owner:
 
 ```bash
-codex exec -s workspace-write -C /Users/johnvaught/apps/church-inventory-codex "<message>"
+codex exec -s workspace-write \
+  -c 'sandbox_workspace_write.writable_roots=["/Users/johnvaught/apps/church-inventory-review/.git"]' \
+  -C /Users/johnvaught/apps/church-inventory-review "<message>"
 ```
 
 `-s workspace-write` is required. `codex exec` defaults to a read-only sandbox,
@@ -85,13 +87,78 @@ in which Codex cannot write its review, commit it, or even fast-forward its own
 branch — it will report the workspace as read-only and stop without changing
 anything (observed 2026-08-31).
 
-Even with `-s workspace-write`, Codex can write files in its worktree but cannot
-commit from it: a linked worktree's Git metadata lives under the primary repo's
-`.git/worktrees/`, which is outside the sandbox, so `index.lock` creation fails
-(observed 2026-08-31). **Codex therefore writes its review as an untracked file
-and Claude commits it**, unmodified, attributing Codex as the author in the
-commit message. Ask Codex for a path, not a commit. Claude must not edit the
-content of a review it commits.
+### The review clone
+
+Codex reviews in **`/Users/johnvaught/apps/church-inventory-review`**, a full
+clone with its own `.git`, not a linked worktree. The old worktree could not
+commit at all: a linked worktree's Git metadata lives under the primary repo's
+`.git/worktrees/`, outside the sandbox, so `index.lock` creation failed and
+Claude had to copy the review file out by hand.
+
+Codex has **no network access** under `-s workspace-write`, so it can neither
+fetch nor push. That is deliberate, and it shapes the flow:
+
+1. **Claude prepares the clone at the exact SHA to review**, before invoking:
+   ```bash
+   git -C /Users/johnvaught/apps/church-inventory-review fetch --all --prune
+   git -C /Users/johnvaught/apps/church-inventory-review checkout <sha>
+   ```
+   This also pins what was reviewed, rather than trusting a moving branch.
+2. **Codex commits its review in the clone**, on a `codex/*` branch. Its Git
+   identity there is `Codex <jcvaught@gmail.com>`, so authorship is unambiguous
+   in the log.
+
+   The `writable_roots` flag above is what makes this work, and it is not
+   optional. `-s workspace-write` excludes `.git` from writes even when the
+   repository IS the workspace — an undocumented default, and the opposite of
+   what both agents predicted. A clone alone fails identically to the old
+   worktree:
+   ```text
+   fatal: cannot lock ref 'refs/heads/codex/env-check':
+   unable to create directory for .git/refs/heads/codex/env-check
+   ```
+   Naming that one `.git` directory as a writable root is a narrow grant: it
+   permits Codex to write refs and objects in the review clone and nothing else.
+   It does not grant network, so it still cannot push. Verified 2026-09-01 by
+   probe: commit `e693f14`, authored `Codex <jcvaught@gmail.com>`, fetched into
+   the implementation worktree by local path with authorship intact.
+3. **Claude fetches that branch from the clone by local path** — no GitHub write
+   is involved, and nothing is copied by hand:
+   ```bash
+   git fetch /Users/johnvaught/apps/church-inventory-review <codex-branch>
+   git cherry-pick FETCH_HEAD    # or merge, per the task
+   ```
+
+Claude must not edit the content of a review it brings across. Codex is not
+authorized to push to GitHub; a writable clone makes pushing possible, and the
+product owner has deliberately not granted it.
+
+Keep production credentials out of the clone. `scripts/serviceAccountKey.json`
+is gitignored, so a fresh clone does not contain it — preserve that on purpose,
+not by luck. A reviewer needs none of it.
+
+### What Codex still cannot do
+
+`npm run test:rules` and `test:handlers` need the Firebase emulators, and the
+sandbox refuses to bind local sockets (`EPERM` on 4400/4500/8080/9150/9199).
+This is a network-sandbox policy; the clone does not change it. The narrow fix
+is a custom permission profile extending `:workspace` with
+`permissions.<name>.network.enabled` and `permissions.<name>.network.allow_local_binding`
+(verified against the Codex config reference; do not combine a custom profile
+with `sandbox_mode`). It is narrower than `--dangerously-bypass-approvals-and-sandbox`
+but still permits more local and private networking than those five ports, so
+enabling it is the product owner's call and has not been made.
+
+Until it is: **a Codex review is never verification of a test result.** It must
+say so, and Claude must report emulator results as unreproduced by a second
+party. `npm run test:unit`, `npm run lint`, and `npm run build` DO run in the
+clone, which has real `npm ci` installs at the root and in `functions/` (not a
+symlinked `node_modules`: tooling writes caches beneath it, and an external tree
+can drift from the clone's lockfile).
+
+Toolchain in use as of 2026-09-01 — record it in handoffs, because environment
+difference is the usual explanation when one party reproduces a failure and the
+other cannot: Node v25.8.0, OpenJDK 26.0.1, Firebase CLI 15.10.0.
 
 `codex exec resume --last` may be used to preserve Codex's session context, but
 the message must be written so a cold session would also succeed — always cite
