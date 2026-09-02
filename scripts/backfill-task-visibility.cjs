@@ -81,7 +81,19 @@ function refuseIfExists(path, what) {
 // mean (gate-2 review L-1), so presence is recorded explicitly.
 const FIELDS = ['visibility', 'assigneeUids', 'sharedWithUids'];
 const imageOf = (data) => Object.fromEntries(FIELDS.map((f) => [f, f in data ? { present: true, value: data[f] } : { present: false }]));
-const sameValue = (a, b) => (Array.isArray(a) || Array.isArray(b) ? sameArray(a, b) : a === b);
+// Canonical stringify, so image comparison is by VALUE. `===` was wrong here: a
+// malformed projection stored as a map ({uid: true}) never equals a fresh read of
+// itself by identity, so such a document could never satisfy its own before-image
+// and the attempt loop exhausted without ever migrating it. Malformed values are
+// exactly the ones this backfill has to repair, so they must compare.
+function canonical(v) {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`;
+  if (v && typeof v === 'object') {
+    return `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v);
+}
+const sameValue = (a, b) => canonical(a) === canonical(b);
 const matchesImage = (data, image) => FIELDS.every((f) => {
   const want = image[f];
   if (!want.present) return !(f in data);
@@ -116,6 +128,44 @@ if (EXECUTE && !EMULATOR && !PROD_OK) {
   console.error('   Production: re-run with --execute --prod');
   process.exit(1);
 }
+
+// ── Test-only hooks ─────────────────────────────────────────────────────────
+// These exist to make crash and race windows reproducible. They are refused
+// outright against production and outside the emulator, and their values are
+// validated, so they cannot be activated by a stray environment variable during
+// a real migration (gate-2 final review, L-1).
+const TEST_HOOKS = (() => {
+  const raw = {
+    failAfter: process.env.COH006_FAILPOINT_AFTER,
+    failMode: process.env.COH006_FAILPOINT_MODE,
+    pauseMs: process.env.COH006_PAUSE_AFTER_SCAN_MS,
+  };
+  const requested = Object.entries(raw).filter(([, v]) => v !== undefined && v !== '');
+  if (!requested.length) return { failAfter: 0, failMode: null, pauseMs: 0 };
+  if (!EMULATOR || PROD_OK) {
+    console.error(`✋ Test hooks are set (${requested.map(([k]) => k).join(', ')}) but this is not an emulator run.`);
+    console.error('   These deliberately crash or stall a migration mid-flight. Refusing to continue.');
+    process.exit(1);
+  }
+  const int = (name, v, max) => {
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 0 || n > max) {
+      console.error(`✋ ${name}=${v} is not an integer in 0..${max}.`);
+      process.exit(1);
+    }
+    return n;
+  };
+  const modes = ['after-applied', 'before-applied'];
+  if (raw.failMode && !modes.includes(raw.failMode)) {
+    console.error(`✋ COH006_FAILPOINT_MODE=${raw.failMode} is not one of: ${modes.join(', ')}.`);
+    process.exit(1);
+  }
+  return {
+    failAfter: raw.failAfter ? int('COH006_FAILPOINT_AFTER', raw.failAfter, 100000) : 0,
+    failMode: raw.failMode || 'after-applied',
+    pauseMs: raw.pauseMs ? int('COH006_PAUSE_AFTER_SCAN_MS', raw.pauseMs, 120000) : 0,
+  };
+})();
 
 // The projection, character-for-character the same policy as uidsOf() in
 // src/utils/taskVisibility.js and uidProjection() in functions/index.js: dedupe,
@@ -165,7 +215,7 @@ async function eachTask(fn) {
     const tasks = snap.docs.filter((d) => d.data().type === 'task');
     // Test-only: hold between the query snapshot and the writes so a concurrent
     // client edit can be injected deterministically. Unset in every real run.
-    const pause = Number(process.env.COH006_PAUSE_AFTER_SCAN_MS || 0);
+    const pause = TEST_HOOKS.pauseMs;
     if (pause) {
       console.log(`  ⏸  COH006_PAUSE_AFTER_SCAN_MS=${pause} — holding after the ${church.id} snapshot.`);
       await new Promise((r) => setTimeout(r, pause));
@@ -203,16 +253,17 @@ async function rollback(path) {
   // The manifest is an append-only JSONL journal, so a run interrupted mid-way
   // still leaves a readable, truncation-tolerant record.
   const lines = fs.readFileSync(path, 'utf8').split('\n').filter(Boolean);
-  const rows = [];
-  const applied = new Map();
+  const intents = new Map();
   let header = null;
   let complete = false;
   for (const line of lines) {
     let row;
     try { row = JSON.parse(line); } catch { continue; }   // a torn last line is expected after a crash
     if (row.kind === 'manifest-header') header = row;
-    else if (row.kind === 'intent') rows.push(row);
-    else if (row.kind === 'applied' && row.before) applied.set(`${row.churchId}/${row.docId}`, row);
+    // The last intent for a document is the authoritative one: earlier attempts
+    // were superseded because a client wrote before they could commit, and their
+    // transactions did not apply.
+    else if (row.kind === 'intent') intents.set(`${row.churchId}/${row.docId}`, row);
     else if (row.kind === 'complete') complete = true;
   }
   if (!header) {
@@ -225,7 +276,7 @@ async function rollback(path) {
     process.exit(1);
   }
   console.log(`\n${EXECUTE ? '↩️  ROLLBACK' : '🔎 ROLLBACK DRY RUN'} → ${TARGET}`);
-  console.log(`   From ${path}, written ${header.writtenAt} — ${rows.length} intended change(s)${complete ? '' : ', RUN DID NOT COMPLETE'}.`);
+  console.log(`   From ${path}, written ${header.writtenAt} — ${intents.size} intended change(s)${complete ? '' : ', RUN DID NOT COMPLETE'}.`);
   if (!complete) {
     console.log('   The journal has no completion record, so that run was interrupted. Every intent is');
     console.log('   still checked against the document: one that was never written simply refuses.');
@@ -237,10 +288,7 @@ async function rollback(path) {
   const skipped = [];
   let restored = 0;
   let missing = 0;
-  for (const intent of rows) {
-    // An applied line supersedes its intent: if the write re-planned against
-    // fresher data, those are the images that describe what actually happened.
-    const row = applied.get(`${intent.churchId}/${intent.docId}`) || intent;
+  for (const row of intents.values()) {
     const ref = db.doc(`churches/${row.churchId}/workItems/${row.docId}`);
     if (!EXECUTE) {
       const snap = await ref.get();
@@ -327,39 +375,61 @@ async function run() {
       if ('sharedWithUids' in updates) per.shr++;
       if (!EXECUTE) continue;
 
-      const before = imageOf(data);
-      const after = imageOf({ ...data, ...updates });
-      jrnl.append({ kind: 'intent', churchId, docId: d.id, before, after });
+      // Each attempt is: fresh read, exact images, DURABLE intent, then a
+      // transaction that applies only if the document still matches that exact
+      // before-image (gate-2 final review H-1). The earlier shape journaled an
+      // intent derived from the scan snapshot and let the transaction re-plan to
+      // something else, so a crash between commit and the `applied` line left the
+      // journal describing a write that never happened while the real one stood.
+      // Recovery must never depend on a record written after the commit.
+      //
+      // A mismatch means a client wrote between the read and the transaction, so
+      // the attempt refuses and loops with fresh data — each retry journaling its
+      // own exact intent under a new attempt number.
+      const MAX_ATTEMPTS = 4;
+      let outcome = { state: 'exhausted' };
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const fresh = await d.ref.get();
+        if (!fresh.exists) { outcome = { state: 'gone' }; break; }
+        const cur = fresh.data();
+        const curUpdates = plan(cur);
+        if (!curUpdates) { outcome = { state: 'already-current' }; break; }
 
-      // Test-only crash simulation. Set to a positive integer to abort after
-      // that many committed writes, which is how the crash-recovery case is
-      // exercised; unset in every real run.
-      const failAfter = Number(process.env.COH006_FAILPOINT_AFTER || 0);
+        const before = imageOf(cur);
+        const after = imageOf({ ...cur, ...curUpdates });
+        jrnl.append({ kind: 'intent', churchId, docId: d.id, attempt, before, after });
 
-      // Re-plan inside the transaction rather than refusing a row a client touched
-      // since the scan. The images then describe the state actually replaced and
-      // produced, and no document is left behind for a later run to pick up —
-      // gate-2 re-review H-1's option (a), which also makes --verify meaningful
-      // immediately after the run instead of only after a second pass.
-      const outcome = await db.runTransaction(async (t) => {
-        const snap = await t.get(d.ref);
-        if (!snap.exists) return { state: 'gone' };
-        const cur = snap.data();
-        const fresh = plan(cur);
-        if (!fresh) return { state: 'already-current' };   // the client's write left it correct
-        const curBefore = imageOf(cur);
-        const curAfter = imageOf({ ...cur, ...fresh });
-        t.update(d.ref, applyImage(curAfter));
-        return { state: 'applied', before: curBefore, after: curAfter, replanned: !matchesImage(cur, before) };
-      });
+        const res = await db.runTransaction(async (t) => {
+          const snap = await t.get(d.ref);
+          if (!snap.exists) return 'gone';
+          if (!matchesImage(snap.data(), before)) return 'stale';
+          t.update(d.ref, applyImage(after));
+          return 'applied';
+        });
+
+        if (res === 'applied') {
+          // Crash between the remote commit and the applied record. The write is
+          // still recoverable because the intent already on disk describes it
+          // exactly — that is the property the previous design lacked.
+          if (TEST_HOOKS.failMode === 'before-applied' && TEST_HOOKS.failAfter
+              && (grand.applied + per.applied + 1) >= TEST_HOOKS.failAfter) {
+            console.error(`\n💥 COH006_FAILPOINT_MODE=before-applied — committed, aborting before the applied record.`);
+            jrnl.close();
+            process.exit(70);
+          }
+          jrnl.append({ kind: 'applied', churchId, docId: d.id, attempt });
+          outcome = { state: 'applied', replanned: attempt > 1 };
+          break;
+        }
+        if (res === 'gone') { outcome = { state: 'gone' }; break; }
+        jrnl.append({ kind: 'superseded', churchId, docId: d.id, attempt });
+      }
+
       if (outcome.state === 'applied') {
         per.applied++;
         if (outcome.replanned) per.replanned++;
-        // The applied line carries the images the transaction really used, which
-        // supersede the intent line's if a re-plan happened.
-        jrnl.append({ kind: 'applied', churchId, docId: d.id, before: outcome.before, after: outcome.after, replanned: outcome.replanned });
-        if (failAfter && (grand.applied + per.applied) >= failAfter) {
-          console.error(`\n💥 COH006_FAILPOINT_AFTER=${failAfter} — aborting after ${failAfter} committed write(s).`);
+        if (TEST_HOOKS.failMode === 'after-applied' && TEST_HOOKS.failAfter && (grand.applied + per.applied) >= TEST_HOOKS.failAfter) {
+          console.error(`\n💥 COH006_FAILPOINT_AFTER=${TEST_HOOKS.failAfter} — aborting after ${TEST_HOOKS.failAfter} committed write(s).`);
           jrnl.close();
           process.exit(70);
         }
