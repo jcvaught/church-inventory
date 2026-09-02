@@ -229,8 +229,18 @@ async function main() {
       const summary = explain?.metrics?.planSummary ?? explain?.planSummary;
       const used = summary?.indexesUsed || [];
       console.log('    planSummary.indexesUsed:', JSON.stringify(used));
-      const hit = used.some((i) => JSON.stringify(i).includes('visibility') && JSON.stringify(i).includes('sharedWithUids'));
-      check(used.length > 0 && hit, 'plan uses a composite index naming visibility and sharedWithUids');
+      // Assert the STRUCTURE, not a substring: scope, both field names, and the
+      // array-contains mode. A single-field index, a collection-GROUP index, or a
+      // plan naming only __name__ must all fail rather than pass on a loose match.
+      const hit = used.some((i) => {
+        const props = String(i.properties || '');
+        const scope = String(i.query_scope || i.queryScope || '');
+        return /^collection$/i.test(scope)
+          && /\bvisibility\s+ASC\b/.test(props)
+          && /\bsharedWithUids\s+ARRAY_CONTAINS\b/.test(props);
+      });
+      check(used.length > 0 && hit,
+        'plan uses a COLLECTION-scope composite: visibility ASC + sharedWithUids ARRAY_CONTAINS');
     } catch (e) {
       console.log(`    ⚠️  Query Explain unavailable (${e.code || e.message}).`);
       console.log('    Recording the limitation rather than claiming the index was identified.');
@@ -243,7 +253,10 @@ async function main() {
     for (const [docId] of Object.values(F)) del.delete(adb.doc(`churches/${CHURCH}/workItems/${docId}`));
     await del.commit();
     const left = await adb.collection(`churches/${CHURCH}/workItems`).count().get();
-    console.log(`  removed ${Object.keys(F).length} fixtures; ${left.data().count} workItems remain in ${CHURCH}`);
+    // A checked assertion, not a printed number: fixtures left behind in a
+    // production tenant would break the next run's zero-count precondition and
+    // quietly become someone else's confusing data.
+    check(left.data().count === 0, `cleanup: ${CHURCH} is empty again (${left.data().count} remain)`);
   }
 }
 
