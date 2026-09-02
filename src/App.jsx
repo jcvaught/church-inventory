@@ -926,6 +926,22 @@ function AppShell({ authHook }) {
       </div>
       </PageErrorBoundary>
 
+      {/* COH-006 gate 3: a work-item listener failed terminally, so task data is
+          incomplete and the store is publishing nothing rather than a short list.
+          This is app-wide and not dismissible, because Global Search, Event Day
+          and the exports all read that data — a toast someone dismissed would
+          leave every one of them quietly answering from an empty set. */}
+      {store.workItemsError && (
+        <div role="alert" style={{ position:"sticky", top:0, zIndex:250, background:"#FEF3C7", borderBottom:"2px solid #F59E0B", padding:"10px 20px", fontFamily:f1, fontSize:13, color:"#7C2D12", textAlign:"center" }}>
+          <strong>Tasks and maintenance could not be fully loaded</strong>{" "}
+          ({store.workItemsError.sources.join(", ")}
+          {store.workItemsError.code ? `: ${store.workItemsError.code}` : ""}).
+          They are hidden rather than shown incomplete, so search, Event Day and
+          exports are not reliable right now. Reload the page; if it persists,
+          contact your administrator.
+        </div>
+      )}
+
       {/* Error toast */}
       {store.error && (
         <div style={{ position:"fixed", bottom: isMobile ? "calc(96px + env(safe-area-inset-bottom, 0px))" : 24, left:"50%", transform:"translateX(-50%)", zIndex:300, background:"#1E1E1E", color:"#fff", borderRadius:12, padding:"12px 20px", display:"flex", alignItems:"center", gap:14, boxShadow:"0 4px 20px rgba(0,0,0,0.3)", maxWidth:"90vw", minWidth:280 }}>

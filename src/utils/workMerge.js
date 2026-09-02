@@ -64,11 +64,21 @@ export function createWorkStore(sourceKeys) {
       delivered.delete(key);
     },
     read() {
-      const { tasks, maintenance } = mergeWorkSources(data);
+      const merged = mergeWorkSources(data);
       const complete = sourceKeys.every(k => delivered.has(k)) && failed.size === 0;
       return {
-        tasks,
-        maintenance,
+        // The authoritative arrays. EMPTY when the store is incomplete, on
+        // purpose (gate-3 verification review H-2): partial data must not travel
+        // the same contract that Global Search, Event Day, CSV/ICS export and the
+        // attention panel treat as "all the tasks". A warning on one board is not
+        // enough — those surfaces would report a normal result computed from a
+        // silently short list. Better to show nothing and say why than to answer
+        // a question about visibility with an answer that is quietly incomplete.
+        tasks: complete ? merged.tasks : [],
+        maintenance: complete ? merged.maintenance : [],
+        // What did arrive, for diagnostics and for a UI that wants to say how
+        // much is missing. Deliberately NOT the same field names.
+        partial: merged,
         complete,
         settled: sourceKeys.every(k => delivered.has(k) || failed.has(k)),
         error: failed.size

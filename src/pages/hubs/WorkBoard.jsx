@@ -1791,12 +1791,13 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
           you". */}
       {store.workItemsError && (
         <div role="alert" style={{ background:'#FEF3C7', border:'1px solid #F59E0B', borderRadius:8, padding:'10px 14px', marginBottom:16, fontFamily:f2, fontSize:13, color:'#7C2D12' }}>
-          <strong>This list may be incomplete.</strong>{' '}
-          Some {isMaint ? 'maintenance items' : 'tasks'} could not be loaded
+          <strong>This board is not showing your {isMaint ? 'maintenance items' : 'tasks'}.</strong>{' '}
+          Part of the data could not be loaded
           ({store.workItemsError.sources.join(', ')}
-          {store.workItemsError.code ? `: ${store.workItemsError.code}` : ''}).
-          Reload the page; if it keeps happening, tell your administrator before
-          relying on what you see here.
+          {store.workItemsError.code ? `: ${store.workItemsError.code}` : ''}), so
+          the list is hidden rather than shown incomplete — a short list here
+          would look exactly like having nothing. Reload the page; if it keeps
+          happening, tell your administrator.
         </div>
       )}
       {/* Header */}
