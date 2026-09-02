@@ -54,3 +54,71 @@ test('no sources yields empty arrays rather than throwing', () => {
   assert.deepEqual(tasks, []);
   assert.deepEqual(maintenance, []);
 });
+
+// ── createWorkStore — Codex's gate-3 H-1 fixtures, run ───────────────────────
+// A Firestore listener error callback is terminal. The bug these pin: counting
+// it as an initial snapshot lets loading finish and presents a task list that is
+// silently missing whatever that source alone delivers.
+import { createWorkStore } from '../../src/utils/workMerge.js';
+
+const KEYS = ['maintenance', 'team', 'own', 'assigned', 'shared'];
+const docs = (...entries) => new Map(entries);
+
+test('a terminal query error does not count as an initial snapshot', () => {
+  const store = createWorkStore(KEYS);
+  for (const k of ['maintenance', 'team', 'own', 'assigned']) store.snapshot(k, new Map());
+  store.fail('shared', 'failed-precondition');
+
+  const state = store.read();
+  assert.equal(state.complete, false, 'must not be marked successfully ready');
+  assert.ok(state.error, 'a blocking error must be exposed');
+  assert.deepEqual(state.error.sources, ['shared']);
+  assert.equal(state.error.code, 'failed-precondition');
+  // The spinner still ends — a dead listener must not hang the app — but the
+  // empty list is explicitly not a complete result.
+  assert.equal(state.settled, true);
+  assert.deepEqual(state.tasks, []);
+});
+
+test('a source that fails after delivering stops presenting its documents', () => {
+  const store = createWorkStore(KEYS);
+  for (const k of ['maintenance', 'team', 'own', 'assigned']) store.snapshot(k, new Map());
+  store.snapshot('shared', docs(task('task_shared')));
+  assert.deepEqual(store.read().tasks.map(t => t._docId), ['task_shared']);
+
+  store.fail('shared', 'permission-denied');
+  const state = store.read();
+  assert.equal(state.complete, false);
+  assert.deepEqual(state.tasks, [], 'stale documents from a dead listener must not persist');
+  assert.equal(state.error.code, 'permission-denied');
+});
+
+test('all five delivering makes the store complete and error-free', () => {
+  const store = createWorkStore(KEYS);
+  for (const k of KEYS) store.snapshot(k, new Map());
+  store.snapshot('team', docs(task('task_t')));
+  const state = store.read();
+  assert.equal(state.complete, true);
+  assert.equal(state.settled, true);
+  assert.equal(state.error, null);
+  assert.deepEqual(state.tasks.map(t => t._docId), ['task_t']);
+});
+
+test('a source is neither settled nor complete before it reports', () => {
+  const store = createWorkStore(KEYS);
+  for (const k of ['maintenance', 'team', 'own', 'assigned']) store.snapshot(k, new Map());
+  const state = store.read();
+  assert.equal(state.settled, false, 'the spinner must not end while a source is still silent');
+  assert.equal(state.complete, false);
+});
+
+test('a failed source that later recovers clears the error', () => {
+  const store = createWorkStore(KEYS);
+  for (const k of KEYS) store.snapshot(k, new Map());
+  store.fail('shared', 'unavailable');
+  assert.ok(store.read().error);
+  store.snapshot('shared', docs(task('task_s')));
+  const state = store.read();
+  assert.equal(state.error, null);
+  assert.equal(state.complete, true);
+});

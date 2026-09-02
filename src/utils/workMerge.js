@@ -28,3 +28,53 @@ export function mergeWorkSources(sources) {
     maintenance: all.filter(w => w.type === 'maintenance').sort(byCreatedDesc),
   };
 }
+
+// The listener coordinator, extracted so the states that matter can be tested
+// without a Firestore connection (gate-3 review H-1).
+//
+// The distinction it exists to enforce: a source that FAILED is not a source that
+// returned nothing. A Firestore listener error callback is terminal — a missing
+// index (`failed-precondition`) or a denied query (`permission-denied`) never
+// recovers on its own — so counting it as an initial snapshot would let the app
+// finish loading and present a task list that is quietly missing everything that
+// source alone delivers. On a task whose whole point is who can see what, that is
+// the worst possible failure mode: it looks exactly like "you have no shared
+// tasks".
+//
+//   settled  — every source has either delivered or failed. Ends the spinner.
+//   complete — every source delivered and none failed. Only then is the store
+//              authoritative, and only then may the UI present it as the answer.
+//
+// A source that fails also has its documents dropped, so a listener that dies
+// after delivering cannot leave stale documents on screen indefinitely.
+export function createWorkStore(sourceKeys) {
+  const data = new Map(sourceKeys.map(k => [k, new Map()]));
+  const delivered = new Set();
+  const failed = new Map();
+
+  return {
+    snapshot(key, docs) {
+      data.set(key, docs);
+      delivered.add(key);
+      failed.delete(key);
+    },
+    fail(key, code) {
+      data.set(key, new Map());
+      failed.set(key, code || 'unknown');
+      delivered.delete(key);
+    },
+    read() {
+      const { tasks, maintenance } = mergeWorkSources(data);
+      const complete = sourceKeys.every(k => delivered.has(k)) && failed.size === 0;
+      return {
+        tasks,
+        maintenance,
+        complete,
+        settled: sourceKeys.every(k => delivered.has(k) || failed.has(k)),
+        error: failed.size
+          ? { sources: [...failed.keys()], code: [...failed.values()][0] }
+          : null,
+      };
+    },
+  };
+}

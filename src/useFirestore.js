@@ -11,7 +11,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { generateRecurrenceDates } from './utils/date.js';
 import { excludeTestAccounts } from './utils/testAccounts.js';
 import { uidsOf } from './utils/taskVisibility.js';
-import { mergeWorkSources } from './utils/workMerge.js';
+import { createWorkStore } from './utils/workMerge.js';
 
 // ── Work model (unified Tasks + Maintenance) ─────────────────────────────────
 // Tasks and maintenance tickets live in one `workItems` collection (a single
@@ -77,6 +77,9 @@ export function useFirestore(churchId, userProfile) {
   const [accessRecords, setAccessRecords] = useState([]);
   const [timeEntries, setTimeEntries] = useState([]);
   const [tasks, setTasks] = useState([]);
+  // Non-null when a work-item listener has terminally failed: the task list is
+  // then incomplete and must not be presented as authoritative (COH-006 gate 3).
+  const [workItemsError, setWorkItemsError] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [jobListings, setJobListings] = useState([]);
   const [jobAnnouncements, setJobAnnouncements] = useState([]);
@@ -280,19 +283,18 @@ export function useFirestore(churchId, userProfile) {
         ['shared', query(workRef, where('visibility', '==', 'shared'), where('sharedWithUids', 'array-contains', myUid))],
       ] : []),
     ];
-    const workBySource = new Map(workQueries.map(([key]) => [key, new Map()]));
-    const workFirstSnapshot = new Set();
-    const emitWork = () => {
-      const { tasks: t, maintenance: m } = mergeWorkSources(workBySource);
-      setTasks(t);
-      setMaintenanceTickets(m);
-    };
-    // Every listener must report once — including one that errors — or the single
-    // readiness signal never fires and the app stays on its loading state forever.
-    const workReady = (key) => {
-      if (workFirstSnapshot.has(key)) return;
-      workFirstSnapshot.add(key);
-      if (workFirstSnapshot.size >= workQueries.length) checkDone();
+    const workStore = createWorkStore(workQueries.map(([key]) => key));
+    let workSettled = false;
+    const publishWork = () => {
+      const state = workStore.read();
+      setTasks(state.tasks);
+      setMaintenanceTickets(state.maintenance);
+      // Consumers must be able to tell "no shared tasks" from "the shared query
+      // failed" — see createWorkStore. `complete` gates presenting this as the
+      // answer; the spinner ends on `settled` either way, so a dead listener
+      // cannot hang the app.
+      setWorkItemsError(state.complete ? null : state.error);
+      if (state.settled && !workSettled) { workSettled = true; checkDone(); }
     };
     for (const [key, q] of workQueries) {
       unsubs.push(onSnapshot(q, (snap) => {
@@ -300,10 +302,13 @@ export function useFirestore(churchId, userProfile) {
         // CRUD calls speak bare ids; the merge key is the real document id.
         const next = new Map();
         for (const d of snap.docs) next.set(d.id, { _docId: stripWorkPrefix(d.id), ...d.data() });
-        workBySource.set(key, next);
-        emitWork();
-        workReady(key);
-      }, (err) => { handleErr(err, { listener: true }); workReady(key); }));
+        workStore.snapshot(key, next);
+        publishWork();
+      }, (err) => {
+        handleErr(err, { listener: true });
+        workStore.fail(key, err?.code);
+        publishWork();
+      }));
     }
 
     // Rooms/Spaces
@@ -1591,7 +1596,7 @@ export function useFirestore(churchId, userProfile) {
     config, settings, items, supplies, activityLog, reservations, users,
     maintenanceTickets, vendors, bundles, notificationConfig, audits,
     tasks,
-    loading, error,
+    loading, error, workItemsError,
     loadOlderActivityLog, loadActivityLogSince,
     updateSettings, updateConfig,
     addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem,

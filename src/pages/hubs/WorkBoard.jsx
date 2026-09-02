@@ -766,7 +766,13 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
     const unsub = onSnapshot(q, snap => {
       setComments(snap.docs.map(d => ({ id:d.id, ...d.data() })));
       setCommentsLoading(false);
-    }, () => setCommentsLoading(false));
+    }, () => {
+      // Clear rather than keep showing comments this listener can no longer
+      // confirm — gate 4 gates comments on the parent's visibility, so a denial
+      // here becomes a real case (gate-3 review M-1).
+      setComments([]);
+      setCommentsLoading(false);
+    });
     return unsub;
   }, [showDetail?._docId, churchId]);
 
@@ -796,6 +802,20 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
           setDetailEdits(edits);
           setDetailSnapshot(edits);
         }
+      },
+      // COH-006 gate 3 (review M-1): losing read access is not a delete, and the
+      // `!snap.exists()` branch above never fires for it. When the creator drops
+      // your last assignment on a private task, the collection listeners stop
+      // returning it and this document listener is denied — previously leaving the
+      // modal open on data you can no longer read, with no explanation. Close it
+      // and say why. Any other listener failure closes too rather than silently
+      // freezing on a stale document.
+      err => {
+        setShowDetail(null);
+        setRemoteUpdate(null);
+        flash(err?.code === 'permission-denied'
+          ? `Your access to this ${noun} was removed.`
+          : `This ${noun} stopped syncing and was closed.`, true);
       }
     );
     return () => { unsub(); setRemoteUpdate(null); };
@@ -1764,6 +1784,21 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
   // ── Render ──
   return (
     <div>
+      {/* COH-006 gate 3: a work-item listener failed terminally, so this board is
+          missing whatever that query alone delivers. Say so rather than letting an
+          incomplete list read as the complete one — on a visibility feature, a
+          silently short list is indistinguishable from "nothing is shared with
+          you". */}
+      {store.workItemsError && (
+        <div role="alert" style={{ background:'#FEF3C7', border:'1px solid #F59E0B', borderRadius:8, padding:'10px 14px', marginBottom:16, fontFamily:f2, fontSize:13, color:'#7C2D12' }}>
+          <strong>This list may be incomplete.</strong>{' '}
+          Some {isMaint ? 'maintenance items' : 'tasks'} could not be loaded
+          ({store.workItemsError.sources.join(', ')}
+          {store.workItemsError.code ? `: ${store.workItemsError.code}` : ''}).
+          Reload the page; if it keeps happening, tell your administrator before
+          relying on what you see here.
+        </div>
+      )}
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20, flexWrap:'wrap', gap:12 }}>
         <div>
