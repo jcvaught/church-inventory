@@ -80,6 +80,25 @@ test('a terminal query error does not count as an initial snapshot', () => {
   assert.deepEqual(state.tasks, []);
 });
 
+test('an incomplete store publishes NO tasks through the authoritative contract', () => {
+  // Gate-3 verification review H-2: Global Search, Event Day and the exports all
+  // read `tasks`. If a short list travels that field they report a normal result
+  // computed from incomplete data, which on this feature is indistinguishable
+  // from a correct one.
+  const store = createWorkStore(KEYS);
+  store.snapshot('team', docs(task('task_team')));
+  for (const k of ['maintenance', 'own', 'assigned']) store.snapshot(k, new Map());
+  store.fail('shared', 'failed-precondition');
+
+  const state = store.read();
+  assert.deepEqual(state.tasks, [], 'no partial array may travel the loaded contract');
+  assert.deepEqual(state.maintenance, []);
+  // What arrived is still available, under a different name, for diagnostics.
+  assert.deepEqual(state.partial.tasks.map(t => t._docId), ['task_team']);
+  assert.equal(state.complete, false);
+  assert.ok(state.error);
+});
+
 test('a source that fails after delivering stops presenting its documents', () => {
   const store = createWorkStore(KEYS);
   for (const k of ['maintenance', 'team', 'own', 'assigned']) store.snapshot(k, new Map());
