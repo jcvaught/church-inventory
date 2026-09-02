@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   doc, setDoc, getDoc, deleteDoc, getDocs,
   collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction, writeBatch, startAfter,
@@ -10,7 +10,8 @@ import { ref as stRef, deleteObject } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { generateRecurrenceDates } from './utils/date.js';
 import { excludeTestAccounts } from './utils/testAccounts.js';
-import { canSeeTask, uidsOf } from './utils/taskVisibility.js';
+import { uidsOf } from './utils/taskVisibility.js';
+import { mergeWorkSources } from './utils/workMerge.js';
 
 // ── Work model (unified Tasks + Maintenance) ─────────────────────────────────
 // Tasks and maintenance tickets live in one `workItems` collection (a single
@@ -244,20 +245,66 @@ export function useFirestore(churchId, userProfile) {
       checkDone();
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
-    // Work Items (unified Tasks + Maintenance). One subscription feeds both the
-    // `tasks` and `maintenanceTickets` arrays, split by the `type` discriminator.
-    // `_docId` is the bare id (prefix stripped) so downstream link fields and
-    // CRUD calls speak bare ids.
-    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'workItems'), (snap) => {
-      const all = snap.docs.map(d => ({ _docId: stripWorkPrefix(d.id), ...d.data() }));
-      const t = all.filter(w => w.type === 'task');
-      const m = all.filter(w => w.type === 'maintenance');
-      t.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-      m.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    // Work Items (unified Tasks + Maintenance) — COH-006 gate 3.
+    //
+    // This used to be one unconstrained listener over the whole collection, and
+    // production delivered every member's private tasks over it (DEC-2026-009).
+    // It is now five constrained listeners whose shapes the rules can prove safe,
+    // merged into the same two arrays the app already consumed. Each query
+    // matches one arm of the read rule:
+    //
+    //   maintenance  type == 'maintenance'                    — no visibility model
+    //   team         visibility == 'team'                     — church-wide
+    //   own          createdBy == uid
+    //   assigned     assigneeUids array-contains uid
+    //   shared       visibility == 'shared' AND sharedWithUids array-contains uid
+    //
+    // The shared listener needs BOTH constraints: `sharedWithUids` alone can match
+    // a private task carrying a stale recipient, which the rules do not authorize
+    // (gate-1 review H-1). That pairing is why it needs the composite index.
+    //
+    // Membership is tracked PER SOURCE rather than merged into one accumulating
+    // map, so a document that drops out of its last qualifying listener — a task
+    // unshared, unassigned, or made private — leaves the store instead of
+    // lingering in a dedupe cache (gate-2 review). Readiness is one signal: the
+    // work-items slot reports done once every listener has produced a first
+    // snapshot, so the app does not render a half-populated board.
+    const workRef = collection(db, 'churches', churchId, 'workItems');
+    const myUid = userProfile?.uid;
+    const workQueries = [
+      ['maintenance', query(workRef, where('type', '==', 'maintenance'))],
+      ['team', query(workRef, where('visibility', '==', 'team'))],
+      ...(myUid ? [
+        ['own', query(workRef, where('createdBy', '==', myUid))],
+        ['assigned', query(workRef, where('assigneeUids', 'array-contains', myUid))],
+        ['shared', query(workRef, where('visibility', '==', 'shared'), where('sharedWithUids', 'array-contains', myUid))],
+      ] : []),
+    ];
+    const workBySource = new Map(workQueries.map(([key]) => [key, new Map()]));
+    const workFirstSnapshot = new Set();
+    const emitWork = () => {
+      const { tasks: t, maintenance: m } = mergeWorkSources(workBySource);
       setTasks(t);
       setMaintenanceTickets(m);
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+    };
+    // Every listener must report once — including one that errors — or the single
+    // readiness signal never fires and the app stays on its loading state forever.
+    const workReady = (key) => {
+      if (workFirstSnapshot.has(key)) return;
+      workFirstSnapshot.add(key);
+      if (workFirstSnapshot.size >= workQueries.length) checkDone();
+    };
+    for (const [key, q] of workQueries) {
+      unsubs.push(onSnapshot(q, (snap) => {
+        // `_docId` is the bare id (prefix stripped) so downstream link fields and
+        // CRUD calls speak bare ids; the merge key is the real document id.
+        const next = new Map();
+        for (const d of snap.docs) next.set(d.id, { _docId: stripWorkPrefix(d.id), ...d.data() });
+        workBySource.set(key, next);
+        emitWork();
+        workReady(key);
+      }, (err) => { handleErr(err, { listener: true }); workReady(key); }));
+    }
 
     // Rooms/Spaces
     unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'rooms'), (snap) => {
@@ -299,7 +346,9 @@ export function useFirestore(churchId, userProfile) {
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     return () => unsubs.forEach(u => u());
-  }, [churchId]);
+    // userProfile.uid is a dependency now: three of the work-item listeners are
+    // scoped to the signed-in user, so they have to be created once it arrives.
+  }, [churchId, userProfile?.uid]);
 
   // People Access is manager/admin-readable, while ordinary users receive only
   // their linked tracked-person document(s) and those people's compliance
@@ -1531,23 +1580,17 @@ export function useFirestore(churchId, userProfile) {
     } catch (err) { handleErr(err); return []; }
   }, [churchId]);
 
-  // ── Interim task-visibility filter (DEC-2026-010) ───────────────────────────
-  // The `workItems` listener above is unconstrained, and production delivers
-  // other members' private tasks over it (DEC-2026-009). Until COH-006 replaces
-  // it with constrained queries, filter at this single point every consumer
-  // reads, so private/shared tasks stay out of Global Search, Event Day, exports,
-  // and the attention panel — not just the Work board, which filtered its own
-  // list already. This is NOT authorization: the documents still reach the
-  // browser. Remove at COH-006's reader cutover so there is one enforcement path.
-  const visibleTasks = useMemo(
-    () => tasks.filter(t => canSeeTask(t, userProfile?.uid)),
-    [tasks, userProfile?.uid]
-  );
+  // The interim store filter that lived here is gone (COH-006 gate 3). It was
+  // compensating for an unconstrained listener that no longer exists: the five
+  // constrained queries above deliver only what this user may read, so filtering
+  // the result again would be a second, drifting definition of visibility on top
+  // of the rules that now enforce it. WorkBoard keeps its own canSeeTask call as
+  // a rendering guard, which is cheap and harmless over an already-scoped store.
 
   return {
     config, settings, items, supplies, activityLog, reservations, users,
     maintenanceTickets, vendors, bundles, notificationConfig, audits,
-    tasks: visibleTasks,
+    tasks,
     loading, error,
     loadOlderActivityLog, loadActivityLogSince,
     updateSettings, updateConfig,
