@@ -514,11 +514,11 @@ async function verify() {
   if (BASELINE === null) console.log('   Re-run with --baseline <expected task count> to also check the population size.');
   // Stated every time, because this is the sentence an operator is most likely
   // to over-read (gate-2 review H-2).
-  console.log('\n⚠️  This is NOT proof that coverage will still be complete at cutover.');
-  console.log('   The scan walks churches in sequence, so a stale client can create an unprojected');
-  console.log('   task in a church already passed, and a write immediately after the last snapshot');
-  console.log('   has the same effect. Closing that race needs the gate-4 create-shape rule live');
-  console.log('   before this scan, or an enforced write freeze through the reader cutover.');
+  console.log('\n⚠️  Complete for creates, not for updates.');
+  console.log('   The create-shape rule is live (DEC-2026-013), so no client can add an unprojected');
+  console.log('   task behind this scan. A stale tab CAN still update assignees or sharing without');
+  console.log('   moving the projection, leaving the arrays disagreeing until a current client writes');
+  console.log('   that document again. Re-run this check immediately before the reader cutover.');
 }
 
 (async () => {

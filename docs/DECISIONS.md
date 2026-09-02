@@ -576,3 +576,32 @@ backfill that rewrites every task document is not.
 **Note for future sessions.** Where this file and `AGENTS.md` disagree, say so
 rather than silently picking the safer reading — the safer reading is not free,
 and here it stalled a finished gate for a day.
+
+#### COH-006 migration record (2026-09-02)
+
+Gate 1 deployed and gate 2 executed against `church-inventory-9615c`.
+
+| Step | Result |
+|---|---|
+| Independent baseline (aggregation count, `type == 'task'`) | 90 |
+| Dry run | 90 tasks, 90 needing projections, 0 needing visibility normalisation |
+| Backup | `~/apps/coh006-migration/backup-20260902-091731.json`, 90 rows |
+| Execute | 90 applied, 0 skipped; manifest `manifest-20260902-091731.json` |
+| Verify `--baseline 90` | 0 outstanding |
+| Spot check | 0 projection mismatches against `assignees` / `sharedWith` |
+
+No task needed `visibility` normalisation — every existing task already carried a
+value, so the legacy-missing-field case the plan anticipated did not exist in
+this data.
+
+Visibility distribution afterwards: **80 shared, 6 private, 4 team.** Worth
+stating plainly, because it sets the stakes for gate 4: `shared` is still
+readable by any member of the church under the transitional rule, so the large
+majority of this congregation's tasks remain exposed until the restrictive read
+rule lands. Gate 3 alone stops delivering them to clients; gate 4 is what makes
+that an authorization boundary rather than a client-side choice.
+
+Seventeen `shared` tasks have no recipients at all. Gate 3's shared listener will
+stop delivering those to non-creators, which changes nothing on screen — the UI
+predicate already hid them — but is worth knowing before reading the diff in
+delivered document counts.

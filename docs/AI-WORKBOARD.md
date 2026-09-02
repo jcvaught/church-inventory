@@ -23,7 +23,13 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-006 — Enforce private and shared task visibility
 
-- Status: **In progress** (Claude). Amended twice from Codex reviews:
+- Status: **In progress** (Claude). **Gates 1 and 2 are done in production
+  (2026-09-02).** Gate 1: client, indexes (composite probed present), functions,
+  and rules all deployed. Gate 2: backfill executed — 90 tasks across 6 churches,
+  90 applied, 0 skipped, verify 0 outstanding against an independent aggregation
+  baseline of 90, and a field-by-field spot check found 0 projection mismatches.
+  Backup and manifest are at `~/apps/coh006-migration/`. Gate 3 is written and
+  reviewed but NOT deployed; gate 4 is not started. Amended twice from Codex reviews:
   `docs/COH-006-PREIMPLEMENTATION-REVIEW-2026-08-31.md` (seven findings, all
   verified and accepted; owner calls in **DEC-2026-010**) and
   `docs/COH-006-PLAN-REVIEW-ROUND2-2026-08-31.md` (four further amendments, all
