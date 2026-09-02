@@ -545,3 +545,34 @@ update rule does not enforce the shape. That write leaves the object arrays and
 the uid arrays disagreeing until the next write from a current client. The
 gate-3 delta scan will catch it if it happens before cutover; after cutover the
 canonical uid arrays simply lag. Recorded rather than solved.
+
+### DEC-2026-014 — Claude deploys; the owner approves execution
+
+- Date: 2026-09-02
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: `AGENTS.md` (Safety and Production Boundaries, Definition
+  of Done), `docs/AI-WORKBOARD.md`
+
+**The contradiction.** `AGENTS.md` said, in one place, that Claude "follows the
+product owner's established operational practice … which includes running
+Firebase deploys; it does not need per-deploy approval," and in another that
+"every production deploy [remains] the product owner's decision." Claude
+followed the more restrictive line without flagging the conflict, and then wrote
+"the four gates are the owner's to trigger" into the COH-006 entry, hardening its
+own caution into something that looked like a project rule. The owner noticed and
+asked why deployment was their task.
+
+**Decision.** Claude merges to `main` — which deploys the client via Vercel — and
+runs `firestore:rules`, `firestore:indexes`, and functions deploys, verifying
+project targeting first. The owner approves **execution**: running a migration or
+any script that mutates production data, plus anything touching billing, Stripe,
+Twilio, Brevo, or Planning Center. Codex does none of it.
+
+**The line, stated plainly.** Deploying code is Claude's. Changing data is the
+owner's. A rules deploy that alters what users can read is still a deploy; a
+backfill that rewrites every task document is not.
+
+**Note for future sessions.** Where this file and `AGENTS.md` disagree, say so
+rather than silently picking the safer reading — the safer reading is not free,
+and here it stalled a finished gate for a day.

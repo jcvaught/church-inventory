@@ -15,8 +15,9 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   **Review**.
 - The reviewer reports findings by severity. Ownership stays with the
   implementation owner unless explicitly transferred.
-- Deployment and production-data changes are separate owner-approved actions;
-  **Merged** does not imply **Deployed**.
+- **Merged** does not imply **Deployed**. Deployment is Claude's under
+  DEC-2026-014; changes that mutate production data are the owner's to approve
+  and remain a separate, explicit step.
 
 ## Active Tasks
 

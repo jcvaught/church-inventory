@@ -334,8 +334,21 @@ results in the handoff.
 
 A task is not complete until its acceptance criteria are met, relevant tests
 pass, documentation is current, the handoff is written, and known limitations
-are disclosed. Only the product owner decides when to merge or deploy, with one
-standing exception below.
+are disclosed.
+
+**Who may deploy (owner decision 2026-09-02, DEC-2026-014).** This file used to
+say both that Claude runs Firebase deploys without per-deploy approval and that
+every production deploy is the owner's decision. The contradiction is resolved
+in favour of the first:
+
+- **Claude:** merges to `main` (which deploys the client via Vercel) and Firebase
+  deploys — `firestore:rules`, `firestore:indexes`, and functions. Verify project
+  targeting first, every time; five projects share one account.
+- **The product owner, always:** *execution* — running a migration or any script
+  that mutates production data, and anything touching billing, Stripe, Twilio,
+  Brevo, or Planning Center. A migration still needs a backup, a dry run,
+  validation queries, a rollback procedure, and explicit execution approval.
+- **Codex:** none of the above.
 
 ### Documentation merge exception (Claude only)
 
@@ -351,8 +364,7 @@ git diff --stat <base> HEAD -- firestore.rules storage.rules src/ functions/ \
   scripts/ e2e/ package.json
 ```
 
-Empty output is the precondition. If that command prints anything, the merge is
-not documentation-only and requires the product owner. Merging code, rules,
-tests, or configuration to `main`, and every production deploy, remain the
-product owner's decision.
+Empty output is the precondition. This exception predates DEC-2026-014 and is
+now largely redundant: Claude may merge code to `main` as well. It survives as a
+reminder to check what a "documentation" merge actually contains.
 
