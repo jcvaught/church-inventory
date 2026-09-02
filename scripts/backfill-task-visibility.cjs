@@ -139,6 +139,7 @@ const TEST_HOOKS = (() => {
     failAfter: process.env.COH006_FAILPOINT_AFTER,
     failMode: process.env.COH006_FAILPOINT_MODE,
     pauseMs: process.env.COH006_PAUSE_AFTER_SCAN_MS,
+    pauseTxnMs: process.env.COH006_PAUSE_BEFORE_TXN_MS,
   };
   const requested = Object.entries(raw).filter(([, v]) => v !== undefined && v !== '');
   if (!requested.length) return { failAfter: 0, failMode: null, pauseMs: 0 };
@@ -164,6 +165,7 @@ const TEST_HOOKS = (() => {
     failAfter: raw.failAfter ? int('COH006_FAILPOINT_AFTER', raw.failAfter, 100000) : 0,
     failMode: raw.failMode || 'after-applied',
     pauseMs: raw.pauseMs ? int('COH006_PAUSE_AFTER_SCAN_MS', raw.pauseMs, 120000) : 0,
+    pauseTxnMs: raw.pauseTxnMs ? int('COH006_PAUSE_BEFORE_TXN_MS', raw.pauseTxnMs, 120000) : 0,
   };
 })();
 
@@ -253,18 +255,50 @@ async function rollback(path) {
   // The manifest is an append-only JSONL journal, so a run interrupted mid-way
   // still leaves a readable, truncation-tolerant record.
   const lines = fs.readFileSync(path, 'utf8').split('\n').filter(Boolean);
-  const intents = new Map();
+  // Journal state is keyed by document AND attempt, because "the last intent for
+  // this document" is not the same as "the write this migration made"
+  // (gate-3 verification review H-1). The sequence that breaks the simpler rule:
+  // attempt 1 journals before B / after A; a client independently changes the
+  // document from B to exactly A; the transaction sees a stale before-image,
+  // writes nothing, and journals `superseded`; the retry finds the document
+  // already current and journals no new intent. Rollback would then see the last
+  // intent, see the document equals A, and "restore" B — undoing the client's
+  // write for a migration write that never happened.
+  //
+  //   intent + applied     → this migration wrote it; roll it back
+  //   intent + superseded  → it did not write; ignore entirely
+  //   intent + neither     → crash-after-commit ambiguity; keep it, and let the
+  //                          conditional compare decide (a write that never
+  //                          landed will not match its after-image)
+  const attempts = new Map();
   let header = null;
   let complete = false;
   for (const line of lines) {
     let row;
     try { row = JSON.parse(line); } catch { continue; }   // a torn last line is expected after a crash
-    if (row.kind === 'manifest-header') header = row;
-    // The last intent for a document is the authoritative one: earlier attempts
-    // were superseded because a client wrote before they could commit, and their
-    // transactions did not apply.
-    else if (row.kind === 'intent') intents.set(`${row.churchId}/${row.docId}`, row);
-    else if (row.kind === 'complete') complete = true;
+    if (row.kind === 'manifest-header') { header = row; continue; }
+    if (row.kind === 'complete') { complete = true; continue; }
+    if (!row.docId || row.attempt === undefined) continue;
+    const key = `${row.churchId}/${row.docId}#${row.attempt}`;
+    if (row.kind === 'intent') attempts.set(key, { intent: row, status: attempts.get(key)?.status || null });
+    else if (row.kind === 'applied' || row.kind === 'superseded') {
+      const e = attempts.get(key) || { intent: null, status: null };
+      e.status = row.kind;
+      attempts.set(key, e);
+    }
+  }
+
+  const intents = new Map();
+  for (const { intent, status } of attempts.values()) {
+    if (!intent || status === 'superseded') continue;
+    const docKey = `${intent.churchId}/${intent.docId}`;
+    const held = intents.get(docKey);
+    // An applied attempt always wins over an unresolved one, and among equals the
+    // later attempt is the relevant one.
+    if (!held || (status === 'applied' && held.status !== 'applied')
+        || (status === held.status && intent.attempt > held.intent.attempt)) {
+      intents.set(docKey, { intent, status });
+    }
   }
   if (!header) {
     console.error(`✋ ${path} has no manifest header, so it is not an --execute journal.`);
@@ -288,7 +322,7 @@ async function rollback(path) {
   const skipped = [];
   let restored = 0;
   let missing = 0;
-  for (const row of intents.values()) {
+  for (const { intent: row } of intents.values()) {
     const ref = db.doc(`churches/${row.churchId}/workItems/${row.docId}`);
     if (!EXECUTE) {
       const snap = await ref.get();
@@ -398,6 +432,13 @@ async function run() {
         const before = imageOf(cur);
         const after = imageOf({ ...cur, ...curUpdates });
         jrnl.append({ kind: 'intent', churchId, docId: d.id, attempt, before, after });
+
+        // Test-only: hold between journaling the intent and the transaction, the
+        // only window in which an attempt can be superseded. Unset in real runs.
+        if (TEST_HOOKS.pauseTxnMs && attempt === 1) {
+          console.log(`  ⏸  COH006_PAUSE_BEFORE_TXN_MS=${TEST_HOOKS.pauseTxnMs} — holding before the ${d.id} transaction.`);
+          await new Promise((r) => setTimeout(r, TEST_HOOKS.pauseTxnMs));
+        }
 
         const res = await db.runTransaction(async (t) => {
           const snap = await t.get(d.ref);
