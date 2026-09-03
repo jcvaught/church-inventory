@@ -14,8 +14,9 @@ import { test, before, after, beforeEach } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import assert from 'node:assert/strict';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField, collection, getDocs, query, where } from 'firebase/firestore';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const RULES = readFileSync(join(here, '../../../firestore.rules'), 'utf8');
@@ -333,3 +334,178 @@ test('comments: a team task turned private shuts out the former ordinary member'
   await assertFails(comment('teamMember', 'task_t'));
   await assertFails(updateDoc(doc(as('teamMember'), P('workItems/task_t/comments/c1')), { text: 'edit' }));
 });
+
+
+// ── The five gate-3 list shapes ─────────────────────────────────────────────
+// Rule-regression coverage only: the emulator fails OPEN on list queries, so a
+// pass here proves the rule does not reject the query shape outright — not that
+// production would contain the results. Containment is the production probe's
+// job (scripts/verify-coh006-gate3.mjs), which asserts exact ID sets.
+
+const items = (uid) => collection(as(uid), P('workItems'));
+
+test('list: each of the five deployed client queries is admitted by the final rule', async () => {
+  await put('mnt_1', { type: 'maintenance', title: 'Boiler' });
+  await put('task_team', task({ visibility: 'team' }));
+  await put('task_mine', task({ visibility: 'private' }));
+  await put('task_asg', task({ visibility: 'private', assigneeUids: ['assignee'] }));
+  await put('task_shr', task({ visibility: 'shared', sharedWithUids: ['recipient'] }));
+
+  const outcome = async (label, q) => {
+    try { const r = await getDocs(q); return `${label}: ALLOWED (${r.size})`; }
+    catch (e) { return `${label}: ${e.code}`; }
+  };
+  const results = [
+    await outcome('maintenance', query(items('teamMember'), where('type', '==', 'maintenance'))),
+    await outcome('team', query(items('teamMember'), where('visibility', '==', 'team'))),
+    await outcome('own', query(items('creator'), where('createdBy', '==', 'creator'))),
+    await outcome('assigned', query(items('assignee'), where('assigneeUids', 'array-contains', 'assignee'))),
+    await outcome('shared', query(items('recipient'),
+      where('visibility', '==', 'shared'), where('sharedWithUids', 'array-contains', 'recipient'))),
+  ];
+  assert.deepEqual(results.filter((r) => !r.includes('ALLOWED')), [], results.join(' | '));
+});
+
+test('list: a query the rule cannot prove safe is rejected', async () => {
+  // The shape the old client used, and the one gate 3 removed: constrained only
+  // by sharedWithUids, which can match a private task carrying a stale recipient.
+  await put('task_stale', task({ visibility: 'private', sharedWithUids: ['recipient'] }));
+  await assertFails(getDocs(query(items('recipient'), where('sharedWithUids', 'array-contains', 'recipient'))));
+});
+
+// ── Completing the adversarial matrix ───────────────────────────────────────
+
+test('read: inactive and cross-tenant users are denied EVERY positive arm', async () => {
+  await put('mnt_1', { type: 'maintenance', title: 'Boiler' });
+  await put('task_team', task({ visibility: 'team' }));
+  await put('task_own', task({ visibility: 'private', createdBy: 'inactive' }));
+  await put('task_asg', task({ visibility: 'private', assigneeUids: ['inactive', 'outsider'] }));
+  await put('task_shr', task({ visibility: 'shared', sharedWithUids: ['inactive', 'outsider'] }));
+  for (const uid of ['inactive', 'outsider']) {
+    for (const id of ['mnt_1', 'task_team', 'task_own', 'task_asg', 'task_shr']) {
+      await assertFails(read(uid, id));
+    }
+  }
+});
+
+test('update: an admin cannot grant self OR a third party, on private OR shared, through either projection', async () => {
+  await put('task_p', task({ visibility: 'private' }));
+  await put('task_s', task({ visibility: 'shared', sharedWithUids: ['recipient'] }));
+  for (const id of ['task_p', 'task_s']) {
+    for (const field of ['assigneeUids', 'sharedWithUids']) {
+      await assertFails(tryGrant('boss', id, field, ['boss']));
+      await assertFails(tryGrant('boss', id, field, ['third']));
+    }
+  }
+});
+
+test('update: creator, recipient and assignee can each widen through BOTH projections', async () => {
+  await put('task_c', task({ visibility: 'private' }));
+  await assertSucceeds(tryGrant('creator', 'task_c', 'assigneeUids', ['third']));
+  await assertSucceeds(tryGrant('creator', 'task_c', 'sharedWithUids', ['third']));
+
+  await put('task_r', task({ visibility: 'shared', sharedWithUids: ['recipient'] }));
+  await assertSucceeds(tryGrant('recipient', 'task_r', 'assigneeUids', ['third']));
+  await assertSucceeds(tryGrant('recipient', 'task_r', 'sharedWithUids', ['recipient', 'third']));
+
+  await put('task_a', task({ visibility: 'private', assigneeUids: ['assignee'] }));
+  await assertSucceeds(tryGrant('assignee', 'task_a', 'assigneeUids', ['assignee', 'third']));
+  await assertSucceeds(tryGrant('assignee', 'task_a', 'sharedWithUids', ['third']));
+});
+
+test('update: deleting a projection or visibility is denied, not just nulling it', async () => {
+  await put('task_p', task({ visibility: 'private' }));
+  for (const field of ['assigneeUids', 'sharedWithUids', 'visibility']) {
+    await assertFails(updateDoc(doc(as('creator'), P('workItems/task_p')), { [field]: deleteField() }));
+  }
+});
+
+test('update: an admin deleting a linked ticket cannot clear the backlink on a shared task it cannot see', async () => {
+  // Gate-4 review M-3, asserted rather than discovered in production. The denial
+  // is CORRECT — an actor who cannot read a task must not write it — but it is a
+  // real regression for best-effort backlink cleanup, recorded as a residual.
+  await put('task_s', task({ visibility: 'shared', sharedWithUids: ['recipient'], linkedTicketDocId: 'mnt_1' }));
+  await assertFails(updateDoc(doc(as('boss'), P('workItems/task_s')), { linkedTicketDocId: null }));
+});
+
+// ── Comment matrix, completed ───────────────────────────────────────────────
+
+async function twoComments(itemId) {
+  await seedComment(itemId, 'creator', 'c1');
+  await seedComment(itemId, 'teamMember', 'c2');
+}
+const deniedCode = async (promiseFactory) => {
+  try { await promiseFactory(); return 'ALLOWED'; }
+  catch (e) { return e.code; }
+};
+
+test('comments: authorized actors list the exact set under every parent shape', async () => {
+  await put('mnt_1', { type: 'maintenance', title: 'Boiler' });
+  await put('task_team', task({ visibility: 'team' }));
+  await put('task_p', task({ visibility: 'private', assigneeUids: ['assignee'] }));
+  await put('task_s', task({ visibility: 'shared', sharedWithUids: ['recipient'] }));
+  for (const id of ['mnt_1', 'task_team', 'task_p', 'task_s']) await twoComments(id);
+
+  for (const [uid, id] of [['teamMember', 'mnt_1'], ['teamMember', 'task_team'],
+                           ['creator', 'task_p'], ['assignee', 'task_p'], ['recipient', 'task_s']]) {
+    const snap = await listComments(uid, id);
+    assert.equal(snap.size, 2, `${uid} lists both comments under ${id}`);
+  }
+});
+
+test('comments: maintenance and team creation by an ordinary member', async () => {
+  await put('mnt_1', { type: 'maintenance', title: 'Boiler' });
+  await put('task_team', task({ visibility: 'team' }));
+  await assertSucceeds(addComment('teamMember', 'mnt_1', 'n1'));
+  await assertSucceeds(addComment('teamMember', 'task_team', 'n2'));
+});
+
+test('comments: creator and recipient may create', async () => {
+  await put('task_p', task({ visibility: 'private' }));
+  await put('task_s', task({ visibility: 'shared', sharedWithUids: ['recipient'] }));
+  await assertSucceeds(addComment('creator', 'task_p', 'n1'));
+  await assertSucceeds(addComment('recipient', 'task_s', 'n2'));
+});
+
+test('comments: an unlisted member gets exactly permission-denied on every operation', async () => {
+  await put('task_p', task({ visibility: 'private' }));
+  await seedComment('task_p', 'creator');
+  assert.equal(await deniedCode(() => comment('teamMember', 'task_p')), 'permission-denied');
+  assert.equal(await deniedCode(() => listComments('teamMember', 'task_p')), 'permission-denied');
+  assert.equal(await deniedCode(() => addComment('teamMember', 'task_p', 'n')), 'permission-denied');
+  assert.equal(await deniedCode(() => updateDoc(doc(as('teamMember'), P('workItems/task_p/comments/c1')), { text: 'x' })), 'permission-denied');
+  assert.equal(await deniedCode(() => deleteDoc(doc(as('teamMember'), P('workItems/task_p/comments/c1')))), 'permission-denied');
+});
+
+test('comments: a missing parent denies list, update and delete too', async () => {
+  await seedComment('task_ghost', 'creator');
+  assert.equal(await deniedCode(() => listComments('creator', 'task_ghost')), 'permission-denied');
+  assert.equal(await deniedCode(() => updateDoc(doc(as('creator'), P('workItems/task_ghost/comments/c1')), { text: 'x' })), 'permission-denied');
+  assert.equal(await deniedCode(() => deleteDoc(doc(as('creator'), P('workItems/task_ghost/comments/c1')))), 'permission-denied');
+});
+
+test('comments: inactive and cross-tenant actors are denied on a readable parent', async () => {
+  await put('task_team', task({ visibility: 'team' }));
+  await seedComment('task_team', 'creator');
+  for (const uid of ['inactive', 'outsider']) {
+    await assertFails(comment(uid, 'task_team'));
+    await assertFails(listComments(uid, 'task_team'));
+    await assertFails(addComment(uid, 'task_team', 'n'));
+  }
+});
+
+test('comments: an author may delete their own', async () => {
+  await put('task_team', task({ visibility: 'team' }));
+  await seedComment('task_team', 'teamMember');
+  await assertSucceeds(deleteDoc(doc(as('teamMember'), P('workItems/task_team/comments/c1'))));
+});
+
+test('comments: a former team member loses delete as well as read', async () => {
+  await put('task_t', task({ visibility: 'team' }));
+  await seedComment('task_t', 'teamMember');
+  await env.withSecurityRulesDisabled(async (e) => {
+    await updateDoc(doc(e.firestore(), P('workItems/task_t')), { visibility: 'private' });
+  });
+  await assertFails(deleteDoc(doc(as('teamMember'), P('workItems/task_t/comments/c1'))));
+});
+

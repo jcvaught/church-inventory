@@ -34,13 +34,32 @@ service cloud.firestore {
     //
     // There is deliberately NO admin override: private means private, including
     // from church admins. That has always been the promise and is now enforced.
+    // Two shapes here are load-bearing and were both arrived at by measurement.
+    //
+    // Every field access is defaulted. A rules expression that touches a missing
+    // field raises an evaluation error, and inside a LIST that error fails the
+    // whole query for every caller — so one malformed document with no `type`
+    // would take the task board down for the entire church rather than merely
+    // hiding itself. Defaulting fails that document closed and leaves the rest
+    // readable.
+    //
+    // Membership uses `.hasAny([uid])`, NOT `uid in field` guarded by `is list`.
+    // The guarded form is denied for `array-contains` queries — measured: with
+    // `is list` the assigned and shared list queries the deployed client runs are
+    // rejected outright, without it they are admitted. `hasAny` keeps the
+    // protection the guard existed for: rules `in` also tests MAP KEYS, so a
+    // malformed `{uid: true}` would otherwise grant access no array-contains
+    // query could ever deliver, whereas `hasAny` on a map raises an evaluation
+    // error and fails closed. List-ness is additionally enforced where it is
+    // cheap and total — the create and update rules both require both
+    // projections to be lists, so no client can write the malformed shape.
     function canSeeWorkItem(d) {
-      return d.type == 'maintenance'
-        || d.visibility == 'team'
-        || d.createdBy == request.auth.uid
-        || ('assigneeUids' in d && d.assigneeUids is list && request.auth.uid in d.assigneeUids)
-        || (d.visibility == 'shared' && 'sharedWithUids' in d && d.sharedWithUids is list
-            && request.auth.uid in d.sharedWithUids);
+      return d.get('type', '') == 'maintenance'
+        || d.get('visibility', '') == 'team'
+        || d.get('createdBy', '') == request.auth.uid
+        || d.get('assigneeUids', []).hasAny([request.auth.uid])
+        || (d.get('visibility', '') == 'shared'
+            && d.get('sharedWithUids', []).hasAny([request.auth.uid]));
     }
     // Comments live under a fixed itemId, so the parent resolves deterministically
     // for both a single get and a subcollection list. A missing parent fails
