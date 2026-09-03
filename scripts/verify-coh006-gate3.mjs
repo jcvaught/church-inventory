@@ -90,6 +90,13 @@ async function main() {
     'private-b-stale-a': [TASK('private-b-stale-a'), base({ visibility: 'private', createdBy: B, sharedWith: [person(A)], sharedWithUids: [A] })],
     'team-overlap': [TASK('team-overlap'), base({ visibility: 'team', createdBy: A, assignees: [person(B)], assigneeUids: [B], sharedWith: [person(B)], sharedWithUids: [B] })],
     'shared-overlap': [TASK('shared-overlap'), base({ visibility: 'shared', createdBy: A, assignees: [person(B)], assigneeUids: [B], sharedWith: [person(B)], sharedWithUids: [B] })],
+    // ADMIN's `own` set must contain a document no OTHER admin listener holds.
+    // Without this the set is exactly ['team'], a strict subset of the team
+    // listener's cache, so the SDK answers `own` from cache and never delivers a
+    // server-backed snapshot — the listener assertion then times out even though
+    // the rule admits the query. Measured 2026-09-03: attached first and alone,
+    // the same listener is server-backed at once with zero cache-only callbacks.
+    'admin-private': [TASK('admin-private'), base({ visibility: 'private', createdBy: ADMIN })],
   };
   const batch = adb.batch();
   for (const [id, data] of Object.values(F)) batch.set(adb.doc(`churches/${CHURCH}/workItems/${id}`), data);
@@ -129,7 +136,7 @@ async function main() {
     // team fixture is createdBy ADMIN — and nothing through admin role alone.
     ADMIN: {
       maintenance: ['maintenance'], team: ['team', 'team-overlap'],
-      own: ['team'], assigned: [], shared: [],
+      own: ['team', 'admin-private'], assigned: [], shared: [],
     },
   };
 
@@ -139,15 +146,18 @@ async function main() {
       ['private-b', 'permission-denied', "is denied the other member's private task"],
       ['private-b-assigned-a', 'ALLOWED', 'reads a private task assigned to them'],
       ['private-b-stale-a', 'permission-denied', 'is denied a PRIVATE task holding them as a stale recipient'],
+      ['admin-private', 'permission-denied', "is denied the ADMIN's own private task"],
     ],
     B: [
       ['private-b', 'ALLOWED', 'reads its own private task'],
       ['private-a', 'permission-denied', "is denied the other member's private task"],
       ['private-a-assigned-b', 'ALLOWED', 'reads a private task assigned to them'],
       ['private-a-stale-b', 'permission-denied', 'is denied a PRIVATE task holding them as a stale recipient'],
+      ['admin-private', 'permission-denied', "is denied the ADMIN's own private task"],
     ],
     ADMIN: [
       ['team', 'ALLOWED', 'reads a team task'],
+      ['admin-private', 'ALLOWED', 'reads its own private task'],
       ['private-a', 'permission-denied', 'is denied an unrelated private task'],
       ['private-b', 'permission-denied', 'is denied a second unrelated private task'],
       ['shared-a-to-b', 'permission-denied', 'is denied an unrelated shared task'],
