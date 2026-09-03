@@ -605,3 +605,44 @@ Seventeen `shared` tasks have no recipients at all. Gate 3's shared listener wil
 stop delivering those to non-creators, which changes nothing on screen — the UI
 predicate already hid them — but is worth knowing before reading the diff in
 delivered document counts.
+
+### DEC-2026-015 — COH-006 gate 4: what the restrictive rules do and do not close
+
+- Date: 2026-09-03
+- Status: Accepted
+- Deciders: Product owner (implementation); reviewer findings from
+  `docs/COH-006-GATE4-REVIEW-2026-09-03.md`
+
+**Closed.** Task visibility is a server-enforced authorization boundary.
+`canSeeWorkItem()` is the single predicate for the read rule, for update's
+pre-state authorization, and for comment gating. The arm that admitted any member
+to `visibility == 'shared'` is gone — it was why 80 of the 90 tasks in the live
+church were readable by everyone with an SDK. Comments inherit their parent's
+visibility. There is no admin override anywhere.
+
+**A measurement worth keeping.** Membership is tested with
+`.hasAny([request.auth.uid])`, not `request.auth.uid in field` guarded by
+`is list`. The guarded form is *rejected for `array-contains` list queries*: with
+it, the assigned and shared listeners the deployed client runs are denied
+outright; without it they are admitted. Found by running the client's five query
+shapes against the rules rather than by reading them, and it would have broken
+the live board on deploy. `hasAny` preserves the protection the guard existed for,
+because rules `in` also tests map keys and `hasAny` on a map fails closed.
+
+**Residual 1 — best-effort backlink cleanup, newly narrowed.** Deleting a
+maintenance ticket or a job clears the corresponding backlink on a linked task via
+a direct update outside `updateTask`. An admin can legitimately delete a linked
+ticket without being the task's creator, assignee, or recipient. Under the
+transitional rule that cleanup succeeded on a `shared` task; under the final rule
+it is denied, and the client swallows the rejection, leaving a stale backlink.
+The denial is correct — an actor who cannot read a task must not write it — and a
+role override would reopen the boundary. Private tasks already had this
+limitation; gate 4 extends it to shared. A rules test asserts the denial so the
+behaviour is pinned rather than discovered later. Fixing it properly needs an
+authorized server operation, which is a separate task.
+
+**Residual 2 — comment attribution.** `authorId`, `authorName`, `createdAt` and
+`updatedAt` on comments remain unpinned, so an authorized member can still forge
+attribution on a comment they create. Parent gating does not address this, and
+adding attribution integrity is a policy decision the owner has not made. Not
+fixed, and must not be described as fixed.

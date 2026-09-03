@@ -17,6 +17,58 @@ service cloud.firestore {
     function isChurchAdmin(churchId)          { return isMember(churchId) && userIsAdmin(); }
     function isChurchAdminOrManager(churchId) { return isMember(churchId) && userIsAdminOrManager(); }
 
+    // ── COH-006 work-item visibility ─────────────────────────────────────────
+    // The single definition of who may see a work item, used by the read rule,
+    // by update's PRE-STATE authorization check, and by comment gating. One
+    // predicate rather than three, because three would drift.
+    //
+    // The uid arrays are canonical for authorization (DEC-2026-012), and both
+    // are required to be lists: rules `in` also tests MAP KEYS, so without the
+    // type check a malformed `{uid: true}` would grant access that no
+    // array-contains query could ever deliver.
+    //
+    // `sharedWithUids` grants only while visibility is 'shared'. A private task
+    // can carry a stale recipient — switching visibility does not always clear
+    // the array, and the backfill projected whatever it found — and that
+    // recipient must not be able to read it.
+    //
+    // There is deliberately NO admin override: private means private, including
+    // from church admins. That has always been the promise and is now enforced.
+    // Two shapes here are load-bearing and were both arrived at by measurement.
+    //
+    // Every field access is defaulted. A rules expression that touches a missing
+    // field raises an evaluation error, and inside a LIST that error fails the
+    // whole query for every caller — so one malformed document with no `type`
+    // would take the task board down for the entire church rather than merely
+    // hiding itself. Defaulting fails that document closed and leaves the rest
+    // readable.
+    //
+    // Membership uses `.hasAny([uid])`, NOT `uid in field` guarded by `is list`.
+    // The guarded form is denied for `array-contains` queries — measured: with
+    // `is list` the assigned and shared list queries the deployed client runs are
+    // rejected outright, without it they are admitted. `hasAny` keeps the
+    // protection the guard existed for: rules `in` also tests MAP KEYS, so a
+    // malformed `{uid: true}` would otherwise grant access no array-contains
+    // query could ever deliver, whereas `hasAny` on a map raises an evaluation
+    // error and fails closed. List-ness is additionally enforced where it is
+    // cheap and total — the create and update rules both require both
+    // projections to be lists, so no client can write the malformed shape.
+    function canSeeWorkItem(d) {
+      return d.get('type', '') == 'maintenance'
+        || d.get('visibility', '') == 'team'
+        || d.get('createdBy', '') == request.auth.uid
+        || d.get('assigneeUids', []).hasAny([request.auth.uid])
+        || (d.get('visibility', '') == 'shared'
+            && d.get('sharedWithUids', []).hasAny([request.auth.uid]));
+    }
+    // Comments live under a fixed itemId, so the parent resolves deterministically
+    // for both a single get and a subcollection list. A missing parent fails
+    // closed rather than erroring.
+    function canSeeWorkItemById(churchId, itemId) {
+      return exists(/databases/$(database)/documents/churches/$(churchId)/workItems/$(itemId))
+        && canSeeWorkItem(get(/databases/$(database)/documents/churches/$(churchId)/workItems/$(itemId)).data);
+    }
+
     // Shepherd Hub (P2): elder status is a server-set custom auth claim
     // (`elder: true`), granted by claimElderRole against the email allow-list —
     // NOT a Firestore-doc role (those are raceable/readable). Baked into the
@@ -208,49 +260,16 @@ service cloud.firestore {
     //      task        → the visibility/immutability rules from the tasks block
     //      maintenance → admin/manager create+delete, any-member update (no field guards)
     match /churches/{churchId}/workItems/{docId} {
-      // read: maintenance is member-readable; tasks are visibility-gated.
-      //
-      // ⚠️ COH-006 TRANSITIONAL RULE (gate 1). This is deliberately additive and
-      // still NOT an authorization boundary: `shared` remains readable by any
-      // member, and an unconstrained list over this collection is admitted and
-      // delivers private tasks (DEC-2026-009). The restrictive replacement lands
-      // at gate 4, once every document carries the uid projections and the
-      // clients issue constrained queries.
-      //
-      // The assignee arm is the one addition, and it is required before gate 3
-      // (COH-006 round-2 review H-1): the gate-3 client subscribes with
-      // where('assigneeUids','array-contains',uid), and without this arm that
-      // query is not provably safe for a private task assigned to someone other
-      // than its creator, so it would be denied for the whole gate-3-to-gate-4
-      // interval. It also delivers what the Help Centre has always promised —
-      // assignees see their tasks regardless of visibility — which the rule did
-      // not previously honour.
-      //
-      // `is list` is load-bearing (gate-1 review L-1): rules `in` also tests map
-      // KEYS, so without it a malformed `assigneeUids: {memberB: true}` would
-      // authorize a direct get on a document the array-contains listener could
-      // never deliver. Gate 4's create rule enforces the list type outright.
-      allow read: if isMember(churchId) && (
-        resource.data.type == 'maintenance'
-        || !resource.data.keys().hasAny(['visibility'])
-        || resource.data.visibility == 'team'
-        || resource.data.visibility == 'shared'
-        || resource.data.createdBy == request.auth.uid
-        || ('assigneeUids' in resource.data && resource.data.assigneeUids is list
-            && request.auth.uid in resource.data.assigneeUids)
-      );
-      // create: maintenance is admin/manager-only; tasks are any member, enforcing createdBy.
-      //
-      // COH-006 (DEC-2026-013): a task create must carry a normalised `visibility`
-      // and BOTH uid projections, as lists. This is gate 4's shape, deployed early
-      // by owner decision, because the backfill's coverage scan walks churches in
-      // sequence and a stale client could otherwise create an unprojected task in
-      // a church already scanned — leaving a task the constrained readers cannot
-      // deliver to its recipients (gate-2 review H-2). The deliberate cost: a
-      // browser tab still running a pre-COH-006 bundle has its task creates denied
-      // until it reloads. The app polls /version.json every five minutes and on
-      // tab focus, so those tabs are prompted to update well before this matters.
-      // Maintenance items have no visibility model and are unaffected.
+      // COH-006 GATE 4 — the restrictive rules. This is the boundary the whole
+      // task exists to create. Until now `visibility == 'shared'` admitted any
+      // member, so 80 of 90 tasks in the live church were readable by everyone;
+      // the transitional assignee arm and the legacy missing-visibility arm are
+      // both gone, the latter only because production verification showed every
+      // task carries a value.
+      allow read: if isMember(churchId) && canSeeWorkItem(resource.data);
+
+      // create: maintenance is admin/manager-only; tasks are any member, enforcing
+      // createdBy and the projection shape (DEC-2026-013, shipped in gate 1).
       allow create: if isMember(churchId) && (
         (request.resource.data.type == 'maintenance' && isChurchAdminOrManager(churchId))
         || (request.resource.data.type == 'task'
@@ -259,27 +278,38 @@ service cloud.firestore {
             && request.resource.data.assigneeUids is list
             && request.resource.data.sharedWithUids is list)
       );
-      // update: maintenance is any member; tasks keep the visibility + immutability predicate.
-      // `type` is immutable — a doc cannot be moved between the task and maintenance
-      // rule regimes after creation (clients never change it; CFs use the Admin SDK).
+
+      // update: authorization is decided from resource.data — the PRE-state —
+      // never from the document being proposed. That is what stops a self-grant:
+      // a member who cannot already see the task cannot write their own uid into
+      // a projection to gain it, because the check runs against the document as
+      // it stands. Role is not preauthorization either; an admin who cannot see
+      // the task cannot update it.
+      //
+      // Per DEC-2026-012 the projections are deliberately NOT pinned to their
+      // `assignees`/`sharedWith` object arrays: anyone already authorized may
+      // widen access, and the uid arrays are canonical. Divergence between the
+      // two is a client bug, not a rules violation.
       allow update: if isMember(churchId)
         && request.resource.data.type == resource.data.type
         && (
-        resource.data.type == 'maintenance'
-        || (
-          (
-            (resource.data.visibility != 'private' && request.resource.data.visibility != 'private')
-            || resource.data.createdBy == request.auth.uid
-          ) && (
-            request.resource.data.visibility == resource.data.visibility
-            || resource.data.createdBy == request.auth.uid
-            || isChurchAdminOrManager(churchId)
+          resource.data.type == 'maintenance'
+          || (
+            canSeeWorkItem(resource.data)
+            && request.resource.data.createdBy == resource.data.createdBy
+            && request.resource.data.taskNumber == resource.data.taskNumber
+            && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.visibility in ['team', 'private', 'shared']
+            && request.resource.data.assigneeUids is list
+            && request.resource.data.sharedWithUids is list
+            // Changing visibility stays creator/admin-only, as before — and an
+            // admin reaches this only after passing canSeeWorkItem above, so the
+            // role can never bypass the parent boundary.
+            && (request.resource.data.visibility == resource.data.visibility
+                || resource.data.createdBy == request.auth.uid
+                || isChurchAdminOrManager(churchId))
           )
-          && request.resource.data.createdBy == resource.data.createdBy
-          && request.resource.data.taskNumber == resource.data.taskNumber
-          && request.resource.data.createdAt == resource.data.createdAt
-        )
-      );
+        );
       // delete: maintenance admin/manager-only; tasks admin/manager or the creator.
       allow delete: if (resource.data.type == 'maintenance' && isChurchAdminOrManager(churchId))
         || (resource.data.type == 'task' && (
@@ -289,10 +319,22 @@ service cloud.firestore {
     }
 
     // ── Work item comments — same shape as task/ticket comments ──────────────
+    // COH-006 gate 4: a comment is only as private as its parent. Previously any
+    // member could read and write comments under every work item, so private task
+    // DISCUSSION stayed exposed even once the task itself was gated. The parent
+    // predicate is an additional condition on every operation, never an
+    // alternative to the author/admin check — an admin who cannot see the task
+    // cannot moderate its comments.
+    //
+    // Not fixed here, and recorded rather than implied: `authorId`, `authorName`
+    // and the timestamps are still unpinned, so attribution remains spoofable by
+    // an authorized member. Changing that is an attribution policy decision the
+    // owner has not made.
     match /churches/{churchId}/workItems/{itemId}/comments/{commentId} {
-      allow read:           if isMember(churchId);
-      allow create:         if isMember(churchId);
-      allow update, delete: if isChurchAdminOrManager(churchId) || (isMember(churchId) && request.auth.uid == resource.data.authorId);
+      allow read:           if isMember(churchId) && canSeeWorkItemById(churchId, itemId);
+      allow create:         if isMember(churchId) && canSeeWorkItemById(churchId, itemId);
+      allow update, delete: if isMember(churchId) && canSeeWorkItemById(churchId, itemId)
+                            && (isChurchAdminOrManager(churchId) || request.auth.uid == resource.data.authorId);
     }
 
     // ── Job Hub — job listings (audit H1/H2/H3/M1, 2026-05-22) ───────────────

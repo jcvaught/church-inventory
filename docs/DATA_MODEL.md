@@ -50,6 +50,24 @@ Granular per-subcollection rules (no wildcard). All church-scoped membership che
 - `workItems` task visibility (COH-006): `visibility` is `'team' | 'private' | 'shared'`, and the people fields are stored twice — `assignees` / `sharedWith` as `[{uid, name}]` for display, and **`assigneeUids` / `sharedWithUids` as plain, deduped, sorted `string[]`** because Firestore rules cannot search inside an object array. The uid arrays are what the security rules and the constrained client queries read; the object arrays are what the UI renders. Every write path keeps them in step: `addTask`/`updateTask` in `src/useFirestore.js` derive them via `uidsOf()` (`src/utils/taskVisibility.js`), and the recurring-template generator in `functions/index.js` uses the server twin `uidProjection()`. Tasks created before the COH-006 backfill have neither field; maintenance items have no visibility model and carry none of these fields.
 - `jobListings` — gated by `canUseJobsHub` (membership + active Jobs Hub subscription + per-user `allowedHubs`); update can't touch the roster counters, identity, recurrence, or notification stamps; the `signups`/`waitlist` subcollections are Cloud-Function-write-only, read per `canSeeJobRoster` (the `jobsRosterVisibility` setting); `jobAnnouncements` update can't rewrite `createdBy`/`createdByName`/`createdAt`; `jobSwapRequests` create is key-allowlisted with `uid`/`name` pinned and `note` ≤1000 chars
 - `publicRequests` — unauthenticated create allowed but bounded (exact key allowlist + length caps); `errors` denies all access (unused — see table above)
+- **`workItems` task authorization boundary (COH-006 gate 4, final).** One
+  predicate, `canSeeWorkItem()`, governs the read rule, update's pre-state
+  authorization, and comment access. A task is visible only to an actor who is
+  its creator, an assignee (`assigneeUids`), an explicit recipient of a `shared`
+  task (`visibility == 'shared'` **and** `sharedWithUids`), or any active member
+  when `visibility == 'team'`; maintenance items are member-readable as before.
+  **There is no admin override anywhere in it** — role alone grants nothing, and
+  an admin with no relationship to a private or shared task is denied both the
+  document and its comments. Membership is tested with
+  `.hasAny([request.auth.uid])` rather than a `is list`-guarded `in`, because the
+  guarded form is *rejected* for the deployed `array-contains` listeners: it
+  would have denied the assigned and shared queries outright and broken the live
+  board. Comments inherit their parent's visibility as a conjunction of parent
+  access and the existing author/moderator condition. Updates are authorized from
+  `resource.data`, so a member who learns a task ID cannot write their own uid
+  into a projection to grant themselves read access. Two accepted residuals
+  (DEC-2026-015): best-effort backlink cleanup on a linked task is now denied for
+  actors who cannot read it, and comment attribution fields remain unpinned.
 - **Shepherd Hub** — all reads gated to `isElder()` (the server-set `elder` custom claim) or `isShepherdAdmin()` (John's email only via `OWNER_EMAILS`, NOT any church admin — pastoral data is need-to-know). `shepherdPeople` + `config/shepherdSync` are Cloud-Function-write-only (`write: if false`). `config/shepherdRoster` write = John only. `privateNotes/{ownerUid}` read+write = the owning elder only (`request.auth.uid == ownerUid`). `careThread` create/edit/delete = author-owned (`authorUid == request.auth.uid`, can't be forged). `shepherdAudit` is append-only (`update,delete: if false`), actor-stamped on create. The hub itself is FXCC-only + surfaced as a non-subscription "special" card in HubsPage (no UpgradeGate)
 - Users cannot self-escalate role: create requires `role == 'user'`; self-updates cannot change `role`, `churchId`, `active`, or `allowedHubs`
 - Storage rules enforce 5MB max upload size and `image/*` content type only
