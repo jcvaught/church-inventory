@@ -36,12 +36,22 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   `05a9dc8` → re-review `c3fe8a6`
   (`docs/COH-006-GATE4-REREVIEW-2026-09-03.md`, rules approved / release package
   incomplete) → release-package plan review `ccefde2`
-  (`docs/COH-006-GATE4-RELEASE-PACKAGE-PLAN-REVIEW-2026-09-03.md`). All three
-  Codex reviews are **published** on `origin/codex/gate4-rereview`. Next action:
-  Claude completes the release package (L-1 exact-ID fixture, the three
-  production-probe controls written but not executed, `DATA_MODEL.md`, this
-  board), verifies it as release SHA R, writes the handoff pinned to R, and hands
-  it to Codex once. Amended twice from Codex reviews:
+  (`docs/COH-006-GATE4-RELEASE-PACKAGE-PLAN-REVIEW-2026-09-03.md`) → release
+  package **R = `f4c890d`** → handoff **H = `ef15bb2`**
+  (`docs/COH-006-GATE4-HANDOFF-2026-09-03.md`) → package review **`f5e1dbe`**
+  (`docs/COH-006-GATE4-PACKAGE-REVIEW-2026-09-03.md`), **APPROVED for the
+  deployment gate, no findings and no additional test cases**. All four Codex
+  reviews are **published**: `origin/codex/gate4-rereview` at `ccefde2` and
+  `origin/codex/coh-006-gate4-package-review` at `f5e1dbe`. The package is
+  published on `origin/claude/coh-006-gate-4` at `ef15bb2`.
+- **Next action: the product owner.** The deploy gate is reserved and nothing is
+  deployed. Blocking condition carried forward from the package review: the
+  read-only `--verify` run at package time measured **92 tasks, 0 outstanding**
+  against a stale `--baseline 90`. The +2 are explained (live church, created
+  2026-09-03, both `private`, both correctly projected) and do not block the
+  package, but that is **not a passing baseline check** and cannot satisfy the
+  pre-deploy gate. The baseline must be independently re-established and
+  verification rerun immediately before deployment. Amended twice from Codex reviews:
   `docs/COH-006-PREIMPLEMENTATION-REVIEW-2026-08-31.md` (seven findings, all
   verified and accepted; owner calls in **DEC-2026-010**) and
   `docs/COH-006-PLAN-REVIEW-ROUND2-2026-08-31.md` (four further amendments, all

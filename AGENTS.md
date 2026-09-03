@@ -224,6 +224,45 @@ stays visible.
 
 This is Claude-only and one-directional. Codex has no reciprocal grant.
 
+#### Publication receipts and recovery
+
+Added 2026-09-03 after a handoff was lost. Codex completed a gate 4 re-review and
+committed it; Claude never published it, the workboard stayed three gates stale,
+and the next session read the absence of a *final message* as the absence of a
+*review*. It then told the product owner both that no re-review existed and that
+Codex was unreachable. Neither was true. Codex cannot push, so a review it has
+finished is invisible until Claude fetches and publishes it — these rules make
+that step observable instead of assumed. They change no authorization on either
+side.
+
+1. **Reviewer receipt.** Every Codex final response states the review branch,
+   commit SHA, review-document path, and `published: no (Codex has no network)`.
+   A review is complete when committed, not when pushed, but it is not yet
+   delivered to the shared remote.
+2. **Caller completion check.** After `codex exec` exits **or is killed**, Claude
+   checks both the output file and
+   `git log -1 --format=%H <expected-codex-branch>` before reporting that no
+   review exists. A missing final message is not proof of a missing commit.
+   Record the exit code and newest SHA.
+3. **Publication receipt.** Claude fetches the exact Codex SHA, publishes it
+   under the named review branch, and verifies the remote ref equals that SHA.
+   The same-turn owner report says `committed`, `published`, or `failed` — never
+   the ambiguous word `finished`.
+4. **Workboard checkpoint.** In the same implementation-owner commit that
+   receives a review, update the active entry with current gate, implementation
+   SHA, review SHA/path, publication state, verdict, and next owner/action. Do
+   not wait for the eventual final handoff to correct stale gate state.
+5. **Recovery rule.** On timeout, token exhaustion, context loss, or session
+   stall, inspect the expected branch in **both** repositories and the preserved
+   log before retrying or telling the owner the counterpart is unreachable. If a
+   commit exists, resume from it; do not spend the stage's retry recreating a
+   completed review.
+6. **Pre-invocation enforcement.** The committed-and-pushed artifact
+   precondition stands. An inline plan is an emergency recovery exception, not
+   normal transport; when used, the owner report must say which precondition
+   failed, and the next action must publish the recovered artifacts before more
+   implementation begins.
+
 ### Reviewer verification worktree
 
 A reviewer may create a **temporary detached worktree at the handoff SHA** to run
