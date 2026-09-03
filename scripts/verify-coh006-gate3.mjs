@@ -19,7 +19,7 @@ import { createRequire } from 'module';
 import { initializeApp, deleteApp } from 'firebase/app';
 import {
   getFirestore, collection, doc, query, where,
-  getDocFromServer, getDocsFromServer, onSnapshot,
+  getDocFromServer, getDocsFromServer, onSnapshot, setDoc,
 } from 'firebase/firestore';
 import { getAuth, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { createWorkStore } from '../src/utils/workMerge.js';
@@ -59,8 +59,9 @@ async function main() {
   const A = (await admin.auth().getUserByEmail('e2e-member-a@churchopshub.com')).uid;
   const B = (await admin.auth().getUserByEmail('e2e-member-b@churchopshub.com')).uid;
   const ADMIN = (await admin.auth().getUserByEmail('e2e-admin@churchopshub.com')).uid;
-  check(!!A && !!B && A !== B, `uids resolved and distinct (A=${A.slice(0, 6)}… B=${B.slice(0, 6)}…)`);
-  for (const [label, uid] of [['A', A], ['B', B]]) {
+  check(!!A && !!B && !!ADMIN && new Set([A, B, ADMIN]).size === 3,
+    `uids resolved and distinct (A=${A.slice(0, 6)}… B=${B.slice(0, 6)}… ADMIN=${ADMIN.slice(0, 6)}…)`);
+  for (const [label, uid] of [['A', A], ['B', B], ['ADMIN', ADMIN]]) {
     const u = await adb.doc(`users/${uid}`).get();
     check(u.exists && u.data().churchId === CHURCH && u.data().active !== false,
       `member ${label} is an active member of ${CHURCH}`);
@@ -92,10 +93,25 @@ async function main() {
   };
   const batch = adb.batch();
   for (const [id, data] of Object.values(F)) batch.set(adb.doc(`churches/${CHURCH}/workItems/${id}`), data);
+  // Two comments beneath every parent the comments matrix exercises. Seeded
+  // through the Admin SDK so the matrix measures READ/CREATE authorisation,
+  // not whether the seeding actor could write them.
+  const COMMENTED = ['private-a', 'private-a-assigned-b', 'shared-a-to-b', 'private-b'];
+  for (const key of COMMENTED) {
+    for (const cid of ['c1', 'c2']) {
+      batch.set(adb.doc(`churches/${CHURCH}/workItems/${F[key][0]}/comments/${cid}`), {
+        text: `[E2E] seeded ${cid}`, authorId: A, authorName: 'E2E',
+        createdAt: new Date().toISOString(),
+      });
+    }
+  }
   await batch.commit();
   console.log(`\nSeeded ${Object.keys(F).length} fixtures with prefix ${PREFIX}\n`);
 
   const id = (s) => F[s][0];
+  // Every comment the probe itself creates, so cleanup can be asserted rather
+  // than assumed.
+  const CREATED = [];
   const EXPECT = {
     A: {
       maintenance: ['maintenance'], team: ['team', 'team-overlap'],
@@ -107,6 +123,13 @@ async function main() {
       own: ['private-b', 'private-b-assigned-a', 'shared-b-to-a', 'private-b-stale-a'],
       assigned: ['private-a-assigned-b', 'team-overlap', 'shared-overlap'],
       shared: ['shared-a-to-b', 'shared-overlap'],
+    },
+    // The no-role-override control. ADMIN sees only what the maintenance, team
+    // and creator arms independently authorise — `own` is ['team'] because the
+    // team fixture is createdBy ADMIN — and nothing through admin role alone.
+    ADMIN: {
+      maintenance: ['maintenance'], team: ['team', 'team-overlap'],
+      own: ['team'], assigned: [], shared: [],
     },
   };
 
@@ -123,6 +146,13 @@ async function main() {
       ['private-a-assigned-b', 'ALLOWED', 'reads a private task assigned to them'],
       ['private-a-stale-b', 'permission-denied', 'is denied a PRIVATE task holding them as a stale recipient'],
     ],
+    ADMIN: [
+      ['team', 'ALLOWED', 'reads a team task'],
+      ['private-a', 'permission-denied', 'is denied an unrelated private task'],
+      ['private-b', 'permission-denied', 'is denied a second unrelated private task'],
+      ['shared-a-to-b', 'permission-denied', 'is denied an unrelated shared task'],
+      ['shared-b-to-a', 'permission-denied', 'is denied a second unrelated shared task'],
+    ],
   };
   try {
     // ONE account signed in at a time. Two authenticated Firebase apps alive
@@ -131,7 +161,11 @@ async function main() {
     // which reads exactly like "this query silently returns nothing". Measured,
     // not assumed — with a single app the same listeners are server-backed at
     // once, and that is what the earlier all-timeouts result actually was.
-    for (const [label, uid, email] of [['A', A, 'e2e-member-a@churchopshub.com'], ['B', B, 'e2e-member-b@churchopshub.com']]) {
+    for (const [label, uid, email] of [
+      ['A', A, 'e2e-member-a@churchopshub.com'],
+      ['B', B, 'e2e-member-b@churchopshub.com'],
+      ['ADMIN', ADMIN, 'e2e-admin@churchopshub.com'],
+    ]) {
       const app = initializeApp(CFG, `probe-${label}-${RUN}`);
       const auth = getAuth(app);
       const cred = await signInWithEmailAndPassword(auth, email, PASSWORD);
@@ -216,6 +250,73 @@ async function main() {
         fail(`${label}: cross-tenant read ALLOWED — tenant boundary breach`);
       } catch (e) { check(e.code === 'permission-denied', `${label}: cross-tenant read denied (${e.code})`); }
 
+      // ── Old-client tripwire ────────────────────────────────────────────
+      // The unconstrained collection read the pre-gate-3 client issued. Exact
+      // permission-denied only: a timeout or an unknown error is a FAILURE, not
+      // a pass, because it would not prove the rule rejected the query.
+      const resultCode = async (operation) => {
+        try { await operation(); return 'ALLOWED'; }
+        catch (e) { return e.code; }
+      };
+      const tripwire = await resultCode(() => getDocsFromServer(ref));
+      check(tripwire === 'permission-denied',
+        `${label}: unconstrained old-client collection read is permission-denied`
+        + (tripwire === 'permission-denied' ? '' : ` — got ${tripwire}`));
+
+      // ── Comments matrix ────────────────────────────────────────────────
+      console.log(`\n--- member ${label}: comments ---`);
+      const commentRef = (parentId, commentId) => doc(
+        fdb, `churches/${CHURCH}/workItems/${parentId}/comments/${commentId}`,
+      );
+      const commentList = (parentId) => collection(
+        fdb, `churches/${CHURCH}/workItems/${parentId}/comments`,
+      );
+      const commentIds = async (parentId) => sorted(
+        (await getDocsFromServer(commentList(parentId))).docs.map((d) => d.id),
+      );
+      const positive = async (parentKey, newId, who) => {
+        const parent = id(parentKey);
+        check((await getDocFromServer(commentRef(parent, 'c1'))).exists(),
+          `${label} ${who} gets c1 on ${parentKey}`);
+        check(eq(await commentIds(parent), ['c1', 'c2']),
+          `${label} ${who} lists exact seeded comments on ${parentKey}`);
+        await setDoc(commentRef(parent, newId), {
+          text: 'probe', authorId: uid, authorName: 'E2E',
+          createdAt: new Date().toISOString(),
+        });
+        CREATED.push(`${parent}/comments/${newId}`);
+        check(eq(await commentIds(parent), ['c1', 'c2', newId]),
+          `${label} ${who} creates and lists exactly ${newId} on ${parentKey}`);
+      };
+      const negative = async (parentKey, deniedId, who) => {
+        const parent = id(parentKey);
+        check(await resultCode(() => getDocFromServer(commentRef(parent, 'c1'))) === 'permission-denied',
+          `${label} ${who} get on ${parentKey} is permission-denied`);
+        check(await resultCode(() => getDocsFromServer(commentList(parent))) === 'permission-denied',
+          `${label} ${who} list on ${parentKey} is permission-denied`);
+        check(await resultCode(() => setDoc(commentRef(parent, deniedId),
+          { text: 'probe', authorId: uid })) === 'permission-denied',
+          `${label} ${who} create on ${parentKey} is permission-denied`);
+      };
+
+      if (label === 'A') {
+        await positive('private-a', 'new-a', 'as creator');
+        await negative('private-b', 'denied-a', 'unlisted');
+      }
+      if (label === 'B') {
+        await positive('private-a-assigned-b', 'new-b-assignee', 'as assignee');
+        await positive('shared-a-to-b', 'new-b-recipient', 'as recipient');
+        // Post-revocation: strip B from the assignee projections through the
+        // Admin SDK, then require every comment operation to close behind them.
+        await adb.doc(`churches/${CHURCH}/workItems/${id('private-a-assigned-b')}`)
+          .update({ assignees: [], assigneeUids: [] });
+        await negative('private-a-assigned-b', 'denied-b-revoked', 'after assignee revocation');
+      }
+      if (label === 'ADMIN') {
+        await negative('private-a', 'denied-admin-private', 'unrelated');
+        await negative('shared-a-to-b', 'denied-admin-shared', 'unrelated');
+      }
+
       await signOut(auth).catch(() => {});
       await deleteApp(app).catch(() => {});
     }
@@ -249,9 +350,19 @@ async function main() {
     }
   } finally {
     console.log(`\n--- cleanup ---`);
-    const del = adb.batch();
-    for (const [docId] of Object.values(F)) del.delete(adb.doc(`churches/${CHURCH}/workItems/${docId}`));
-    await del.commit();
+    // recursiveDelete, not a parent-only batch: deleting a document does NOT
+    // delete its subcollections, so a batch would leave every seeded and
+    // probe-created comment orphaned in the production tenant.
+    for (const [docId] of Object.values(F)) {
+      await adb.recursiveDelete(adb.doc(`churches/${CHURCH}/workItems/${docId}`));
+    }
+    // recursiveDelete covers each parent's comments; assert it, and name the
+    // probe-created ones so a failure says which write escaped cleanup.
+    const orphans = await adb.collectionGroup('comments').get();
+    const leftover = orphans.docs.filter((d) => d.ref.path.includes(PREFIX));
+    check(leftover.length === 0,
+      `cleanup: no probe comments orphaned (${leftover.length} remain of ${CREATED.length} created)`
+      + (leftover.length ? `\n      ${leftover.map((d) => d.ref.path).join('\n      ')}` : ''));
     const left = await adb.collection(`churches/${CHURCH}/workItems`).count().get();
     // A checked assertion, not a printed number: fixtures left behind in a
     // production tenant would break the next run's zero-count precondition and

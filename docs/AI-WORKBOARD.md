@@ -28,8 +28,20 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   and rules all deployed. Gate 2: backfill executed — 90 tasks across 6 churches,
   90 applied, 0 skipped, verify 0 outstanding against an independent aggregation
   baseline of 90, and a field-by-field spot check found 0 projection mismatches.
-  Backup and manifest are at `~/apps/coh006-migration/`. Gate 3 is written and
-  reviewed but NOT deployed; gate 4 is not started. Amended twice from Codex reviews:
+  Backup and manifest are at `~/apps/coh006-migration/`. **Gate 3 is deployed
+  (2026-09-02)**, `main` at `69e7390`. **Gate 4 is implemented, reviewed, fixed,
+  and re-reviewed; it is NOT deployed** and the deploy gate is reserved for the
+  product owner. Gate 4 trail: implementation `2711ff4` → review `285d204`
+  (`docs/COH-006-GATE4-REVIEW-2026-09-03.md`, changes requested) → fixes
+  `05a9dc8` → re-review `c3fe8a6`
+  (`docs/COH-006-GATE4-REREVIEW-2026-09-03.md`, rules approved / release package
+  incomplete) → release-package plan review `ccefde2`
+  (`docs/COH-006-GATE4-RELEASE-PACKAGE-PLAN-REVIEW-2026-09-03.md`). All three
+  Codex reviews are **published** on `origin/codex/gate4-rereview`. Next action:
+  Claude completes the release package (L-1 exact-ID fixture, the three
+  production-probe controls written but not executed, `DATA_MODEL.md`, this
+  board), verifies it as release SHA R, writes the handoff pinned to R, and hands
+  it to Codex once. Amended twice from Codex reviews:
   `docs/COH-006-PREIMPLEMENTATION-REVIEW-2026-08-31.md` (seven findings, all
   verified and accepted; owner calls in **DEC-2026-010**) and
   `docs/COH-006-PLAN-REVIEW-ROUND2-2026-08-31.md` (four further amendments, all
@@ -238,6 +250,26 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   behaviour), and COH-005's D-3/D-7/D-8.
 
 ## Proposed Queue
+
+### COH-007 — Completed-task archiving and archive search
+
+- Status: **Proposed** — **blocked on COH-006** reaching merged, deployed, and
+  production-verified. The two tasks share `src/useFirestore.js`,
+  `firestore.rules`, `firestore.indexes.json`, the work board, and
+  `functions/index.js`, so implementation must not overlap Gate 4.
+- Owner request (2026-09-03, HIGH): automatically archive tasks that have been
+  `Complete` for more than six weeks, and provide a way to search and view
+  archived tasks.
+- Plan: `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md`, published on
+  `origin/codex/coh-007-plan` at `ef11213`. **Not yet reviewed** — publishing the
+  branch is not review. Its own step 2 requires Claude to amend it against the
+  final COH-006 state before Codex's pre-implementation review.
+- Shape: soft `archived`/`archivedAt` flags on `workItems` (lossless, nothing
+  moved or deleted), `archived == false` added to the four authorization-shaped
+  active queries, an on-demand Archived Tasks view running the same four arms
+  with `archived == true`, a daily `archiveCompletedTasks` scheduled function,
+  and a `Reopen` path back to `Backlog`. Maintenance tickets are out of scope.
+- Backlog entry: `docs/backlog.md` COH-007.
 
 ### COH-005 — Remaining core authorization policy (D-3, D-7, D-8)
 

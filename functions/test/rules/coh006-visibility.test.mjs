@@ -344,26 +344,30 @@ test('comments: a team task turned private shuts out the former ordinary member'
 
 const items = (uid) => collection(as(uid), P('workItems'));
 
-test('list: each of the five deployed client queries is admitted by the final rule', async () => {
+test('list: each deployed client query is admitted and returns its exact fixture', async () => {
   await put('mnt_1', { type: 'maintenance', title: 'Boiler' });
-  await put('task_team', task({ visibility: 'team' }));
-  await put('task_mine', task({ visibility: 'private' }));
-  await put('task_asg', task({ visibility: 'private', assigneeUids: ['assignee'] }));
-  await put('task_shr', task({ visibility: 'shared', sharedWithUids: ['recipient'] }));
+  await put('task_team', task({ visibility: 'team', createdBy: 'third' }));
+  await put('task_mine', task({ visibility: 'private', createdBy: 'creator' }));
+  await put('task_asg', task({
+    visibility: 'private', createdBy: 'third', assigneeUids: ['assignee'],
+  }));
+  await put('task_shr', task({
+    visibility: 'shared', createdBy: 'third', sharedWithUids: ['recipient'],
+  }));
+  await put('task_noise', task({ visibility: 'private', createdBy: 'third' }));
 
-  const outcome = async (label, q) => {
-    try { const r = await getDocs(q); return `${label}: ALLOWED (${r.size})`; }
-    catch (e) { return `${label}: ${e.code}`; }
-  };
-  const results = [
-    await outcome('maintenance', query(items('teamMember'), where('type', '==', 'maintenance'))),
-    await outcome('team', query(items('teamMember'), where('visibility', '==', 'team'))),
-    await outcome('own', query(items('creator'), where('createdBy', '==', 'creator'))),
-    await outcome('assigned', query(items('assignee'), where('assigneeUids', 'array-contains', 'assignee'))),
-    await outcome('shared', query(items('recipient'),
-      where('visibility', '==', 'shared'), where('sharedWithUids', 'array-contains', 'recipient'))),
-  ];
-  assert.deepEqual(results.filter((r) => !r.includes('ALLOWED')), [], results.join(' | '));
+  const ids = async (q) => (await getDocs(q)).docs.map((d) => d.id).sort();
+  assert.deepEqual(await ids(query(items('teamMember'),
+    where('type', '==', 'maintenance'))), ['mnt_1']);
+  assert.deepEqual(await ids(query(items('teamMember'),
+    where('visibility', '==', 'team'))), ['task_team']);
+  assert.deepEqual(await ids(query(items('creator'),
+    where('createdBy', '==', 'creator'))), ['task_mine']);
+  assert.deepEqual(await ids(query(items('assignee'),
+    where('assigneeUids', 'array-contains', 'assignee'))), ['task_asg']);
+  assert.deepEqual(await ids(query(items('recipient'),
+    where('visibility', '==', 'shared'),
+    where('sharedWithUids', 'array-contains', 'recipient'))), ['task_shr']);
 });
 
 test('list: a query the rule cannot prove safe is rejected', async () => {
@@ -508,4 +512,3 @@ test('comments: a former team member loses delete as well as read', async () => 
   });
   await assertFails(deleteDoc(doc(as('teamMember'), P('workItems/task_t/comments/c1'))));
 });
-
