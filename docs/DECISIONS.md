@@ -605,3 +605,22 @@ Seventeen `shared` tasks have no recipients at all. Gate 3's shared listener wil
 stop delivering those to non-creators, which changes nothing on screen — the UI
 predicate already hid them — but is worth knowing before reading the diff in
 delivered document counts.
+
+### DEC-2026-016 — Archive completed tasks after six weeks
+
+- Date: 2026-09-03
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: COH-007,
+  `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md`, `docs/backlog.md`
+
+**Decision.** Treat completed-task archiving as a high-priority COH backlog
+item. Tasks that have remained complete for more than six weeks should be
+archived, and the Tasks Hub must provide a way to search and view archived
+tasks.
+
+**Implementation boundary.** This decision sets the retention period and the
+required user capability. The proposed technical design is recorded in the
+COH-007 plan and still receives the normal Claude implementation/Codex review
+cycle. COH-007 must follow COH-006 because both change the task reader and its
+authorization-sensitive query shapes.

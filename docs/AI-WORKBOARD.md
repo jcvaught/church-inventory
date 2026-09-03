@@ -239,6 +239,27 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ## Proposed Queue
 
+### COH-007 — Completed-task archiving and archive search
+
+- Status: **Proposed — high priority** (owner request 2026-09-03)
+- Suggested owner: Claude
+- Suggested reviewer: Codex
+- Plan: `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md`
+- Depends on: COH-006 merged, deployed, and production-verified. The two tasks
+  overlap `src/useFirestore.js`, `src/pages/hubs/WorkBoard.jsx`,
+  `firestore.rules`, `firestore.indexes.json`, and `functions/index.js`, so
+  COH-007 must not begin while Gate 4 is active.
+- Owner request: automatically archive completed tasks after more than six
+  weeks, with a way to search and view archived tasks.
+- Proposed shape: lossless soft archive on the existing `workItems` document;
+  active listeners add `archived == false`; archive results use lazy one-shot
+  versions of the same COH-006 visibility query arms; a monitored daily function
+  performs race-safe, idempotent transitions; an owner-approved backfill makes
+  the reader cutover safe.
+- Next coordination step: Claude reviews and amends the plan against the final
+  merged COH-006 implementation, records consequential decisions, and sends the
+  reviewable plan to Codex before implementation under DEC-2026-011.
+
 ### COH-005 — Remaining core authorization policy (D-3, D-7, D-8)
 
 - Status: Proposed
@@ -331,4 +352,3 @@ is reviewed and file overlap is checked.
 - Note: the highest-severity finding, AC-01, was found by the owner and missed by
   the reviewer's independent baseline; the legacy-block and emulator findings ran
   the other way. Neither agent alone produced the complete picture.
-
