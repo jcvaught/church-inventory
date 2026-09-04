@@ -23,7 +23,8 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-006 — Enforce private and shared task visibility
 
-- Status: **In progress** (Claude). **Gates 1 and 2 are done in production
+- Status: **COMPLETE — all four gates deployed and verified in production
+  (gate 4: 2026-09-03).** **Gates 1 and 2 are done in production
   (2026-09-02).** Gate 1: client, indexes (composite probed present), functions,
   and rules all deployed. Gate 2: backfill executed — 90 tasks across 6 churches,
   90 applied, 0 skipped, verify 0 outstanding against an independent aggregation
@@ -44,14 +45,27 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   reviews are **published**: `origin/codex/gate4-rereview` at `ccefde2` and
   `origin/codex/coh-006-gate4-package-review` at `f5e1dbe`. The package is
   published on `origin/claude/coh-006-gate-4` at `ef15bb2`.
-- **Next action: the product owner.** The deploy gate is reserved and nothing is
-  deployed. Blocking condition carried forward from the package review: the
-  read-only `--verify` run at package time measured **92 tasks, 0 outstanding**
-  against a stale `--baseline 90`. The +2 are explained (live church, created
-  2026-09-03, both `private`, both correctly projected) and do not block the
-  package, but that is **not a passing baseline check** and cannot satisfy the
-  pre-deploy gate. The baseline must be independently re-established and
-  verification rerun immediately before deployment. Amended twice from Codex reviews:
+- **DEPLOYED 2026-09-03, owner-authorized.** Executed in the reviewed order:
+  project targeting verified (the Firebase CLI's active project was
+  `courtclimber`, so `--project church-inventory-9615c` was passed explicitly);
+  prior ruleset `bd3e029f` recorded; baseline **independently re-established at
+  92** by aggregation and `--verify --baseline 92` passed 92/92 with 0
+  outstanding; `firestore:rules` deployed at **23:39:42Z** as ruleset
+  **`db4736ab-3747-47f4-9fe1-07ec92878ba8`**, confirmed by reading the deployed
+  source back (11 `hasAny`, 9 `canSeeWorkItem`); canary admitted all five client
+  query shapes; the full probe passed with **0 failures**; merged to `main` as
+  `a9b7ffc`; Vercel production `dpl_6LX91hZMgWMoJf1BGpyFz7MHbk5s` READY; the Help
+  Centre smoke confirmed the new server-enforcement copy live and the pre-fix
+  warning gone.
+- **One defect found during the deploy, in the probe rather than the rules.**
+  ADMIN's `own` listener timed out while its identical one-shot query returned
+  the exact expected set. Isolated: attached first and alone the same listener is
+  server-backed immediately. ADMIN's `own` set was exactly `['team']`, a strict
+  subset of what its `team` listener had already cached, so the SDK never needed
+  a server round-trip. Fixed by the `admin-private` fixture (`bcb0fc2`), which a
+  task only `own` returns; it also strengthens the no-override controls in both
+  directions. Codex's insistence that a timeout is a failure rather than "no
+  leak" is what surfaced it. Amended twice from Codex reviews:
   `docs/COH-006-PREIMPLEMENTATION-REVIEW-2026-08-31.md` (seven findings, all
   verified and accepted; owner calls in **DEC-2026-010**) and
   `docs/COH-006-PLAN-REVIEW-ROUND2-2026-08-31.md` (four further amendments, all
