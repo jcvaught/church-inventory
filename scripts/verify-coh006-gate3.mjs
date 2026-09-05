@@ -90,12 +90,13 @@ async function main() {
     'private-b-stale-a': [TASK('private-b-stale-a'), base({ visibility: 'private', createdBy: B, sharedWith: [person(A)], sharedWithUids: [A] })],
     'team-overlap': [TASK('team-overlap'), base({ visibility: 'team', createdBy: A, assignees: [person(B)], assigneeUids: [B], sharedWith: [person(B)], sharedWithUids: [B] })],
     'shared-overlap': [TASK('shared-overlap'), base({ visibility: 'shared', createdBy: A, assignees: [person(B)], assigneeUids: [B], sharedWith: [person(B)], sharedWithUids: [B] })],
-    // ADMIN's `own` set must contain a document no OTHER admin listener holds.
-    // Without this the set is exactly ['team'], a strict subset of the team
-    // listener's cache, so the SDK answers `own` from cache and never delivers a
-    // server-backed snapshot — the listener assertion then times out even though
-    // the rule admits the query. Measured 2026-09-03: attached first and alone,
-    // the same listener is server-backed at once with zero cache-only callbacks.
+    // A creator positive for ADMIN and a symmetric private-task negative for A
+    // and B. It is NOT the listener fix: `admin-private` only happens to make
+    // ADMIN's `own` result differ from the cached subset under the current
+    // ordering, which forces a document change and therefore a callback. Cache
+    // the document first, or warm the exact `own` set in a future refactor, and
+    // the false timeout returns. Transport observation belongs to
+    // includeMetadataChanges on the listener, not to this fixture.
     'admin-private': [TASK('admin-private'), base({ visibility: 'private', createdBy: ADMIN })],
   };
   const batch = adb.batch();
@@ -193,13 +194,17 @@ async function main() {
         shared: query(ref, where('visibility', '==', 'shared'), where('sharedWithUids', 'array-contains', uid)),
       };
 
-      // ORDER IS LOAD-BEARING: listeners first. In this SDK a getDocsFromServer
-      // call poisons subsequent onSnapshot listeners on the same Firestore
-      // instance — the listener delivers one cached callback and the Listen
-      // stream never establishes. Measured directly: the same listener is
-      // server-backed before the reads and times out after them. Nothing to do
-      // with rules or with the queries; it would simply have been reported as
-      // "listener timeout" and misread as a product failure.
+      // Listeners first. A preceding getDocsFromServer warms the cache with the
+      // exact result set, and a later listener over the same query then has
+      // nothing but sync metadata left to report. With includeMetadataChanges
+      // enabled above that is now observable either way, so this ordering is
+      // defence in depth rather than the oracle itself.
+      //
+      // Corrected 2026-09-05 (Codex post-deploy review, M-1). The previous note
+      // here claimed a one-shot read "poisons" the listener and that the Listen
+      // stream never establishes. Neither is supported by a suppressed callback:
+      // absence of a user callback is not absence of a server round-trip. Do not
+      // reintroduce that reading.
       console.log(`\n--- member ${label}: onSnapshot ---`);
       for (const [src, q] of Object.entries(Q)) {
         const want = EXPECT[label][src].map(id);
@@ -207,7 +212,14 @@ async function main() {
           let un = () => {};
           let cacheCallbacks = 0;
           const t = setTimeout(() => { un(); resolve({ state: 'timeout', cacheCallbacks }); }, 15000);
-          un = onSnapshot(q,
+          // includeMetadataChanges is REQUIRED, not cosmetic. It defaults to false
+          // in this SDK (12.13.0), and with it off a backend confirmation that
+          // changes only sync metadata raises no second callback. When the cache
+          // already holds the exact result set, the listener then delivers one
+          // fromCache snapshot and nothing else — indistinguishable from a
+          // listener that never reached the server. With it on, server
+          // confirmation is observable regardless of what the cache holds.
+          un = onSnapshot(q, { includeMetadataChanges: true },
             (snap) => {
               if (snap.metadata.fromCache) { cacheCallbacks++; return; }   // recorded, not accepted
               clearTimeout(t); un();
