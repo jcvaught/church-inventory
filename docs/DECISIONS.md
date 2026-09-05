@@ -665,3 +665,43 @@ required user capability. The proposed technical design is recorded in the
 COH-007 plan and still receives the normal Claude implementation/Codex review
 cycle. COH-007 must follow COH-006 because both change the task reader and its
 authorization-sensitive query shapes.
+
+### DEC-2026-017 — Whether an archived task's backlinks stay writable
+
+- Date: 2026-09-05
+- Status: **Proposed — awaiting the product owner**
+- Deciders: Product owner
+- Related tasks/docs: COH-007,
+  `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md` (amendment A6),
+  DEC-2026-015 (residual 1)
+
+**Context.** COH-006 gate 4 recorded a residual: deleting a linked maintenance
+ticket or job clears the corresponding backlink on a task through a direct update
+outside `updateTask`, and that write is denied when the actor cannot read the
+task, leaving a stale backlink. `deleteTask` clears `linkedSetupTaskDocId` on a
+linked reservation the same way.
+
+COH-007 proposes that an archived task's content is read-only until reopen. That
+extends the denial to a case the residual does not cover: an actor who **can**
+read the task would also be blocked, purely because the task is archived. The
+result is a dangling pointer to a deleted ticket, job, or reservation on an
+archived task — which the archive's linked-task affordance then has to render as
+neither `archived` nor `missing` but broken.
+
+**Options.**
+
+1. **Carve the backlink fields out of the archived write-lock.**
+   `linkedJobDocId`, `linkedTicketDocId`, `linkedReservationDocId` and
+   `linkedItemDocId` stay writable on an archived task by an actor who passes
+   `canSeeWorkItem`. Cost: the lock is no longer "no content changes at all", so
+   the rule carries an explicit field allowlist that must be kept in step with
+   the link fields as they change.
+2. **Accept stale backlinks on archived tasks.** The lock stays total and the
+   archive detail view degrades gracefully on a link whose target is gone. Cost:
+   a known-wrong field stored on archived records, and the degradation has to be
+   built and tested regardless.
+
+**Not decided by Claude.** This is a data-integrity-versus-rule-surface
+trade-off with no technically correct answer, and it changes the rules contract,
+so it is recorded here as Proposed rather than settled in the plan. COH-007
+implementation should not begin until it is answered.

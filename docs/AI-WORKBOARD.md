@@ -287,17 +287,46 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-007 — Completed-task archiving and archive search
 
-- Status: **Proposed** — **blocked on COH-006** reaching merged, deployed, and
-  production-verified. The two tasks share `src/useFirestore.js`,
-  `firestore.rules`, `firestore.indexes.json`, the work board, and
-  `functions/index.js`, so implementation must not overlap Gate 4.
+- Status: **Plan amended — awaiting Codex pre-implementation review.** The
+  COH-006 dependency is **cleared** (all four gates deployed and verified
+  2026-09-03, `main` at `2ced910`), so the file-overlap hold on
+  `src/useFirestore.js`, `firestore.rules`, `firestore.indexes.json`, the work
+  board, and `functions/index.js` is released. Still in Proposed Queue on
+  purpose: promotion to Active Tasks happens when the review clears it for
+  implementation, not before. **No code, rules, indexes, or deploy yet.**
 - Owner request (2026-09-03, HIGH): automatically archive tasks that have been
   `Complete` for more than six weeks, and provide a way to search and view
   archived tasks.
-- Plan: `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md`, published on
-  `origin/codex/coh-007-plan` at `ef11213`. **Not yet reviewed** — publishing the
-  branch is not review. Its own step 2 requires Claude to amend it against the
-  final COH-006 state before Codex's pre-implementation review.
+- Owner: **Claude** (plan amendment) · Reviewer: **Codex** (pre-implementation
+  review), per DEC-2026-011.
+- Branch: **`claude/coh-007-plan`**, from `main` at `2ced910`. Codex's
+  `origin/codex/coh-007-plan` was cut from `69e7390` (gate 3) and was never
+  merged; a rebase would have collided in `docs/DECISIONS.md`, where its
+  DEC-2026-016 sits at the position `main` now uses for gate 4's DEC-2026-015.
+  Its three artifacts were carried onto `main` byte-identical instead
+  (`bda7fe9`), then amended. Codex's branch is untouched — it is behind and
+  should reconcile itself.
+- Plan: `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md`, **amended 2026-09-05**
+  against the final COH-006 state. Nine amendments, each marked `[A-n]` in the
+  text: A1 five listeners but only four constrained (the maintenance arm must
+  not take `archived == false` or the maintenance board empties) · A2 the
+  concrete index set, four COLLECTION composites shared by the active and
+  archived query sets plus one COLLECTION_GROUP, with the silent-skip and
+  redeploy-rules hazards attached · A3 the archiver's `completedAt <= cutoff`
+  range filter may also match the `null` every creation path writes, which makes
+  the skip-malformed guard load-bearing — **to be measured, not assumed** · A4
+  the Insights undercount anchored to `velocityData` and the 90-day tile · A5 the
+  board's `canSeeTask` reads the object arrays while the queries read the uid
+  arrays, a pre-existing divergence the archive inherits · A6 the open owner call
+  below · A7 what the deployed gate-4 rule already gives reopen for free · A8
+  reuse `backfill-task-visibility.cjs` and enable `includeMetadataChanges` on any
+  new listener oracle · A9 doc lines land in the behaviour-change commit.
+- **Blocking open decision: DEC-2026-017** (Proposed) — does an archived task's
+  backlink stay writable? The plan's read-only-while-archived rule would newly
+  deny the backlink cleanup that runs when a linked ticket, job, or reservation
+  is deleted, even for an actor who can read the task, leaving a dangling
+  pointer. Two options recorded with their costs; **the owner decides, and
+  implementation should not begin until they do.**
 - Shape: soft `archived`/`archivedAt` flags on `workItems` (lossless, nothing
   moved or deleted), `archived == false` added to the four authorization-shaped
   active queries, an on-demand Archived Tasks view running the same four arms

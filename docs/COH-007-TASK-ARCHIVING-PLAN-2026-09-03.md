@@ -1,6 +1,14 @@
 # COH-007 — Completed-task archiving and archive search
 
-**Status:** Proposed plan
+**Status:** Proposed plan — **amended 2026-09-05 (Claude)** against the final
+COH-006 state, `main` at `2ced910`. Awaiting Codex pre-implementation review.
+
+**Amendments.** This document was written on top of `69e7390` (COH-006 gate 3),
+before gate 4 shipped. Nine things about the deployed system are knowable now
+that were not then; each is marked **[A-n, 2026-09-05]** where it changed the
+text. The consequential one is **A6** — an open owner call, not a design choice
+Claude may make. Amendment step 2 of Migration and rollout is therefore
+complete; the pre-implementation review is the next gate.
 
 **Priority:** High (owner request, 2026-09-03)
 
@@ -8,7 +16,9 @@
 
 **Suggested reviewer:** Codex
 
-**Depends on:** COH-006 merged, deployed, and production-verified
+**Depends on:** COH-006 merged, deployed, and production-verified —
+**satisfied 2026-09-03**; all four gates deployed and verified, `main` at
+`2ced910` (`docs/COH-006-GATE4-DEPLOY-RECEIPT-2026-09-03.md`).
 
 ## Owner request
 
@@ -59,6 +69,13 @@ collection but keep their current lifecycle and listener.
    longer than a month. The 12-week velocity chart and 90-day completion metric
    must combine active tasks with authorized archived tasks loaded on demand;
    they must not silently undercount after the cutover.
+   **[A4, 2026-09-05]** Anchored to the code: `velocityData`
+   (`src/pages/hubs/WorkBoard.jsx:1572-1586`) spans 12 weeks — 84 days — and the
+   `Avg/Week (90d)` tile (`:2111-2118`) spans 90; both exceed the 42-day cutoff,
+   so both undercount from the reader gate onward, silently and by a growing
+   amount. `completedThisMonth` (`:1565`) is safe on arithmetic alone: the
+   longest month is 31 days. All three read `visibleTasks`, so combining archives
+   means feeding that one derived array, not patching three call sites.
 
 ## Data model
 
@@ -96,6 +113,25 @@ The existing per-source membership tracking remains mandatory, so an archived
 task leaves the merged active store as soon as it drops out of its last active
 listener.
 
+**[A1, 2026-09-05] Five listeners, four constrained.** The deployed reader
+(`src/useFirestore.js:277-285`) runs *five* queries, not four: `maintenance`,
+`team`, `own`, `assigned`, `shared`. Only the four task-capable arms take
+`archived == false`. The `maintenance` arm must **not** — maintenance documents
+never carry the field, and an equality filter on a missing field matches nothing,
+so constraining that arm would empty the maintenance board for every church.
+
+Two second-order effects to state rather than let a reviewer rediscover:
+
+- The `own` arm (`createdBy == uid`) currently delivers maintenance tickets the
+  user created. Adding `archived == false` drops those from that arm. Harmless:
+  the `maintenance` arm returns every ticket church-wide and
+  `mergeWorkSources()` (`src/utils/workMerge.js`) splits the union by `type`, so
+  the maintenance array is unchanged. It is a change in delivered document
+  counts, not in what renders.
+- The `assigned` arm is unaffected, because only `addTask` and `updateTask`
+  write `assigneeUids` (`useFirestore.js:796-797`, `:818-819`); no maintenance
+  writer does. That arm has always been tasks-only.
+
 ### Archived Tasks view
 
 Run the same four authorization-shaped queries as one-shot server reads with
@@ -108,11 +144,45 @@ Factor the active and archive query construction through one small builder so
 their visibility arms cannot drift. Do not reuse the global live task array for
 archives, and do not turn the archive into another permanent listener.
 
-Firestore may require composites for the added equality constraint, especially
-the array-contains arms. Declare every required COLLECTION-scope index in
-`firestore.indexes.json`, then probe the exact active and archived query shapes
-against production before cutting over. Do not infer index availability from a
-successful Firebase CLI deploy.
+**[A5, 2026-09-05] The client predicate still runs, and can disagree with the
+queries.** Gate 3 removed the interim store-boundary filter, but the board still
+filters through `canSeeTask()` at `src/pages/hubs/WorkBoard.jsx:667`. That
+predicate reads the `assignees` / `sharedWith` **object** arrays, while the
+queries and the rules read the `assigneeUids` / `sharedWithUids` **uid** arrays,
+and DEC-2026-012 deliberately does not pin the two together. A task delivered by
+a uid-array arm whose object array has gone stale is therefore already hidden by
+the board today. The archive view inherits this exactly: apply the same predicate
+for consistency with the active board, never rely on it for authorization, and
+record the divergence as pre-existing rather than introduced here. If COH-007
+surfaces a real instance of it in production data, that is a separate finding
+against DEC-2026-012, not a defect in archiving.
+
+**[A2, 2026-09-05] The index set, concretely.** The active and archived query
+sets differ only in the `archived` value, so one set of four COLLECTION-scope
+composites serves both:
+
+| Serves | Index |
+|---|---|
+| `team` | `(visibility ASC, archived ASC)` |
+| `own` | `(createdBy ASC, archived ASC)` |
+| `assigned` | `(assigneeUids CONTAINS, archived ASC)` |
+| `shared` | `(visibility ASC, sharedWithUids CONTAINS, archived ASC)` |
+
+The existing `(visibility, sharedWithUids)` COLLECTION entry in
+`firestore.indexes.json` stays — it still serves nothing else, but removing it is
+a separate change and not worth bundling into an authorization-sensitive rollout.
+
+Two standing hazards apply, both already documented in `CLAUDE.md` and both
+previously paid for on this repository:
+
+- `firebase deploy --only firestore:indexes` exits 0 while silently creating
+  nothing for a COLLECTION-scope composite whose field list matches an existing
+  COLLECTION_GROUP index (Known Pitfalls, Case A — it cost five weeks of a
+  missing production index in 2026-05). Probe each of the five exact query shapes
+  against production after deploying, and fall back to
+  `gcloud firestore indexes composite create` for any that are absent. A
+  successful deploy is not evidence.
+- Redeploy `firestore:rules` after any `firestore:indexes` deploy.
 
 ## Scheduled archiver
 
@@ -122,7 +192,29 @@ Add `archiveCompletedTasks`, a once-daily `onSchedule` function wrapped by
 The collection-group query selects `status == 'Complete'`, `archived == false`,
 and `completedAt <= cutoff`. Only task documents carry `archived`, but the
 function still checks `type == 'task'` before writing. Declare and probe the
-required COLLECTION_GROUP composite index.
+required COLLECTION_GROUP composite index —
+`(status ASC, archived ASC, completedAt ASC)`.
+
+**[A3, 2026-09-05] The range filter may return null-dated documents.** Every
+task-creation path writes `completedAt: null` — the client writer at
+`src/useFirestore.js:800` and the template generator at
+`functions/index.js:3533` — and Firestore's total value ordering places null
+before strings, which would make `completedAt <= '<iso cutoff>'` match every
+null. A task can reach `status == 'Complete'` with a null `completedAt` through
+any write path that sets status without stamping the date, so the population is
+not hypothetical even though it should be small.
+
+If that ordering behaviour holds, the handler's "skip a malformed or missing
+date, count it, surface it in telemetry, and never guess it from `updatedAt` or
+`createdAt`" guard is **load-bearing** — it is the only thing standing between a
+never-completed-properly task and automatic archiving — rather than the
+defensive nicety the original text implies.
+
+Do not take the ordering claim on reasoning. **Measure it** against the emulator
+before implementation, seeding one `Complete` task with `completedAt: null`
+alongside eligible and ineligible dated ones, and record the observed result in
+the handoff. The guard ships either way; what the measurement decides is whether
+its skip counter is expected to be non-zero in production.
 
 Each update writes only:
 
@@ -180,6 +272,49 @@ Build on the final COH-006 predicate; do not start from the transitional rule on
   archive fields and transitions so direct SDK callers cannot bypass the
   lifecycle.
 
+**[A7, 2026-09-05] What the deployed rule already gives us.** `canSeeWorkItem()`
+has no archived arm, so archiving changes nothing about *who may read* a task and
+the read rule needs no edit at all. Reopen inherits every constraint the gate-4
+update rule already imposes — `type` equality, the `createdBy` / `taskNumber` /
+`createdAt` immutability pins, `visibility in ['team','private','shared']`, both
+`is list` checks on the uid projections, and the pre-state
+`canSeeWorkItem(resource.data)` authorization that is what stops a self-grant.
+COH-007 therefore adds only the transition constraints on top: a client may move
+`archived` true→false (landing in `Backlog` with `completedAt` and `archivedAt`
+null) and never false→true.
+
+**[A6, 2026-09-05] OPEN OWNER CALL — read-only-while-archived collides with
+DEC-2026-015's first residual.** Gate 4 recorded that deleting a linked
+maintenance ticket or job clears the corresponding backlink on the task through a
+direct update *outside* `updateTask`, and that the write is denied when the actor
+cannot read the task, leaving a stale backlink. `deleteTask` clears
+`linkedSetupTaskDocId` on a linked reservation the same way
+(`src/useFirestore.js`, the `deleteTask` backlink block).
+
+The plan's rule "archived task content and comments are read-only until reopen"
+extends that denial to a new case: an actor who **can** read the task would also
+be blocked from clearing its backlink, purely because the task is archived. The
+result is a dangling pointer to a deleted ticket, job, or reservation on an
+archived task, which the linked-task affordance in Client behavior then has to
+render as neither `archived` nor `missing` but broken.
+
+Two options, and this is the owner's call, not Claude's:
+
+1. **Carve the backlink fields out of the archived write-lock** —
+   `linkedJobDocId`, `linkedTicketDocId`, `linkedReservationDocId`,
+   `linkedItemDocId` remain writable on an archived task by an actor who passes
+   `canSeeWorkItem`. Cost: the write-lock is no longer "no content changes at
+   all", so the rule and its tests carry an explicit field allowlist that must be
+   kept in step with the link fields.
+2. **Accept stale backlinks on archived tasks** — the lock stays total, and the
+   archive detail view is required to degrade gracefully on a link whose target
+   no longer exists. Cost: a known-wrong field on archived records, and the
+   degradation has to be built and tested anyway.
+
+Option 1 is the smaller lie about the data at the cost of a slightly leakier
+rule; option 2 keeps the rule clean at the cost of storing something false.
+Record the answer as a numbered decision before implementation begins.
+
 ## Migration and rollout
 
 This is a staged schema/read-path change, not a combined deploy.
@@ -188,9 +323,10 @@ This is a staged schema/read-path change, not a combined deploy.
    production verification. COH-007 touches the same central reader, rules,
    indexes, work board, and scheduled-functions file, so implementation must not
    overlap Gate 4.
-2. **Plan review.** Claude reviews/amends this plan against the final COH-006
-   state, records any consequential decision, then hands the plan to Codex for
-   the required pre-implementation review.
+2. **Plan review. — DONE 2026-09-05.** Claude amended this plan against the
+   final COH-006 state (amendments A1–A9 above; `main` at `2ced910`). The one
+   consequential decision is **A6**, left open for the owner rather than settled
+   by Claude. Next gate: Codex's pre-implementation review.
 3. **Additive gate.** Ship task writers, archive loader/UI, rules shape,
    function code, monitoring entry, and all indexes without changing the active
    listeners or enabling production archiving. Verify the exact archive queries
@@ -200,6 +336,15 @@ This is a staged schema/read-path change, not a combined deploy.
    backup, dry run, counts by church/status, explicit owner execution approval,
    execute, independent coverage query, and a delta pass. Do not infer or alter
    `completedAt` in this pass.
+   **[A8, 2026-09-05]** Do not invent the script's shape — follow
+   `scripts/backfill-task-visibility.cjs`, which already implements exactly this
+   sequence and was executed cleanly in production at COH-006 gate 2 (90 tasks
+   across 6 churches, 90 applied, 0 skipped, 0 outstanding against an independent
+   aggregation baseline). Reuse in particular its dry-run default, its
+   `--execute --prod` guard, and its **manifest-based** rollback: it records the
+   before- and after-image of every document it writes and refuses to restore one
+   a user has touched since, rather than blindly reverting. Verification follows
+   `scripts/verify-coh006-gate3.mjs`.
 5. **Reader gate.** After coverage and index probes pass, deploy the active
    query constraints. Verify two accounts against team, own, assigned, shared,
    private-negative, stale-recipient-negative, and archived fixtures. Confirm a
@@ -243,6 +388,15 @@ requires the same backup/dry-run/approval discipline.
 - Scheduled archiving is idempotent, preserves every non-archive field and
   subcollection, skips malformed dates, chunks safely, and loses a deliberate
   reopen/archive race rather than archiving the reopened task.
+
+**[A8 cont., 2026-09-05] Any new listener assertion needs metadata events.** A COH-006
+post-deploy review found the gate-4 probe's `onSnapshot()` oracle lacked
+`{ includeMetadataChanges: true }`, which defaults to false: a backend
+confirmation that changes only sync metadata raises no second callback, so a warm
+cache and a dead listener are indistinguishable to the test. Any COH-007
+assertion that a task *leaves* an active listener must enable metadata events, or
+it can pass while broken. `scripts/verify-coh006-listener-oracle.mjs` is the
+ordering-independent regression that pins this.
 
 ### UI/E2E coverage
 
@@ -291,7 +445,12 @@ requires the same backup/dry-run/approval discipline.
 - rules, handler, unit, and authenticated E2E tests
 - an idempotent backfill/verification script under `scripts/`
 - `docs/DATA_MODEL.md`, Help Centre, `src/data/whatsNew.js`, and handoff/review
-  artifacts
+  artifacts. **[A9, 2026-09-05]** These were already scoped correctly; the only
+  amendment is procedural — the doc and Help Centre lines land in the **same
+  commit** as the behaviour change they describe, not a tidy-up commit
+  afterwards. The Help Centre currently states that task visibility is
+  server-enforced (gate 4); archiving adds to that copy rather than replacing
+  it.
 
 ## Explicitly out of scope
 
