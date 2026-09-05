@@ -30,9 +30,9 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   90 applied, 0 skipped, verify 0 outstanding against an independent aggregation
   baseline of 90, and a field-by-field spot check found 0 projection mismatches.
   Backup and manifest are at `~/apps/coh006-migration/`. **Gate 3 is deployed
-  (2026-09-02)**, `main` at `69e7390`. **Gate 4 is implemented, reviewed, fixed,
-  and re-reviewed; it is NOT deployed** and the deploy gate is reserved for the
-  product owner. Gate 4 trail: implementation `2711ff4` → review `285d204`
+  (2026-09-02)**, `main` at `69e7390`. Before the owner-authorized deployment,
+  Gate 4 reached the following reviewed release state. Gate 4 trail:
+  implementation `2711ff4` → review `285d204`
   (`docs/COH-006-GATE4-REVIEW-2026-09-03.md`, changes requested) → fixes
   `05a9dc8` → re-review `c3fe8a6`
   (`docs/COH-006-GATE4-REREVIEW-2026-09-03.md`, rules approved / release package
@@ -56,16 +56,26 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   query shapes; the full probe passed with **0 failures**; merged to `main` as
   `a9b7ffc`; Vercel production `dpl_6LX91hZMgWMoJf1BGpyFz7MHbk5s` READY; the Help
   Centre smoke confirmed the new server-enforcement copy live and the pre-fix
-  warning gone.
-- **One defect found during the deploy, in the probe rather than the rules.**
-  ADMIN's `own` listener timed out while its identical one-shot query returned
-  the exact expected set. Isolated: attached first and alone the same listener is
-  server-backed immediately. ADMIN's `own` set was exactly `['team']`, a strict
-  subset of what its `team` listener had already cached, so the SDK never needed
-  a server round-trip. Fixed by the `admin-private` fixture (`bcb0fc2`), which a
-  task only `own` returns; it also strengthens the no-override controls in both
-  directions. Codex's insistence that a timeout is a failure rather than "no
-  leak" is what surfaced it. Amended twice from Codex reviews:
+  warning gone. **Auditable evidence — exact commands, the prior ruleset id, and
+  a SHA-256 comparison proving the deployed source is byte-identical to
+  `firestore.rules` at R — is in
+  `docs/COH-006-GATE4-DEPLOY-RECEIPT-2026-09-03.md`.**
+- **One defect found during the deploy, in the probe rather than the rules —
+  and my first diagnosis of it was wrong.** ADMIN's `own` listener timed out
+  while its identical one-shot query returned the exact expected set. I attributed
+  it to a warm cache removing the need for a server round-trip and fixed it with
+  the `admin-private` fixture (`bcb0fc2`). Codex's post-deploy review `0f41b46`
+  showed that reading is unsupported: `onSnapshot()` lacked
+  `{ includeMetadataChanges: true }`, which defaults to false in Firebase 12.13.0,
+  so a backend confirmation changing only sync metadata raised no second callback.
+  A warm cache and a dead listener were indistinguishable to the probe, and
+  `admin-private` only masked it under the current ordering. Corrected by enabling
+  metadata events on the probe's listener oracle, with
+  `scripts/verify-coh006-listener-oracle.mjs` as an ordering-independent
+  regression: metadata events on, both listeners are server-backed; off, both time
+  out while the one-shot still succeeds. `admin-private` stays for its security
+  value. False-negative defect only — every listener in the passing run produced
+  an exact `fromCache === false` snapshot, and the deployed rules are unaffected. Amended twice from Codex reviews:
   `docs/COH-006-PREIMPLEMENTATION-REVIEW-2026-08-31.md` (seven findings, all
   verified and accepted; owner calls in **DEC-2026-010**) and
   `docs/COH-006-PLAN-REVIEW-ROUND2-2026-08-31.md` (four further amendments, all
