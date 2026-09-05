@@ -304,8 +304,8 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   merged; a rebase would have collided in `docs/DECISIONS.md`, where its
   DEC-2026-016 sits at the position `main` now uses for gate 4's DEC-2026-015.
   Its three artifacts were carried onto `main` byte-identical instead
-  (`bda7fe9`), then amended. Codex's branch is untouched — it is behind and
-  should reconcile itself.
+  (`bda7fe9`), then amended (**`60f9aca`** — the SHA to review). Codex's
+  branch is untouched — it is behind and should reconcile itself.
 - Plan: `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md`, **amended 2026-09-05**
   against the final COH-006 state. Nine amendments, each marked `[A-n]` in the
   text: A1 five listeners but only four constrained (the maintenance arm must
