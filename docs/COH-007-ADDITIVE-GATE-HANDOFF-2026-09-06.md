@@ -6,7 +6,7 @@
 - Owner: **Claude** · Reviewer: **Codex** (DEC-2026-011)
 - Branch: `claude/coh-007-additive-gate`, from `main` at `6dbc6c6`
 - Commits: `a7d490d` (writers, rules, indexes) → `e4230c3` (reader, archive view, Insights) → `d62e92b` (archiver, inert) → `5d2ac1b` (handoff) → `1a89784` (Codex review) → `94ee913` (fixes) → `9e2abdb` (docs) → `18619a5` (Codex re-review) → second-pass fixes
-- Status: **Implemented, reviewed three times, and fixed. Nothing deployed.** Pass 1: two High / three Medium — all resolved. Pass 2: one High / one Medium on the H2 fix — both resolved. Pass 3: one High / one Medium, again on the H2 lineage — both resolved, with no regression found anywhere else. Awaiting a fourth (confirmation) pass, then owner authorization for the rules/index deploy and the production probes.
+- Status: **APPROVED WITH FOLLOW-UP by Codex, 2026-09-06 (fourth pass). Nothing deployed — awaiting owner authorization.** Pass 1: two High / three Medium — all resolved. Pass 2: one High / one Medium on the H2 fix — both resolved. Pass 3: one High / one Medium, again on the H2 lineage — both resolved. Pass 4 (`docs/COH-007-ADDITIVE-GATE-FINAL-2026-09-06.md`, reviewed `f6a2e20`, committed `f8975d7`): **approved with follow-up**, the sole follow-up being an audit-trail citation typo in this document, corrected here. No rules, archiver, handler or archive-reader behaviour was destabilised across the four passes.
 
 Normative spec: `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md` (amendments A1–A20),
 cleared for implementation by three Codex passes ending at `876645d`.
@@ -14,8 +14,8 @@ Prerequisite COH-008 is deployed and verified (`docs/COH-008-HANDOFF-2026-09-06.
 
 ## Review outcome (2026-09-06)
 
-Codex reviewed at `5d2ac1b`: **changes requested**, two High and three Medium,
-no Critical. Every finding was accepted and fixed; the written cases were
+Codex reviewed `5d2ac1b` and committed its review at `1a89784`: **changes
+requested**, two High and three Medium, no Critical. Every finding was accepted and fixed; the written cases were
 integrated and run.
 
 - **H1 — malformed archive state failed OPEN for comments and delete.**
@@ -255,7 +255,7 @@ can reach them.
 
 ## Re-review outcome (2026-09-06, second pass)
 
-Codex re-reviewed at `9e2abdb`
+Codex re-reviewed `9e2abdb` and committed at `96aa947`
 (`docs/COH-007-ADDITIVE-GATE-REREVIEW-2026-09-06.md`): **changes requested**,
 one High and one Medium, both on the H2 fix. Original **H1, M1, M2 and M3 are
 CLOSED**; the three-shape rules model and the create tightening were explicitly
@@ -289,7 +289,7 @@ one archive field. Both new findings are fixed:
 
 ## Confirmation-pass outcome (2026-09-06, third pass)
 
-Codex confirmed at `f562c7d`
+Codex confirmed `f562c7d` and committed at `ccb8600`
 (`docs/COH-007-ADDITIVE-GATE-CONFIRMATION-2026-09-06.md`): **changes
 requested**, one High and one Medium, both again on the H2 lineage. It confirmed
 the interval coordinator encodes the right invariant, that no departure changing
@@ -319,6 +319,32 @@ ownership rule was therefore extracted into a pure coordinator and asserted in
 the form it requires — A settling after B is installed, then an observation
 routed to B — so what is tested is the rule itself rather than React's effect
 scheduling. That is a deliberate substitution and worth naming as one.
+
+## Final approval (2026-09-06, fourth pass)
+
+**Approved with follow-up.** Codex confirmed the coordinator's identity-ownership
+rule is correct and completely wired, that testing the extracted coordinator
+rather than the component is acceptable for this gate and needs no
+component-harness coverage, and that the completion and creation boundaries now
+match exactly what `velocityData` and the `Avg/Week (90d)` tile compute. It found
+no regression across the four passes in the three-state archive rules, the
+archiver's retry-safe telemetry and dry-run posture, the four-arm reader and its
+failure taxonomy, or the archived-comment error state.
+
+The single follow-up was **L1**, an audit-trail citation in this document: the
+third-pass section cited `f562c7d`, which is the fix Codex reviewed rather than
+the review itself. Corrected above, along with the same ambiguity in the two
+sections before it — each now names both the reviewed SHA and the review commit.
+
+**A pattern worth carrying into the remaining gates.** Every finding across all
+four passes landed on one feature, the Insights history join, and each pass found
+the previous fix *correct but scoped one step too narrowly*: the predicate was
+right while its baseline was captured too late; the baseline then covered the
+interval while the shared slot could still be detached by a superseded load; the
+watched set narrowed from the board, to the figures, to each figure's own date
+floor. The rules, archiver and reader drew no finding after the first pass. When
+the backfill and reader gates touch anything with a live half and a frozen half,
+that is where the review budget belongs.
 
 ## Original Review Focus (first pass)
 

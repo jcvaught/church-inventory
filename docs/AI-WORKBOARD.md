@@ -369,8 +369,10 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-007 — Completed-task archiving and archive search
 
-- Status: **ADDITIVE GATE (3 of 4) IMPLEMENTED, REVIEWED THREE TIMES — findings
-  fixed, awaiting a fourth (confirmation) pass. Nothing deployed.** Branch
+- Status: **ADDITIVE GATE (3 of 4) IMPLEMENTED AND APPROVED — Codex "approved
+  with follow-up" 2026-09-06 after four passes; the one follow-up (an audit-trail
+  citation typo) is closed. NOTHING DEPLOYED — the next step needs the owner's
+  authorization.** Branch
   `claude/coh-007-additive-gate` from `main` at `6dbc6c6`. Trail: implementation
   `a7d490d` → `e4230c3` → `d62e92b` → handoff `5d2ac1b` → **Codex review
   `1a89784`** (`docs/COH-007-ADDITIVE-GATE-REVIEW-2026-09-06.md`, two High /
@@ -381,7 +383,10 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   fix) → fixes `f562c7d` → **Codex confirmation `ccb8600`**
   (`docs/COH-007-ADDITIVE-GATE-CONFIRMATION-2026-09-06.md`, **changes
   requested**; one High + one Medium, again on the H2 lineage, and **no
-  regression anywhere else**) → third-pass fixes.
+  regression anywhere else**) → fixes `4a98171` → SHA correction `f6a2e20` →
+  **Codex final `f8975d7`**
+  (`docs/COH-007-ADDITIVE-GATE-FINAL-2026-09-06.md`, **APPROVED WITH
+  FOLLOW-UP**) → follow-up closed.
   **The re-review's High is the first review's H2 in a narrower window, and the
   distinction is worth keeping:** my fix captured the active baseline when the
   four archive reads *settled*, so an arm could snapshot without `x`, the worker
@@ -454,7 +459,9 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   before the reader/automation gates and the rules are undeployed) and the
   production index/query probes (the gate's own acceptance step — needs the
   owner's authorization to deploy rules + indexes).
-- **Next, in order:** Codex re-review → owner-authorized
+- **AWAITING THE OWNER.** The gate is code-complete and approved; every
+  remaining step is a production action the owner must authorize.
+- **Next, in order:** owner-authorized
   `firestore:rules` + `firestore:indexes` deploy (probe all nine shapes; a green
   deploy is not evidence, and redeploy rules afterwards) → Cloud Functions deploy
   (DEC-2026-014) → production board smoke test on a real church → **backfill
