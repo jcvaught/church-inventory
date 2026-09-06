@@ -337,7 +337,8 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   discovered in review:** A18 requires transient failures to reject so Eventarc
   retries, which means enabling `retry` (available in the installed
   firebase-functions 7.2.5). With it on, a *permanently* failing invocation
-  retries for up to 24 hours. The handler must therefore classify errors and
+  retries for up to **7 days** (the figure Firebase prints at deploy; an earlier
+  note here said 24 hours and was wrong). The handler must therefore classify errors and
   throw only on transient ones (`UNAVAILABLE`, `DEADLINE_EXCEEDED`, `ABORTED`,
   `INTERNAL`, `RESOURCE_EXHAUSTED`), returning normally on permanent ones after a
   Sentry capture. Idempotency is what makes retry safe: the reciprocal check

@@ -1378,7 +1378,9 @@ exports._setBacklinkHook = (fn) => { _backlinkHook = fn; };
 exports._resetBacklinkHook = () => { _backlinkHook = null; };
 
 // gRPC codes worth retrying. Everything else is permanent: retrying it would
-// burn Eventarc's full 24h retry window on a write that can never succeed.
+// burn the platform's full retry window on a write that can never succeed —
+// measured at deploy: Firebase warns retried executions continue "up to 7
+// days", not the 24h an earlier version of this comment claimed.
 const TRANSIENT_GRPC_CODES = new Set([4, 8, 10, 13, 14]);
 function isTransient(err) {
   return TRANSIENT_GRPC_CODES.has(err?.code)
@@ -1442,7 +1444,8 @@ async function runBacklinkCleanup({ sourceKind, churchId, docId, data, jobName }
       if (isTransient(err)) {
         transientError = err;
       } else {
-        // Permanent: record it and move on. Throwing would retry for 24h a write
+        // Permanent: record it and move on. Throwing would retry for up to 7
+        // DAYS a write
         // that cannot succeed, and would also re-attempt the directions that
         // already succeeded in this invocation.
         console.error(`${jobName}: permanent failure clearing ${d.sourceField}`, err);
