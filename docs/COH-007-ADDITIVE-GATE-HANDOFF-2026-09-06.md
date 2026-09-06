@@ -5,12 +5,61 @@
 - Task ID and title: **COH-007 — Completed-task archiving and archive search**, gate 3 of 4 (the **additive gate**)
 - Owner: **Claude** · Reviewer: **Codex** (DEC-2026-011)
 - Branch: `claude/coh-007-additive-gate`, from `main` at `6dbc6c6`
-- Commits: `a7d490d` (writers, rules, indexes) → `e4230c3` (reader, archive view, Insights) → `d62e92b` (archiver, inert)
-- Status: **Implemented and locally verified. Nothing deployed.** Awaiting Codex implementation review, then owner authorization for the rules/index deploy and the production probes.
+- Commits: `a7d490d` (writers, rules, indexes) → `e4230c3` (reader, archive view, Insights) → `d62e92b` (archiver, inert) → `5d2ac1b` (handoff) → `1a89784` (Codex review, cherry-picked) → review fixes
+- Status: **Implemented, reviewed, and fixed. Nothing deployed.** Codex requested changes 2026-09-06 (`docs/COH-007-ADDITIVE-GATE-REVIEW-2026-09-06.md`, two High / three Medium); all five are resolved below. Awaiting **re-review**, then owner authorization for the rules/index deploy and the production probes.
 
 Normative spec: `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md` (amendments A1–A20),
 cleared for implementation by three Codex passes ending at `876645d`.
 Prerequisite COH-008 is deployed and verified (`docs/COH-008-HANDOFF-2026-09-06.md`).
+
+## Review outcome (2026-09-06)
+
+Codex reviewed at `5d2ac1b`: **changes requested**, two High and three Medium,
+no Critical. Every finding was accepted and fixed; the written cases were
+integrated and run.
+
+- **H1 — malformed archive state failed OPEN for comments and delete.**
+  Correct, and the sharper half is delete, which cannot be undone.
+  `itemIsArchived()` asked only `archived == true` and read every other value as
+  active. Content updates were in fact denied — they must also satisfy the
+  active shape — but the comment and delete rules consulted the discriminator
+  alone, so a task carrying `archived: 'true'`, `archived: 1`, or a half-written
+  pair stayed commentable and permanently deletable. The rules now recognise
+  exactly three shapes — **absent** (legacy), **active** (`archived` boolean
+  false with `archivedAt` null), **frozen** (`archived` boolean true) — and
+  anything else permits nothing at all, while reads are never withheld. Fixing
+  only the write rules would have created a second hazard, so **create was
+  tightened too**: it now requires both fields or neither, because a document
+  created with a half-written pair would have been locked on arrival.
+- **H2 — the Insights as-of snapshot changed after its stated instant.**
+  Correct, and it is the half of A20's race that precedence cannot reach.
+  `mergeInsightTasks` live-wins closes the reopen direction; a task *archived*
+  after the read is dropped by the live listeners and was never in the frozen
+  result, so it falls out of the join while the label still claims a complete
+  history. Only noticing it can fix that, so the load now records which tasks
+  were active when it settled and `insightHistoryStale()` reports a torn
+  history, which no longer uses the complete presentation. Extracted as a pure
+  function rather than tested through a renderer, since the property is the
+  point and this suite has no component harness.
+- **M1 — calendar-impossible dates passed the ISO guard.** Correct:
+  `Date.parse('2026-02-30T…')` normalizes into March rather than failing. The
+  guard now round-trips the parsed instant back to its calendar date.
+- **M2 — transaction retries overcounted the telemetry.** Correct: Firestore may
+  invoke a transaction callback more than once, so counting inside it turned one
+  committed archive into two in the daily heartbeat. The callback now returns an
+  outcome and the counters move after it resolves; a `_setArchiveTransactionRunner`
+  seam makes the retry executable.
+- **M3 — an archived-comment listener failure rendered as an empty discussion.**
+  Correct, and it is the one false-empty the reader still had. The detail view
+  now shows an explicit comments error with a retry.
+- **Q1 — pin the final-ruleset sentinel.** Accepted, and scheduled as the
+  reader gate's first commit per the review's own verdict ("before the reader
+  cutover"), not done here: it needs the final ruleset, which this gate must not
+  deploy.
+- **Q2 — my production-measurement claim was wrong.** See the corrected
+  paragraph under Verification.
+- **Q3, Q4** — index order accepted as a deployable assumption subject to the
+  probes already planned; reader taxonomy accepted apart from M3.
 
 ## Outcome
 
@@ -99,15 +148,22 @@ user-visible behaviour is archiving, which starts at the automation gate.
 
 ## Verification
 
+After the review fixes:
+
 ```text
-npm run test:rules     — 101/101 pass (12 new in coh007-archive.test.mjs)
-npm run test:handlers  —  72/72 pass (11 new in archiveCompletedTasks.test.mjs)
-npm run test:unit      — 152/152 pass (22 new across 3 files)
+npm run test:rules     — 104/104 pass (15 new in coh007-archive.test.mjs)
+npm run test:handlers  —  73/73 pass (12 new in archiveCompletedTasks.test.mjs)
+npm run test:unit      — 157/157 pass (27 new across 4 files)
 npm run lint           — 0 errors, 51 warnings (baseline 50; +1 is the
                          reopenTask logActivity exhaustive-dep, matching the
                          ~10 intentional ones already in useFirestore.js)
 npm run build          — clean, 29 chunks, 0 jsxDEV
 ```
+
+Codex independently ran `test:unit` (152/152 at `5d2ac1b`), `lint` and `build`
+in its clone. It **cannot bind the emulator ports**, so the rules and handler
+results above are **unreproduced by a second party** — that limitation is
+standing, not incidental to this task.
 
 **Not run, and why:**
 
@@ -118,6 +174,8 @@ npm run build          — clean, 29 chunks, 0 jsxDEV
   belong to the reader and automation gates.
 - Production index and query probes — nothing is deployed. These are the
   gate's own acceptance step and need owner authorization.
+- The A3 production baseline (review Q2) — it is vacuous until the backfill
+  gate, for the reason recorded below.
 - No emulator result here is a production claim. See the measurement below.
 
 **THE A3 MEASUREMENT CAME BACK AGAINST THE PLAN.** A3 predicted that Firestore's
@@ -128,9 +186,25 @@ against the emulator with Codex's exact fixture, the range returns
 `['boundary', 'eligible']` — **neither the null-valued nor the missing-field
 document**. On that evidence the guard is defensive rather than load-bearing and
 its counter is expected to be zero for nulls. The guard ships anyway, exactly as
-A3 says it should; what the measurement decides is the expected counter. **This
-is an emulator result. The first production dry run re-measures it and is the
-authority.**
+A3 says it should; what the measurement decides is the expected counter. This is
+an emulator result, and the emulator is not production.
+
+**Correction, per review Q2 — my first version of this paragraph claimed the
+production dry run would re-measure it. It would not.** The dry run's
+eligibility query can only report what it returned, and a zero malformed count
+cannot distinguish "production excludes nulls from the range" from "there were
+no complete, unarchived, null-dated tasks to find." Measuring it needs an
+independent baseline: separately read the population matching
+`status == 'Complete'` **and** `archived == false` **and** `completedAt == null`,
+then compare those known document ids against the range query's result. If the
+baseline is empty, the production question is **unmeasured**, not resolved, and
+must be recorded that way. No write need be enabled for either query.
+
+A second timing constraint follows from the rollout and is worth stating rather
+than discovering: until the backfill runs, **no production document carries
+`archived` at all**, so the archiver's `archived == false` query matches nothing
+and both queries above are vacuous. This measurement therefore belongs to the
+**backfill gate**, not to the first dry run after this one.
 
 ## Risk and Rollback
 
@@ -170,7 +244,25 @@ authority.**
   app) it cannot bind; a church that approached it would silently truncate, and
   the tripwire DEC-2026-018 asks for is not instrumented yet.
 
-## Review Focus
+## Re-review Focus
+
+The five findings above are fixed; the cases Codex wrote are integrated and run.
+Where scrutiny is worth most on the second pass:
+
+1. **The three-shape rules model.** It is a bigger change than H1 strictly
+   required — create was tightened as well, to close the locked-on-arrival
+   shape the fix would otherwise have created. Is `archiveStateUsable` correct
+   at every call site, and does the transition table admit exactly the
+   legacy → legacy, legacy → active, active → active, and frozen → reopen moves
+   and nothing else?
+2. **`insightHistoryStale()`.** Is there a sequence it misses, or one where it
+   fires so readily that the complete presentation becomes unreachable in
+   practice?
+3. **Q2's baseline query.** Does the two-query comparison actually settle the
+   production question, given the backfill-gate timing constraint recorded
+   above?
+
+## Original Review Focus (first pass)
 
 Where independent scrutiny is worth most, roughly in order:
 

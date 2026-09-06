@@ -84,7 +84,7 @@ npm run test:handlers # Cloud Functions HANDLER integration tests — boots fire
                   # filter returns neither null-valued nor missing fields, so the
                   # skip guard is defensive, not load-bearing. Emulator evidence
                   # only — the first production dry run is the authority).
-                  # 72 tests, all green.
+                  # 73 tests, all green.
 ```
 
 ### Local sandbox — Firebase Emulator Suite (2026-06-07)

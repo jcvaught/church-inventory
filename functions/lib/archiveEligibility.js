@@ -28,9 +28,19 @@ function archiveCutoffISO(now, days = ARCHIVE_AFTER_DAYS) {
 // `completedAt` is deliberately NOT reconstructed from `updatedAt` or
 // `createdAt`. Those answer a different question, and a task whose completion
 // was never stamped has no completion date to infer.
+//
+// The shape regex and `Date.parse()` together are NOT enough (review M1):
+// JavaScript normalizes calendar overflow rather than rejecting it, so
+// `Date.parse('2026-02-30T00:00:00.000Z')` happily resolves into March. A task
+// stamped with an impossible date would then be treated as a valid completion
+// and archived. Round-tripping the parsed instant back to its calendar date
+// catches exactly that — Feb 30 comes back as Mar 02 and no longer matches.
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 function isUsableCompletedAt(value) {
-  return typeof value === 'string' && ISO_UTC.test(value) && !Number.isNaN(Date.parse(value));
+  if (typeof value !== 'string' || !ISO_UTC.test(value)) return false;
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return false;
+  return new Date(parsed).toISOString().slice(0, 10) === value.slice(0, 10);
 }
 
 // Returns { eligible, reason }. `reason` names why a document the eligibility

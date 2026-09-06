@@ -83,7 +83,13 @@ Granular per-subcollection rules (no wildcard). All church-scoped membership che
   ISO-string form. Rollout is staged: at the **additive gate** the rules are
   deliberately *transitional* — a missing pre-state defaults to active, so a task
   written before the backfill stays fully usable, while a task that already
-  carries the pair may not delete, corrupt, or forge either field. Clients may
+  carries the pair may not delete, corrupt, or forge either field. Precisely,
+  three shapes are recognised — **absent** (a legacy task carrying neither
+  field), **active** (`archived` boolean `false` with `archivedAt` `null`), and
+  **frozen** (`archived` boolean `true`) — and anything else is malformed and
+  permits no write at all, including comments and deletion, while reads are
+  never withheld. Create requires both fields or neither, so a half-written pair
+  cannot be minted and then find itself locked. Clients may
   never drive `archived` false → true; the one client transition is **reopen**
   (archived → active), constrained by
   `diff().affectedKeys().hasOnly(['archived','archivedAt','status','completedAt','updatedAt'])`

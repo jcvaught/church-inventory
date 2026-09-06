@@ -3839,6 +3839,12 @@ let _archiverHook = null;
 exports._setArchiverHook = (fn) => { _archiverHook = fn; };
 exports._resetArchiverHook = () => { _archiverHook = null; };
 
+// Second test seam: replaces the transaction runner so a RETRIED callback can be
+// executed rather than reasoned about (review M2). Production never sets this.
+let _archiveTxRunner = null;
+exports._setArchiveTransactionRunner = (fn) => { _archiveTxRunner = fn; };
+exports._resetArchiveTransactionRunner = () => { _archiveTxRunner = null; };
+
 async function runArchiveCompletedTasks({ writesEnabled = ARCHIVER_WRITES_ENABLED } = {}) {
   const db = getFirestore();
   const cutoff = archiveCutoffISO(nowDate());
@@ -3895,17 +3901,25 @@ async function runArchiveCompletedTasks({ writesEnabled = ARCHIVER_WRITES_ENABLE
     const chunk = candidates.slice(i, i + ARCHIVER_WRITE_CONCURRENCY);
     await Promise.all(chunk.map(async (ref) => {
       try {
-        await db.runTransaction(async (t) => {
+        // The callback RETURNS its outcome and the counters move only once the
+        // transaction resolves. Incrementing inside the callback overcounts
+        // (review M2): Firestore may invoke it more than once, so a retry after
+        // the update would count a single committed archive twice, and a run
+        // that ultimately failed could count both an archive and a failure.
+        // Nothing else in this loop makes the daily heartbeat trustworthy.
+        const runTx = _archiveTxRunner || ((cb) => db.runTransaction(cb));
+        const outcome = await runTx(async (t) => {
           const fresh = await t.get(ref);
-          if (!fresh.exists) { summary.conflicted++; return; }
-          if (!evaluateArchiveCandidate(fresh.data(), cutoff).eligible) { summary.conflicted++; return; }
+          if (!fresh.exists) return 'conflicted';
+          if (!evaluateArchiveCandidate(fresh.data(), cutoff).eligible) return 'conflicted';
           t.update(ref, {
             archived: true,
             archivedAt: FieldValue.serverTimestamp(),
             updatedAt: new Date().toISOString(),
           });
-          summary.archived++;
+          return 'archived';
         });
+        if (outcome === 'archived') summary.archived++; else summary.conflicted++;
       } catch (err) {
         summary.failed++;
         // Path only. Never a task name, description, comment, or recipient —

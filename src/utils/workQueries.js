@@ -84,3 +84,25 @@ export function mergeInsightTasks(activeTasks, archivedTasks) {
   for (const t of activeTasks || []) if (t?._docId) byId.set(t._docId, t);
   return [...byId.values()];
 }
+
+// Has the live active half moved since the frozen archive half was read?
+//
+// `mergeInsightTasks` closes the REOPEN direction of A20 by precedence. It
+// cannot close the ARCHIVE direction (review H2): a task archived after the
+// one-shot read is dropped by the live listeners and was never in the frozen
+// result, so it falls out of the join entirely while the UI still claims a
+// complete history as of the load instant — figures that then describe neither
+// moment. Precedence cannot repair that; only noticing it can.
+//
+// A task that was active when the read settled and is now in neither half has
+// moved underneath us. A deletion trips this too, which is right: the honest
+// statement in both cases is that the underlying data changed.
+export function insightHistoryStale({ activeIdsAtLoad, activeTasks, archivedTasks }) {
+  if (!activeIdsAtLoad) return false;
+  const live = new Set((activeTasks || []).map(t => t?._docId));
+  const archived = new Set((archivedTasks || []).map(t => t?._docId));
+  for (const id of activeIdsAtLoad) {
+    if (!live.has(id) && !archived.has(id)) return true;
+  }
+  return false;
+}

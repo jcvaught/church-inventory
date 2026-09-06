@@ -57,6 +57,8 @@ export function ArchivedTasks({ churchId, userId, users = [], canOperate, loadAr
   const [detail, setDetail] = useState(null);
   const [comments, setComments] = useState([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsError, setCommentsError] = useState(null);
+  const [commentsRetryKey, setCommentsRetryKey] = useState(0);
   const [reopening, setReopening] = useState(false);
 
   const load = useCallback(async (forMonths) => {
@@ -71,9 +73,10 @@ export function ArchivedTasks({ churchId, userId, users = [], canOperate, loadAr
   // through the same live subscription the board uses, so a task reopened in
   // another tab stops looking frozen here too.
   useEffect(() => {
-    if (!detail?._docId || !churchId) { setComments([]); return; }
+    if (!detail?._docId || !churchId) { setComments([]); setCommentsError(null); return undefined; }
     setCommentsLoading(true);
     setComments([]);
+    setCommentsError(null);
     const q = fsQuery(
       collection(db, 'churches', churchId, 'workItems', `task_${detail._docId}`, 'comments'),
       orderBy('createdAt', 'asc')
@@ -81,8 +84,17 @@ export function ArchivedTasks({ churchId, userId, users = [], canOperate, loadAr
     return onSnapshot(q, snap => {
       setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setCommentsLoading(false);
-    }, () => { setComments([]); setCommentsLoading(false); });
-  }, [detail?._docId, churchId]);
+      setCommentsError(null);
+    }, (err) => {
+      // Clearing and falling silent here would render "No comments yet" — the
+      // one thing this view must never say about a discussion it could not read
+      // (review M3). The archive's whole promise is that the history is intact,
+      // so a failure has to look like a failure.
+      setComments([]);
+      setCommentsLoading(false);
+      setCommentsError(err?.code || 'unknown');
+    });
+  }, [detail?._docId, churchId, commentsRetryKey]);
 
   const items = useMemo(() => state.result?.items || [], [state.result]);
   const filtered = useMemo(() => {
@@ -257,11 +269,20 @@ export function ArchivedTasks({ churchId, userId, users = [], canOperate, loadAr
 
             <div>
               <div style={{ fontSize: 11, color: B.textLight, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, fontFamily: f1, marginBottom: 8 }}>Comments</div>
+              {commentsError ? (
+                <div style={{ background: B.redPale, border: '1px solid #FECACA', borderRadius: 10, padding: '12px 16px' }}>
+                  <div style={{ fontSize: 13, color: B.textDark, lineHeight: 1.5 }}>
+                    The comments could not be loaded ({commentsError}). This is not an empty discussion — nothing was removed when this task was archived.
+                  </div>
+                  <button type="button" onClick={() => setCommentsRetryKey(k => k + 1)} style={{ ...btnS, marginTop: 10, padding: '5px 12px', fontSize: 12 }}>Retry comments</button>
+                </div>
+              ) : (
               <CommentThread
                 comments={comments} loading={commentsLoading} newComment="" onChange={() => {}} onPost={() => {}}
                 posting={false} userId={userId} canOperate={canOperate} onEdit={() => {}} onDelete={() => {}}
                 users={users} readOnly
               />
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, borderTop: '1px solid ' + B.sand, paddingTop: 14 }}>

@@ -6,7 +6,7 @@
 // Run: npm run test:unit
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { taskQueryArms, mergeArchiveArms, mergeInsightTasks } from '../../src/utils/workQueries.js';
+import { taskQueryArms, mergeArchiveArms, mergeInsightTasks, insightHistoryStale } from '../../src/utils/workQueries.js';
 
 const ME = 'uid-me';
 const keys = (arms) => arms.map(a => a.key);
@@ -117,4 +117,40 @@ test('insight merge unions without duplicating, and tolerates an empty archive',
   assert.deepEqual(mergeInsightTasks([a], []).map(t => t._docId), ['a']);
   assert.deepEqual(mergeInsightTasks([a], null).map(t => t._docId), ['a']);
   assert.deepEqual(mergeInsightTasks([], [b]).map(t => t._docId), ['b']);
+});
+
+// ── the forward race (review H2) ────────────────────────────────────────────
+
+test('a task archiving after the read cannot vanish under a complete as-of label', () => {
+  // Codex, review H2. Live-wins closes the reopen direction; this is the other
+  // one. `x` was active when the archive read settled; the server then archived
+  // it, so the live listeners dropped it and the frozen T0 archive never gained
+  // it. Either the snapshot still accounts for x, or the history must stop
+  // calling itself complete — the combination of "complete" and "x absent" is
+  // the failure.
+  const x = { _docId: 'x', type: 'task', status: 'Complete', completedAt: '2026-08-01T00:00:00.000Z' };
+  const activeIdsAtLoad = new Set(['x']);
+
+  assert.equal(insightHistoryStale({ activeIdsAtLoad, activeTasks: [x], archivedTasks: [] }), false);
+
+  const merged = mergeInsightTasks([], []);
+  const stale = insightHistoryStale({ activeIdsAtLoad, activeTasks: [], archivedTasks: [] });
+  assert.ok(
+    stale || merged.some(t => t._docId === 'x'),
+    'a complete as-of snapshot must retain x, otherwise the history must invalidate',
+  );
+  assert.equal(stale, true);
+});
+
+test('staleness ignores a task that merely moved from the live half to the archive half', () => {
+  // The benign case: the archive read already contains it, so the join is whole
+  // and refusing to present it would be a false alarm.
+  const activeIdsAtLoad = new Set(['x']);
+  const archivedX = { _docId: 'x', archived: true };
+  assert.equal(insightHistoryStale({ activeIdsAtLoad, activeTasks: [], archivedTasks: [archivedX] }), false);
+});
+
+test('staleness is false before any history has been loaded', () => {
+  assert.equal(insightHistoryStale({ activeIdsAtLoad: undefined, activeTasks: [], archivedTasks: [] }), false);
+  assert.equal(insightHistoryStale({ activeIdsAtLoad: new Set(), activeTasks: [], archivedTasks: [] }), false);
 });

@@ -226,3 +226,28 @@ test('the shipped default is a DRY RUN: it reports and writes nothing', async ()
   assert.equal((await get('old')).archived, false);
   assert.equal((await get('old')).archivedAt, null);
 });
+
+test('a retried transaction counts one committed archive exactly once', async () => {
+  // Codex, review M2. Firestore may invoke a transaction callback more than
+  // once; counting inside it turns one committed archive into two in the daily
+  // heartbeat. The double here is a dry first attempt (a real read, a discarded
+  // update) followed by the real transaction, so exactly one write commits.
+  const funcs = await loadFunctions();
+  await put('retry', task({ completedAt: '2026-01-01T00:00:00.000Z' }));
+  let callbackRuns = 0;
+  funcs._setArchiveTransactionRunner(async (cb) => {
+    callbackRuns++;
+    await cb({ get: async (r) => db().doc(r.path).get(), update: () => {} });
+    callbackRuns++;
+    return db().runTransaction(cb);
+  });
+  let summary;
+  try { summary = await run(funcs, { writesEnabled: true }); }
+  finally { funcs._resetArchiveTransactionRunner(); }
+
+  assert.ok(callbackRuns >= 2, 'the double must actually execute the callback twice');
+  assert.equal((await get('retry')).archived, true);
+  assert.equal(summary.archived, 1);
+  assert.equal(summary.conflicted, 0);
+  assert.equal(summary.failed, 0);
+});

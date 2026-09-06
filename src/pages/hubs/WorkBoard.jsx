@@ -23,7 +23,7 @@ import { STATUSES, PRIORITIES, RECURRENCE_OPTIONS, RECURRENCE_LABELS, priorityCo
 import { BoardCalendar } from '../../components/board/BoardCalendar.jsx';
 import { CommentThread } from '../../components/comments/CommentThread.jsx';
 import { ArchivedTasks } from '../../components/board/ArchivedTasks.jsx';
-import { mergeInsightTasks } from '../../utils/workQueries.js';
+import { mergeInsightTasks, insightHistoryStale } from '../../utils/workQueries.js';
 
 // ── Bulk paste-import parsing ──
 // Per-import cap. Above this, hint that the user split into batches.
@@ -1599,15 +1599,42 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
   const [insightArchive, setInsightArchive] = useState(null);
   const [insightLoading, setInsightLoading] = useState(false);
   const [insightReloadKey, setInsightReloadKey] = useState(0);
+  // The active half of the join is LIVE and keeps moving after the archive read
+  // settles. Recording which tasks were active at that instant is what lets us
+  // notice the forward race below.
+  const visibleIdsRef = useRef(new Set());
+  useEffect(() => { visibleIdsRef.current = new Set(visibleTasks.map(t => t._docId)); }, [visibleTasks]);
   useEffect(() => {
     if (isMaint || !canOperate || viewMode !== 'insights' || !loadArchivedTasks) return undefined;
     let cancelled = false;
     setInsightLoading(true);
     loadArchivedTasks({ since: insightWindowStart() }).then(result => {
-      if (!cancelled) { setInsightArchive(result); setInsightLoading(false); }
+      if (!cancelled) {
+        setInsightArchive({ ...result, activeIdsAtLoad: new Set(visibleIdsRef.current) });
+        setInsightLoading(false);
+      }
     });
     return () => { cancelled = true; };
   }, [viewMode, isMaint, canOperate, loadArchivedTasks, insightReloadKey]);
+
+  // The forward race A20 names, and the one `mergeInsightTasks` cannot fix
+  // (review H2). Live-wins closes the REOPEN direction: a task that comes back
+  // after the read is in both sets and the live copy wins. It cannot close the
+  // ARCHIVE direction — a task archived at T1 is dropped by the live listeners
+  // and was never in the frozen T0 archive result, so it falls out of the join
+  // entirely while the label still claims a complete history as of T0. The
+  // figures then describe neither instant.
+  //
+  // Precedence cannot repair that; only noticing it can. A task that was active
+  // when the archive read settled and is now in neither half has moved
+  // underneath us, so the history is torn and must not reuse the complete
+  // presentation. A deletion trips this too, which is correct — the honest
+  // statement in both cases is that the underlying data changed.
+  const insightStale = useMemo(() => insightHistoryStale({
+    activeIdsAtLoad: insightArchive?.activeIdsAtLoad,
+    activeTasks: visibleTasks,
+    archivedTasks: insightArchive?.items,
+  }), [visibleTasks, insightArchive]);
 
   // Live active data always wins a collision (A20): a task reopened after the
   // one-shot archive read settled is in both sets, and the frozen archived copy
@@ -2177,7 +2204,16 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
               </div>
             </div>
           )}
-          {!insightLoading && insightArchive?.complete && (
+          {!insightLoading && insightArchive?.complete && insightStale && (
+            <div style={{ background:B.warmGray, borderRadius:14, padding:'14px 18px', border:'1px solid '+B.sand }}>
+              <div style={{ fontWeight:700, color:B.navy, fontFamily:f1, marginBottom:4, fontSize:13 }}>These history figures are out of date</div>
+              <div style={{ fontSize:13, color:B.textDark, lineHeight:1.5 }}>
+                A task moved out of the active board after this history was loaded, so the 12-week chart and the 90-day average below no longer describe either moment. Refresh to recompute them.
+                <button type="button" onClick={() => setInsightReloadKey(k => k + 1)} style={{ ...btnS, marginLeft:10, padding:'4px 12px', fontSize:12 }}>Refresh</button>
+              </div>
+            </div>
+          )}
+          {!insightLoading && insightArchive?.complete && !insightStale && (
             <div style={{ fontSize:12, color:B.textLight, fontFamily:f1, display:'flex', alignItems:'center', gap:10 }}>
               <span>History including archived tasks, as of {new Date(insightArchive.loadedAt).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })}.</span>
               <button type="button" onClick={() => setInsightReloadKey(k => k + 1)} style={{ ...btnS, padding:'4px 12px', fontSize:12 }}>Refresh</button>

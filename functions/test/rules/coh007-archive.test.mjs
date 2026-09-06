@@ -104,6 +104,60 @@ test('a shaped active task cannot delete or corrupt archive state', async () => 
   await assertSucceeds(updateDoc(ref('creator', 'task_new'), { name: 'edited', updatedAt: 'now' }));
 });
 
+test('malformed archive discriminators fail closed for content, comments and delete', async () => {
+  // Codex, review H1. The first implementation asked only `archived == true`
+  // and read every other value as active, so a malformed pair stayed
+  // commentable and permanently DELETABLE — the one that cannot be undone.
+  // Reachable through an Admin SDK defect, a botched migration, or an import;
+  // not through these rules, which is why the create arm below stays tolerant
+  // of absence but not of a half-written pair.
+  const malformed = [
+    ['string-true',   { archived: 'true', archivedAt: new Date('2026-08-12T00:00:00.000Z') }],
+    ['number-one',    { archived: 1, archivedAt: new Date('2026-08-12T00:00:00.000Z') }],
+    ['false-stamped', { archived: false, archivedAt: new Date('2026-08-12T00:00:00.000Z') }],
+    ['partial',       { archived: false }],
+    ['stamp-only',    { archivedAt: null }],
+  ];
+  for (const [id, shape] of malformed) {
+    await put(`task_${id}`, legacy({ visibility: 'private', ...shape }));
+    await seed(P(`workItems/task_${id}/comments/c1`), {
+      text: 'before', authorId: 'creator', authorName: 'Creator', createdAt: 'then',
+    });
+    await assertFails(updateDoc(ref('creator', `task_${id}`), { name: 'edited', updatedAt: 'now' }));
+    await assertFails(addDoc(collection(as('creator'), P(`workItems/task_${id}/comments`)), {
+      text: 'after', authorId: 'creator', authorName: 'Creator', createdAt: 'now',
+    }));
+    await assertFails(updateDoc(doc(as('creator'), P(`workItems/task_${id}/comments/c1`)), { text: 'edited' }));
+    await assertFails(deleteDoc(ref('creator', `task_${id}`)));
+    await assertFails(deleteDoc(ref('boss', `task_${id}`)));
+    // Reading is never withheld: the task and its history stay visible to
+    // everyone the COH-006 predicate authorizes, whatever shape the flags are in.
+    await assertSucceeds(getDoc(ref('creator', `task_${id}`)));
+  }
+});
+
+test('a legacy task with BOTH fields absent stays fully usable — the compatibility boundary', async () => {
+  // The companion to the case above: fail-closed repair must not freeze the
+  // live unbackfilled board, which is every task in production today.
+  await put('task_legacy', legacy({ visibility: 'private' }));
+  await seed(P('workItems/task_legacy/comments/c1'),
+    { text: 'before', authorId: 'creator', authorName: 'Creator', createdAt: 'then' });
+  await assertSucceeds(updateDoc(ref('creator', 'task_legacy'), { name: 'edited', updatedAt: 'now' }));
+  await assertSucceeds(addDoc(collection(as('creator'), P('workItems/task_legacy/comments')),
+    { text: 'after', authorId: 'creator', authorName: 'Creator', createdAt: 'now' }));
+  await assertSucceeds(updateDoc(doc(as('creator'), P('workItems/task_legacy/comments/c1')), { text: 'edited' }));
+  // A legacy task may also be brought forward to the shaped active pair.
+  await assertSucceeds(updateDoc(ref('creator', 'task_legacy'), { archived: false, archivedAt: null, updatedAt: 'now' }));
+  await assertSucceeds(deleteDoc(ref('creator', 'task_legacy')));
+});
+
+test('create refuses a half-written pair, which would be locked on arrival', async () => {
+  const base = { ...legacy(), createdBy: 'creator' };
+  await assertFails(setDoc(ref('creator', 'task_half1'), { ...base, archived: false }));
+  await assertFails(setDoc(ref('creator', 'task_half2'), { ...base, archivedAt: null }));
+  await assertFails(setDoc(ref('creator', 'task_half3'), { ...base, archived: 'false', archivedAt: null }));
+});
+
 test('no client may archive a task — that transition is the scheduled job alone', async () => {
   await put('task_new', active({ status: 'Complete', completedAt: '2026-07-01T00:00:00.000Z' }));
   await assertFails(updateDoc(ref('creator', 'task_new'), { archived: true, archivedAt: serverTimestamp() }));

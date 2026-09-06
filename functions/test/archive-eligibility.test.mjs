@@ -61,3 +61,27 @@ test('an unusable completion date is skipped, never inferred from other stamps',
 test('a future completion date is never eligible', () => {
   assert.equal(verdict({ completedAt: '2027-01-01T00:00:00.000Z' }).reason, 'too-recent');
 });
+
+test('calendar-impossible ISO-looking completion dates are malformed', () => {
+  // Codex, review M1. Date.parse normalizes overflow instead of rejecting it,
+  // so the shape regex alone would let Feb 30 through as a valid completion.
+  for (const value of [
+    '2026-02-30T00:00:00.000Z',
+    '2025-02-29T00:00:00.000Z',
+    '2026-04-31T23:59:59.999Z',
+    '2026-13-01T00:00:00.000Z',
+    '2026-00-10T00:00:00.000Z',
+  ]) {
+    assert.equal(isUsableCompletedAt(value), false, value);
+    assert.deepEqual(evaluateArchiveCandidate(task({ completedAt: value }), CUTOFF), {
+      eligible: false,
+      reason: 'malformed-completed-at',
+    });
+  }
+});
+
+test('real leap days are still usable', () => {
+  // The guard must reject overflow without rejecting valid calendars.
+  assert.equal(isUsableCompletedAt('2024-02-29T00:00:00.000Z'), true);
+  assert.equal(isUsableCompletedAt('2026-12-31T23:59:59.999Z'), true);
+});
