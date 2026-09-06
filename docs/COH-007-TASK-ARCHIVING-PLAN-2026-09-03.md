@@ -287,9 +287,13 @@ null) and never false→true.
 DEC-2026-015's first residual.** Gate 4 recorded that deleting a linked
 maintenance ticket or job clears the corresponding backlink on the task through a
 direct update *outside* `updateTask`, and that the write is denied when the actor
-cannot read the task, leaving a stale backlink. `deleteTask` clears
-`linkedSetupTaskDocId` on a linked reservation the same way
-(`src/useFirestore.js`, the `deleteTask` backlink block).
+cannot read the task, leaving a stale backlink. Measured: three call sites do
+this, touching two fields — `deleteTicket` (`src/useFirestore.js:758`,
+`linkedTicketDocId`), `deleteJobListing` (`:1276`, `linkedJobDocId`) and
+`clearLinkedTaskBackRefs` for job-series deletes (`:1342`, `linkedJobDocId`).
+All three are fire-and-forget, so a denial is swallowed and shows up later as a
+chip pointing at a deleted document — the same stale chip the 2026-05-12 audit
+(Data #1) already found and fixed once.
 
 The plan's rule "archived task content and comments are read-only until reopen"
 extends that denial to a new case: an actor who **can** read the task would also
@@ -300,20 +304,26 @@ render as neither `archived` nor `missing` but broken.
 
 Two options, and this is the owner's call, not Claude's:
 
-1. **Carve the backlink fields out of the archived write-lock** —
-   `linkedJobDocId`, `linkedTicketDocId`, `linkedReservationDocId`,
-   `linkedItemDocId` remain writable on an archived task by an actor who passes
-   `canSeeWorkItem`. Cost: the write-lock is no longer "no content changes at
-   all", so the rule and its tests carry an explicit field allowlist that must be
-   kept in step with the link fields.
+1. **Carve the two fields out of the archived write-lock** — `linkedTicketDocId`
+   and `linkedJobDocId` remain writable on an archived task by an actor who
+   passes `canSeeWorkItem`. Cost: the write-lock is no longer "no content changes
+   at all", so the rule and its tests carry an explicit two-field allowlist.
 2. **Accept stale backlinks on archived tasks** — the lock stays total, and the
    archive detail view is required to degrade gracefully on a link whose target
    no longer exists. Cost: a known-wrong field on archived records, and the
    degradation has to be built and tested anyway.
+3. **Move the cleanup server-side** — a callable using the Admin SDK, which
+   neither the archive lock nor `canSeeWorkItem` blocks. The only option that
+   also closes DEC-2026-015's original residual, and the one that decision itself
+   pointed at. Cost: materially more work, a new callable to authorize and
+   monitor, and scope COH-007 did not ask for.
 
 Option 1 is the smaller lie about the data at the cost of a slightly leakier
-rule; option 2 keeps the rule clean at the cost of storing something false.
-Record the answer as a numbered decision before implementation begins.
+rule; option 2 keeps the rule clean at the cost of storing something false;
+option 3 fixes the underlying problem at a price COH-007 did not budget for.
+`linkedReservationDocId` and `linkedItemDocId` are not in scope here — no delete
+path clears them today, which is a separate pre-existing gap. Recorded as
+**DEC-2026-017**; answer it before implementation begins.
 
 ## Migration and rollout
 
