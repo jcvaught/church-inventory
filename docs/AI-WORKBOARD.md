@@ -378,7 +378,7 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   **Codex re-review `96aa947`**
   (`docs/COH-007-ADDITIVE-GATE-REREVIEW-2026-09-06.md`, **changes requested**;
   original H1/M1/M2/M3 **CLOSED**, one new High + one Medium, both on the H2
-  fix) → fixes `f562c7d` → **Codex confirmation `62b1d69`**
+  fix) → fixes `f562c7d` → **Codex confirmation `ccb8600`**
   (`docs/COH-007-ADDITIVE-GATE-CONFIRMATION-2026-09-06.md`, **changes
   requested**; one High + one Medium, again on the H2 lineage, and **no
   regression anywhere else**) → third-pass fixes.
