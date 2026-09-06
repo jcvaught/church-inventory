@@ -816,3 +816,67 @@ client cleanups at `useFirestore.js:758`, `:852`, `:1276`, `:1342`.
 trade-off with no technically correct answer, and it changes the rules contract,
 so it is recorded here as Proposed rather than settled in the plan. COH-007
 implementation should not begin until it is answered.
+
+### DEC-2026-018 — Archive reads are bounded by time, not by downloading everything
+
+- Date: 2026-09-05
+- Status: **Proposed — recommended by Claude, awaiting the owner's window choice**
+- Deciders: Product owner
+- Related tasks/docs: COH-007,
+  `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md`,
+  `docs/COH-007-PLAN-REVIEW-2026-09-05.md` finding M3
+
+**In plain language.** As written, opening Archived Tasks downloads every
+archived task you're allowed to see, every time, so it can search them in the
+browser. That works beautifully today and gets slower every year, forever.
+
+**What the numbers actually say.** Measured 2026-09-05 against production:
+**134 work items exist in total**, across every church, for the whole life of the
+app. The COH-006 migration counted 92 tasks on 2026-08-31 and 92 again on
+2026-09-03. This is a small, slow-growing dataset.
+
+So the honest finding is that cost is *not* the problem and will not be for many
+years. A busy church writing 200 tasks a year reaches roughly 2,000 archived
+tasks after a decade. Downloading those is on the order of a few megabytes and a
+fraction of a cent. The thing that degrades is page-open time on a phone, and it
+degrades slowly.
+
+**The part that is genuinely expensive to change later is the promise, not the
+query.** If v1 says "search your whole archive" and year four forces "search the
+last year", that is a visible downgrade to something people have learned to
+rely on. Saying "the last 12 months, and here's how to search further back" from
+day one is honest at every size and never has to be walked back.
+
+**Decision (recommended).** Three parts, all cheap now and awkward to retrofit:
+
+1. **Insights must never load the whole archive.** Its metrics only span 90
+   days, so its archive query is bounded by `completedAt` within that window.
+   This is correct at any archive size, forever, and there is no reason to build
+   it any other way.
+2. **The archive view is time-windowed by default** — newest first, a bounded
+   page per authorization arm, with the window stated on screen and an explicit
+   control to search further back. Search covers the loaded window and the UI
+   says so, so the promise stays true as the archive grows.
+3. **No tokenized search field and no search service in v1.** Defer both behind
+   a tripwire: if churches routinely reach the end of the default window, or
+   archive opens exceed a recorded latency/read budget, revisit with real
+   numbers rather than speculation.
+
+**Cost of doing this now.** Close to nothing. The four composite indexes already
+required by amendment A2 simply gain `completedAt` as their trailing ordered
+field. The queries gain one range constraint. Only the archive UI's window
+control and its copy are genuinely new.
+
+**Open for the owner:** the default window. **12 months recommended.** Longer is
+fine — the architecture is unchanged — it only shifts how often anyone needs the
+widen control.
+
+**Explicitly rejected.** Downloading full history with no bound (works now,
+quietly worsens forever, and forces a promise change later). Silent pagination
+with unchanged search copy (tells people they searched everything when they did
+not — the failure Codex flagged as making "I searched and it wasn't there"
+untrustworthy). Moving archives to a second collection (breaks comment
+subcollections, task numbers, and links, for a storage problem that does not
+exist at this scale). A per-church denormalized archive index (cannot honour
+per-user private and shared visibility without a fan-out write, and would put a
+second authorization projection alongside DEC-2026-012's).

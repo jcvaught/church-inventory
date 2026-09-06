@@ -181,6 +181,13 @@ composites serves both:
 | `assigned` | `(assigneeUids CONTAINS, archived ASC)` |
 | `shared` | `(visibility ASC, sharedWithUids CONTAINS, archived ASC)` |
 
+**[A10, 2026-09-05] Append `completedAt` as the trailing ordered field.** Per
+**DEC-2026-018**, archive and Insights reads are bounded by a `completedAt`
+window rather than downloading full history, so each of the four composites above
+carries `completedAt` last: `(… , archived ASC, completedAt DESC)`. Declaring it
+now costs one field per index and avoids a second index build later. Review
+finding M3 is what this answers.
+
 The existing `(visibility, sharedWithUids)` COLLECTION entry in
 `firestore.indexes.json` stays — it still serves nothing else, but removing it is
 a separate change and not worth bundling into an authorization-sensitive rollout.
