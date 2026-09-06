@@ -369,7 +369,39 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-007 — Completed-task archiving and archive search
 
-- Status: **Plan amended — awaiting Codex pre-implementation review.** The
+- Status: **ADDITIVE GATE (3 of 4) IMPLEMENTED — awaiting Codex implementation
+  review. Nothing deployed.** Branch `claude/coh-007-additive-gate` from `main`
+  at `6dbc6c6`; three commits, `a7d490d` → `e4230c3` → `d62e92b`. Handoff:
+  `docs/COH-007-ADDITIVE-GATE-HANDOFF-2026-09-06.md`.
+  **No reader changed shape** — the four task arms now come from one shared
+  builder called with `archived: null`, so the board asks exactly the questions
+  it asked yesterday, and `archived: false` is a one-line change at the reader
+  gate. Ships: both task writers, the transitional ruleset, nine indexes, the
+  archive reader and Tasks → Archived view, `insightTasks`, and
+  `archiveCompletedTasks` **as a dry run** (`ARCHIVER_WRITES_ENABLED = false`),
+  registered on the scheduled-job monitor.
+  Two live defects fixed on the way past, neither needing archiving to be a
+  defect: `canSeeTask()` now reads the canonical uid arrays (a task with a stale
+  object array was hidden **on the active board** from someone the rules
+  authorize), and a linked task absent from the active store is no longer
+  described as deleted.
+  **The A3 measurement contradicted the plan.** Executed with Codex's exact
+  fixture, `completedAt <= '<iso cutoff>'` returns neither the null-valued nor
+  the missing-field document — so the skip-malformed guard is defensive, not
+  load-bearing, and its counter is expected to be zero for nulls. The guard ships
+  either way, as A3 requires. **Emulator evidence only**; the first production
+  dry run re-measures it and is the authority.
+  `npm run test:rules` 101/101, `test:handlers` 72/72, `test:unit` 152/152,
+  `lint` 0 errors, `build` clean. **Not run:** `test:e2e` (its cases cannot fire
+  before the reader/automation gates and the rules are undeployed) and the
+  production index/query probes (the gate's own acceptance step — needs the
+  owner's authorization to deploy rules + indexes).
+- **Next, in order:** Codex implementation review → owner-authorized
+  `firestore:rules` + `firestore:indexes` deploy (probe all nine shapes; a green
+  deploy is not evidence, and redeploy rules afterwards) → Cloud Functions deploy
+  (DEC-2026-014) → production board smoke test on a real church → **backfill
+  gate** → reader gate → automation gate.
+- Prior status, kept for the record: **Plan amended — awaiting Codex pre-implementation review.** The
   COH-006 dependency is **cleared** (all four gates deployed and verified
   2026-09-03, `main` at `2ced910`), so the file-overlap hold on
   `src/useFirestore.js`, `firestore.rules`, `firestore.indexes.json`, the work
