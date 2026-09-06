@@ -321,6 +321,11 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   below · A7 what the deployed gate-4 rule already gives reopen for free · A8
   reuse `backfill-task-visibility.cjs` and enable `includeMetadataChanges` on any
   new listener oracle · A9 doc lines land in the behaviour-change commit.
+- Owner clarification 2026-09-05: **archiving changes nothing about who can
+  see a task** — same visibility as before, no admin override, and the archive
+  is NOT scoped to tasks the viewer is personally attached to. The four-arm
+  archive query (including `team`) is confirmed, not assumed. Settled; do not
+  reopen.
 - **Blocking open decision: DEC-2026-017** (Proposed) — does an archived task's
   backlink stay writable? The plan's read-only-while-archived rule would newly
   deny the backlink cleanup that runs when a linked ticket, job, or reservation

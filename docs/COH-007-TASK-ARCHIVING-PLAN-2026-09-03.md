@@ -49,9 +49,22 @@ collection but keep their current lifecycle and listener.
    the difference user-invisible while avoiding timezone-dependent retention.
 3. Archiving is a soft state change on the existing document. No task, comment,
    photo, or link is moved or deleted.
-4. Archived tasks retain the COH-006 authorization contract exactly. There is
-   no admin visibility override: a person who could not read a private or shared
-   task before archiving cannot discover it through the archive.
+4. **Archiving changes nothing about who can see a task — confirmed by the
+   product owner 2026-09-05.** In plain terms: a task visible to the whole church
+   is still visible to the whole church once archived; a private one is still
+   visible only to its creator and assignees; a shared one still only to the
+   people it was shared with. Nobody gains access because a task was archived,
+   and nobody loses it. There is no admin override — an admin who could not read
+   a private or shared task before archiving cannot discover it through the
+   archive.
+
+   Precisely: archived tasks retain the COH-006 authorization contract exactly,
+   `canSeeWorkItem()` is unchanged, and the archive view therefore runs all four
+   authorization arms — including `team` — rather than a personal subset. The
+   alternative reading, an archive scoped to tasks the viewer is personally
+   attached to, was **considered and rejected by the owner**: it would have made
+   the church's completed history unbrowsable by anyone who was not on each
+   individual task. Do not reopen this in review.
 5. Archived Tasks is an on-demand Tasks Hub view, not another app-start
    subscription. Opening it loads and de-duplicates the authorized archive query
    set, then supports client-side substring search across task name,
