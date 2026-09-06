@@ -321,6 +321,27 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   below · A7 what the deployed gate-4 rule already gives reopen for free · A8
   reuse `backfill-task-visibility.cjs` and enable `includeMetadataChanges` on any
   new listener oracle · A9 doc lines land in the behaviour-change commit.
+- **Codex pre-implementation review COMPLETE 2026-09-05 — CHANGES REQUESTED.**
+  `docs/COH-007-PLAN-REVIEW-2026-09-05.md`, review branch
+  `codex/coh-007-plan-review` at `28bd287`, cherry-picked to `ee4ccf1` with
+  authorship intact. Four High, three Medium, three owner questions. Codex could
+  not start the emulators, so **no test result in it is independently verified**.
+  The four archive query arms and A1's maintenance exclusion were both approved
+  as correct. Three of the four High findings land on Claude's own amendments:
+  **H1** the DEC-2026-017 trigger recommendation is a confused deputy — link
+  fields are unconstrained by the create rule, so a member can forge
+  `linkedJobDocId`, delete their own task, and have an Admin-privileged trigger
+  clear an unrelated job's backlink; the fix is a transactional reciprocal check
+  against the deleted doc's BARE id, not abandoning the trigger. **H2** A5's
+  "apply `canSeeTask` for consistency" would hide archived tasks Firestore
+  lawfully returned, violating COH-007's own acceptance criterion. **H3** A4's
+  "feed archives into `visibleTasks`" would put archived rows on the operational
+  board — Insights needs a separate `insightTasks`. **H4** the additive gate has
+  no legacy-state transition contract. Mediums: reopen needs an
+  `affectedKeys().hasOnly(...)` allowlist preserving `nextRecurrenceCreatedAt`
+  (else duplicate recurring successors); the archiver's telemetry promise cannot
+  be delivered by a range query that never sees a missing field; archive read
+  cost is unbounded. Next: Claude amends against the findings, then re-review.
 - Owner clarification 2026-09-05: **archiving changes nothing about who can
   see a task** — same visibility as before, no admin override, and the archive
   is NOT scoped to tasks the viewer is personally attached to. The four-arm
