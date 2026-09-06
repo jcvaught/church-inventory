@@ -370,6 +370,23 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   metric's boundary *date*, not the exact instant (**A19**). **N4**
   `insightTasks` needs a live-wins temporal merge contract (**A20**). M2 closed
   by **A17**. Superseded prose in DEC-2026-017 and this board corrected.
+- **Confirmation pass 2026-09-05 — VERDICT: IMPLEMENTATION-READY**
+  (`codex/coh-007-plan-confirmation` at `876645d`). M2 and N1–N4 all confirmed
+  closed against the specific amendment text; the five-row direction map is
+  complete, and the job row needs no `type` because the separate
+  `jobListings/{docId}` trigger's collection path is itself the trusted
+  discriminator. No contradictory normative prose remains. A17–A20 introduced no
+  new error. **Nothing left to amend before implementation.**
+- **Status: plan CLEARED for implementation.** Three Codex passes — review
+  (`28bd287`, changes requested) → re-review (`4eaf923`, changes requested) →
+  confirmation (`876645d`, implementation-ready). Twenty amendments A1–A20.
+  Decisions DEC-2026-016/017/018 all Accepted. **No emulator result in any pass
+  is independently verified — Codex cannot bind the emulator ports, so every
+  test it wrote is a proposed case Claude must integrate and run.**
+- **Next, in order:** (1) the type-pinned backlink delete-trigger task — its own
+  task, ahead of COH-007, fixing three defects live in production today, and a
+  Cloud Functions deploy the owner must authorize; (2) COH-007 additive gate;
+  (3) backfill; (4) reader gate; (5) automation gate.
 - Shape: soft `archived`/`archivedAt` flags on `workItems` (lossless, nothing
   moved or deleted), `archived == false` added to the four authorization-shaped
   active queries, an on-demand Archived Tasks view running the same four arms
