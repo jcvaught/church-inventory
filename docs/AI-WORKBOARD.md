@@ -357,12 +357,19 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   is NOT scoped to tasks the viewer is personally attached to. The four-arm
   archive query (including `team`) is confirmed, not assumed. Settled; do not
   reopen.
-- **Blocking open decision: DEC-2026-017** (Proposed) — does an archived task's
-  backlink stay writable? The plan's read-only-while-archived rule would newly
-  deny the backlink cleanup that runs when a linked ticket, job, or reservation
-  is deleted, even for an actor who can read the task, leaving a dangling
-  pointer. Two options recorded with their costs; **the owner decides, and
-  implementation should not begin until they do.**
+- **Re-review 2026-09-05 (`codex/coh-007-plan-rereview` at `4eaf923`, cherry-picked
+  `6cf1f4c`): all four High and M1/M3 CLOSED; M2 partial; four new findings from
+  the amendment pass.** **N1 (High)** the reciprocal trigger check is still
+  exploitable without type-pinned routing — `task_x` and `mnt_x` share the bare
+  id `x`, so a forged link field on the wrong source type can drive a matching
+  reciprocal check against an unrelated victim; fixed by the direction map at
+  **A18**. **N2 (High)** one longer index set does not serve both readers — a
+  composite indexes only documents having every field, and tasks with
+  `completedAt` absent would vanish from the active board; both sets kept, eight
+  indexes (**A10 revised**). **N3** the 90-day query bound must start at the
+  metric's boundary *date*, not the exact instant (**A19**). **N4**
+  `insightTasks` needs a live-wins temporal merge contract (**A20**). M2 closed
+  by **A17**. Superseded prose in DEC-2026-017 and this board corrected.
 - Shape: soft `archived`/`archivedAt` flags on `workItems` (lossless, nothing
   moved or deleted), `archived == false` added to the four authorization-shaped
   active queries, an on-demand Archived Tasks view running the same four arms

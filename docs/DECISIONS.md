@@ -695,14 +695,18 @@ Archiving would add a fourth: once a task is frozen, the cleanup is refused even
 for people who *can* see it. Since every task eventually archives, this one would
 become the common case rather than an edge case.
 
-**Recommendation (revised 2026-09-05): fix it properly, on the server.** My first
-write-up of this priced the proper fix as a big job and steered toward a cheap
-patch. That was wrong, because I priced the wrong design. It does not need a new
-callable with its own permission model. It needs a **delete trigger** — a small
-piece of server code that runs automatically after a ticket, job, or task is
-deleted and tidies up the leftover link. The deletion has already been checked
-for permission before the trigger runs, so there is no new permission question to
-get wrong, and nothing can be reached that couldn't be reached before.
+**Decision (2026-09-05): fix it properly, on the server.** My first write-up
+priced the proper fix as a big job and steered toward a cheap patch. That was
+wrong — I priced the wrong design. It needs a **delete trigger**: a small piece
+of server code that runs automatically after a ticket, job, or task is deleted
+and tidies up the leftover link.
+
+**Superseded claim, kept visible on purpose.** That first write-up also said the
+trigger raises no new permission question because the deletion was already
+checked. **That is false**, and review findings H1 and N1 are why: the *deletion*
+was checked, the *cleanup write to the other document* was not. The trigger is
+approved only with the safeguards below. Nothing in this entry authorises a
+trigger that clears a link without them.
 
 This repository already runs this exact kind of trigger (`sendWelcomeEmail`,
 `notifyAdminsOfNewMember`), on a library version that supports the delete
@@ -777,7 +781,9 @@ update. A regular member deleting their own linked task is therefore denied, and
 the `.catch(() => {})` swallows it. This is broken in production now and has
 nothing to do with archiving.
 
-**Trigger shape (the recommended option).** `onDocumentDeleted` is exported by
+**Trigger shape (superseded in part — the "no new authorization surface"
+sentence below is WRONG; see H1/N1 and the Decision above, which govern).**
+`onDocumentDeleted` is exported by
 `firebase-functions` 7.2.5 (verified against
 `functions/node_modules/firebase-functions/lib/v2/providers/firestore.js`), and
 `functions/index.js:3` already imports the v2 Firestore providers for
@@ -819,8 +825,9 @@ production defects on its own.
    archive detail view degrades gracefully on a link whose target is gone. Cost:
    a known-wrong field stored on archived records, and the degradation has to be
    built and tested regardless.
-3. **Move the cleanup server-side.** A callable using the Admin SDK performs the
-   backlink clear, so neither the archive lock nor `canSeeWorkItem` blocks it.
+3. **Move the cleanup server-side — CHOSEN, see the Decision above for the
+   binding form.** A server-side clear that neither the archive lock nor
+   `canSeeWorkItem` blocks.
    This is the option DEC-2026-015 itself pointed at — "fixing it properly needs
    an authorized server operation, which is a separate task" — and it is the only
    one that also closes the original residual, where an admin deleting a ticket
@@ -829,10 +836,10 @@ production defects on its own.
    scope COH-007 did not ask for. Recorded because COH-007 widens the residual
    enough to change the calculus, not because it is being recommended.
 
-**Not decided by Claude.** This is a data-integrity-versus-rule-surface
-trade-off with no technically correct answer, and it changes the rules contract,
-so it is recorded here as Proposed rather than settled in the plan. COH-007
-implementation should not begin until it is answered.
+**Answered 2026-09-05.** Option 3 with the mandatory safeguards. The trigger
+work is its own task, implemented, reviewed, deployed and verified **before**
+COH-007's additive gate; the type-pinned direction map required by re-review
+finding N1 is recorded at plan amendment **A18** and is binding on it.
 
 ### DEC-2026-018 — Archive reads are bounded by time, not by downloading everything
 

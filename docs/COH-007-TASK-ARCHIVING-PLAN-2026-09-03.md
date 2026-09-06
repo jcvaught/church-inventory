@@ -7,8 +7,11 @@ COH-006 state, `main` at `2ced910`. Awaiting Codex pre-implementation review.
 before gate 4 shipped, and has since been amended twice: first against the
 shipped COH-006 state (**A1–A9**), then against Codex's pre-implementation
 review (`docs/COH-007-PLAN-REVIEW-2026-09-05.md`, four High and three Medium,
-verdict *changes requested*) and the owner's answers to it (**A10–A16**). Each
-amendment is marked **[A-n, 2026-09-05]** where it changed the text.
+verdict *changes requested*) and the owner's answers to it (**A10–A16**), then
+against the re-review (`docs/COH-007-PLAN-REREVIEW-2026-09-05.md` — all four High
+and M1/M3 closed, M2 partial, four new findings against the amendment pass
+itself) which produced **A17–A20**. Each amendment is marked
+**[A-n, 2026-09-05]** where it changed the text.
 
 **All owner questions are now answered** — DEC-2026-016 (archive after six
 weeks), DEC-2026-017 (backlink cleanup moves server-side, with reciprocal
@@ -125,6 +128,35 @@ collection but keep their current lifecycle and listener.
    DEC-2026-018 the Insights archive query is bounded to its own 90-day window
    and never loads full history.
 
+   **[A19, 2026-09-05 — re-review finding N3] The query bound must not be
+   narrower than the metric it feeds.** The existing tile counts every task whose
+   `completedAt.slice(0,10) >= localDateStr(now - 90d)` — a whole-date
+   comparison. Bounding the query at the exact ISO instant 90 elapsed days ago
+   would exclude completions earlier on that same boundary date, so active plus
+   archive would undercount precisely the acceptance criterion this amendment
+   exists to fix. The 12-week chart has slack inside 90 days; the
+   `Avg/Week (90d)` tile has none. Take the query's lower bound from the **start
+   of the metric's boundary date** under an explicit timezone contract, or query
+   a conservatively earlier UTC instant and keep the client date predicate. Apply
+   the same precision to the archive's "12 months" copy: state the exact included
+   date range wherever the window is shown.
+
+   **[A20, 2026-09-05 — re-review finding N4] `insightTasks` needs a temporal
+   merge contract.** It joins a *live* active listener to *one-shot* archive
+   reads, so dedupe by document id closes overlap but not state races. If a task
+   archives after the one-shot reads settle, the live listener drops it and the
+   frozen archive set never gains it — the metric silently loses history. In
+   reverse, a reopened task appears in both, and if the stale archive copy wins
+   the collision its old `Complete` / `completedAt` keep counting after the live
+   task is back in `Backlog`. Required policy: **live active data always wins a
+   collision**; all four archive arms must settle successfully before the metric
+   is marked complete; a task leaving the active set during an open Insights load
+   must trigger a refresh or be presented as an explicit as-of snapshot; and a
+   torn or partial metric must never reuse the normal complete presentation.
+   This mirrors `createWorkStore`'s settled-versus-complete distinction, and the
+   same reasoning applies — a partial history that looks whole is the worst
+   available failure.
+
 ## Data model
 
 Add these fields to every task document in `workItems`:
@@ -141,8 +173,17 @@ writers do not add the fields.
 `completedAt` remains the eligibility clock and keeps its existing ISO-string
 representation for this task. COH-007 does not mix a timestamp-format migration
 into the archive rollout. A completed task with a missing or malformed
-`completedAt` is not guessed from `updatedAt` or `createdAt`; it is skipped,
-counted, and surfaced in function telemetry for explicit remediation.
+`completedAt` is never guessed from `updatedAt` or `createdAt` — it is skipped
+and counted.
+
+**[A17, 2026-09-05 — re-review finding M2 partial] Scoped to what the query
+sees.** An earlier version of this paragraph promised such tasks would also be
+"surfaced in function telemetry for explicit remediation", which A12 then
+contradicted. A12 is normative: the eligibility range query never returns a
+document whose `completedAt` is **absent**, nor one whose malformed value sorts
+outside the range, so the archiver can only guard and count the malformed values
+**it was actually returned**. Population-wide data quality is explicitly not
+promised here and is a separate, bounded decision.
 
 ## Read architecture
 
@@ -233,12 +274,29 @@ composites serves both:
 | `assigned` | `(assigneeUids CONTAINS, archived ASC)` |
 | `shared` | `(visibility ASC, sharedWithUids CONTAINS, archived ASC)` |
 
-**[A10, 2026-09-05] Append `completedAt` as the trailing ordered field.** Per
-**DEC-2026-018**, archive and Insights reads are bounded by a `completedAt`
-window rather than downloading full history, so each of the four composites above
-carries `completedAt` last: `(… , archived ASC, completedAt DESC)`. Declaring it
-now costs one field per index and avoids a second index build later. Review
-finding M3 is what this answers.
+**[A10, 2026-09-05 — REVISED after re-review finding N2] Both index sets are
+required; the longer one does not replace the shorter.** Per **DEC-2026-018**,
+archive and Insights reads are bounded by a `completedAt` window, so they need
+four further composites carrying `completedAt` last:
+`(… , archived ASC, completedAt DESC)`.
+
+My first version of this amendment claimed one longer set served both readers.
+**Do not rely on that.** A Firestore composite index contains an entry only for
+documents that have *every* indexed field, and this plan knowingly preserves a
+population of tasks whose `completedAt` is absent (A3, A12 — the backfill
+deliberately does not repair them). The active board applies no chronology
+predicate and must keep returning those tasks. Serving it from an index whose
+trailing field they lack would silently drop them from the board — the exact
+class of failure COH-006 spent four gates closing.
+
+So: **keep the four shorter A2 composites for the active arms, and add four
+longer variants for the bounded archive and Insights reads** — eight in total.
+Collapsing them back to four is permitted only on an exact emulator measurement
+proving a shaped active task with `completedAt` *absent* is still returned, and
+that measurement must be recorded. Production probes must include that shape, not
+only a null-valued fixture, and must separately assert the bounded archive query
+excludes it rather than showing it as a search result. Do not infer the planner
+will choose index merging.
 
 The existing `(visibility, sharedWithUids)` COLLECTION entry in
 `firestore.indexes.json` stays — it still serves nothing else, but removing it is
@@ -439,10 +497,37 @@ The trigger task must therefore, for every direction:
   verified, removing it in a later gate. With reciprocal checks the overlap is
   idempotent and safe.
 
+**[A18, 2026-09-05 — re-review finding N1] The reciprocal check alone is not
+enough: routing must be pinned to the source's `type`.** A work-item's real
+document id carries a `task_` / `mnt_` prefix while every link field stores the
+bare suffix, so `task_x` and `mnt_x` share the bare id `x`. A member can create
+`task_collision` carrying `linkedTaskDocId: 'victim'` — a field that has no
+meaning on a task source — delete it, and, if the trigger follows any link field
+it finds, drive a reciprocal match against a legitimate victim and clear a
+backlink that had nothing to do with the deleted document. The reciprocal check
+passes because the bare ids genuinely match.
+
+The trigger must therefore route on the **trusted** `before.data().type` before
+following any link field, and permit exactly these directions and no others:
+
+| Deleted source | Field followed | Target field cleared |
+|---|---|---|
+| `type: 'task'` | `linkedJobDocId` | `jobListings.linkedTaskDocId` |
+| `type: 'task'` | `linkedTicketDocId` | maintenance `workItems.linkedTaskDocId` |
+| `type: 'task'` | `linkedReservationDocId` | `reservations.linkedSetupTaskDocId` |
+| `type: 'maintenance'` | `linkedTaskDocId` | task `workItems.linkedTicketDocId` |
+| job listing | `linkedTaskDocId` | task `workItems.linkedJobDocId` |
+
+An unknown or missing `type`, and any link field that does not belong to the
+source's type, must be a **no-op** — never a best-effort guess. Reservation
+deletion to task is deliberately absent: DEC-2026-017 records that direction as a
+pre-existing asymmetry outside this scope.
+
 **Sequencing.** This is its own task, ahead of COH-007's rules gate, and it ships
-independently because it fixes three live defects. COH-007's rules work depends
-on it only in that the total freeze assumes the cleanup no longer needs a client
-write path.
+independently because it fixes three live defects. It must be implemented,
+reviewed, deployed and verified **before** COH-007's additive gate. COH-007's
+rules work depends on it only in that the total freeze assumes the cleanup no
+longer needs a client write path.
 
 ## Migration and rollout
 
