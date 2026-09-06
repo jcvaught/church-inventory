@@ -369,10 +369,38 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-007 — Completed-task archiving and archive search
 
-- Status: **ADDITIVE GATE (3 of 4) IMPLEMENTED — awaiting Codex implementation
-  review. Nothing deployed.** Branch `claude/coh-007-additive-gate` from `main`
-  at `6dbc6c6`; three commits, `a7d490d` → `e4230c3` → `d62e92b`. Handoff:
-  `docs/COH-007-ADDITIVE-GATE-HANDOFF-2026-09-06.md`.
+- Status: **ADDITIVE GATE (3 of 4) IMPLEMENTED AND REVIEWED — findings fixed,
+  awaiting Codex re-review. Nothing deployed.** Branch
+  `claude/coh-007-additive-gate` from `main` at `6dbc6c6`. Trail: implementation
+  `a7d490d` → `e4230c3` → `d62e92b` → handoff `5d2ac1b` → **Codex review
+  `1a89784`** (`docs/COH-007-ADDITIVE-GATE-REVIEW-2026-09-06.md`, two High /
+  three Medium / no Critical, **changes requested**) → fixes **`94ee913`**.
+  Handoff: `docs/COH-007-ADDITIVE-GATE-HANDOFF-2026-09-06.md`.
+  **Both High findings were the same mistake in two places: a state that could
+  not be classified was treated as the permissive one.** **H1** — the archive
+  discriminator asked only `archived == true`, so a malformed or half-written
+  pair read as active and stayed commentable and permanently DELETABLE; content
+  updates were already denied, which is what disguised it. The rules now
+  recognise exactly three shapes (absent / active / frozen) and anything else
+  permits no write at all, reads never withheld — and create was tightened to
+  both-or-neither, because the fix would otherwise have left a half-written
+  document locked on arrival to its own creator. **H2** — a task archived after
+  the Insights one-shot read falls out of both halves of the join while the
+  label still claims a complete history; live-wins precedence cannot reach that
+  direction, only noticing it can, so the load records the active set at settle
+  time and a torn history stops using the complete presentation.
+  Mediums: `Date.parse` normalizes calendar overflow (Feb 30 would have archived
+  as a valid completion); transaction-callback retries overcounted the daily
+  heartbeat; an archived task's comment-listener error rendered as "No comments
+  yet".
+  **Codex also corrected a claim of mine** (Q2): the production dry run cannot
+  re-measure A3's null-ordering question, because a zero malformed count cannot
+  distinguish "production excludes nulls" from "there were none to find". It
+  needs an independent `completedAt == null` baseline compared by document id —
+  and since no production document carries `archived` until the backfill runs,
+  that measurement belongs to the **backfill gate**, not the next dry run.
+  Q1 (pin the final-ruleset sentinel as an executable test) is scheduled as the
+  **reader gate's first commit**, per the review's verdict.
   **No reader changed shape** — the four task arms now come from one shared
   builder called with `archived: null`, so the board asks exactly the questions
   it asked yesterday, and `archived: false` is a one-line change at the reader
@@ -391,12 +419,14 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   load-bearing, and its counter is expected to be zero for nulls. The guard ships
   either way, as A3 requires. **Emulator evidence only**; the first production
   dry run re-measures it and is the authority.
-  `npm run test:rules` 101/101, `test:handlers` 72/72, `test:unit` 152/152,
-  `lint` 0 errors, `build` clean. **Not run:** `test:e2e` (its cases cannot fire
+  `npm run test:rules` 104/104, `test:handlers` 73/73, `test:unit` 157/157,
+  `lint` 0 errors, `build` clean. Codex independently ran `test:unit`, `lint` and
+  `build` in its clone; it **cannot bind the emulator ports**, so **no rules or
+  handler result is reproduced by a second party**. **Not run:** `test:e2e` (its cases cannot fire
   before the reader/automation gates and the rules are undeployed) and the
   production index/query probes (the gate's own acceptance step — needs the
   owner's authorization to deploy rules + indexes).
-- **Next, in order:** Codex implementation review → owner-authorized
+- **Next, in order:** Codex re-review → owner-authorized
   `firestore:rules` + `firestore:indexes` deploy (probe all nine shapes; a green
   deploy is not evidence, and redeploy rules afterwards) → Cloud Functions deploy
   (DEC-2026-014) → production board smoke test on a real church → **backfill
