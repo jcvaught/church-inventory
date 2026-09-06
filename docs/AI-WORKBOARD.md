@@ -369,8 +369,8 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-007 — Completed-task archiving and archive search
 
-- Status: **ADDITIVE GATE (3 of 4) IMPLEMENTED, REVIEWED TWICE — findings fixed,
-  awaiting a third pass. Nothing deployed.** Branch
+- Status: **ADDITIVE GATE (3 of 4) IMPLEMENTED, REVIEWED THREE TIMES — findings
+  fixed, awaiting a fourth (confirmation) pass. Nothing deployed.** Branch
   `claude/coh-007-additive-gate` from `main` at `6dbc6c6`. Trail: implementation
   `a7d490d` → `e4230c3` → `d62e92b` → handoff `5d2ac1b` → **Codex review
   `1a89784`** (`docs/COH-007-ADDITIVE-GATE-REVIEW-2026-09-06.md`, two High /
@@ -378,7 +378,10 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   **Codex re-review `96aa947`**
   (`docs/COH-007-ADDITIVE-GATE-REREVIEW-2026-09-06.md`, **changes requested**;
   original H1/M1/M2/M3 **CLOSED**, one new High + one Medium, both on the H2
-  fix) → second-pass fixes.
+  fix) → fixes `f562c7d` → **Codex confirmation `62b1d69`**
+  (`docs/COH-007-ADDITIVE-GATE-CONFIRMATION-2026-09-06.md`, **changes
+  requested**; one High + one Medium, again on the H2 lineage, and **no
+  regression anywhere else**) → third-pass fixes.
   **The re-review's High is the first review's H2 in a narrower window, and the
   distinction is worth keeping:** my fix captured the active baseline when the
   four archive reads *settled*, so an arm could snapshot without `x`, the worker
@@ -437,7 +440,14 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   load-bearing, and its counter is expected to be zero for nulls. The guard ships
   either way, as A3 requires. **Emulator evidence only**; the first production
   dry run re-measures it and is the authority.
-  `npm run test:rules` 104/104, `test:handlers` 73/73, `test:unit` 162/162,
+  **Every finding across all three passes has landed on the same feature — the
+  Insights history join — and each pass found the previous fix correct but
+  scoped one step too narrowly:** the predicate was right but its baseline was
+  captured too late; the baseline then covered the interval but the shared slot
+  could be detached by a superseded load; the watched set was narrowed to the
+  board, then to the figures, and finally to each figure's own date floor. The
+  rules, archiver and archive reader have drawn no finding since the first pass.
+  `npm run test:rules` 104/104, `test:handlers` 73/73, `test:unit` 165/165,
   `lint` 0 errors, `build` clean. Codex independently ran `test:unit`, `lint` and
   `build` in its clone; it **cannot bind the emulator ports**, so **no rules or
   handler result is reproduced by a second party**. **Not run:** `test:e2e` (its cases cannot fire

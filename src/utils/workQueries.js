@@ -94,14 +94,22 @@ export function mergeInsightTasks(activeTasks, archivedTasks) {
 // history is out of date — and routine board cleanup would otherwise produce a
 // steady drip of false warnings that trains people to ignore the real one.
 //
-// `boundaryDate` is a YYYY-MM-DD floor: the earliest date either metric looks
-// at. Comparison is whole-date, matching the metrics themselves.
-export function contributesToHistory(task, boundaryDate) {
-  if (!task || !boundaryDate) return false;
+// The two dates need SEPARATE floors (confirmation M1). Completions matter from
+// the 90-day tile's floor, which always reaches further back; creations matter
+// only from the chart's own start, up to thirteen days later. Applying the
+// earlier floor to both — as the first version of this did — tracks a task
+// created in that gap which contributes to neither figure, leaving a smaller
+// version of the same false warning.
+//
+// Comparison is whole-date, matching the metrics themselves, and inclusive of
+// each boundary date for the same reason.
+export function contributesToHistory(task, boundaries) {
+  const { completionBoundaryDate, creationBoundaryDate } = boundaries || {};
+  if (!task) return false;
   const completed = (task.completedAt || '').slice(0, 10);
   const created = (task.createdAt || '').slice(0, 10);
-  return (completed !== '' && completed >= boundaryDate)
-    || (created !== '' && created >= boundaryDate);
+  return (!!completionBoundaryDate && completed !== '' && completed >= completionBoundaryDate)
+    || (!!creationBoundaryDate && created !== '' && created >= creationBoundaryDate);
 }
 
 // Tracks which contributing tasks were active across the WHOLE archive read,
@@ -114,11 +122,11 @@ export function contributesToHistory(task, boundaryDate) {
 // join is torn. The interval, not the instant, is what has to be covered. So the
 // baseline opens before the first read and accumulates every contributing task
 // seen active until settlement.
-export function createInsightHistoryLoad({ activeTasks, boundaryDate }) {
+export function createInsightHistoryLoad({ activeTasks, boundaries }) {
   const observed = new Set();
   const track = (tasks) => {
     for (const t of tasks || []) {
-      if (t?._docId && contributesToHistory(t, boundaryDate)) observed.add(t._docId);
+      if (t?._docId && contributesToHistory(t, boundaries)) observed.add(t._docId);
     }
   };
   track(activeTasks);
@@ -127,6 +135,30 @@ export function createInsightHistoryLoad({ activeTasks, boundaryDate }) {
     settle: (result) => ({ ...result, activeIdsAtLoad: new Set(observed) }),
     // Exposed for assertions; the caller has no reason to read it.
     _observed: observed,
+  };
+}
+
+// Which load is current, and who is allowed to retire it.
+//
+// The rule is ownership by identity, and it exists because "am I cancelled?" is
+// the wrong question (confirmation H1). A load that was superseded — the user
+// left Insights and came back — still settles eventually, and clearing the
+// shared slot unconditionally on the way out detaches the load that replaced
+// it. Nothing after that reaches the current baseline, so a task appearing and
+// leaving during the current read goes unrecorded and the torn history is
+// presented as complete.
+//
+// A generation may retire the slot only while the slot still holds it.
+// Extracted so that rule has one implementation and can be asserted directly:
+// the ordering it defends against is a real production sequence, not React
+// effect-scheduling trivia.
+export function createInsightHistoryCoordinator() {
+  let current = null;
+  return {
+    begin(load) { current = load; return load; },
+    observe(tasks) { current?.observeActive(tasks); },
+    release(load) { if (current === load) current = null; },
+    isCurrent(load) { return current === load; },
   };
 }
 

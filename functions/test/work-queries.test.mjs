@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   taskQueryArms, mergeArchiveArms, mergeInsightTasks, insightHistoryStale,
-  createInsightHistoryLoad, contributesToHistory,
+  createInsightHistoryLoad, createInsightHistoryCoordinator, contributesToHistory,
 } from '../../src/utils/workQueries.js';
 
 const ME = 'uid-me';
@@ -160,7 +160,10 @@ test('staleness is false before any history has been loaded', () => {
 
 // ── the in-flight interval (re-review H1) ───────────────────────────────────
 
-const BOUNDARY = '2026-06-08';   // the 90-day floor for a 2026-09-06 "now"
+// The two floors for a 2026-09-06 "now": the 90-day completion floor, and the
+// 12-week chart's own (later) start. The gap between them is where the
+// confirmation pass found a task still being tracked that changes neither figure.
+const BOUNDARIES = { completionBoundaryDate: '2026-06-08', creationBoundaryDate: '2026-06-21' };
 const deferred = () => {
   let resolve;
   const promise = new Promise(r => { resolve = r; });
@@ -178,7 +181,7 @@ test('a departure while archive reads are in flight invalidates the settled hist
     completedAt: '2026-08-01T00:00:00.000Z', createdAt: '2026-08-01T00:00:00.000Z',
   };
   const archive = deferred();
-  const load = createInsightHistoryLoad({ activeTasks: [x], boundaryDate: BOUNDARY });
+  const load = createInsightHistoryLoad({ activeTasks: [x], boundaries: BOUNDARIES });
 
   // The archive query has taken its snapshot without x, but has not yet settled.
   // The live side then observes the archive transition.
@@ -198,7 +201,7 @@ test('a task that appears mid-flight and then leaves is also caught', async () =
   // The baseline is an interval, not two instants: anything seen active at any
   // point across the read has to be accounted for at settlement.
   const y = { _docId: 'y', completedAt: '2026-08-02T00:00:00.000Z' };
-  const load = createInsightHistoryLoad({ activeTasks: [], boundaryDate: BOUNDARY });
+  const load = createInsightHistoryLoad({ activeTasks: [], boundaries: BOUNDARIES });
   load.observeActive([y]);
   load.observeActive([]);
   const settled = load.settle({ items: [], complete: true });
@@ -207,7 +210,7 @@ test('a task that appears mid-flight and then leaves is also caught', async () =
 
 test('a task that moved from the live half INTO the archive half is not stale', async () => {
   const z = { _docId: 'z', completedAt: '2026-07-01T00:00:00.000Z' };
-  const load = createInsightHistoryLoad({ activeTasks: [z], boundaryDate: BOUNDARY });
+  const load = createInsightHistoryLoad({ activeTasks: [z], boundaries: BOUNDARIES });
   load.observeActive([]);
   const settled = load.settle({ items: [{ _docId: 'z', archived: true }], complete: true });
   assert.equal(insightHistoryStale({ ...settled, activeTasks: [], archivedTasks: settled.items }), false);
@@ -223,23 +226,85 @@ test('departure of a non-contributing task does not invalidate historical figure
     _docId: 'old', type: 'task', status: 'Backlog',
     createdAt: '2024-01-01T00:00:00.000Z', completedAt: null,
   };
-  const load = createInsightHistoryLoad({ activeTasks: [oldBacklog], boundaryDate: BOUNDARY });
+  const load = createInsightHistoryLoad({ activeTasks: [oldBacklog], boundaries: BOUNDARIES });
   load.observeActive([]);
   const settled = load.settle({ items: [], complete: true });
   assert.equal(settled.activeIdsAtLoad.size, 0);
   assert.equal(insightHistoryStale({ ...settled, activeTasks: [], archivedTasks: [] }), false);
 });
 
-test('contribution is decided by either date crossing the boundary', () => {
-  const at = (over) => contributesToHistory(over, BOUNDARY);
+test('contribution is decided by either date crossing ITS OWN boundary', () => {
+  const at = (over) => contributesToHistory(over, BOUNDARIES);
   assert.equal(at({ completedAt: '2026-08-01T00:00:00.000Z' }), true);
   assert.equal(at({ createdAt: '2026-08-01T00:00:00.000Z', completedAt: null }), true);
   assert.equal(at({ createdAt: '2024-01-01T00:00:00.000Z', completedAt: null }), false);
   assert.equal(at({ createdAt: '2024-01-01T00:00:00.000Z', completedAt: '2024-02-01T00:00:00.000Z' }), false);
-  // The boundary date itself is inside the window, matching the metrics' own
+  // Each boundary date is itself inside its window, matching the metrics' own
   // whole-date comparison.
-  assert.equal(at({ completedAt: `${BOUNDARY}T00:00:00.000Z` }), true);
+  assert.equal(at({ completedAt: '2026-06-08T00:00:00.000Z' }), true);
+  assert.equal(at({ createdAt: '2026-06-21T00:00:00.000Z', completedAt: null }), true);
   assert.equal(at({}), false);
   assert.equal(at(null), false);
   assert.equal(contributesToHistory({ completedAt: '2026-08-01T00:00:00.000Z' }, null), false);
+});
+
+test('a creation between the 90-day floor and the 12-week chart start is not tracked', () => {
+  // Codex, confirmation M1. The tile counts completions from 2026-06-08; the
+  // chart counts creations only from 2026-06-21. A Backlog task created in that
+  // thirteen-day gap changes neither figure, so its departure must not turn the
+  // history "out of date" — the residue of the same false warning.
+  const task = {
+    _docId: 'outside-created-window', type: 'task', status: 'Backlog',
+    createdAt: '2026-06-10T12:00:00.000Z', completedAt: null,
+  };
+  assert.equal(contributesToHistory(task, BOUNDARIES), false);
+
+  const load = createInsightHistoryLoad({ activeTasks: [task], boundaries: BOUNDARIES });
+  load.observeActive([]);
+  const settled = load.settle({ items: [], complete: true });
+  assert.equal(settled.activeIdsAtLoad.size, 0);
+  assert.equal(insightHistoryStale({ ...settled, activeTasks: [], archivedTasks: [] }), false);
+
+  // But a COMPLETION on the earlier floor still counts, so the narrowing has
+  // not gone too far in the other direction.
+  const completedInGap = { _docId: 'g', completedAt: '2026-06-10T12:00:00.000Z' };
+  assert.equal(contributesToHistory(completedInGap, BOUNDARIES), true);
+});
+
+// ── load ownership (confirmation H1) ────────────────────────────────────────
+
+test('a cancelled load settling late cannot detach the current history load', async () => {
+  // Codex, confirmation H1. The sequence is a real one: enter Insights, leave
+  // before the read settles, re-enter to start a second read, and let the first
+  // settle afterwards. Clearing the shared slot unconditionally on the way out
+  // detaches the load that replaced it, and nothing observed after that reaches
+  // the current baseline — so a task appearing and leaving during the CURRENT
+  // read goes unrecorded and its torn history is presented as complete.
+  const coord = createInsightHistoryCoordinator();
+  const mk = (activeTasks) => createInsightHistoryLoad({ activeTasks, boundaries: BOUNDARIES });
+
+  const A = coord.begin(mk([]));      // 1. enter Insights, start A
+  coord.release(A);                   // 2. leave Insights before A settles
+  const B = coord.begin(mk([]));      // 3. re-enter, start B — B is current
+  coord.release(A);                   // 4. A settles LATE; it must not detach B
+  assert.equal(coord.isCurrent(B), true, 'a superseded load must not retire its successor');
+
+  // 5. a contributing task appears while B is still in flight
+  const y = { _docId: 'y', completedAt: '2026-08-02T00:00:00.000Z' };
+  coord.observe([y]);
+  // 6. y leaves before B settles; B's arms never saw it
+  coord.observe([]);
+  const settled = B.settle({ items: [], complete: true, failures: [] });
+
+  assert.equal(settled.activeIdsAtLoad.has('y'), true);
+  assert.equal(insightHistoryStale({ ...settled, activeTasks: [], archivedTasks: [] }), true);
+});
+
+test('the current load releases its own slot, and observations then go nowhere', () => {
+  const coord = createInsightHistoryCoordinator();
+  const A = coord.begin(createInsightHistoryLoad({ activeTasks: [], boundaries: BOUNDARIES }));
+  coord.release(A);
+  assert.equal(coord.isCurrent(A), false);
+  coord.observe([{ _docId: 'z', completedAt: '2026-08-02T00:00:00.000Z' }]);
+  assert.equal(A.settle({ items: [] }).activeIdsAtLoad.size, 0);
 });

@@ -6,7 +6,7 @@
 - Owner: **Claude** · Reviewer: **Codex** (DEC-2026-011)
 - Branch: `claude/coh-007-additive-gate`, from `main` at `6dbc6c6`
 - Commits: `a7d490d` (writers, rules, indexes) → `e4230c3` (reader, archive view, Insights) → `d62e92b` (archiver, inert) → `5d2ac1b` (handoff) → `1a89784` (Codex review) → `94ee913` (fixes) → `9e2abdb` (docs) → `18619a5` (Codex re-review) → second-pass fixes
-- Status: **Implemented, reviewed twice, and fixed. Nothing deployed.** First pass: changes requested, two High / three Medium — all resolved. Second pass: changes requested, one High / one Medium, both on the H2 fix — both resolved. Awaiting a third pass, then owner authorization for the rules/index deploy and the production probes.
+- Status: **Implemented, reviewed three times, and fixed. Nothing deployed.** Pass 1: two High / three Medium — all resolved. Pass 2: one High / one Medium on the H2 fix — both resolved. Pass 3: one High / one Medium, again on the H2 lineage — both resolved, with no regression found anywhere else. Awaiting a fourth (confirmation) pass, then owner authorization for the rules/index deploy and the production probes.
 
 Normative spec: `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md` (amendments A1–A20),
 cleared for implementation by three Codex passes ending at `876645d`.
@@ -153,7 +153,7 @@ After both review passes:
 ```text
 npm run test:rules     — 104/104 pass (15 new in coh007-archive.test.mjs)
 npm run test:handlers  —  73/73 pass (12 new in archiveCompletedTasks.test.mjs)
-npm run test:unit      — 162/162 pass (32 new across 4 files)
+npm run test:unit      — 165/165 pass (35 new across 4 files)
 npm run lint           — 0 errors, 51 warnings (baseline 50; +1 is the
                          reopenTask logActivity exhaustive-dep, matching the
                          ~10 intentional ones already in useFirestore.js)
@@ -161,7 +161,7 @@ npm run build          — clean, 29 chunks, 0 jsxDEV
 ```
 
 Codex independently ran `test:unit` (152/152 at `5d2ac1b`, 157/157 at
-`9e2abdb`), `lint` and `build` in its clone. It **cannot bind the emulator ports**, so the rules and handler
+`9e2abdb`, 162/162 at `f562c7d`), `lint` and `build` in its clone. It **cannot bind the emulator ports**, so the rules and handler
 results above are **unreproduced by a second party** — that limitation is
 standing, not incidental to this task.
 
@@ -286,6 +286,39 @@ one archive field. Both new findings are fixed:
   the cutover proceeds.
 - **Q2** — the two-query comparison is confirmed as the right measurement, with
   one qualification of mine corrected a second time. See Verification.
+
+## Confirmation-pass outcome (2026-09-06, third pass)
+
+Codex confirmed at `f562c7d`
+(`docs/COH-007-ADDITIVE-GATE-CONFIRMATION-2026-09-06.md`): **changes
+requested**, one High and one Medium, both again on the H2 lineage. It confirmed
+the interval coordinator encodes the right invariant, that no departure changing
+either figure is excluded, and that the amendment introduced **no rules,
+archiver, handler or archive-reader regression** in untouched code. Both
+findings are fixed:
+
+- **H1 (third pass) — a superseded read could clear the current coordinator.**
+  Right, and it is a real production ordering rather than React scheduling
+  trivia: enter Insights and start load A; leave before A settles; re-enter and
+  start B; A settles late and its `.then()` cleared the shared ref
+  unconditionally, detaching B. Every observation after that saw a null ref, so
+  a task appearing and leaving during B's read went unrecorded and B's torn
+  history was presented as complete. Checking `cancelled` does not help — the
+  question is ownership, not cancellation. A generation may now retire the slot
+  **only while the slot still holds it**, and that rule lives in one place
+  (`createInsightHistoryCoordinator`) so it can be asserted directly.
+- **M1 (third pass) — the created side still watched the wrong floor.** Right:
+  `historyBoundaryDate()` returned the earlier of the two, which is the 90-day
+  completion floor, and then applied it to `createdAt` as well. The chart counts
+  creations only from its own later start — 2026-06-08 versus 2026-06-21 on the
+  reviewed date — so a Backlog task created in that thirteen-day gap was tracked
+  while contributing to neither figure. The two floors are now separate.
+
+Codex noted its H1 case needs a component harness this suite does not have. The
+ownership rule was therefore extracted into a pure coordinator and asserted in
+the form it requires — A settling after B is installed, then an observation
+routed to B — so what is tested is the rule itself rather than React's effect
+scheduling. That is a deliberate substitution and worth naming as one.
 
 ## Original Review Focus (first pass)
 
