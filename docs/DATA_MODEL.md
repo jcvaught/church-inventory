@@ -68,6 +68,31 @@ Granular per-subcollection rules (no wildcard). All church-scoped membership che
   into a projection to grant themselves read access. Two accepted residuals
   (DEC-2026-015): best-effort backlink cleanup on a linked task is now denied for
   actors who cannot read it, and comment attribution fields remain unpinned.
+  (The first residual was closed by COH-008: the reciprocal backlink is now
+  cleared by an Admin-SDK `onDocumentDeleted` trigger, so no client write path
+  needs that permission.)
+- **`workItems` task archive state (COH-007).** A task carries `archived`
+  (boolean) and `archivedAt` (Firestore `Timestamp` or `null`). Archiving is a
+  soft, lossless state change on the existing document — nothing is moved or
+  deleted, and `canSeeWorkItem()` has no archived arm, so **archiving changes
+  nothing about who may read a task**. Both fields are written by every task
+  creation path (`addTask` in `src/useFirestore.js`, and the recurring-template
+  generator in `functions/index.js`); maintenance items carry neither, because an
+  equality filter on a missing field matches nothing and would empty the
+  maintenance board. `completedAt` stays the eligibility clock in its existing
+  ISO-string form. Rollout is staged: at the **additive gate** the rules are
+  deliberately *transitional* — a missing pre-state defaults to active, so a task
+  written before the backfill stays fully usable, while a task that already
+  carries the pair may not delete, corrupt, or forge either field. Clients may
+  never drive `archived` false → true; the one client transition is **reopen**
+  (archived → active), constrained by
+  `diff().affectedKeys().hasOnly(['archived','archivedAt','status','completedAt','updatedAt'])`
+  so a reopen cannot smuggle a rename, a recipient change, or the deletion of
+  `nextRecurrenceCreatedAt` (which would mint a duplicate recurring successor).
+  An archived task is read-only, its comments are readable but frozen, and it
+  cannot be deleted until reopened. The **final** ruleset, deployed with the
+  reader cutover, requires both fields on every task update; an unbackfilled task
+  failing under it is the cutover signal, not an acceptable production state.
 - **Shepherd Hub** — all reads gated to `isElder()` (the server-set `elder` custom claim) or `isShepherdAdmin()` (John's email only via `OWNER_EMAILS`, NOT any church admin — pastoral data is need-to-know). `shepherdPeople` + `config/shepherdSync` are Cloud-Function-write-only (`write: if false`). `config/shepherdRoster` write = John only. `privateNotes/{ownerUid}` read+write = the owning elder only (`request.auth.uid == ownerUid`). `careThread` create/edit/delete = author-owned (`authorUid == request.auth.uid`, can't be forged). `shepherdAudit` is append-only (`update,delete: if false`), actor-stamped on create. The hub itself is FXCC-only + surfaced as a non-subscription "special" card in HubsPage (no UpgradeGate)
 - Users cannot self-escalate role: create requires `role == 'user'`; self-updates cannot change `role`, `churchId`, `active`, or `allowedHubs`
 - Storage rules enforce 5MB max upload size and `image/*` content type only

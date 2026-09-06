@@ -797,7 +797,16 @@ export function useFirestore(churchId, userProfile) {
           assigneeUids: uidsOf(task.assignees),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          completedAt: null
+          completedAt: null,
+          // COH-007 additive gate: every task is born active. Written here and by
+          // the server twin in generateRecurringTemplateTasks so that, once the
+          // backfill has run, EVERY task carries the pair — which is what lets
+          // the reader gate's `archived == false` equality filters be trusted.
+          // Inert until then: no reader filters on it yet. Maintenance tickets
+          // deliberately do NOT get these fields (A1) — an equality filter on a
+          // missing field matches nothing, and the maintenance arm is unfiltered.
+          archived: false,
+          archivedAt: null
         });
       });
       const addLogDetails = { priority: task.priority };

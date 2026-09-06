@@ -69,6 +69,60 @@ service cloud.firestore {
         && canSeeWorkItem(get(/databases/$(database)/documents/churches/$(churchId)/workItems/$(itemId)).data);
     }
 
+    // ── COH-007 archive lifecycle — TRANSITIONAL ruleset (additive gate) ──────
+    //
+    // This ships BEFORE the backfill, so most tasks in production carry neither
+    // `archived` nor `archivedAt`. Every predicate below therefore defaults a
+    // MISSING field to "active": an unbackfilled task and its comments stay
+    // fully usable. Written the obvious way instead — direct field access, or
+    // `archived == false` — this rule would deny every ordinary edit and comment
+    // write on every legacy task the moment it deployed, freezing the whole
+    // board mid-rollout (plan A13, review finding H4).
+    //
+    // That tolerance is deliberately temporary. The FINAL ruleset, deployed with
+    // the reader cutover, requires both fields on every task update; the
+    // unbackfilled-task sentinel failing under it is the cutover signal, never an
+    // acceptable production state. Leaving this permissive default in place
+    // afterwards is the opposite failure — a client could delete the pair and
+    // vanish from both equality-filtered readers.
+    function itemIsArchived(d) { return d.get('archived', false) == true; }
+
+    // An ACTIVE task's archive state may not be corrupted: `archived` stays
+    // false, `archivedAt` stays null, and a field the pre-state carries cannot
+    // be deleted. No client branch may drive false -> true — archiving is the
+    // scheduled function's alone.
+    function activeArchiveShapeHeld(pre, post) {
+      return post.get('archived', false) == false
+        && post.get('archivedAt', null) == null
+        && (!('archived' in pre) || 'archived' in post)
+        && (!('archivedAt' in pre) || 'archivedAt' in post);
+    }
+
+    // The ONE archived -> active transition, as an exact field allowlist (plan
+    // A14, review finding M1). Constraining the resulting VALUES is not enough:
+    // the COH-006 update rule otherwise lets an authorized actor rewrite nearly
+    // every task field, so a client could atomically reopen and rename a task,
+    // alter its recipients, or delete `nextRecurrenceCreatedAt` — and that last
+    // one defeats the recurrence dedupe marker, minting a second successor when
+    // the reopened task is completed. `hasOnly` is what makes those unreachable.
+    // The sentinel defaults (`true` / `'x'`) require both fields to be PRESENT
+    // and correct, unlike the tolerant reads above.
+    function isReopenTransition(pre, post) {
+      return post.get('archived', true) == false
+        && post.get('archivedAt', 'x') == null
+        && post.get('status', '') == 'Backlog'
+        && post.get('completedAt', 'x') == null
+        && post.diff(pre).affectedKeys()
+             .hasOnly(['archived', 'archivedAt', 'status', 'completedAt', 'updatedAt']);
+    }
+
+    // Comment writes follow the parent's freeze. Short-circuits behind
+    // canSeeWorkItemById at every call site, so the get() is both cached and
+    // known to exist.
+    function workItemIsArchived(churchId, itemId) {
+      return itemIsArchived(get(/databases/$(database)/documents/churches/$(churchId)/workItems/$(itemId)).data);
+    }
+
     // Shepherd Hub (P2): elder status is a server-set custom auth claim
     // (`elder: true`), granted by claimElderRole against the email allow-list —
     // NOT a Firestore-doc role (those are raceable/readable). Baked into the
@@ -276,7 +330,14 @@ service cloud.firestore {
             && request.resource.data.createdBy == request.auth.uid
             && request.resource.data.visibility in ['team', 'private', 'shared']
             && request.resource.data.assigneeUids is list
-            && request.resource.data.sharedWithUids is list)
+            && request.resource.data.sharedWithUids is list
+            // COH-007: a task is born active. Tolerant of absence on purpose —
+            // a browser tab still running the pre-COH-007 bundle must keep
+            // being able to create a task through the additive gate — but a
+            // born-archived task or a forged `archivedAt` is denied outright.
+            // The FINAL ruleset requires the pair.
+            && request.resource.data.get('archived', false) == false
+            && request.resource.data.get('archivedAt', null) == null)
       );
 
       // update: authorization is decided from resource.data — the PRE-state —
@@ -308,11 +369,20 @@ service cloud.firestore {
             && (request.resource.data.visibility == resource.data.visibility
                 || resource.data.createdBy == request.auth.uid
                 || isChurchAdminOrManager(churchId))
+            // COH-007: archived is frozen except for the one reopen transition;
+            // active may not forge its way into the archive. Both arms sit
+            // AFTER the COH-006 pre-state authorization above, so reopen
+            // inherits it rather than replacing it.
+            && (itemIsArchived(resource.data)
+                  ? isReopenTransition(resource.data, request.resource.data)
+                  : activeArchiveShapeHeld(resource.data, request.resource.data))
           )
         );
       // delete: maintenance admin/manager-only; tasks admin/manager or the creator.
+      // COH-007: an archived task must be reopened before the existing
+      // permanent-delete flow is available to anyone, creator and admin alike.
       allow delete: if (resource.data.type == 'maintenance' && isChurchAdminOrManager(churchId))
-        || (resource.data.type == 'task' && (
+        || (resource.data.type == 'task' && !itemIsArchived(resource.data) && (
           isChurchAdminOrManager(churchId)
           || (isMember(churchId) && resource.data.createdBy == request.auth.uid)
         ));
@@ -331,9 +401,16 @@ service cloud.firestore {
     // an authorized member. Changing that is an attribution policy decision the
     // owner has not made.
     match /churches/{churchId}/workItems/{itemId}/comments/{commentId} {
+      // COH-007: an archived task's discussion stays READABLE and becomes
+      // read-only. There is no backlink carve-out in that freeze — DEC-2026-017
+      // moved the only write that needed one (clearing a reciprocal link when a
+      // ticket or job is deleted) onto the COH-008 server triggers, which run
+      // under the Admin SDK and are not bound by these rules.
       allow read:           if isMember(churchId) && canSeeWorkItemById(churchId, itemId);
-      allow create:         if isMember(churchId) && canSeeWorkItemById(churchId, itemId);
+      allow create:         if isMember(churchId) && canSeeWorkItemById(churchId, itemId)
+                            && !workItemIsArchived(churchId, itemId);
       allow update, delete: if isMember(churchId) && canSeeWorkItemById(churchId, itemId)
+                            && !workItemIsArchived(churchId, itemId)
                             && (isChurchAdminOrManager(churchId) || request.auth.uid == resource.data.authorId);
     }
 

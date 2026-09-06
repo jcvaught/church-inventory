@@ -3759,6 +3759,12 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
           sharedWithUids: uidProjection(template.sharedWith),
           assigneeUids: uidProjection(template.assignees),
           completedAt: null,
+          // COH-007 additive gate — server twin of the client writer in
+          // src/useFirestore.js addTask(). Both creation paths must write the
+          // pair, or the backfill's coverage baseline goes stale the moment the
+          // next recurring task is generated.
+          archived: false,
+          archivedAt: null,
           linkedItemDocId: null,
           linkedTicketDocId: null,
           ministry: template.ministry || null,
