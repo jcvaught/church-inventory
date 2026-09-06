@@ -369,12 +369,30 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-007 — Completed-task archiving and archive search
 
-- Status: **ADDITIVE GATE (3 of 4) IMPLEMENTED AND REVIEWED — findings fixed,
-  awaiting Codex re-review. Nothing deployed.** Branch
+- Status: **ADDITIVE GATE (3 of 4) IMPLEMENTED, REVIEWED TWICE — findings fixed,
+  awaiting a third pass. Nothing deployed.** Branch
   `claude/coh-007-additive-gate` from `main` at `6dbc6c6`. Trail: implementation
   `a7d490d` → `e4230c3` → `d62e92b` → handoff `5d2ac1b` → **Codex review
   `1a89784`** (`docs/COH-007-ADDITIVE-GATE-REVIEW-2026-09-06.md`, two High /
-  three Medium / no Critical, **changes requested**) → fixes **`94ee913`**.
+  three Medium / no Critical, **changes requested**) → fixes `94ee913` →
+  **Codex re-review `96aa947`**
+  (`docs/COH-007-ADDITIVE-GATE-REREVIEW-2026-09-06.md`, **changes requested**;
+  original H1/M1/M2/M3 **CLOSED**, one new High + one Medium, both on the H2
+  fix) → second-pass fixes.
+  **The re-review's High is the first review's H2 in a narrower window, and the
+  distinction is worth keeping:** my fix captured the active baseline when the
+  four archive reads *settled*, so an arm could snapshot without `x`, the worker
+  archive `x` so the live listeners dropped it, and the read settle with `x` in
+  neither half and never recorded — the predicate cannot detect an id its caller
+  never supplies. The baseline now covers the **interval** rather than the
+  instant. Its Medium: staleness watched every board row, so deleting an old
+  Backlog task with no date in either metric window flipped the presentation to
+  "out of date" while both figures were byte-for-byte unchanged — a drip of
+  false warnings that teaches people to ignore the real one. Now narrowed to
+  tasks that actually contribute to the figures.
+  Codex explicitly approved the three-shape rules model and the create
+  tightening, confirming no supported client generation writes only one archive
+  field.
   Handoff: `docs/COH-007-ADDITIVE-GATE-HANDOFF-2026-09-06.md`.
   **Both High findings were the same mistake in two places: a state that could
   not be classified was treated as the permissive one.** **H1** — the archive
@@ -419,7 +437,7 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   load-bearing, and its counter is expected to be zero for nulls. The guard ships
   either way, as A3 requires. **Emulator evidence only**; the first production
   dry run re-measures it and is the authority.
-  `npm run test:rules` 104/104, `test:handlers` 73/73, `test:unit` 157/157,
+  `npm run test:rules` 104/104, `test:handlers` 73/73, `test:unit` 162/162,
   `lint` 0 errors, `build` clean. Codex independently ran `test:unit`, `lint` and
   `build` in its clone; it **cannot bind the emulator ports**, so **no rules or
   handler result is reproduced by a second party**. **Not run:** `test:e2e` (its cases cannot fire

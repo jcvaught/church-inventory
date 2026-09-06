@@ -5,8 +5,8 @@
 - Task ID and title: **COH-007 — Completed-task archiving and archive search**, gate 3 of 4 (the **additive gate**)
 - Owner: **Claude** · Reviewer: **Codex** (DEC-2026-011)
 - Branch: `claude/coh-007-additive-gate`, from `main` at `6dbc6c6`
-- Commits: `a7d490d` (writers, rules, indexes) → `e4230c3` (reader, archive view, Insights) → `d62e92b` (archiver, inert) → `5d2ac1b` (handoff) → `1a89784` (Codex review, cherry-picked) → review fixes
-- Status: **Implemented, reviewed, and fixed. Nothing deployed.** Codex requested changes 2026-09-06 (`docs/COH-007-ADDITIVE-GATE-REVIEW-2026-09-06.md`, two High / three Medium); all five are resolved below. Awaiting **re-review**, then owner authorization for the rules/index deploy and the production probes.
+- Commits: `a7d490d` (writers, rules, indexes) → `e4230c3` (reader, archive view, Insights) → `d62e92b` (archiver, inert) → `5d2ac1b` (handoff) → `1a89784` (Codex review) → `94ee913` (fixes) → `9e2abdb` (docs) → `18619a5` (Codex re-review) → second-pass fixes
+- Status: **Implemented, reviewed twice, and fixed. Nothing deployed.** First pass: changes requested, two High / three Medium — all resolved. Second pass: changes requested, one High / one Medium, both on the H2 fix — both resolved. Awaiting a third pass, then owner authorization for the rules/index deploy and the production probes.
 
 Normative spec: `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md` (amendments A1–A20),
 cleared for implementation by three Codex passes ending at `876645d`.
@@ -148,20 +148,20 @@ user-visible behaviour is archiving, which starts at the automation gate.
 
 ## Verification
 
-After the review fixes:
+After both review passes:
 
 ```text
 npm run test:rules     — 104/104 pass (15 new in coh007-archive.test.mjs)
 npm run test:handlers  —  73/73 pass (12 new in archiveCompletedTasks.test.mjs)
-npm run test:unit      — 157/157 pass (27 new across 4 files)
+npm run test:unit      — 162/162 pass (32 new across 4 files)
 npm run lint           — 0 errors, 51 warnings (baseline 50; +1 is the
                          reopenTask logActivity exhaustive-dep, matching the
                          ~10 intentional ones already in useFirestore.js)
 npm run build          — clean, 29 chunks, 0 jsxDEV
 ```
 
-Codex independently ran `test:unit` (152/152 at `5d2ac1b`), `lint` and `build`
-in its clone. It **cannot bind the emulator ports**, so the rules and handler
+Codex independently ran `test:unit` (152/152 at `5d2ac1b`, 157/157 at
+`9e2abdb`), `lint` and `build` in its clone. It **cannot bind the emulator ports**, so the rules and handler
 results above are **unreproduced by a second party** — that limitation is
 standing, not incidental to this task.
 
@@ -201,10 +201,19 @@ baseline is empty, the production question is **unmeasured**, not resolved, and
 must be recorded that way. No write need be enabled for either query.
 
 A second timing constraint follows from the rollout and is worth stating rather
-than discovering: until the backfill runs, **no production document carries
-`archived` at all**, so the archiver's `archived == false` query matches nothing
-and both queries above are vacuous. This measurement therefore belongs to the
-**backfill gate**, not to the first dry run after this one.
+than discovering. **Corrected again after re-review:** it is *not* literally true
+that no production document carries `archived` before the backfill — from the
+moment this gate deploys, every newly created client task and every generated
+recurring task carries `archived: false`. What is true is narrower and is the
+part that matters: **the pre-existing population whose null-ordering behaviour is
+in question does not enter the `archived == false` query until the backfill
+shapes it.** A pre-backfill run can therefore measure only newly shaped
+documents, which are exactly the ones written correctly, and cannot settle the
+question for legacy data. The measurement belongs to the **backfill gate**.
+
+Note also that the baseline query tests explicit `completedAt == null` only.
+Missing-field documents are a separate population and no equality-to-null query
+can reach them.
 
 ## Risk and Rollback
 
@@ -244,23 +253,39 @@ and both queries above are vacuous. This measurement therefore belongs to the
   app) it cannot bind; a church that approached it would silently truncate, and
   the tripwire DEC-2026-018 asks for is not instrumented yet.
 
-## Re-review Focus
+## Re-review outcome (2026-09-06, second pass)
 
-The five findings above are fixed; the cases Codex wrote are integrated and run.
-Where scrutiny is worth most on the second pass:
+Codex re-reviewed at `9e2abdb`
+(`docs/COH-007-ADDITIVE-GATE-REREVIEW-2026-09-06.md`): **changes requested**,
+one High and one Medium, both on the H2 fix. Original **H1, M1, M2 and M3 are
+CLOSED**; the three-shape rules model and the create tightening were explicitly
+approved, including the finding that no supported client generation writes only
+one archive field. Both new findings are fixed:
 
-1. **The three-shape rules model.** It is a bigger change than H1 strictly
-   required — create was tightened as well, to close the locked-on-arrival
-   shape the fix would otherwise have created. Is `archiveStateUsable` correct
-   at every call site, and does the transition table admit exactly the
-   legacy → legacy, legacy → active, active → active, and frozen → reopen moves
-   and nothing else?
-2. **`insightHistoryStale()`.** Is there a sequence it misses, or one where it
-   fires so readily that the complete presentation becomes unreachable in
-   practice?
-3. **Q2's baseline query.** Does the two-query comparison actually settle the
-   production question, given the backfill-gate timing constraint recorded
-   above?
+- **H1 (second pass) — the H2 fix captured its baseline after the race had
+  already happened.** Right, and it is the original contract failure in a
+  narrower window rather than a cosmetic edge. The caller copied the active set
+  only when the four archive reads *settled*, so this ordering slipped through:
+  an arm snapshots without `x` → the worker archives `x` and the live listeners
+  drop it → the read settles, by which point `x` is in neither half and was
+  never recorded. The predicate cannot detect an id its caller never supplies.
+  The baseline now covers the **interval**, not the instant:
+  `createInsightHistoryLoad()` opens before the first read and absorbs every
+  active set observed until settlement. The unit case encodes the ordering
+  `active [x] → archive snapshot [] → active [] → settlement`, which the
+  previous test did not.
+- **M1 (second pass) — staleness watched the whole board, not the figures.**
+  Right, and the cost is false warnings: deleting an old Backlog task with no
+  date in either window left `velocityData` and the 90-day average byte-for-byte
+  unchanged yet flipped the presentation to "out of date". A steady drip of
+  those teaches people to ignore the real one. `contributesToHistory()` now
+  narrows the watched set to tasks whose `completedAt` or `createdAt` falls
+  inside the earliest boundary either metric uses.
+- **Q1** — the final-ruleset sentinel stays the reader gate's first commit,
+  confirmed; it must pass against an explicitly pinned final rules source before
+  the cutover proceeds.
+- **Q2** — the two-query comparison is confirmed as the right measurement, with
+  one qualification of mine corrected a second time. See Verification.
 
 ## Original Review Focus (first pass)
 

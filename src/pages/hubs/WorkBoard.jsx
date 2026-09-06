@@ -23,7 +23,7 @@ import { STATUSES, PRIORITIES, RECURRENCE_OPTIONS, RECURRENCE_LABELS, priorityCo
 import { BoardCalendar } from '../../components/board/BoardCalendar.jsx';
 import { CommentThread } from '../../components/comments/CommentThread.jsx';
 import { ArchivedTasks } from '../../components/board/ArchivedTasks.jsx';
-import { mergeInsightTasks, insightHistoryStale } from '../../utils/workQueries.js';
+import { mergeInsightTasks, insightHistoryStale, createInsightHistoryLoad } from '../../utils/workQueries.js';
 
 // ── Bulk paste-import parsing ──
 // Per-import cap. Above this, hint that the user split into batches.
@@ -1599,37 +1599,55 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
   const [insightArchive, setInsightArchive] = useState(null);
   const [insightLoading, setInsightLoading] = useState(false);
   const [insightReloadKey, setInsightReloadKey] = useState(0);
-  // The active half of the join is LIVE and keeps moving after the archive read
-  // settles. Recording which tasks were active at that instant is what lets us
-  // notice the forward race below.
-  const visibleIdsRef = useRef(new Set());
-  useEffect(() => { visibleIdsRef.current = new Set(visibleTasks.map(t => t._docId)); }, [visibleTasks]);
+  // The earliest date either advertised figure looks at. The 90-day tile always
+  // reaches further back than the 12-week chart (84 days plus at most 6 to the
+  // week boundary), but both are computed rather than assumed — the point of
+  // this floor is that it must never be later than a metric's own boundary.
+  const historyBoundaryDate = () => {
+    const d90 = new Date(); d90.setDate(d90.getDate() - 90);
+    const now = new Date();
+    const chartStart = new Date(now);
+    chartStart.setDate(now.getDate() - now.getDay() - 77);
+    const a = localDateStr(d90), b = localDateStr(chartStart);
+    return a < b ? a : b;
+  };
+
+  // The active half of the join is LIVE and keeps moving WHILE the archive reads
+  // are in flight, not only after they settle. The coordinator opens its
+  // baseline before the first read and keeps absorbing observations until
+  // settlement; this ref feeds it each new active set.
+  const historyLoadRef = useRef(null);
+  const visibleTasksRef = useRef([]);
+  useEffect(() => {
+    visibleTasksRef.current = visibleTasks;
+    historyLoadRef.current?.observeActive(visibleTasks);
+  }, [visibleTasks]);
   useEffect(() => {
     if (isMaint || !canOperate || viewMode !== 'insights' || !loadArchivedTasks) return undefined;
     let cancelled = false;
     setInsightLoading(true);
+    const load = createInsightHistoryLoad({
+      activeTasks: visibleTasksRef.current,
+      boundaryDate: historyBoundaryDate(),
+    });
+    historyLoadRef.current = load;
     loadArchivedTasks({ since: insightWindowStart() }).then(result => {
+      historyLoadRef.current = null;
       if (!cancelled) {
-        setInsightArchive({ ...result, activeIdsAtLoad: new Set(visibleIdsRef.current) });
+        setInsightArchive(load.settle(result));
         setInsightLoading(false);
       }
     });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; historyLoadRef.current = null; };
   }, [viewMode, isMaint, canOperate, loadArchivedTasks, insightReloadKey]);
 
   // The forward race A20 names, and the one `mergeInsightTasks` cannot fix
   // (review H2). Live-wins closes the REOPEN direction: a task that comes back
   // after the read is in both sets and the live copy wins. It cannot close the
-  // ARCHIVE direction — a task archived at T1 is dropped by the live listeners
-  // and was never in the frozen T0 archive result, so it falls out of the join
-  // entirely while the label still claims a complete history as of T0. The
-  // figures then describe neither instant.
-  //
-  // Precedence cannot repair that; only noticing it can. A task that was active
-  // when the archive read settled and is now in neither half has moved
-  // underneath us, so the history is torn and must not reuse the complete
-  // presentation. A deletion trips this too, which is correct — the honest
-  // statement in both cases is that the underlying data changed.
+  // ARCHIVE direction — a task archived during or after the read is dropped by
+  // the live listeners and is not in the frozen archive result, so it falls out
+  // of the join entirely while the label still claims a complete history. The
+  // figures then describe neither instant. Only noticing it can repair that.
   const insightStale = useMemo(() => insightHistoryStale({
     activeIdsAtLoad: insightArchive?.activeIdsAtLoad,
     activeTasks: visibleTasks,

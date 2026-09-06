@@ -85,18 +85,63 @@ export function mergeInsightTasks(activeTasks, archivedTasks) {
   return [...byId.values()];
 }
 
+// Does this task contribute to either advertised historical figure?
+//
+// Narrower than "is on the board" on purpose (re-review M1). The 12-week chart
+// counts completions and creations inside its weeks; the 90-day tile counts
+// completions. An old Backlog task with no date in either window changes
+// neither figure, so its departure is not a reason to tell the user their
+// history is out of date — and routine board cleanup would otherwise produce a
+// steady drip of false warnings that trains people to ignore the real one.
+//
+// `boundaryDate` is a YYYY-MM-DD floor: the earliest date either metric looks
+// at. Comparison is whole-date, matching the metrics themselves.
+export function contributesToHistory(task, boundaryDate) {
+  if (!task || !boundaryDate) return false;
+  const completed = (task.completedAt || '').slice(0, 10);
+  const created = (task.createdAt || '').slice(0, 10);
+  return (completed !== '' && completed >= boundaryDate)
+    || (created !== '' && created >= boundaryDate);
+}
+
+// Tracks which contributing tasks were active across the WHOLE archive read,
+// not merely when it finished.
+//
+// Capturing the active set at settlement is too late (re-review H1): an archive
+// arm can take its snapshot without `x`, the worker can then archive `x` so the
+// live listeners drop it, and only then does the read settle — by which point
+// `x` is in neither half and was never recorded, so nothing detects that the
+// join is torn. The interval, not the instant, is what has to be covered. So the
+// baseline opens before the first read and accumulates every contributing task
+// seen active until settlement.
+export function createInsightHistoryLoad({ activeTasks, boundaryDate }) {
+  const observed = new Set();
+  const track = (tasks) => {
+    for (const t of tasks || []) {
+      if (t?._docId && contributesToHistory(t, boundaryDate)) observed.add(t._docId);
+    }
+  };
+  track(activeTasks);
+  return {
+    observeActive: track,
+    settle: (result) => ({ ...result, activeIdsAtLoad: new Set(observed) }),
+    // Exposed for assertions; the caller has no reason to read it.
+    _observed: observed,
+  };
+}
+
 // Has the live active half moved since the frozen archive half was read?
 //
 // `mergeInsightTasks` closes the REOPEN direction of A20 by precedence. It
-// cannot close the ARCHIVE direction (review H2): a task archived after the
-// one-shot read is dropped by the live listeners and was never in the frozen
-// result, so it falls out of the join entirely while the UI still claims a
-// complete history as of the load instant — figures that then describe neither
+// cannot close the ARCHIVE direction (review H2): a task archived during or
+// after the one-shot read is dropped by the live listeners and is not in the
+// frozen result, so it falls out of the join entirely while the UI still claims
+// a complete history as of the load instant — figures that then describe neither
 // moment. Precedence cannot repair that; only noticing it can.
 //
-// A task that was active when the read settled and is now in neither half has
-// moved underneath us. A deletion trips this too, which is right: the honest
-// statement in both cases is that the underlying data changed.
+// A contributing task that was active at any point across the read and is now in
+// neither half has moved underneath us. A deletion trips this too, which is
+// right: the honest statement in both cases is that the underlying data changed.
 export function insightHistoryStale({ activeIdsAtLoad, activeTasks, archivedTasks }) {
   if (!activeIdsAtLoad) return false;
   const live = new Set((activeTasks || []).map(t => t?._docId));
