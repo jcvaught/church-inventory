@@ -285,6 +285,50 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ## Proposed Queue
 
+### COH-008 — Server-side backlink cleanup on delete
+
+- Status: **Ready to implement — no separate plan review.** The design is
+  already reviewed: **plan amendment A18** in
+  `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md` is the normative spec, and it
+  survived two Codex passes (raised as H1, hardened by N1, confirmed complete by
+  `codex/coh-007-plan-confirmation` at `876645d`, which called the five-row
+  direction map complete). Codex has already written the adversarial cases.
+  Writing a fresh plan document would re-derive reviewed content. **Codex reviews
+  the implementation instead**, per DEC-2026-011.
+- Owner: Claude · Reviewer: Codex
+- Authorized by: **DEC-2026-017** (Accepted). Blocks COH-007's additive gate.
+- Why now, independent of archiving: **three of the four backlink cleanup paths
+  are broken in production today.** Deleting a ticket or job linked to a private
+  task is denied because the actor cannot read the task; a regular member
+  deleting their own linked task cannot clear the job's backref because
+  `jobListings` update is admin/manager-only (`firestore.rules:354`). All are
+  fire-and-forget, so every failure is silent.
+- Scope: two `onDocumentDeleted` triggers — `churches/{churchId}/workItems/{docId}`
+  and `churches/{churchId}/jobListings/{docId}` — each routing on the trusted
+  source discriminator and clearing only a reciprocal backlink, in a transaction.
+  The A18 direction map is exhaustive; anything else is a no-op.
+- **Not** in scope: removing the four client cleanups
+  (`useFirestore.js:758`, `:852`, `:1276`, `:1342`). A18 requires they stay until
+  the triggers are deployed and verified; removal is a later gate. Also out of
+  scope: the reservation-to-task direction, recorded in DEC-2026-017 as a
+  pre-existing asymmetry.
+- **Implementation decision not settled by A18 — recorded here rather than
+  discovered in review:** A18 requires transient failures to reject so Eventarc
+  retries, which means enabling `retry` (available in the installed
+  firebase-functions 7.2.5). With it on, a *permanently* failing invocation
+  retries for up to 24 hours. The handler must therefore classify errors and
+  throw only on transient ones (`UNAVAILABLE`, `DEADLINE_EXCEEDED`, `ABORTED`,
+  `INTERNAL`, `RESOURCE_EXHAUSTED`), returning normally on permanent ones after a
+  Sentry capture. Idempotency is what makes retry safe: the reciprocal check
+  makes a second delivery a no-op.
+- Verification: handler tests via `npm run test:handlers`, integrating Codex's
+  written cases — forged-link negative, reciprocal positive with double delivery,
+  concurrent relink, cross-tenant, and the `task_x`/`mnt_x` collision. Note the
+  repo has no existing Firestore-trigger test; the harness pattern is `.run()`
+  on the exported handler, as `scheduledSends.test.mjs` does.
+- **Requires owner authorization to deploy** (Cloud Functions), per DEC-2026-014.
+
+
 ### COH-007 — Completed-task archiving and archive search
 
 - Status: **Plan amended — awaiting Codex pre-implementation review.** The
