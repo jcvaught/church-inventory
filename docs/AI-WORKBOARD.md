@@ -285,19 +285,190 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ## Proposed Queue
 
+### COH-008 — Server-side backlink cleanup on delete
+
+- Status: **COMPLETE — DEPLOYED AND VERIFIED IN PRODUCTION 2026-09-06,
+  owner-authorized.** Receipt and evidence in
+  `docs/COH-008-HANDOFF-2026-09-06.md`. Both functions live (Gen-2, Node 22,
+  us-central1, `RETRY_POLICY_RETRY`). Production verification: both positive
+  directions clear in ~3s, and **both security negatives were observed firing in
+  production** — a forged link logged `not-reciprocal`, and a rule-valid
+  `type:'task'` document at `mnt_v4` logged `id shape does not match source
+  kind`. Two corrections came out of the deploy: the retry window is **7 days,
+  not the 24 hours** every earlier note on this task claimed (Firebase's own
+  warning), and `--force` is mandatory to deploy any function with a retry
+  policy. The first verification run FAILED and was NOT a defect — a newly
+  created Eventarc trigger is not yet delivering when `Deploy complete!` prints,
+  proven by the total absence of a log entry for that delete; it passed in 3s on
+  two re-runs once warm. Generalised into `CLAUDE.md` Known Pitfalls.
+  **Remaining gate:** the four client cleanups stay until a day of real Sentry
+  traffic on `area:backlink-cleanup` is clean.
+- Prior status, kept for the record: **IMPLEMENTED AND REVIEWED — approved with
+  follow-up. Awaiting owner authorization for the Cloud Functions deploy.**
+  Trail: implementation `e1a7146` → review `040d97d`
+  (`docs/COH-008-IMPLEMENTATION-REVIEW-2026-09-06.md`, two High + one Medium,
+  changes requested) → fixes `b3a378b` → re-review
+  (`docs/COH-008-IMPLEMENTATION-REREVIEW-2026-09-06.md`, **approved with
+  follow-up**; H1/H2/M1 closed) → follow-up applied. Handoff:
+  `docs/COH-008-HANDOFF-2026-09-06.md`.
+  Both High findings were the same error twice — trusting a value because it is
+  hard to forge without checking the rules pin it. `firestore.rules` validates a
+  create's `type` but never inspects the document id, so a member can create a
+  rule-valid `type:'task'` document at `mnt_victim` and reciprocate against the
+  real `task_victim` (H1); the same assumption applied to targets, where a
+  constructed `mnt_`/`task_` path was treated as evidence of the target's kind
+  (H2). Both now fail closed on shapes the current rules permit; the rules were
+  deliberately NOT tightened as part of this task.
+  `npm run test:handlers` 62/62, `npm run lint` 0 errors, `npm run build` clean —
+  **none reproduced by Codex, which cannot bind the emulator ports.** The
+  transactional wrapper is verified by inspection: an executed emulator race was
+  attempted and removed (pessimistic locking turns it into a deadlock that passes
+  for the wrong reason), and Codex accepted that reasoning.
+- Original status, kept for the record: **Ready to implement — no separate plan review.** The design is
+  already reviewed: **plan amendment A18** in
+  `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md` is the normative spec, and it
+  survived two Codex passes (raised as H1, hardened by N1, confirmed complete by
+  `codex/coh-007-plan-confirmation` at `876645d`, which called the five-row
+  direction map complete). Codex has already written the adversarial cases.
+  Writing a fresh plan document would re-derive reviewed content. **Codex reviews
+  the implementation instead**, per DEC-2026-011.
+- Owner: Claude · Reviewer: Codex
+- Authorized by: **DEC-2026-017** (Accepted). Blocks COH-007's additive gate.
+- Why now, independent of archiving: **three of the four backlink cleanup paths
+  are broken in production today.** Deleting a ticket or job linked to a private
+  task is denied because the actor cannot read the task; a regular member
+  deleting their own linked task cannot clear the job's backref because
+  `jobListings` update is admin/manager-only (`firestore.rules:354`). All are
+  fire-and-forget, so every failure is silent.
+- Scope: two `onDocumentDeleted` triggers — `churches/{churchId}/workItems/{docId}`
+  and `churches/{churchId}/jobListings/{docId}` — each routing on the trusted
+  source discriminator and clearing only a reciprocal backlink, in a transaction.
+  The A18 direction map is exhaustive; anything else is a no-op.
+- **Not** in scope: removing the four client cleanups
+  (`useFirestore.js:758`, `:852`, `:1276`, `:1342`). A18 requires they stay until
+  the triggers are deployed and verified; removal is a later gate. Also out of
+  scope: the reservation-to-task direction, recorded in DEC-2026-017 as a
+  pre-existing asymmetry.
+- **Implementation decision not settled by A18 — recorded here rather than
+  discovered in review:** A18 requires transient failures to reject so Eventarc
+  retries, which means enabling `retry` (available in the installed
+  firebase-functions 7.2.5). With it on, a *permanently* failing invocation
+  retries for up to **7 days** (the figure Firebase prints at deploy; an earlier
+  note here said 24 hours and was wrong). The handler must therefore classify errors and
+  throw only on transient ones (`UNAVAILABLE`, `DEADLINE_EXCEEDED`, `ABORTED`,
+  `INTERNAL`, `RESOURCE_EXHAUSTED`), returning normally on permanent ones after a
+  Sentry capture. Idempotency is what makes retry safe: the reciprocal check
+  makes a second delivery a no-op.
+- Verification: handler tests via `npm run test:handlers`, integrating Codex's
+  written cases — forged-link negative, reciprocal positive with double delivery,
+  concurrent relink, cross-tenant, and the `task_x`/`mnt_x` collision. Note the
+  repo has no existing Firestore-trigger test; the harness pattern is `.run()`
+  on the exported handler, as `scheduledSends.test.mjs` does.
+- **Requires owner authorization to deploy** (Cloud Functions), per DEC-2026-014.
+
+
 ### COH-007 — Completed-task archiving and archive search
 
-- Status: **Proposed** — **blocked on COH-006** reaching merged, deployed, and
-  production-verified. The two tasks share `src/useFirestore.js`,
-  `firestore.rules`, `firestore.indexes.json`, the work board, and
-  `functions/index.js`, so implementation must not overlap Gate 4.
+- Status: **Plan amended — awaiting Codex pre-implementation review.** The
+  COH-006 dependency is **cleared** (all four gates deployed and verified
+  2026-09-03, `main` at `2ced910`), so the file-overlap hold on
+  `src/useFirestore.js`, `firestore.rules`, `firestore.indexes.json`, the work
+  board, and `functions/index.js` is released. Still in Proposed Queue on
+  purpose: promotion to Active Tasks happens when the review clears it for
+  implementation, not before. **No code, rules, indexes, or deploy yet.**
 - Owner request (2026-09-03, HIGH): automatically archive tasks that have been
   `Complete` for more than six weeks, and provide a way to search and view
   archived tasks.
-- Plan: `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md`, published on
-  `origin/codex/coh-007-plan` at `ef11213`. **Not yet reviewed** — publishing the
-  branch is not review. Its own step 2 requires Claude to amend it against the
-  final COH-006 state before Codex's pre-implementation review.
+- Owner: **Claude** (plan amendment) · Reviewer: **Codex** (pre-implementation
+  review), per DEC-2026-011.
+- Branch: **`claude/coh-007-plan`**, from `main` at `2ced910`. Codex's
+  `origin/codex/coh-007-plan` was cut from `69e7390` (gate 3) and was never
+  merged; a rebase would have collided in `docs/DECISIONS.md`, where its
+  DEC-2026-016 sits at the position `main` now uses for gate 4's DEC-2026-015.
+  Its three artifacts were carried onto `main` byte-identical instead
+  (`bda7fe9`), then amended (**`60f9aca`** — the SHA to review). Codex's
+  branch is untouched — it is behind and should reconcile itself.
+- Plan: `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md`, **amended 2026-09-05**
+  against the final COH-006 state. Nine amendments, each marked `[A-n]` in the
+  text: A1 five listeners but only four constrained (the maintenance arm must
+  not take `archived == false` or the maintenance board empties) · A2 the
+  concrete index set, four COLLECTION composites shared by the active and
+  archived query sets plus one COLLECTION_GROUP, with the silent-skip and
+  redeploy-rules hazards attached · A3 the archiver's `completedAt <= cutoff`
+  range filter may also match the `null` every creation path writes, which makes
+  the skip-malformed guard load-bearing — **to be measured, not assumed** · A4
+  the Insights undercount anchored to `velocityData` and the 90-day tile · A5 the
+  board's `canSeeTask` reads the object arrays while the queries read the uid
+  arrays, a pre-existing divergence the archive inherits · A6 the open owner call
+  below · A7 what the deployed gate-4 rule already gives reopen for free · A8
+  reuse `backfill-task-visibility.cjs` and enable `includeMetadataChanges` on any
+  new listener oracle · A9 doc lines land in the behaviour-change commit.
+- **Codex pre-implementation review COMPLETE 2026-09-05 — CHANGES REQUESTED.**
+  `docs/COH-007-PLAN-REVIEW-2026-09-05.md`, review branch
+  `codex/coh-007-plan-review` at `28bd287`, cherry-picked to `ee4ccf1` with
+  authorship intact. Four High, three Medium, three owner questions. Codex could
+  not start the emulators, so **no test result in it is independently verified**.
+  The four archive query arms and A1's maintenance exclusion were both approved
+  as correct. Three of the four High findings land on Claude's own amendments:
+  **H1** the DEC-2026-017 trigger recommendation is a confused deputy — link
+  fields are unconstrained by the create rule, so a member can forge
+  `linkedJobDocId`, delete their own task, and have an Admin-privileged trigger
+  clear an unrelated job's backlink; the fix is a transactional reciprocal check
+  against the deleted doc's BARE id, not abandoning the trigger. **H2** A5's
+  "apply `canSeeTask` for consistency" would hide archived tasks Firestore
+  lawfully returned, violating COH-007's own acceptance criterion. **H3** A4's
+  "feed archives into `visibleTasks`" would put archived rows on the operational
+  board — Insights needs a separate `insightTasks`. **H4** the additive gate has
+  no legacy-state transition contract. Mediums: reopen needs an
+  `affectedKeys().hasOnly(...)` allowlist preserving `nextRecurrenceCreatedAt`
+  (else duplicate recurring successors); the archiver's telemetry promise cannot
+  be delivered by a range query that never sees a missing field; archive read
+  cost is unbounded.
+- **All seven findings amended 2026-09-05 (A10–A16); every owner question is
+  answered.** DEC-2026-017 **Accepted** — server-side cleanup, trigger approved
+  ONLY with reciprocal transactional checks against the deleted doc's bare id;
+  a blind Admin update is not an option; ships as its own task ahead of the
+  additive gate and COH-007's freeze is therefore total with no allowlist.
+  DEC-2026-018 **Accepted** — archive reads bounded to a **12-month** window,
+  Insights bounded to its own 90 days, no search service in v1, measured basis
+  134 work items across every church for the life of the app. Codex's question 1
+  answered: the canonical uid arrays govern visibility, and `canSeeTask()` is
+  fixed to read them (a live active-board defect). Awaiting **re-review**.
+- Owner clarification 2026-09-05: **archiving changes nothing about who can
+  see a task** — same visibility as before, no admin override, and the archive
+  is NOT scoped to tasks the viewer is personally attached to. The four-arm
+  archive query (including `team`) is confirmed, not assumed. Settled; do not
+  reopen.
+- **Re-review 2026-09-05 (`codex/coh-007-plan-rereview` at `4eaf923`, cherry-picked
+  `6cf1f4c`): all four High and M1/M3 CLOSED; M2 partial; four new findings from
+  the amendment pass.** **N1 (High)** the reciprocal trigger check is still
+  exploitable without type-pinned routing — `task_x` and `mnt_x` share the bare
+  id `x`, so a forged link field on the wrong source type can drive a matching
+  reciprocal check against an unrelated victim; fixed by the direction map at
+  **A18**. **N2 (High)** one longer index set does not serve both readers — a
+  composite indexes only documents having every field, and tasks with
+  `completedAt` absent would vanish from the active board; both sets kept, eight
+  indexes (**A10 revised**). **N3** the 90-day query bound must start at the
+  metric's boundary *date*, not the exact instant (**A19**). **N4**
+  `insightTasks` needs a live-wins temporal merge contract (**A20**). M2 closed
+  by **A17**. Superseded prose in DEC-2026-017 and this board corrected.
+- **Confirmation pass 2026-09-05 — VERDICT: IMPLEMENTATION-READY**
+  (`codex/coh-007-plan-confirmation` at `876645d`). M2 and N1–N4 all confirmed
+  closed against the specific amendment text; the five-row direction map is
+  complete, and the job row needs no `type` because the separate
+  `jobListings/{docId}` trigger's collection path is itself the trusted
+  discriminator. No contradictory normative prose remains. A17–A20 introduced no
+  new error. **Nothing left to amend before implementation.**
+- **Status: plan CLEARED for implementation.** Three Codex passes — review
+  (`28bd287`, changes requested) → re-review (`4eaf923`, changes requested) →
+  confirmation (`876645d`, implementation-ready). Twenty amendments A1–A20.
+  Decisions DEC-2026-016/017/018 all Accepted. **No emulator result in any pass
+  is independently verified — Codex cannot bind the emulator ports, so every
+  test it wrote is a proposed case Claude must integrate and run.**
+- **Next, in order:** (1) the type-pinned backlink delete-trigger task — its own
+  task, ahead of COH-007, fixing three defects live in production today, and a
+  Cloud Functions deploy the owner must authorize; (2) COH-007 additive gate;
+  (3) backfill; (4) reader gate; (5) automation gate.
 - Shape: soft `archived`/`archivedAt` flags on `workItems` (lossless, nothing
   moved or deleted), `archived == false` added to the four authorization-shaped
   active queries, an on-demand Archived Tasks view running the same four arms

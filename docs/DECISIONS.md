@@ -646,3 +646,260 @@ authorized server operation, which is a separate task.
 attribution on a comment they create. Parent gating does not address this, and
 adding attribution integrity is a policy decision the owner has not made. Not
 fixed, and must not be described as fixed.
+
+### DEC-2026-016 — Archive completed tasks after six weeks
+
+- Date: 2026-09-03
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: COH-007,
+  `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md`, `docs/backlog.md`
+
+**Decision.** Treat completed-task archiving as a high-priority COH backlog
+item. Tasks that have remained complete for more than six weeks should be
+archived, and the Tasks Hub must provide a way to search and view archived
+tasks.
+
+**Implementation boundary.** This decision sets the retention period and the
+required user capability. The proposed technical design is recorded in the
+COH-007 plan and still receives the normal Claude implementation/Codex review
+cycle. COH-007 must follow COH-006 because both change the task reader and its
+authorization-sensitive query shapes.
+
+### DEC-2026-017 — Whether an archived task's backlinks stay writable
+
+- Date: 2026-09-05
+- Status: **Accepted 2026-09-05 — option 3, with mandatory reciprocal checks**
+- Deciders: Product owner
+- Related tasks/docs: COH-007,
+  `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md` (amendment A6),
+  DEC-2026-015 (residual 1)
+
+**In plain language.** Some tasks have a maintenance ticket or a job attached to
+them. When somebody deletes that ticket or job, the app reaches back to the task
+and removes the now-dead link, so the task doesn't keep showing a button that
+goes nowhere.
+
+That reach-back is blocked in several situations, and when it's blocked nothing
+warns anybody — the link just quietly goes bad. **Three of those situations are
+happening in production today**, independently of archiving:
+
+- An admin deletes a maintenance ticket attached to somebody's private task. The
+  admin can't see that task, so the cleanup is refused.
+- Same for deleting a job attached to a private task.
+- A regular member deletes their own task that was linked to a job. Members
+  aren't allowed to edit jobs at all, so the job keeps pointing at a task that no
+  longer exists.
+
+Archiving would add a fourth: once a task is frozen, the cleanup is refused even
+for people who *can* see it. Since every task eventually archives, this one would
+become the common case rather than an edge case.
+
+**Decision (2026-09-05): fix it properly, on the server.** My first write-up
+priced the proper fix as a big job and steered toward a cheap patch. That was
+wrong — I priced the wrong design. It needs a **delete trigger**: a small piece
+of server code that runs automatically after a ticket, job, or task is deleted
+and tidies up the leftover link.
+
+**Superseded claim, kept visible on purpose.** That first write-up also said the
+trigger raises no new permission question because the deletion was already
+checked. **That is false**, and review findings H1 and N1 are why: the *deletion*
+was checked, the *cleanup write to the other document* was not. The trigger is
+approved only with the safeguards below. Nothing in this entry authorises a
+trigger that clears a link without them.
+
+This repository already runs this exact kind of trigger (`sendWelcomeEmail`,
+`notifyAdminsOfNewMember`), on a library version that supports the delete
+variant, so it is a known pattern here rather than a new one.
+
+What it gets us:
+
+- All four broken cases are fixed, including the three that are broken right now.
+- Archived tasks can stay **completely** frozen. No exception, no special-case
+  rule to remember later. The promise stays simple and true.
+- The fragile client-side cleanup code that swallows its own failures can be
+  deleted rather than patched.
+
+**Suggested sequencing.** Do this as its own small task *before* COH-007's rules
+work, not folded into it. It stands on its own, it fixes live bugs, and it can
+ship immediately instead of waiting behind COH-007's review cycle. COH-007 then
+inherits a clean total freeze.
+
+**The cheaper options, kept on the record.** Option 1 — allow archived tasks to
+have dead links removed, a two-field exception in the rules. Cheap, but it leaves
+the three live bugs unfixed and adds an exception to maintain. Option 2 — freeze
+totally and let archived tasks carry dead links, hiding them in the UI. Cheapest
+in rules, but it stores data we know is wrong, and the UI still has to cope with
+dead links anyway, because links have *already* gone bad in production. Neither
+removes the need for the server fix; they only delay it.
+
+---
+
+*The rest of this entry is the precise version, for the implementing and
+reviewing agents.*
+
+**Context.** COH-006 gate 4 recorded a residual: deleting a linked maintenance
+ticket or job clears the corresponding backlink on a task through a direct update
+outside `updateTask`, and that write is denied when the actor cannot read the
+task, leaving a stale backlink. `deleteTask` clears `linkedSetupTaskDocId` on a
+linked reservation the same way.
+
+COH-007 proposes that an archived task's content is read-only until reopen. That
+extends the denial to a case the residual does not cover: an actor who **can**
+read the task would also be blocked, purely because the task is archived. The
+result is a dangling pointer to a deleted ticket, job, or reservation on an
+archived task — which the archive's linked-task affordance then has to render as
+neither `archived` nor `missing` but broken.
+
+**Exactly what is affected (measured 2026-09-05).** Three call sites write to a
+task document from outside `updateTask`, and between them they touch **two**
+fields:
+
+| Site | Operation | Field written |
+|---|---|---|
+| `src/useFirestore.js:758` | `deleteTicket` | `linkedTicketDocId: null` |
+| `src/useFirestore.js:1276` | `deleteJobListing` | `linkedJobDocId: null` |
+| `src/useFirestore.js:1342` | `clearLinkedTaskBackRefs` (job-series delete) | `linkedJobDocId: null` |
+
+All three are fire-and-forget — two `.catch(() => {})`, one
+`Promise.allSettled` — so a rules denial is swallowed silently and surfaces only
+later, as a chip pointing at a document that no longer exists. The job-series
+case is not hypothetical: the same stale chip was found and fixed once already
+(audit 2026-05-12, Data #1; the fix is the comment above `clearLinkedTaskBackRefs`).
+
+`linkedReservationDocId` and `linkedItemDocId` are **not** affected: no delete
+path clears them on the task. Deleting a reservation leaves the task's pointer
+dangling today, and `ReservationsPage.jsx:218` resolves the other direction out
+of the live `tasks` array, which archiving will empty for old tasks. That is a
+pre-existing asymmetry worth its own backlog line; it is not COH-007's to fix and
+must not be bundled into this decision.
+
+**The fourth broken case, measured 2026-09-05.** `deleteTask`
+(`src/useFirestore.js:852`) clears `linkedTaskDocId` on a linked job listing, but
+`firestore.rules:354` requires `isChurchAdminOrManager` for any `jobListings`
+update. A regular member deleting their own linked task is therefore denied, and
+the `.catch(() => {})` swallows it. This is broken in production now and has
+nothing to do with archiving.
+
+**Trigger shape (superseded in part — the "no new authorization surface"
+sentence below is WRONG; see H1/N1 and the Decision above, which govern).**
+`onDocumentDeleted` is exported by
+`firebase-functions` 7.2.5 (verified against
+`functions/node_modules/firebase-functions/lib/v2/providers/firestore.js`), and
+`functions/index.js:3` already imports the v2 Firestore providers for
+`onDocumentCreated`. Triggers run with Admin SDK privileges after the delete has
+been authorized by rules, so they introduce no new authorization surface and
+cannot disclose task content — they null one link field. Two paths cover every
+case: a trigger on `churches/{churchId}/workItems/{docId}` (clears the backlink
+on a linked job, ticket, or reservation when a task or ticket is deleted) and one
+on `churches/{churchId}/jobListings/{docId}` (clears `linkedJobDocId` on a linked
+task). No recursion risk: the trigger's writes are updates, and only deletes
+fire it. Scope for that task also includes removing the four fire-and-forget
+client cleanups at `useFirestore.js:758`, `:852`, `:1276`, `:1342`.
+
+**Decision.** Option 3, the server-side fix, **with the safety requirement Codex
+raised in review finding H1**. Claude's original framing — that a delete trigger
+adds no new permission question because the delete was already authorized — is
+wrong about the *target* write. No rule constrains link fields on create, so a
+member can create a task naming any job, delete it, and have an Admin-privileged
+trigger clear a backlink on a job they cannot touch. The trigger is approved only
+with: a transaction that clears solely when the target's backlink reciprocates
+the deleted document's **bare** id; bare-id-only inputs constructed beneath the
+event's own church; missing target and already-null treated as successful no-ops;
+transient failures rejected so Eventarc retries; and the existing client cleanup
+retained until the triggers are verified, then removed in a later gate. A blind
+post-delete Admin update is **not** an available option.
+
+Consequence: COH-007's archive freeze is total, with no backlink allowlist. This
+ships as its own task ahead of COH-007's additive gate, because it fixes three
+production defects on its own.
+
+**The cheaper options, not taken.**
+
+1. **Carve the two fields out of the archived write-lock.**
+   `linkedTicketDocId` and `linkedJobDocId` stay writable on an archived task by
+   an actor who passes `canSeeWorkItem`. Cost: the lock is no longer "no content
+   changes at all", so the rule carries an explicit two-field allowlist that must
+   be kept in step if link fields are added later.
+2. **Accept stale backlinks on archived tasks.** The lock stays total and the
+   archive detail view degrades gracefully on a link whose target is gone. Cost:
+   a known-wrong field stored on archived records, and the degradation has to be
+   built and tested regardless.
+3. **Move the cleanup server-side — CHOSEN, see the Decision above for the
+   binding form.** A server-side clear that neither the archive lock nor
+   `canSeeWorkItem` blocks.
+   This is the option DEC-2026-015 itself pointed at — "fixing it properly needs
+   an authorized server operation, which is a separate task" — and it is the only
+   one that also closes the original residual, where an admin deleting a ticket
+   linked to a task they cannot read leaves a stale pointer. Cost: materially
+   more work than options 1 and 2, a new callable to authorize and monitor, and
+   scope COH-007 did not ask for. Recorded because COH-007 widens the residual
+   enough to change the calculus, not because it is being recommended.
+
+**Answered 2026-09-05.** Option 3 with the mandatory safeguards. The trigger
+work is its own task, implemented, reviewed, deployed and verified **before**
+COH-007's additive gate; the type-pinned direction map required by re-review
+finding N1 is recorded at plan amendment **A18** and is binding on it.
+
+### DEC-2026-018 — Archive reads are bounded by time, not by downloading everything
+
+- Date: 2026-09-05
+- Status: **Accepted 2026-09-05 — 12-month default window**
+- Deciders: Product owner
+- Related tasks/docs: COH-007,
+  `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md`,
+  `docs/COH-007-PLAN-REVIEW-2026-09-05.md` finding M3
+
+**In plain language.** As written, opening Archived Tasks downloads every
+archived task you're allowed to see, every time, so it can search them in the
+browser. That works beautifully today and gets slower every year, forever.
+
+**What the numbers actually say.** Measured 2026-09-05 against production:
+**134 work items exist in total**, across every church, for the whole life of the
+app. The COH-006 migration counted 92 tasks on 2026-08-31 and 92 again on
+2026-09-03. This is a small, slow-growing dataset.
+
+So the honest finding is that cost is *not* the problem and will not be for many
+years. A busy church writing 200 tasks a year reaches roughly 2,000 archived
+tasks after a decade. Downloading those is on the order of a few megabytes and a
+fraction of a cent. The thing that degrades is page-open time on a phone, and it
+degrades slowly.
+
+**The part that is genuinely expensive to change later is the promise, not the
+query.** If v1 says "search your whole archive" and year four forces "search the
+last year", that is a visible downgrade to something people have learned to
+rely on. Saying "the last 12 months, and here's how to search further back" from
+day one is honest at every size and never has to be walked back.
+
+**Decision (recommended).** Three parts, all cheap now and awkward to retrofit:
+
+1. **Insights must never load the whole archive.** Its metrics only span 90
+   days, so its archive query is bounded by `completedAt` within that window.
+   This is correct at any archive size, forever, and there is no reason to build
+   it any other way.
+2. **The archive view is time-windowed by default** — newest first, a bounded
+   page per authorization arm, with the window stated on screen and an explicit
+   control to search further back. Search covers the loaded window and the UI
+   says so, so the promise stays true as the archive grows.
+3. **No tokenized search field and no search service in v1.** Defer both behind
+   a tripwire: if churches routinely reach the end of the default window, or
+   archive opens exceed a recorded latency/read budget, revisit with real
+   numbers rather than speculation.
+
+**Cost of doing this now.** Close to nothing. The four composite indexes already
+required by amendment A2 simply gain `completedAt` as their trailing ordered
+field. The queries gain one range constraint. Only the archive UI's window
+control and its copy are genuinely new.
+
+**Window: 12 months** (owner, 2026-09-05). Longer would not change the
+architecture; it only shifts how often anyone reaches for the widen control.
+
+**Explicitly rejected.** Downloading full history with no bound (works now,
+quietly worsens forever, and forces a promise change later). Silent pagination
+with unchanged search copy (tells people they searched everything when they did
+not — the failure Codex flagged as making "I searched and it wasn't there"
+untrustworthy). Moving archives to a second collection (breaks comment
+subcollections, task numbers, and links, for a storage problem that does not
+exist at this scale). A per-church denormalized archive index (cannot honour
+per-user private and shared visibility without a fan-out write, and would put a
+second authorization projection alongside DEC-2026-012's).
