@@ -1,4 +1,5 @@
 import { useState, useMemo, useContext } from 'react';
+import { LinkedTaskRef } from '../components/board/LinkedTaskRef.jsx';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { notify } from '../utils/notify.js';
@@ -931,14 +932,10 @@ export function ReservationsPage({ store, userProfile, userCanSeeHub }) {
                   <div>
                     <div style={{ fontSize:13, fontWeight:700, color:B.navy, marginBottom:6 }}>Setup task</div>
                     {r.linkedSetupTaskDocId ? (
-                      setupTask ? (
-                        <div style={{ fontSize:14 }}>
-                          <span style={{ fontFamily:"monospace", color:B.textMid, marginRight:8 }}>{setupTask.taskNumber}</span>
-                          {setupTask.name}{setupTask.status ? <span style={{ color:B.textLight }}> — {setupTask.status}</span> : null}
-                        </div>
-                      ) : (
-                        <div style={{ fontSize:13, color:B.textLight }}>Linked setup task — open the Work board to view.</div>
-                      )
+                      // COH-007: a linked task missing from the active store is
+                      // no longer necessarily deleted — it may be archived, and
+                      // telling the user it is gone would be false.
+                      <LinkedTaskRef churchId={userProfile?.churchId} bareId={r.linkedSetupTaskDocId} activeTask={setupTask} style={{ fontSize:14 }} />
                     ) : canCoordinate ? (
                       canUseTasks
                         ? <button onClick={()=>openSetupTask(r)} style={{ ...btnS, fontSize:13, padding:"7px 14px" }}>+ Create setup task</button>

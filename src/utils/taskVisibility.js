@@ -12,15 +12,37 @@
 //
 // Maintenance items have no visibility model; callers filter tasks only.
 
+// Membership in one of the two people fields, reading the CANONICAL uid array
+// and falling back to the object array only where the projection is genuinely
+// ABSENT — a document predating COH-006 gate 1.
+//
+// The distinction is the whole point (COH-007 A5, review finding H2). An empty
+// canonical array is an answer, not a gap: it means nobody, and it must win over
+// a stale object array left behind by a client that forgot to move the
+// projection. The reverse — treating the object arrays as authoritative — hides
+// tasks the rules and the constrained queries lawfully authorize, which was a
+// live defect on the active board before this change and would have been
+// carried straight into the archive reader.
+//
+// Array.isArray is also the malformed-shape guard: a `{uid: true}` map reaches
+// neither branch, mirroring the rules' refusal to let that shape grant anything.
+function inPeopleField(canonicalUids, legacyObjects, uid) {
+  if (Array.isArray(canonicalUids)) return canonicalUids.includes(uid);
+  return Array.isArray(legacyObjects) && legacyObjects.some(p => p?.uid === uid);
+}
+
 // True when `uid` may see task `t`. Mirrors the visibility options the Tasks UI
 // offers: team (or unset, i.e. legacy) is church-wide; private is the creator
 // plus assignees; shared adds the people the creator selected.
+//
+// Deliberately has no `archived` arm (COH-007): archiving changes nothing about
+// who may see a task, exactly as `canSeeWorkItem()` in firestore.rules does not.
 export function canSeeTask(t, uid) {
   if (!t) return false;
   if (t.visibility === 'team' || !t.visibility) return true;
   if (t.createdBy === uid) return true;
-  if (t.assignees?.some(a => a.uid === uid)) return true;
-  if (t.visibility === 'shared' && t.sharedWith?.some(s => s.uid === uid)) return true;
+  if (inPeopleField(t.assigneeUids, t.assignees, uid)) return true;
+  if (t.visibility === 'shared' && inPeopleField(t.sharedWithUids, t.sharedWith, uid)) return true;
   return false;
 }
 

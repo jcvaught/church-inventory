@@ -12,6 +12,7 @@ import { generateRecurrenceDates } from './utils/date.js';
 import { excludeTestAccounts } from './utils/testAccounts.js';
 import { uidsOf } from './utils/taskVisibility.js';
 import { createWorkStore } from './utils/workMerge.js';
+import { taskQueryArms, mergeArchiveArms } from './utils/workQueries.js';
 
 // ── Work model (unified Tasks + Maintenance) ─────────────────────────────────
 // Tasks and maintenance tickets live in one `workItems` collection (a single
@@ -41,6 +42,22 @@ function activityDoc(d) {
     timestamp: rawTimestamp?.toDate ? rawTimestamp.toDate().toISOString() : rawTimestamp,
     _timestampCursor: rawTimestamp,
   };
+}
+
+// Translate one taskQueryArms() description into Firestore constraints. The
+// arms are pure data so they can be unit-asserted without the SDK; this is the
+// only place that turns them into a query.
+// Per-arm document cap on the bounded archive reads. Sized well above the
+// measured population (134 work items across every church for the life of the
+// app) so it is a runaway guard, not a silent truncation — the caller still
+// states the loaded window on screen.
+const ARCHIVE_ARM_LIMIT = 500;
+
+function armConstraints(arm) {
+  const c = arm.filters.map(([field, op, value]) => where(field, op, value));
+  if (arm.order) c.push(orderBy(arm.order[0], arm.order[1]));
+  if (arm.limit) c.push(limit(arm.limit));
+  return c;
 }
 
 function taskDocRef(churchId, bareId) {
@@ -272,16 +289,19 @@ export function useFirestore(churchId, userProfile) {
     // lingering in a dedupe cache (gate-2 review). Readiness is one signal: the
     // work-items slot reports done once every listener has produced a first
     // snapshot, so the app does not render a half-populated board.
+    //
+    // COH-007: the four task arms now come from taskQueryArms() so the archive
+    // reader cannot drift from the board — a drifted arm returns a different set
+    // of tasks to a different screen and raises no error at all. `archived: null`
+    // means the discriminator is OMITTED here: the additive gate changes no
+    // listener, and `archived: false` arrives at the reader gate. The maintenance
+    // arm stays hand-built and unconstrained (A1).
     const workRef = collection(db, 'churches', churchId, 'workItems');
     const myUid = userProfile?.uid;
     const workQueries = [
       ['maintenance', query(workRef, where('type', '==', 'maintenance'))],
-      ['team', query(workRef, where('visibility', '==', 'team'))],
-      ...(myUid ? [
-        ['own', query(workRef, where('createdBy', '==', myUid))],
-        ['assigned', query(workRef, where('assigneeUids', 'array-contains', myUid))],
-        ['shared', query(workRef, where('visibility', '==', 'shared'), where('sharedWithUids', 'array-contains', myUid))],
-      ] : []),
+      ...taskQueryArms({ uid: myUid, archived: null })
+        .map(arm => [arm.key, query(workRef, ...armConstraints(arm))]),
     ];
     const workStore = createWorkStore(workQueries.map(([key]) => key));
     let workSettled = false;
@@ -836,6 +856,67 @@ export function useFirestore(churchId, userProfile) {
         if (safe.name && safe.visibility !== 'private' && safe.visibility !== 'shared') updateLogDetails.name = safe.name;
         await logActivity(action, taskNumber || docId, userId, updateLogDetails);
       }
+    } catch (err) { handleErr(err); throw err; }
+  }, [churchId]);
+
+  // ── COH-007 — the on-demand archive reader ──────────────────────────────
+  //
+  // Four one-shot server reads, NOT a sixth listener: the whole point of
+  // archiving is to keep old completed work out of the always-live subscriptions.
+  //
+  // Three properties this owes the caller, each of which has already been got
+  // wrong somewhere in this file's history:
+  //
+  //   1. It never throws. A failed arm returns `complete: false` with the arm
+  //      named, because "the shared query was denied" and "you have no shared
+  //      archived tasks" are the same empty list, and presenting the first as the
+  //      second is the failure COH-006's work store exists to prevent.
+  //   2. It applies no second authorization filter. Firestore decided access
+  //      against the canonical uid arrays; re-deciding it here could only hide
+  //      tasks the rules lawfully returned (A5, review H2).
+  //   3. It is bounded (DEC-2026-018). `since` is a `completedAt` floor, and the
+  //      caller states the loaded window on screen — silent pagination under
+  //      unchanged copy would make a fruitless search untrustworthy.
+  const loadArchivedTasks = useCallback(async ({ since = null, max = ARCHIVE_ARM_LIMIT } = {}) => {
+    const workRef = collection(db, 'churches', churchId, 'workItems');
+    const arms = taskQueryArms({ uid: userProfile?.uid, archived: true, since, max });
+    const results = new Map();
+    const failures = [];
+    await Promise.all(arms.map(async (arm) => {
+      try {
+        const snap = await getDocs(query(workRef, ...armConstraints(arm)));
+        const found = new Map();
+        for (const d of snap.docs) found.set(d.id, { _docId: stripWorkPrefix(d.id), ...d.data() });
+        results.set(arm.key, found);
+      } catch (err) {
+        failures.push({ arm: arm.key, code: err?.code || 'unknown' });
+        handleErr(err);
+      }
+    }));
+    return {
+      items: mergeArchiveArms(results),
+      complete: failures.length === 0,
+      failures,
+      since,
+      loadedAt: new Date().toISOString(),
+    };
+  }, [churchId, userProfile?.uid]);
+
+  // The one archived -> active transition. Exactly the five fields the rules'
+  // affectedKeys allowlist admits, and nothing else: adding so much as a `name`
+  // here turns every reopen into a permission-denied, and that is deliberate —
+  // a reopen that could also rewrite content would let a client delete
+  // `nextRecurrenceCreatedAt` and mint a duplicate recurring successor (A14).
+  const reopenTask = useCallback(async (docId, userId, taskNumber) => {
+    try {
+      await updateDoc(taskDocRef(churchId, docId), {
+        archived: false,
+        archivedAt: null,
+        status: 'Backlog',
+        completedAt: null,
+        updatedAt: new Date().toISOString(),
+      });
+      if (userId) await logActivity('reopen_task', taskNumber || docId, userId, {});
     } catch (err) { handleErr(err); throw err; }
   }, [churchId]);
 
@@ -1628,6 +1709,7 @@ export function useFirestore(churchId, userProfile) {
     addAccessRecord, updateAccessRecord, deleteAccessRecord,
     addPeopleAccessRequirement, removePeopleAccessRequirement,
     addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags,
+    loadArchivedTasks, reopenTask,
     taskTemplates, addTaskTemplate, deleteTaskTemplate,
     jobListings, jobAnnouncements,
     addJobListing, addJobListingSeries, updateJobListing, deleteJobListing, updateJobListingSeries, deleteJobListingSeries, deleteJobListingSeriesFrom,

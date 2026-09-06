@@ -56,7 +56,10 @@ export function exportAccessRecordsCSV(records) {
   URL.revokeObjectURL(a.href);
 }
 
-export function exportTasksCSV(tasks) {
+// `filename` lets a caller name a differently-scoped export — COH-007's archive
+// view exports its filtered ARCHIVED rows, and a file called `tasks-<date>.csv`
+// sitting next to the active-board export would be indistinguishable from it.
+export function exportTasksCSV(tasks, { filename } = {}) {
   const cols = ['taskNumber','name','description','priority','status','visibility','ministry','dueDate','recurrence','estimatedHours','actualHours','assignees','tags','notes','createdByName','createdAt','completedAt'];
   const header = cols.join(',');
   const rows = (tasks || []).map(t => cols.map(c => {
@@ -70,7 +73,7 @@ export function exportTasksCSV(tasks) {
   const csv = [header, ...rows].join('\n');
   const a = Object.assign(document.createElement('a'), {
     href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
-    download: `tasks-${localDateStr(new Date())}.csv`
+    download: filename || `tasks-${localDateStr(new Date())}.csv`
   });
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(a.href);

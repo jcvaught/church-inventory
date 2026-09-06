@@ -22,6 +22,8 @@ import { formatPhone } from '../../utils/phone.js';
 import { STATUSES, PRIORITIES, RECURRENCE_OPTIONS, RECURRENCE_LABELS, priorityColors, statusColors, initials, assigneeColor, PriorityBadge } from '../../components/board/boardUI.jsx';
 import { BoardCalendar } from '../../components/board/BoardCalendar.jsx';
 import { CommentThread } from '../../components/comments/CommentThread.jsx';
+import { ArchivedTasks } from '../../components/board/ArchivedTasks.jsx';
+import { mergeInsightTasks } from '../../utils/workQueries.js';
 
 // ── Bulk paste-import parsing ──
 // Per-import cap. Above this, hint that the user split into batches.
@@ -595,6 +597,7 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
   const {
     tasks, items, maintenanceTickets, users, settings, config, notificationConfig, loading,
     addTask, updateTask, deleteTask, addTaskComment, updateTaskComment, deleteTaskComment, addTaskTags,
+    loadArchivedTasks, reopenTask,
     updateUser, taskTemplates, addTaskTemplate, deleteTaskTemplate, addJobListing, deleteJobListing,
     addTicket, updateTicket, deleteTicket, addTicketComment, updateTicketComment, deleteTicketComment, addMaintenanceTags,
     vendors = [], addVendor, updateVendor, deleteVendor, accessPeople = [], timeEntries = [], addTimeEntry,
@@ -675,7 +678,12 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
   }, [visibleTasks]);
 
   // ── State ──
-  const [viewMode, setViewMode] = useState(() => localStorage.getItem('tasks_viewMode') || 'kanban');
+  const [viewMode, setViewMode] = useState(() => {
+    // The stored key is shared with the maintenance board, which has no archive.
+    const saved = localStorage.getItem('tasks_viewMode') || 'kanban';
+    return (isMaint && saved === 'archive') ? 'kanban' : saved;
+  });
+  const isArchiveView = !isMaint && viewMode === 'archive';
   const [filterSearch, setFilterSearch] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -1568,6 +1576,47 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
     }, { openCount: 0, inProgressCount: 0, completedThisMonth: 0, overdueCount: 0 });
   }, [visibleTasks]);
 
+  // ── COH-007 — historical Insights (A4, A19, A20) ────────────────────────
+  //
+  // From the reader gate on, a completed task leaves the active listeners after
+  // 42 days while the 12-week chart spans 84 and the Avg/Week tile spans 90.
+  // Both would undercount silently, by a growing amount. So Insights loads the
+  // authorized archive for its own window and computes from a SEPARATE array.
+  //
+  // Separate is the whole point (review H3). `visibleTasks` also feeds
+  // tasksByDocId, the filters, Kanban and list rendering, selection, bulk
+  // actions, detail editing and linked-task behaviour — archived rows joined
+  // there would reappear on the operational board carrying affordances the
+  // rules reject.
+  const insightWindowStart = () => {
+    const d = new Date(); d.setDate(d.getDate() - 90);
+    // The tile compares whole DATES, so the query floor is the START of the
+    // boundary date. Bounding at the exact instant 90 days ago would drop
+    // completions earlier that same day — undercounting the very metric this
+    // exists to fix (A19).
+    return `${localDateStr(d)}T00:00:00.000Z`;
+  };
+  const [insightArchive, setInsightArchive] = useState(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightReloadKey, setInsightReloadKey] = useState(0);
+  useEffect(() => {
+    if (isMaint || !canOperate || viewMode !== 'insights' || !loadArchivedTasks) return undefined;
+    let cancelled = false;
+    setInsightLoading(true);
+    loadArchivedTasks({ since: insightWindowStart() }).then(result => {
+      if (!cancelled) { setInsightArchive(result); setInsightLoading(false); }
+    });
+    return () => { cancelled = true; };
+  }, [viewMode, isMaint, canOperate, loadArchivedTasks, insightReloadKey]);
+
+  // Live active data always wins a collision (A20): a task reopened after the
+  // one-shot archive read settled is in both sets, and the frozen archived copy
+  // would keep counting a completion that has since been undone.
+  const insightTasks = useMemo(
+    () => mergeInsightTasks(visibleTasks, insightArchive?.items || []),
+    [visibleTasks, insightArchive]
+  );
+
   // ── Task velocity (Insights view) ──
   const velocityData = useMemo(() => {
     if (!canOperate) return [];
@@ -1579,11 +1628,11 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
       weekEnd.setDate(weekStart.getDate() + 6);
       const startStr = localDateStr(weekStart);
       const endStr = localDateStr(weekEnd);
-      const completed = visibleTasks.filter(t => t.completedAt && t.completedAt.slice(0,10) >= startStr && t.completedAt.slice(0,10) <= endStr).length;
-      const created = visibleTasks.filter(t => t.createdAt && t.createdAt.slice(0,10) >= startStr && t.createdAt.slice(0,10) <= endStr).length;
+      const completed = insightTasks.filter(t => t.completedAt && t.completedAt.slice(0,10) >= startStr && t.completedAt.slice(0,10) <= endStr).length;
+      const created = insightTasks.filter(t => t.createdAt && t.createdAt.slice(0,10) >= startStr && t.createdAt.slice(0,10) <= endStr).length;
       return { week: weekStart.toLocaleDateString('en-US', { month:'short', day:'numeric' }), completed, created };
     });
-  }, [visibleTasks, canOperate]);
+  }, [insightTasks, canOperate]);
 
   // ── Cross-hub: Convert task to job ──
   function openConvertToJob() {
@@ -1857,8 +1906,8 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
         </div>
       )}
 
-      {/* Stats */}
-      <div style={{ display:'flex', flexWrap:'wrap', gap:10, marginBottom:20 }}>
+      {/* Stats — active board only; the archive view carries its own count */}
+      {!isArchiveView && <div style={{ display:'flex', flexWrap:'wrap', gap:10, marginBottom:20 }}>
         {[
           { label:'Open', value:openCount, icon:'📋', color:B.textMid },
           { label:'In Progress', value:inProgressCount, icon:'🔵', color:'#1A65C7' },
@@ -1871,14 +1920,16 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
             <span style={{ fontSize:11, color:B.textLight, fontWeight:600, textTransform:'uppercase', letterSpacing:0.8, fontFamily:f1 }}>{s.label}</span>
           </div>
         ))}
-      </div>
+      </div>}
 
       {msg && (
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:msg.isError ? B.redPale : B.tealPale, border:'1px solid '+(msg.isError ? '#FECACA' : B.teal), borderRadius:10, padding:'10px 16px', marginBottom:16, color:msg.isError ? B.red : B.teal, fontWeight:600, fontSize:13, fontFamily:f1 }}><span>{msg.text}</span><button onClick={()=>setMsg(null)} style={{ border:'none', background:'none', cursor:'pointer', color:'inherit', fontSize:16, lineHeight:1, marginLeft:8, padding:'0 2px', fontWeight:700 }}>&times;</button></div>
       )}
 
-      {/* Filter Bar */}
-      <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap', alignItems:'center' }}>
+      {/* Filter Bar — active board only. The archive has its own search, and
+          sharing this one would imply the saved views and assignee filters apply
+          to it. */}
+      {!isArchiveView && <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap', alignItems:'center' }}>
         <input
           style={{ ...inp, flex:1, minWidth:160, maxWidth:280 }}
           placeholder={`Search ${noun}s...`}
@@ -1916,8 +1967,8 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
             {!isMaint && <button type="button" onClick={handleSaveView} title="Save current filters as a named view" style={{ padding:'9px 12px', borderRadius:10, border:'1px solid '+B.sand, background:B.white, color:B.teal, fontSize:13, cursor:'pointer' }}>Save View</button>}
           </>
         )}
-      </div>
-      {!isMaint && savedFilters.length > 0 && (
+      </div>}
+      {!isMaint && !isArchiveView && savedFilters.length > 0 && (
         <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
           {savedFilters.map((v, i) => (
             <span key={i} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 12px', borderRadius:20, background:B.tealPale, border:'1px solid '+B.tealLight, fontSize:12, fontFamily:f1, color:B.teal }}>
@@ -1931,13 +1982,13 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
       {/* View Toggle + Sort */}
       <div style={{ display:'flex', gap:8, marginBottom:18, alignItems:'center', flexWrap:'wrap' }}>
         <div style={{ display:'flex', background:B.warmGray, borderRadius:10, padding:3 }}>
-          {[['kanban', 'Kanban'], ['list', 'List'], ['calendar', 'Calendar'], ...(!isMaint && canOperate ? [['insights', 'Insights']] : [])].map(([mode, label]) => (
+          {[['kanban', 'Kanban'], ['list', 'List'], ['calendar', 'Calendar'], ...(!isMaint && canOperate ? [['insights', 'Insights']] : []), ...(!isMaint ? [['archive', 'Archived']] : [])].map(([mode, label]) => (
             <button key={mode} onClick={() => switchViewMode(mode)} style={{ padding:'7px 18px', borderRadius:8, border:'none', background:viewMode===mode ? B.white : 'transparent', color:viewMode===mode ? B.navy : B.textMid, fontWeight:viewMode===mode ? 700 : 500, fontSize:13, fontFamily:f1, cursor:'pointer', boxShadow:viewMode===mode ? '0 1px 3px rgba(27,42,74,0.1)' : 'none', transition:'all 0.15s' }}>
               {label}
             </button>
           ))}
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:6, marginLeft:4 }}>
+        {!isArchiveView && <div style={{ display:'flex', alignItems:'center', gap:6, marginLeft:4 }}>
           <span style={{ fontSize:12, color:B.textLight, fontFamily:f1, fontWeight:600, textTransform:'uppercase', letterSpacing:.6, whiteSpace:'nowrap' }}>Sort:</span>
           <select style={{ ...inp, width:'auto', cursor:'pointer', fontSize:13, padding:'7px 12px' }} value={sortBy} onChange={e => { setSortBy(e.target.value); localStorage.setItem('tasks_sortBy', e.target.value); }}>
             <option value="createdDesc">Newest first</option>
@@ -1945,8 +1996,8 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
             <option value="priority">Priority</option>
             <option value="dueDate">Due date</option>
           </select>
-        </div>
-        {!isMaint && (
+        </div>}
+        {!isMaint && !isArchiveView && (
           <button
             type="button"
             onClick={() => { setDefaultsForm({ visibility: userProfile?.taskDefaultVisibility || 'private', sharedWith: userProfile?.taskDefaultSharedWith || [] }); setShowDefaultsModal(true); }}
@@ -1955,7 +2006,7 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
             ⚙ Defaults
           </button>
         )}
-        {!isMaint && (
+        {!isMaint && !isArchiveView && (
           <button
             type="button"
             onClick={() => exportTasksCSV(filteredTasks)}
@@ -1965,7 +2016,7 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
             Export CSV
           </button>
         )}
-        {!isMaint && (
+        {!isMaint && !isArchiveView && (
           <button
             type="button"
             onClick={() => exportTasksICS(filteredTasks.filter(t => t.dueDate), config?.churchName || '')}
@@ -1975,20 +2026,33 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
             Export ICS
           </button>
         )}
-        <span style={{ color:B.textLight, fontSize:13, marginLeft:'auto' }}>
+        {!isArchiveView && <span style={{ color:B.textLight, fontSize:13, marginLeft:'auto' }}>
           {filteredTasks.length}{filteredTasks.length !== visibleTasks.length ? ` of ${visibleTasks.length}` : ''} {noun}{visibleTasks.length !== 1 ? 's' : ''}
-        </span>
+        </span>}
       </div>
 
+      {/* ═══ ARCHIVED TASKS (COH-007) ═══ */}
+      {isArchiveView && (
+        <ArchivedTasks
+          churchId={churchId}
+          userId={userId}
+          users={taskHubUsers}
+          canOperate={canOperate}
+          loadArchivedTasks={loadArchivedTasks}
+          reopenTask={reopenTask}
+          onMessage={setMsg}
+        />
+      )}
+
       {/* Empty state — loading */}
-      {visibleTasks.length === 0 && loading && (
+      {!isArchiveView && visibleTasks.length === 0 && loading && (
         <div style={{ background:B.white, borderRadius:18, padding:'48px 32px', border:'1px solid '+B.sand, textAlign:'center' }}>
           <Spinner/>
         </div>
       )}
 
       {/* Empty state — no items at all */}
-      {visibleTasks.length === 0 && !loading && (
+      {!isArchiveView && visibleTasks.length === 0 && !loading && (
         <div style={{ background:B.white, borderRadius:18, padding:'48px 32px', border:'1px solid '+B.sand, textAlign:'center' }}>
           <EmojiIcon emoji={isMaint ? '🔧' : '✅'} decorative style={{ fontSize:48, marginBottom:16, display:'block' }} />
           <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 8px', fontSize:18 }}>{isMaint ? 'No maintenance tickets yet' : 'No tasks yet'}</h3>
@@ -1997,7 +2061,7 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
       )}
 
       {/* Empty state — My filter active but nothing assigned */}
-      {filterMyTasks && filteredTasks.length === 0 && visibleTasks.length > 0 && (
+      {!isArchiveView && filterMyTasks && filteredTasks.length === 0 && visibleTasks.length > 0 && (
         <div style={{ background:B.white, borderRadius:14, padding:'32px 24px', border:'1px solid '+B.sand, textAlign:'center', marginBottom:16 }}>
           <EmojiIcon emoji="👤" decorative style={{ fontSize:36, marginBottom:12, display:'block' }} />
           <h3 style={{ fontFamily:f1, color:B.navy, margin:'0 0 6px', fontSize:16 }}>No {noun}s assigned to you</h3>
@@ -2092,6 +2156,33 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
       {/* Insights View (tasks only) */}
       {viewMode === 'insights' && !isMaint && canOperate && (
         <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+          {/* COH-007 A20 — the honesty band. These two metrics span 84 and 90
+              days while the active board keeps only 42, so they are a join of a
+              LIVE listener and a frozen one-shot archive read. Dedupe closes the
+              overlap; it cannot close the race, so the history is presented as
+              an explicit as-of snapshot with a refresh, and a torn or failed
+              archive load never reuses the complete presentation. */}
+          {insightLoading && (
+            <div style={{ background:B.white, borderRadius:14, padding:'14px 18px', border:'1px solid '+B.sand, display:'flex', alignItems:'center', gap:12 }}>
+              <Spinner/>
+              <span style={{ fontSize:13, color:B.textMid, fontFamily:f1 }}>Loading archived history for the 12-week and 90-day figures...</span>
+            </div>
+          )}
+          {!insightLoading && insightArchive && !insightArchive.complete && (
+            <div style={{ background:B.redPale, borderRadius:14, padding:'14px 18px', border:'1px solid #FECACA' }}>
+              <div style={{ fontWeight:700, color:B.red, fontFamily:f1, marginBottom:4, fontSize:13 }}>These history figures are incomplete</div>
+              <div style={{ fontSize:13, color:B.textDark, lineHeight:1.5 }}>
+                Part of the archived history could not be loaded ({insightArchive.failures.map(f => `${f.arm}: ${f.code}`).join(', ')}), so the 12-week chart and the 90-day average below undercount. Do not read them as a complete record.
+                <button type="button" onClick={() => setInsightReloadKey(k => k + 1)} style={{ ...btnS, marginLeft:10, padding:'4px 12px', fontSize:12 }}>Try again</button>
+              </div>
+            </div>
+          )}
+          {!insightLoading && insightArchive?.complete && (
+            <div style={{ fontSize:12, color:B.textLight, fontFamily:f1, display:'flex', alignItems:'center', gap:10 }}>
+              <span>History including archived tasks, as of {new Date(insightArchive.loadedAt).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })}.</span>
+              <button type="button" onClick={() => setInsightReloadKey(k => k + 1)} style={{ ...btnS, padding:'4px 12px', fontSize:12 }}>Refresh</button>
+            </div>
+          )}
           <div style={{ background:B.white, borderRadius:14, padding:'24px', border:'1px solid '+B.sand }}>
             <div style={{ fontWeight:700, fontSize:14, color:B.navy, fontFamily:f1, marginBottom:2 }}>Task Velocity — Last 12 Weeks</div>
             <div style={{ fontSize:12, color:B.textLight, marginBottom:16, fontFamily:f1 }}>Completed vs. created per week</div>
@@ -2110,7 +2201,10 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
             {(() => {
               const d90 = new Date(); d90.setDate(d90.getDate() - 90);
               const s90 = localDateStr(d90);
-              const c90 = visibleTasks.filter(t => t.completedAt && t.completedAt.slice(0,10) >= s90).length;
+              // The 90-day tile reads insightTasks; the first two tiles stay on
+              // the ACTIVE board, because "Total Visible" and "Completed" describe
+              // the board in front of you, not the history behind it.
+              const c90 = insightTasks.filter(t => t.completedAt && t.completedAt.slice(0,10) >= s90).length;
               return [
                 { label:'Total Visible', value:visibleTasks.length, icon:'📋' },
                 { label:'Completed', value:visibleTasks.filter(t=>t.status==='Complete').length, icon:'✅' },
