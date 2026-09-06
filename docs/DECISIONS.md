@@ -680,33 +680,54 @@ them. When somebody deletes that ticket or job, the app reaches back to the task
 and removes the now-dead link, so the task doesn't keep showing a button that
 goes nowhere.
 
-Archiving is supposed to freeze a task — nothing about it changes once it's
-archived. But that freeze would also block this bit of tidying up. Delete a
-ticket that was attached to an archived task, and the task keeps a link to
-something that no longer exists. Nobody sees an error; the link just quietly
-goes bad.
+That reach-back is blocked in several situations, and when it's blocked nothing
+warns anybody — the link just quietly goes bad. **Three of those situations are
+happening in production today**, independently of archiving:
 
-**What you're deciding:** whether "frozen" means *completely* frozen, or frozen
-except for this one bit of housekeeping.
+- An admin deletes a maintenance ticket attached to somebody's private task. The
+  admin can't see that task, so the cleanup is refused.
+- Same for deleting a job attached to a private task.
+- A regular member deletes their own task that was linked to a job. Members
+  aren't allowed to edit jobs at all, so the job keeps pointing at a task that no
+  longer exists.
 
-- **Option 1 — allow the tidy-up.** Archived tasks stay frozen except that the
-  app may remove a dead link to a deleted ticket or job. Simplest fix, and
-  archived tasks stay accurate. The cost is that "archived means nothing
-  changes" is no longer strictly true, and the rule gets a small named
-  exception.
-- **Option 2 — keep the freeze total.** Archived tasks never change, full stop.
-  Some archived tasks will carry links to deleted tickets and jobs, and the
-  archive screen has to notice a dead link and hide it. The cost is storing
-  something we know is wrong, and the hiding has to be built either way.
-- **Option 3 — do the tidy-up on the server.** The server has no restrictions, so
-  it can clean up the link regardless. This is the only option that also fixes a
-  related problem that already exists today: an admin who deletes a ticket
-  attached to someone's *private* task can't clean up that link either, so that
-  one already goes bad. The cost is real extra work COH-007 didn't budget for —
-  a new server function to build, secure, and monitor.
+Archiving would add a fourth: once a task is frozen, the cleanup is refused even
+for people who *can* see it. Since every task eventually archives, this one would
+become the common case rather than an edge case.
 
-Option 1 is the cheap fix. Option 3 is the real fix and costs more. Option 2 is
-only worth it if "archived never changes" matters to you as a promise.
+**Recommendation (revised 2026-09-05): fix it properly, on the server.** My first
+write-up of this priced the proper fix as a big job and steered toward a cheap
+patch. That was wrong, because I priced the wrong design. It does not need a new
+callable with its own permission model. It needs a **delete trigger** — a small
+piece of server code that runs automatically after a ticket, job, or task is
+deleted and tidies up the leftover link. The deletion has already been checked
+for permission before the trigger runs, so there is no new permission question to
+get wrong, and nothing can be reached that couldn't be reached before.
+
+This repository already runs this exact kind of trigger (`sendWelcomeEmail`,
+`notifyAdminsOfNewMember`), on a library version that supports the delete
+variant, so it is a known pattern here rather than a new one.
+
+What it gets us:
+
+- All four broken cases are fixed, including the three that are broken right now.
+- Archived tasks can stay **completely** frozen. No exception, no special-case
+  rule to remember later. The promise stays simple and true.
+- The fragile client-side cleanup code that swallows its own failures can be
+  deleted rather than patched.
+
+**Suggested sequencing.** Do this as its own small task *before* COH-007's rules
+work, not folded into it. It stands on its own, it fixes live bugs, and it can
+ship immediately instead of waiting behind COH-007's review cycle. COH-007 then
+inherits a clean total freeze.
+
+**The cheaper options, kept on the record.** Option 1 — allow archived tasks to
+have dead links removed, a two-field exception in the rules. Cheap, but it leaves
+the three live bugs unfixed and adds an exception to maintain. Option 2 — freeze
+totally and let archived tasks carry dead links, hiding them in the UI. Cheapest
+in rules, but it stores data we know is wrong, and the UI still has to cope with
+dead links anyway, because links have *already* gone bad in production. Neither
+removes the need for the server fix; they only delay it.
 
 ---
 
@@ -748,6 +769,27 @@ dangling today, and `ReservationsPage.jsx:218` resolves the other direction out
 of the live `tasks` array, which archiving will empty for old tasks. That is a
 pre-existing asymmetry worth its own backlog line; it is not COH-007's to fix and
 must not be bundled into this decision.
+
+**The fourth broken case, measured 2026-09-05.** `deleteTask`
+(`src/useFirestore.js:852`) clears `linkedTaskDocId` on a linked job listing, but
+`firestore.rules:354` requires `isChurchAdminOrManager` for any `jobListings`
+update. A regular member deleting their own linked task is therefore denied, and
+the `.catch(() => {})` swallows it. This is broken in production now and has
+nothing to do with archiving.
+
+**Trigger shape (the recommended option).** `onDocumentDeleted` is exported by
+`firebase-functions` 7.2.5 (verified against
+`functions/node_modules/firebase-functions/lib/v2/providers/firestore.js`), and
+`functions/index.js:3` already imports the v2 Firestore providers for
+`onDocumentCreated`. Triggers run with Admin SDK privileges after the delete has
+been authorized by rules, so they introduce no new authorization surface and
+cannot disclose task content — they null one link field. Two paths cover every
+case: a trigger on `churches/{churchId}/workItems/{docId}` (clears the backlink
+on a linked job, ticket, or reservation when a task or ticket is deleted) and one
+on `churches/{churchId}/jobListings/{docId}` (clears `linkedJobDocId` on a linked
+task). No recursion risk: the trigger's writes are updates, and only deletes
+fire it. Scope for that task also includes removing the four fire-and-forget
+client cleanups at `useFirestore.js:758`, `:852`, `:1276`, `:1342`.
 
 **Options.**
 
