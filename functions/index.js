@@ -1,6 +1,6 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
-const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
+const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } = require('firebase-functions/v2/firestore');
 const { defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
@@ -1269,6 +1269,190 @@ exports.notifyAdminsOfNewMember = onDocumentCreated('users/{uid}', async (event)
     Sentry.captureException(err);
   }
 });
+
+// ── COH-008: backlink cleanup on delete ───────────────────────────────────
+// A task can be linked to a job, a maintenance ticket, or a reservation, and the
+// link is stored on BOTH documents. When one side is deleted the other's pointer
+// has to be cleared, or the survivor keeps an affordance that goes nowhere.
+//
+// The client used to do that reach-across itself, and it could not always
+// succeed. Three of its four paths are denied in production today: COH-006's
+// rules require canSeeWorkItem() on the pre-state, so an admin deleting a ticket
+// attached to somebody's PRIVATE task cannot clear that task's pointer; and
+// `jobListings` update is admin/manager-only (firestore.rules), so an ordinary
+// member deleting their own linked task cannot clear the job's pointer. Every
+// one of those client calls is fire-and-forget, so the denial is silent and
+// surfaces later as a dead link. Moving the cleanup here fixes all of it,
+// because the Admin SDK is not subject to rules (DEC-2026-017).
+//
+// THE DANGER THIS CODE EXISTS TO AVOID (review findings H1 and N1). Running with
+// Admin privileges off the back of a delete is a confused-deputy risk: the
+// DELETE was authorized, the resulting write to the OTHER document was not. Two
+// separate holes had to be closed:
+//
+//   1. Nothing in `firestore.rules` constrains a task's link fields on create.
+//      A member can create a task naming ANY job in linkedJobDocId, delete their
+//      own task, and — with a naive implementation — have us clear the backlink
+//      on a job they have no right to touch. Defence: RECIPROCITY. We clear only
+//      when the target points back at the deleted document. A forged link is not
+//      reciprocated, so it clears nothing.
+//
+//   2. Reciprocity alone is still not enough, because a workItems id carries a
+//      `task_` / `mnt_` prefix while link fields store the BARE suffix — so
+//      `task_x` and `mnt_x` both reduce to `x`. An attacker can put a
+//      maintenance-only field on a task, delete it, and drive a genuinely
+//      matching reciprocal check against an unrelated victim. Defence: route on
+//      the TRUSTED source discriminator first (`type` for workItems, the
+//      collection path itself for jobListings) and follow only the fields that
+//      belong to that source type. LINK_DIRECTIONS is exhaustive; anything else
+//      is a no-op, never a best-effort guess.
+//
+// Both defences are required. Neither is sufficient alone.
+//
+// The client cleanups in src/useFirestore.js are deliberately LEFT IN PLACE for
+// now (A18). They are harmless alongside this — a reciprocal clear is idempotent
+// — and they stay until these triggers are deployed and verified in production.
+// Removing them is a later gate.
+
+// A workItems document id is `task_<bare>` or `mnt_<bare>`; link fields hold the
+// bare part. Returns null for any other shape so an unrecognised id fails closed.
+function bareWorkItemId(docId) {
+  const m = /^(task|mnt)_(.+)$/.exec(docId || '');
+  return m ? m[2] : null;
+}
+
+// A link value must be a single bare document id. Rejecting separators is what
+// makes a cross-tenant or cross-collection reference structurally impossible:
+// every target below is built beneath the EVENT's own churchId, so a value that
+// cannot contain a path cannot escape it.
+function isBareDocId(v) {
+  return typeof v === 'string' && v.length > 0 && v.length <= 1500
+    && !v.includes('/') && v !== '.' && v !== '..';
+}
+
+// The exhaustive direction map (A18). Keyed by trusted source discriminator.
+//   sourceField — the field read from the DELETED document
+//   targetPath  — built from the event's churchId and the bare linked id
+//   targetField — the field cleared on the target, and the one that must
+//                 reciprocate the deleted document's bare id
+const LINK_DIRECTIONS = {
+  task: [
+    { sourceField: 'linkedJobDocId',         targetPath: (c, id) => `churches/${c}/jobListings/${id}`,  targetField: 'linkedTaskDocId' },
+    { sourceField: 'linkedTicketDocId',      targetPath: (c, id) => `churches/${c}/workItems/mnt_${id}`, targetField: 'linkedTaskDocId' },
+    { sourceField: 'linkedReservationDocId', targetPath: (c, id) => `churches/${c}/reservations/${id}`,  targetField: 'linkedSetupTaskDocId' },
+  ],
+  maintenance: [
+    { sourceField: 'linkedTaskDocId', targetPath: (c, id) => `churches/${c}/workItems/task_${id}`, targetField: 'linkedTicketDocId' },
+  ],
+  jobListing: [
+    { sourceField: 'linkedTaskDocId', targetPath: (c, id) => `churches/${c}/workItems/task_${id}`, targetField: 'linkedJobDocId' },
+  ],
+};
+
+// gRPC codes worth retrying. Everything else is permanent: retrying it would
+// burn Eventarc's full 24h retry window on a write that can never succeed.
+const TRANSIENT_GRPC_CODES = new Set([4, 8, 10, 13, 14]);
+function isTransient(err) {
+  return TRANSIENT_GRPC_CODES.has(err?.code)
+    || ['UNAVAILABLE', 'DEADLINE_EXCEEDED', 'ABORTED', 'INTERNAL', 'RESOURCE_EXHAUSTED'].includes(err?.status);
+}
+
+// Clears one direction, transactionally. The transaction is not decoration: the
+// target can be RELINKED between the delete and this write, and a blind clear
+// would destroy the newer link. Re-reading inside the transaction makes the
+// newer link win.
+//
+// Returns a short outcome string for the summary log. A missing target or an
+// already-cleared link is a successful no-op, not an error — at-least-once
+// delivery means a second invocation must be harmless.
+async function clearReciprocalBacklink(db, churchId, bareSourceId, direction) {
+  const linkedId = direction.linkedId;
+  if (!isBareDocId(linkedId)) return 'rejected-shape';
+  const ref = db.doc(direction.targetPath(churchId, linkedId));
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return 'target-missing';
+    const current = snap.get(direction.targetField);
+    if (current === null || current === undefined) return 'already-clear';
+    if (current !== bareSourceId) return 'not-reciprocal';
+    tx.update(ref, { [direction.targetField]: null });
+    return 'cleared';
+  });
+}
+
+async function runBacklinkCleanup({ sourceKind, churchId, docId, data, jobName }) {
+  const db = getFirestore();
+  const bareSourceId = sourceKind === 'jobListing' ? docId : bareWorkItemId(docId);
+  if (!bareSourceId) {
+    console.warn(`${jobName}: unrecognised document id shape, ignoring`, { churchId, docId });
+    return;
+  }
+  const directions = LINK_DIRECTIONS[sourceKind] || [];
+  const outcomes = {};
+  let transientError = null;
+  for (const d of directions) {
+    const linkedId = data?.[d.sourceField];
+    if (linkedId === null || linkedId === undefined) continue;
+    try {
+      const outcome = await clearReciprocalBacklink(db, churchId, bareSourceId, { ...d, linkedId });
+      outcomes[d.sourceField] = outcome;
+    } catch (err) {
+      outcomes[d.sourceField] = 'failed';
+      if (isTransient(err)) {
+        transientError = err;
+      } else {
+        // Permanent: record it and move on. Throwing would retry for 24h a write
+        // that cannot succeed, and would also re-attempt the directions that
+        // already succeeded in this invocation.
+        console.error(`${jobName}: permanent failure clearing ${d.sourceField}`, err);
+        Sentry.captureException(err, { tags: { area: 'backlink-cleanup', sourceKind, direction: d.sourceField } });
+      }
+    }
+  }
+  if (Object.keys(outcomes).length) {
+    // Ids only — never task titles, descriptions, or recipients.
+    console.log(`${jobName}: ${churchId}/${docId}`, outcomes);
+  }
+  // Rethrow AFTER the other directions have been attempted, so one flaky target
+  // does not strand the rest. Idempotency makes the retry safe.
+  if (transientError) throw transientError;
+}
+
+// workItems covers both source types; `type` on the deleted document is the
+// trusted discriminator and is read BEFORE any link field is followed.
+exports.cleanupWorkItemBacklinks = onDocumentDeleted(
+  { document: 'churches/{churchId}/workItems/{docId}', retry: true },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    const sourceKind = data.type === 'task' ? 'task' : data.type === 'maintenance' ? 'maintenance' : null;
+    if (!sourceKind) return; // unknown or missing type: no-op, never a guess
+    await runBacklinkCleanup({
+      sourceKind,
+      churchId: event.params.churchId,
+      docId: event.params.docId,
+      data,
+      jobName: 'cleanupWorkItemBacklinks',
+    });
+  }
+);
+
+// jobListings needs no `type` field: its collection path IS the discriminator,
+// and the path is supplied by the platform rather than by the document.
+exports.cleanupJobListingBacklinks = onDocumentDeleted(
+  { document: 'churches/{churchId}/jobListings/{docId}', retry: true },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    await runBacklinkCleanup({
+      sourceKind: 'jobListing',
+      churchId: event.params.churchId,
+      docId: event.params.docId,
+      data,
+      jobName: 'cleanupJobListingBacklinks',
+    });
+  }
+);
 
 // ── processTrialExpirations ───────────────────────────────────────────────
 // Runs daily at 2:00 AM Central time.
