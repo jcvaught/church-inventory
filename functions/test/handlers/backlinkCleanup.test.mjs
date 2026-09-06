@@ -56,10 +56,13 @@ test('a forged link cannot clear an unrelated job (confused deputy, H1)', async 
   assert.equal((await get(`churches/${CHURCH}/jobListings/job-victim`)).linkedTaskDocId, 'legit');
 });
 
-test('a target relinked after the delete keeps its newer link', async () => {
+test('a target already pointing elsewhere is not cleared (reciprocity negative)', async () => {
   const funcs = await loadFunctions();
-  // The observable guarantee behind the transaction: once the target points at
-  // a replacement, the older delete's cleanup must not win.
+  // NB: this is a reciprocity negative, NOT proof of the transaction — nothing
+  // writes between the read and the commit here, so it would also pass for a
+  // non-transactional implementation (review M1). The real transaction proof is
+  // 'a relink racing the cleanup wins' below, which mutates the target inside
+  // the transaction window.
   await set(`churches/${CHURCH}/jobListings/job-relink`, { linkedTaskDocId: 'replacement' });
   await funcs.cleanupWorkItemBacklinks.run(
     deletedEvent(CHURCH, 'task_stale', { type: 'task', linkedJobDocId: 'job-relink' })
@@ -67,7 +70,7 @@ test('a target relinked after the delete keeps its newer link', async () => {
   assert.equal((await get(`churches/${CHURCH}/jobListings/job-relink`)).linkedTaskDocId, 'replacement');
 });
 
-test('task_x and mnt_x cannot impersonate each other (N1)', async () => {
+test('a task source does not follow a maintenance-only field (N1, type routing)', async () => {
   const funcs = await loadFunctions();
   // Same bare id `collision` on two different documents, and `task_collision`
   // carries linkedTaskDocId — a field that has no meaning on a task source.
@@ -136,4 +139,111 @@ test('unrecognised sources and shapes are no-ops', async () => {
     deletedEvent(CHURCH, 'task_x', { type: 'task', linkedJobDocId: 'no-such-job' }));
 
   assert.equal((await get(`churches/${CHURCH}/jobListings/job-safe`)).linkedTaskDocId, 'safe');
+});
+
+// ── Prefix/type binding and target-kind pinning (review H1, H2) ─────────────
+// The rules validate a create's `type` but never inspect the document id, so a
+// member can create a fully rule-valid task at an `mnt_*` id. The trigger must
+// fail closed on shapes the rules already permit.
+
+test('an opposite-prefix task cannot impersonate the real task with the same bare id (H1)', async () => {
+  const funcs = await loadFunctions();
+  await set(`churches/${CHURCH}/workItems/task_h1victim`, {
+    type: 'task', createdBy: 'owner', visibility: 'private', assigneeUids: [], sharedWithUids: [],
+  });
+  await set(`churches/${CHURCH}/jobListings/job-h1victim`, { linkedTaskDocId: 'h1victim' });
+
+  // Shape a regular member can create today: valid `type:'task'`, maintenance id.
+  await funcs.cleanupWorkItemBacklinks.run(deletedEvent(CHURCH, 'mnt_h1victim', {
+    type: 'task', createdBy: 'attacker', visibility: 'team',
+    assigneeUids: [], sharedWithUids: [], linkedJobDocId: 'job-h1victim',
+  }));
+  assert.equal((await get(`churches/${CHURCH}/jobListings/job-h1victim`)).linkedTaskDocId, 'h1victim');
+
+  // Symmetric mismatch: maintenance type at a task id.
+  await set(`churches/${CHURCH}/workItems/task_h1b`, { type: 'task', linkedTicketDocId: 'h1b' });
+  await funcs.cleanupWorkItemBacklinks.run(deletedEvent(CHURCH, 'task_h1b', {
+    type: 'maintenance', linkedTaskDocId: 'h1b',
+  }));
+  assert.equal((await get(`churches/${CHURCH}/workItems/task_h1b`)).linkedTicketDocId, 'h1b');
+});
+
+test('a work-item target of the wrong kind, or of no kind, is not mutated (H2)', async () => {
+  const funcs = await loadFunctions();
+  // A task living in the ticket namespace must not be cleared by task→ticket.
+  await set(`churches/${CHURCH}/workItems/mnt_h2victim`, { type: 'task', linkedTaskDocId: 'h2gone' });
+  await funcs.cleanupWorkItemBacklinks.run(deletedEvent(CHURCH, 'task_h2gone', {
+    type: 'task', linkedTicketDocId: 'h2victim',
+  }));
+  assert.equal((await get(`churches/${CHURCH}/workItems/mnt_h2victim`)).linkedTaskDocId, 'h2gone');
+
+  // A legacy work item carrying no type at all is likewise untouched.
+  await set(`churches/${CHURCH}/workItems/task_h2legacy`, { linkedTicketDocId: 'h2gone2' });
+  await funcs.cleanupWorkItemBacklinks.run(deletedEvent(CHURCH, 'mnt_h2gone2', {
+    type: 'maintenance', linkedTaskDocId: 'h2legacy',
+  }));
+  assert.equal((await get(`churches/${CHURCH}/workItems/task_h2legacy`)).linkedTicketDocId, 'h2gone2');
+});
+
+// ── Transaction and retry behaviour (review M1) ─────────────────────────────
+// These use the _setBacklinkHook seam, which fires between the transaction's
+// read and its commit — the only place these properties can be forced.
+
+// NOT TESTED, and deliberately so: an executed read-then-external-write race
+// inside the transaction window. The Firestore emulator takes a pessimistic lock
+// for a transaction, so a write issued from inside that window BLOCKS on the
+// lock the transaction still holds — producing a deadlock that resolves only
+// through retry, not the clean conflict the test would be claiming to make. An
+// attempt at it passed in ~70s of a ~2s suite, which is the tell: it was green
+// because the retry eventually re-read, not because a conflict was observed.
+//
+// What that shape would prove is `runTransaction`'s own semantics — a platform
+// guarantee, not this module's logic. What IS this module's logic is that the
+// reciprocity check runs against a fresh read and never blind-writes, which the
+// reciprocity negative above covers. The transactional wrapper is verified by
+// inspection; see the COH-008 handoff, where this is recorded rather than
+// implied.
+
+test('a transient failure rejects, keeps partial progress, and completes on redelivery', async () => {
+  const funcs = await loadFunctions();
+  await set(`churches/${CHURCH}/jobListings/j-tr`, { linkedTaskDocId: 'tr' });
+  await set(`churches/${CHURCH}/workItems/mnt_t-tr`, { type: 'maintenance', linkedTaskDocId: 'tr' });
+  await set(`churches/${CHURCH}/reservations/r-tr`, { linkedSetupTaskDocId: 'tr' });
+  const event = deletedEvent(CHURCH, 'task_tr', {
+    type: 'task', linkedJobDocId: 'j-tr', linkedTicketDocId: 't-tr', linkedReservationDocId: 'r-tr',
+  });
+
+  funcs._setBacklinkHook((sourceField) => {
+    if (sourceField === 'linkedTicketDocId') { const e = new Error('unavailable'); e.code = 14; throw e; }
+  });
+  try {
+    await assert.rejects(() => funcs.cleanupWorkItemBacklinks.run(event), (e) => e.code === 14);
+  } finally { funcs._resetBacklinkHook(); }
+  // The other two directions still ran; the failed one is untouched.
+  assert.equal((await get(`churches/${CHURCH}/jobListings/j-tr`)).linkedTaskDocId, null);
+  assert.equal((await get(`churches/${CHURCH}/workItems/mnt_t-tr`)).linkedTaskDocId, 'tr');
+  assert.equal((await get(`churches/${CHURCH}/reservations/r-tr`)).linkedSetupTaskDocId, null);
+
+  await funcs.cleanupWorkItemBacklinks.run(event); // redelivery, no injected fault
+  assert.equal((await get(`churches/${CHURCH}/jobListings/j-tr`)).linkedTaskDocId, null);
+  assert.equal((await get(`churches/${CHURCH}/workItems/mnt_t-tr`)).linkedTaskDocId, null);
+  assert.equal((await get(`churches/${CHURCH}/reservations/r-tr`)).linkedSetupTaskDocId, null);
+});
+
+test('a permanent failure does not reject and does not strand later directions', async () => {
+  const funcs = await loadFunctions();
+  await set(`churches/${CHURCH}/jobListings/j-pm`, { linkedTaskDocId: 'pm' });
+  await set(`churches/${CHURCH}/workItems/mnt_t-pm`, { type: 'maintenance', linkedTaskDocId: 'pm' });
+
+  funcs._setBacklinkHook((sourceField) => {
+    if (sourceField === 'linkedJobDocId') { const e = new Error('permission denied'); e.code = 7; throw e; }
+  });
+  try {
+    await assert.doesNotReject(() => funcs.cleanupWorkItemBacklinks.run(
+      deletedEvent(CHURCH, 'task_pm', {
+        type: 'task', linkedJobDocId: 'j-pm', linkedTicketDocId: 't-pm',
+      })));
+  } finally { funcs._resetBacklinkHook(); }
+  assert.equal((await get(`churches/${CHURCH}/jobListings/j-pm`)).linkedTaskDocId, 'pm');
+  assert.equal((await get(`churches/${CHURCH}/workItems/mnt_t-pm`)).linkedTaskDocId, null);
 });

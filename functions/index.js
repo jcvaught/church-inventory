@@ -1302,12 +1302,24 @@ exports.notifyAdminsOfNewMember = onDocumentCreated('users/{uid}', async (event)
 //      `task_x` and `mnt_x` both reduce to `x`. An attacker can put a
 //      maintenance-only field on a task, delete it, and drive a genuinely
 //      matching reciprocal check against an unrelated victim. Defence: route on
-//      the TRUSTED source discriminator first (`type` for workItems, the
-//      collection path itself for jobListings) and follow only the fields that
-//      belong to that source type. LINK_DIRECTIONS is exhaustive; anything else
-//      is a no-op, never a best-effort guess.
+//      the source discriminator first and follow only the fields belonging to
+//      that source type. LINK_DIRECTIONS is exhaustive; anything else is a
+//      no-op, never a best-effort guess.
 //
-// Both defences are required. Neither is sufficient alone.
+//   3. `type` alone is NOT a sufficient discriminator, because the rules do not
+//      bind it to the id namespace (COH-008 review H1). `firestore.rules`
+//      validates a create's `type` and authorization but never inspects the
+//      document id, so an ordinary member can create a fully rule-valid
+//      `type:'task'` document AT `mnt_victim`. That reduces to bare id `victim`
+//      and reciprocates against a job legitimately linked to the real
+//      `task_victim`. Defence: the source's `type` and its id PREFIX must agree
+//      before anything is followed, and the same applies to work-item TARGETS —
+//      a target's kind is read from its data, never assumed from the path we
+//      built (review H2). Unexpected or missing target types are no-ops.
+//
+// All of these are required. None is sufficient alone. Note what this means: the
+// trigger deliberately fails closed on document shapes the CURRENT rules already
+// permit. Tightening the rules to bind id and type would be a separate task.
 //
 // The client cleanups in src/useFirestore.js are deliberately LEFT IN PLACE for
 // now (A18). They are harmless alongside this — a reciprocal clear is idempotent
@@ -1315,10 +1327,15 @@ exports.notifyAdminsOfNewMember = onDocumentCreated('users/{uid}', async (event)
 // Removing them is a later gate.
 
 // A workItems document id is `task_<bare>` or `mnt_<bare>`; link fields hold the
-// bare part. Returns null for any other shape so an unrecognised id fails closed.
-function bareWorkItemId(docId) {
-  const m = /^(task|mnt)_(.+)$/.exec(docId || '');
-  return m ? m[2] : null;
+// bare part. The prefix REQUIRED for a given source kind is fixed here, and a
+// document whose id namespace disagrees with its `type` yields null so the whole
+// invocation fails closed (review H1).
+const WORK_ID_PREFIX = { task: 'task_', maintenance: 'mnt_' };
+function bareWorkItemId(docId, expectedKind) {
+  const prefix = WORK_ID_PREFIX[expectedKind];
+  if (!prefix || typeof docId !== 'string' || !docId.startsWith(prefix)) return null;
+  const bare = docId.slice(prefix.length);
+  return bare.length ? bare : null;
 }
 
 // A link value must be a single bare document id. Rejecting separators is what
@@ -1335,19 +1352,30 @@ function isBareDocId(v) {
 //   targetPath  — built from the event's churchId and the bare linked id
 //   targetField — the field cleared on the target, and the one that must
 //                 reciprocate the deleted document's bare id
+//   targetKind  — for workItems targets only: the `type` the target MUST carry.
+//                 The path we build is not evidence of the target's kind, since
+//                 a task can legally exist at an `mnt_*` id (review H2).
+//                 jobListings and reservations need none — their collection path
+//                 is supplied by us and is itself the discriminator.
 const LINK_DIRECTIONS = {
   task: [
     { sourceField: 'linkedJobDocId',         targetPath: (c, id) => `churches/${c}/jobListings/${id}`,  targetField: 'linkedTaskDocId' },
-    { sourceField: 'linkedTicketDocId',      targetPath: (c, id) => `churches/${c}/workItems/mnt_${id}`, targetField: 'linkedTaskDocId' },
+    { sourceField: 'linkedTicketDocId',      targetPath: (c, id) => `churches/${c}/workItems/mnt_${id}`, targetField: 'linkedTaskDocId', targetKind: 'maintenance' },
     { sourceField: 'linkedReservationDocId', targetPath: (c, id) => `churches/${c}/reservations/${id}`,  targetField: 'linkedSetupTaskDocId' },
   ],
   maintenance: [
-    { sourceField: 'linkedTaskDocId', targetPath: (c, id) => `churches/${c}/workItems/task_${id}`, targetField: 'linkedTicketDocId' },
+    { sourceField: 'linkedTaskDocId', targetPath: (c, id) => `churches/${c}/workItems/task_${id}`, targetField: 'linkedTicketDocId', targetKind: 'task' },
   ],
   jobListing: [
-    { sourceField: 'linkedTaskDocId', targetPath: (c, id) => `churches/${c}/workItems/task_${id}`, targetField: 'linkedJobDocId' },
+    { sourceField: 'linkedTaskDocId', targetPath: (c, id) => `churches/${c}/workItems/task_${id}`, targetField: 'linkedJobDocId', targetKind: 'task' },
   ],
 };
+
+// Test seam only — see clearReciprocalBacklink. Mirrors the _setClock pattern
+// already used for the scheduled senders. Production never sets this.
+let _backlinkHook = null;
+exports._setBacklinkHook = (fn) => { _backlinkHook = fn; };
+exports._resetBacklinkHook = () => { _backlinkHook = null; };
 
 // gRPC codes worth retrying. Everything else is permanent: retrying it would
 // burn Eventarc's full 24h retry window on a write that can never succeed.
@@ -1371,7 +1399,17 @@ async function clearReciprocalBacklink(db, churchId, bareSourceId, direction) {
   const ref = db.doc(direction.targetPath(churchId, linkedId));
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
+    // Fires between the read and the commit. This is the ONLY point at which a
+    // transaction conflict or a transient failure can be injected
+    // deterministically, so the tests can prove the transaction and the retry
+    // classification rather than approximate them. Never set in production.
+    if (_backlinkHook) await _backlinkHook(direction.sourceField, ref);
     if (!snap.exists) return 'target-missing';
+    // A work-item target's kind comes from its data. The `mnt_`/`task_` path we
+    // built is our own construction, not evidence about what lives there
+    // (review H2): the rules permit a task at an `mnt_*` id, and legacy
+    // documents may carry no type at all. Both are no-ops.
+    if (direction.targetKind && snap.get('type') !== direction.targetKind) return 'target-kind-mismatch';
     const current = snap.get(direction.targetField);
     if (current === null || current === undefined) return 'already-clear';
     if (current !== bareSourceId) return 'not-reciprocal';
@@ -1382,9 +1420,12 @@ async function clearReciprocalBacklink(db, churchId, bareSourceId, direction) {
 
 async function runBacklinkCleanup({ sourceKind, churchId, docId, data, jobName }) {
   const db = getFirestore();
-  const bareSourceId = sourceKind === 'jobListing' ? docId : bareWorkItemId(docId);
+  // For workItems this also enforces that `type` and the id prefix agree — a
+  // rule-valid `type:'task'` document sitting at `mnt_*` is rejected here rather
+  // than allowed to impersonate the real `task_*` document (review H1).
+  const bareSourceId = sourceKind === 'jobListing' ? docId : bareWorkItemId(docId, sourceKind);
   if (!bareSourceId) {
-    console.warn(`${jobName}: unrecognised document id shape, ignoring`, { churchId, docId });
+    console.warn(`${jobName}: id shape does not match source kind, ignoring`, { churchId, docId, sourceKind });
     return;
   }
   const directions = LINK_DIRECTIONS[sourceKind] || [];
