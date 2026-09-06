@@ -287,7 +287,28 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-008 — Server-side backlink cleanup on delete
 
-- Status: **Ready to implement — no separate plan review.** The design is
+- Status: **IMPLEMENTED AND REVIEWED — approved with follow-up. Awaiting owner
+  authorization for the Cloud Functions deploy (DEC-2026-014). NOT DEPLOYED.**
+  Trail: implementation `e1a7146` → review `040d97d`
+  (`docs/COH-008-IMPLEMENTATION-REVIEW-2026-09-06.md`, two High + one Medium,
+  changes requested) → fixes `b3a378b` → re-review
+  (`docs/COH-008-IMPLEMENTATION-REREVIEW-2026-09-06.md`, **approved with
+  follow-up**; H1/H2/M1 closed) → follow-up applied. Handoff:
+  `docs/COH-008-HANDOFF-2026-09-06.md`.
+  Both High findings were the same error twice — trusting a value because it is
+  hard to forge without checking the rules pin it. `firestore.rules` validates a
+  create's `type` but never inspects the document id, so a member can create a
+  rule-valid `type:'task'` document at `mnt_victim` and reciprocate against the
+  real `task_victim` (H1); the same assumption applied to targets, where a
+  constructed `mnt_`/`task_` path was treated as evidence of the target's kind
+  (H2). Both now fail closed on shapes the current rules permit; the rules were
+  deliberately NOT tightened as part of this task.
+  `npm run test:handlers` 62/62, `npm run lint` 0 errors, `npm run build` clean —
+  **none reproduced by Codex, which cannot bind the emulator ports.** The
+  transactional wrapper is verified by inspection: an executed emulator race was
+  attempted and removed (pessimistic locking turns it into a deadlock that passes
+  for the wrong reason), and Codex accepted that reasoning.
+- Original status, kept for the record: **Ready to implement — no separate plan review.** The design is
   already reviewed: **plan amendment A18** in
   `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md` is the normative spec, and it
   survived two Codex passes (raised as H1, hardened by N1, confirmed complete by

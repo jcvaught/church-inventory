@@ -60,9 +60,9 @@ test('a target already pointing elsewhere is not cleared (reciprocity negative)'
   const funcs = await loadFunctions();
   // NB: this is a reciprocity negative, NOT proof of the transaction — nothing
   // writes between the read and the commit here, so it would also pass for a
-  // non-transactional implementation (review M1). The real transaction proof is
-  // 'a relink racing the cleanup wins' below, which mutates the target inside
-  // the transaction window.
+  // non-transactional implementation (review M1). The transactional wrapper is
+  // verified by inspection; the note further down records why an executed
+  // emulator race was removed.
   await set(`churches/${CHURCH}/jobListings/job-relink`, { linkedTaskDocId: 'replacement' });
   await funcs.cleanupWorkItemBacklinks.run(
     deletedEvent(CHURCH, 'task_stale', { type: 'task', linkedJobDocId: 'job-relink' })
