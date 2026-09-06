@@ -287,8 +287,24 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-008 — Server-side backlink cleanup on delete
 
-- Status: **IMPLEMENTED AND REVIEWED — approved with follow-up. Awaiting owner
-  authorization for the Cloud Functions deploy (DEC-2026-014). NOT DEPLOYED.**
+- Status: **COMPLETE — DEPLOYED AND VERIFIED IN PRODUCTION 2026-09-06,
+  owner-authorized.** Receipt and evidence in
+  `docs/COH-008-HANDOFF-2026-09-06.md`. Both functions live (Gen-2, Node 22,
+  us-central1, `RETRY_POLICY_RETRY`). Production verification: both positive
+  directions clear in ~3s, and **both security negatives were observed firing in
+  production** — a forged link logged `not-reciprocal`, and a rule-valid
+  `type:'task'` document at `mnt_v4` logged `id shape does not match source
+  kind`. Two corrections came out of the deploy: the retry window is **7 days,
+  not the 24 hours** every earlier note on this task claimed (Firebase's own
+  warning), and `--force` is mandatory to deploy any function with a retry
+  policy. The first verification run FAILED and was NOT a defect — a newly
+  created Eventarc trigger is not yet delivering when `Deploy complete!` prints,
+  proven by the total absence of a log entry for that delete; it passed in 3s on
+  two re-runs once warm. Generalised into `CLAUDE.md` Known Pitfalls.
+  **Remaining gate:** the four client cleanups stay until a day of real Sentry
+  traffic on `area:backlink-cleanup` is clean.
+- Prior status, kept for the record: **IMPLEMENTED AND REVIEWED — approved with
+  follow-up. Awaiting owner authorization for the Cloud Functions deploy.**
   Trail: implementation `e1a7146` → review `040d97d`
   (`docs/COH-008-IMPLEMENTATION-REVIEW-2026-09-06.md`, two High + one Medium,
   changes requested) → fixes `b3a378b` → re-review

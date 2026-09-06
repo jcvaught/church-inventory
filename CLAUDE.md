@@ -419,6 +419,29 @@ The **server** `Sentry.init` in `functions/index.js` gates `enabled: !isTest` wh
 
 `sendJobReminders` (8am), `sendNewJobsDigest` (noon), `sendTaskDueReminders` (Mon 8am), `sendWeeklyInsightsDigest` (Mon 8am), `sendWeeklyComplianceDigest` (Mon 8am), and `sendWeeklyAttentionDigest` (Mon 8am) all use `schedule: '0 * * * *'` (hourly), NOT a once-a-day cron (2026-06-05; the three weekly digests added 2026-06-07 — they iterate `churches` and gate per-church, no collectionGroup). Each iterates the candidate docs, resolves the owning church's `config/settings.timeZone` (default `America/Chicago` via `getChurchTimeZone`), and **only acts on a church when `localPartsFor(tz).hour` (and weekday, for the weekly digest) matches the target** — so every church gets its send at its own local wall-clock time. "Today" / the week window / idempotency stamps are computed **per church** inside the loop, never once at the top. The hourly heartbeats are why those three are `cadence: 'hourly'` in `SCHEDULED_JOB_REGISTRY`. The collection-group queries widen to a ±1-day (reminders/digest) or [−91,+7]-day (task digest) **UTC** window via `utcYmdOffset()` so they cover "today" in every US zone; the exact church-local date match happens in the loop. If you see "the cron runs 24×/day," that's intended — the hour-gate makes it a no-op for all but the matching hour. `closePastJobs`, `processTrialExpirations`, and `generateRecurringTemplateTasks` are still plain daily Central crons (not timezone-sensitive). Timezone is set per church in Settings → Church Settings (admin only).
 
+### 🟡 A freshly deployed Firestore trigger does not fire immediately
+
+Measured 2026-09-06 deploying COH-008's `cleanupWorkItemBacklinks`. `Deploy
+complete!` and `firebase functions:list` showing the function ACTIVE are **not**
+evidence that its Eventarc subscription is delivering yet. The first
+verification delete ran shortly after the deploy and produced **no function log
+entry whatsoever** — not an error, not an invocation — while the same operation
+3 minutes later succeeded in 3 seconds, and twice more on re-check. The event was
+never delivered; the code was fine.
+
+The tell is the log, not the data: an invocation that ran and decided to do
+nothing still logs (this trigger logs its outcome map or its ignore reason). **No
+log line at all means the event never arrived.** Check `firebase functions:log
+--only <name>` before concluding a trigger is broken, and give a newly created
+trigger a few minutes — or a warm-up delete — before the real assertions. A
+post-deploy check that runs immediately will produce a false failure and send you
+hunting a bug that isn't there.
+
+Also, deploying any function with `retry: true` requires
+`firebase deploy --force` — the CLI refuses with *"Pass the --force option to
+deploy functions with a failure policy"*. Its warning is the authoritative figure
+for the retry window: **up to 7 days**, not 24 hours.
+
 ### 🟡 `firebase deploy --only firestore:indexes` silently skips two index kinds
 
 `firebase deploy --only firestore:indexes` exits 0 with `✔ Deploy complete!` for two index shapes it never actually creates. The affected query then throws `FAILED_PRECONDITION: The query requires an index` at runtime, with no deploy-time signal that anything was wrong.
