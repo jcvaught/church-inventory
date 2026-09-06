@@ -341,7 +341,17 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   `affectedKeys().hasOnly(...)` allowlist preserving `nextRecurrenceCreatedAt`
   (else duplicate recurring successors); the archiver's telemetry promise cannot
   be delivered by a range query that never sees a missing field; archive read
-  cost is unbounded. Next: Claude amends against the findings, then re-review.
+  cost is unbounded.
+- **All seven findings amended 2026-09-05 (A10–A16); every owner question is
+  answered.** DEC-2026-017 **Accepted** — server-side cleanup, trigger approved
+  ONLY with reciprocal transactional checks against the deleted doc's bare id;
+  a blind Admin update is not an option; ships as its own task ahead of the
+  additive gate and COH-007's freeze is therefore total with no allowlist.
+  DEC-2026-018 **Accepted** — archive reads bounded to a **12-month** window,
+  Insights bounded to its own 90 days, no search service in v1, measured basis
+  134 work items across every church for the life of the app. Codex's question 1
+  answered: the canonical uid arrays govern visibility, and `canSeeTask()` is
+  fixed to read them (a live active-board defect). Awaiting **re-review**.
 - Owner clarification 2026-09-05: **archiving changes nothing about who can
   see a task** — same visibility as before, no admin override, and the archive
   is NOT scoped to tasks the viewer is personally attached to. The four-arm

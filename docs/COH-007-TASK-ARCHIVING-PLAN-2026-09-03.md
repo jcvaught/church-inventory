@@ -4,11 +4,17 @@
 COH-006 state, `main` at `2ced910`. Awaiting Codex pre-implementation review.
 
 **Amendments.** This document was written on top of `69e7390` (COH-006 gate 3),
-before gate 4 shipped. Nine things about the deployed system are knowable now
-that were not then; each is marked **[A-n, 2026-09-05]** where it changed the
-text. The consequential one is **A6** — an open owner call, not a design choice
-Claude may make. Amendment step 2 of Migration and rollout is therefore
-complete; the pre-implementation review is the next gate.
+before gate 4 shipped, and has since been amended twice: first against the
+shipped COH-006 state (**A1–A9**), then against Codex's pre-implementation
+review (`docs/COH-007-PLAN-REVIEW-2026-09-05.md`, four High and three Medium,
+verdict *changes requested*) and the owner's answers to it (**A10–A16**). Each
+amendment is marked **[A-n, 2026-09-05]** where it changed the text.
+
+**All owner questions are now answered** — DEC-2026-016 (archive after six
+weeks), DEC-2026-017 (backlink cleanup moves server-side, with reciprocal
+checks), DEC-2026-018 (archive reads bounded by a 12-month window), and the
+canonical-visibility question at A5. Nothing in this plan is waiting on a
+product decision.
 
 **Priority:** High (owner request, 2026-09-03)
 
@@ -70,6 +76,18 @@ collection but keep their current lifecycle and listener.
    set, then supports client-side substring search across task name,
    description, tags, and task number. Results sort by completion date newest
    first and expose the existing detail view in read-only mode.
+
+   **[A15, 2026-09-05 — review finding M3, DEC-2026-018]** That load is
+   **bounded to a 12-month window by default**, newest first, bounded per
+   authorization arm, with the window stated on screen and an explicit control to
+   search further back. Search covers the loaded window and the UI says so. This
+   is a promise decision as much as a cost one: "search your whole archive"
+   cannot later be narrowed without a visible downgrade, and silent pagination
+   under unchanged copy would make a fruitless search untrustworthy. Insights
+   loads only its own 90-day metric window. No tokenized search field and no
+   search service in v1; both stay deferred behind a recorded latency/read
+   tripwire. Measured basis: 134 work items exist across every church for the
+   life of the app.
 6. `Reopen` is the supported restore operation. It returns the task to
    `Backlog`, clears `completedAt` and the archive timestamps, and makes it
    active again. Keeping a restored task `Complete` would make the next daily
@@ -82,13 +100,30 @@ collection but keep their current lifecycle and listener.
    longer than a month. The 12-week velocity chart and 90-day completion metric
    must combine active tasks with authorized archived tasks loaded on demand;
    they must not silently undercount after the cutover.
-   **[A4, 2026-09-05]** Anchored to the code: `velocityData`
-   (`src/pages/hubs/WorkBoard.jsx:1572-1586`) spans 12 weeks — 84 days — and the
-   `Avg/Week (90d)` tile (`:2111-2118`) spans 90; both exceed the 42-day cutoff,
-   so both undercount from the reader gate onward, silently and by a growing
-   amount. `completedThisMonth` (`:1565`) is safe on arithmetic alone: the
-   longest month is 31 days. All three read `visibleTasks`, so combining archives
-   means feeding that one derived array, not patching three call sites.
+   **[A4, 2026-09-05 — REVISED after review finding H3]** Anchored to the code:
+   `velocityData` (`src/pages/hubs/WorkBoard.jsx:1572-1586`) spans 12 weeks — 84
+   days — and the `Avg/Week (90d)` tile (`:2111-2118`) spans 90; both exceed the
+   42-day cutoff, so both undercount from the reader gate onward, silently and by
+   a growing amount. `completedThisMonth` (`:1565`) is safe on arithmetic alone:
+   the longest month is 31 days.
+
+   My first amendment suggested feeding archives into `visibleTasks` because all
+   three metrics read it. **Do not do that.** `visibleTasks` is also the source
+   for `tasksByDocId`, the filters, Kanban and list rendering, selection, bulk
+   actions, detail editing and linked-task behaviour, so archived rows would
+   reappear on the operational board carrying action affordances the rules will
+   reject. Gating the combination on `viewMode === 'insights'` does not save it
+   either — switching views with archive state retained becomes a correctness
+   boundary nobody will remember.
+
+   Required: `visibleTasks` stays **active-only**. Add a separate deduplicated
+   `insightTasks` = active visible tasks + authorized archived tasks loaded for
+   the metric window, and compute only the 12-week and 90-day values from it.
+   `completedThisMonth` stays on active tasks. Loading and error state for the
+   historical metrics stays separate from the active store's completeness, so a
+   failed archive load cannot present a partial history as a complete one. Per
+   DEC-2026-018 the Insights archive query is bounded to its own 90-day window
+   and never loads full history.
 
 ## Data model
 
@@ -157,18 +192,35 @@ Factor the active and archive query construction through one small builder so
 their visibility arms cannot drift. Do not reuse the global live task array for
 archives, and do not turn the archive into another permanent listener.
 
-**[A5, 2026-09-05] The client predicate still runs, and can disagree with the
-queries.** Gate 3 removed the interim store-boundary filter, but the board still
-filters through `canSeeTask()` at `src/pages/hubs/WorkBoard.jsx:667`. That
-predicate reads the `assignees` / `sharedWith` **object** arrays, while the
-queries and the rules read the `assigneeUids` / `sharedWithUids` **uid** arrays,
-and DEC-2026-012 deliberately does not pin the two together. A task delivered by
-a uid-array arm whose object array has gone stale is therefore already hidden by
-the board today. The archive view inherits this exactly: apply the same predicate
-for consistency with the active board, never rely on it for authorization, and
-record the divergence as pre-existing rather than introduced here. If COH-007
-surfaces a real instance of it in production data, that is a separate finding
-against DEC-2026-012, not a defect in archiving.
+**[A5, 2026-09-05 — REVISED after review finding H2] Do not re-filter the
+archive through the object-array predicate.** The board filters through
+`canSeeTask()` at `src/pages/hubs/WorkBoard.jsx:667`, which reads the `assignees`
+/ `sharedWith` **object** arrays, while the queries and the rules read the
+canonical `assigneeUids` / `sharedWithUids` **uid** arrays (DEC-2026-012).
+
+My first amendment said to apply that predicate to the archive anyway, "for
+consistency", and to record the divergence as pre-existing. Codex is right that
+this is not acceptable: a task the rules lawfully authorize and Firestore
+lawfully returns would be hidden by the client, which directly contradicts this
+plan's own acceptance criterion that every authorized user can still see the
+archived tasks they could see before. Carrying a known defect into a brand-new
+reader is not the same as inheriting one.
+
+**Owner answer (2026-09-05), resolving Codex's question 1:** "same visibility"
+means the **canonical uid arrays**, not the board's stale object-array
+presentation.
+
+Required, in this order:
+
+- The archive applies no second authorization filter. After the four
+  rule-compatible queries succeed, filter only the `type == 'task'` invariant and
+  merge by real document id. Firestore has already decided authorization; the
+  client does not get a second vote.
+- Change `canSeeTask()` to read `assigneeUids` / `sharedWithUids`, keeping a
+  deliberate fallback to the object arrays only for documents predating the
+  projection, and use it for the active board as well. This fixes a live defect:
+  a task whose object array has gone stale is hidden from someone the rules
+  authorize, on the active board, today.
 
 **[A2, 2026-09-05] The index set, concretely.** The active and archived query
 sets differ only in the `archived` value, so one set of four COLLECTION-scope
@@ -231,10 +283,21 @@ never-completed-properly task and automatic archiving — rather than the
 defensive nicety the original text implies.
 
 Do not take the ordering claim on reasoning. **Measure it** against the emulator
-before implementation, seeding one `Complete` task with `completedAt: null`
-alongside eligible and ineligible dated ones, and record the observed result in
-the handoff. The guard ships either way; what the measurement decides is whether
-its skip counter is expected to be non-zero in production.
+before implementation, using the exact fixture Codex wrote (review §M2), and
+record the observed result in the handoff. The guard ships either way; what the
+measurement decides is whether its skip counter is expected to be non-zero in
+production.
+
+**[A12, 2026-09-05 — review finding M2] Narrow the telemetry promise to what the
+query can actually see.** The plan claimed missing and malformed completion dates
+would be "skipped, counted, and surfaced". A range query cannot deliver that: a
+document with **no** `completedAt` never appears in it at all, and a malformed
+string sorting after the cutoff is equally absent. The daily archiver therefore
+reports only `malformedReturnedByEligibilityQuery` — what its own range actually
+examined — and the plan must not imply population-wide data-quality coverage.
+Do not widen the daily job into an unbounded scan to preserve the original
+wording. If population-wide data quality is wanted, it is a separate, bounded
+audit and a separate decision.
 
 Each update writes only:
 
@@ -292,6 +355,44 @@ Build on the final COH-006 predicate; do not start from the transitional rule on
   archive fields and transitions so direct SDK callers cannot bypass the
   lifecycle.
 
+**[A13, 2026-09-05 — review finding H4] The additive gate needs a transitional
+rule, and the reader gate needs a strict one.** The additive gate deploys the
+archive lifecycle rules *before* the backfill, when existing tasks carry neither
+field. A rule written as "archived false may be edited, archived true is frozen"
+using direct field access denies ordinary updates and comment writes on **every
+legacy task** until the backfill reaches it — the whole board freezes mid-rollout.
+A permissive default left in place afterwards is the opposite failure: a client
+could delete `archived`/`archivedAt` and vanish from both equality-filtered
+readers.
+
+Two rulesets, deployed at two different gates:
+
+- **Transitional (additive gate).** A missing pre-state defaults to active, so
+  unbackfilled tasks stay fully usable. A task that already carries the fields
+  may not delete or corrupt either one.
+- **Final (before the reader cutover).** Both fields required on every task
+  update.
+
+Coverage must independently compare **both** `archived` and `archivedAt` against
+the type-task baseline immediately before cutover — not `archived` alone. Codex's
+sentinel applies: an unbackfilled task must succeed under the transitional rules
+and fail under the final ones, and that failure is the cutover signal, never an
+acceptable production state.
+
+**[A14, 2026-09-05 — review finding M1] Reopen must be an exact field
+allowlist.** The plan constrained the resulting values but never said the reopen
+write may change *only* those values, and the deployed COH-006 rule otherwise
+permits an authorized actor to edit nearly every task field. A client could
+therefore atomically reopen and rename an archived task, alter its recipients, or
+delete `nextRecurrenceCreatedAt` — and that last one defeats the recurrence
+dedupe marker, so completing the reopened task mints a second successor.
+
+The archived-to-active branch must use `diff().affectedKeys().hasOnly(...)` over
+exactly `archived`, `archivedAt`, `status`, `completedAt`, `updatedAt`, and must
+preserve `nextRecurrenceCreatedAt`. The ordinary active-to-active branch keeps
+the existing COH-006 constraints unchanged, and no client branch permits
+active-to-archived in either rule set.
+
 **[A7, 2026-09-05] What the deployed rule already gives us.** `canSeeWorkItem()`
 has no archived arm, so archiving changes nothing about *who may read* a task and
 the read rule needs no edit at all. Reopen inherits every constraint the gate-4
@@ -303,47 +404,45 @@ COH-007 therefore adds only the transition constraints on top: a client may move
 `archived` true→false (landing in `Backlog` with `completedAt` and `archivedAt`
 null) and never false→true.
 
-**[A6, 2026-09-05] OPEN OWNER CALL — read-only-while-archived collides with
-DEC-2026-015's first residual.** Gate 4 recorded that deleting a linked
-maintenance ticket or job clears the corresponding backlink on the task through a
-direct update *outside* `updateTask`, and that the write is denied when the actor
-cannot read the task, leaving a stale backlink. Measured: three call sites do
-this, touching two fields — `deleteTicket` (`src/useFirestore.js:758`,
-`linkedTicketDocId`), `deleteJobListing` (`:1276`, `linkedJobDocId`) and
-`clearLinkedTaskBackRefs` for job-series deletes (`:1342`, `linkedJobDocId`).
-All three are fire-and-forget, so a denial is swallowed and shows up later as a
-chip pointing at a deleted document — the same stale chip the 2026-05-12 audit
-(Data #1) already found and fixed once.
+**[A6, 2026-09-05 — ANSWERED] The backlink cleanup moves to the server, and
+COH-007 keeps a total freeze.** The read-only-while-archived rule would have
+blocked the cleanup that runs when a linked ticket or job is deleted. Four such
+paths exist and **three are already broken in production**, independently of
+archiving. Recorded as **DEC-2026-017**; the owner chose the server-side fix.
 
-The plan's rule "archived task content and comments are read-only until reopen"
-extends that denial to a new case: an actor who **can** read the task would also
-be blocked from clearing its backlink, purely because the task is archived. The
-result is a dangling pointer to a deleted ticket, job, or reservation on an
-archived task, which the linked-task affordance in Client behavior then has to
-render as neither `archived` nor `missing` but broken.
+`archived` and `archivedAt` are therefore the only lifecycle exception — there is
+**no backlink allowlist** in the archive write-lock. Archived means frozen, with
+no carve-out to maintain.
 
-Two options, and this is the owner's call, not Claude's:
+**[A11, 2026-09-05 — review finding H1] The trigger is not permitted to clear a
+link blindly.** My recommendation claimed a delete trigger adds no new permission
+question because the delete was already authorized. That is true of the delete
+and **false of the target write**. The create rule constrains no link field, so
+an ordinary member can create a task naming any job in `linkedJobDocId`, delete
+their own task, and have an Admin-privileged trigger clear the backlink on a job
+they cannot update themselves. The same shape occurs without malice when a target
+is relinked between the delete and the trigger.
 
-1. **Carve the two fields out of the archived write-lock** — `linkedTicketDocId`
-   and `linkedJobDocId` remain writable on an archived task by an actor who
-   passes `canSeeWorkItem`. Cost: the write-lock is no longer "no content changes
-   at all", so the rule and its tests carry an explicit two-field allowlist.
-2. **Accept stale backlinks on archived tasks** — the lock stays total, and the
-   archive detail view is required to degrade gracefully on a link whose target
-   no longer exists. Cost: a known-wrong field on archived records, and the
-   degradation has to be built and tested anyway.
-3. **Move the cleanup server-side** — a callable using the Admin SDK, which
-   neither the archive lock nor `canSeeWorkItem` blocks. The only option that
-   also closes DEC-2026-015's original residual, and the one that decision itself
-   pointed at. Cost: materially more work, a new callable to authorize and
-   monitor, and scope COH-007 did not ask for.
+The trigger task must therefore, for every direction:
 
-Option 1 is the smaller lie about the data at the cost of a slightly leakier
-rule; option 2 keeps the rule clean at the cost of storing something false;
-option 3 fixes the underlying problem at a price COH-007 did not budget for.
-`linkedReservationDocId` and `linkedItemDocId` are not in scope here — no delete
-path clears them today, which is a separate pre-existing gap. Recorded as
-**DEC-2026-017**; answer it before implementation begins.
+- update the target **in a transaction**, clearing only when the target's
+  backlink still equals the deleted document's **bare** id — `workItems` ids
+  carry a `task_` / `mnt_` prefix while link fields hold bare ids, so a naive
+  comparison silently never matches;
+- treat a missing target or an already-null link as a successful no-op, and let
+  transient failures reject so Eventarc retries — never reproduce the client's
+  swallowed failures;
+- accept a bare document id only, rejecting any value containing a path
+  separator, and construct the target beneath the **event's** church id so a
+  cross-tenant reference is structurally impossible;
+- retain the existing client cleanup until the triggers are deployed and
+  verified, removing it in a later gate. With reciprocal checks the overlap is
+  idempotent and safe.
+
+**Sequencing.** This is its own task, ahead of COH-007's rules gate, and it ships
+independently because it fixes three live defects. COH-007's rules work depends
+on it only in that the total freeze assumes the cleanup no longer needs a client
+write path.
 
 ## Migration and rollout
 
@@ -354,13 +453,22 @@ This is a staged schema/read-path change, not a combined deploy.
    indexes, work board, and scheduled-functions file, so implementation must not
    overlap Gate 4.
 2. **Plan review. — DONE 2026-09-05.** Claude amended this plan against the
-   final COH-006 state (amendments A1–A9 above; `main` at `2ced910`). The one
-   consequential decision is **A6**, left open for the owner rather than settled
-   by Claude. Next gate: Codex's pre-implementation review.
-3. **Additive gate.** Ship task writers, archive loader/UI, rules shape,
-   function code, monitoring entry, and all indexes without changing the active
+   final COH-006 state (A1–A9). Codex's pre-implementation review
+   (`docs/COH-007-PLAN-REVIEW-2026-09-05.md`, four High / three Medium, changes
+   requested) and the owner's answers produced A10–A16. All product questions are
+   answered; DEC-2026-016, -017 and -018 are accepted.
+
+   2b. **Server-side backlink cleanup ships first — separate task.** Per
+   DEC-2026-017 and A11, the `onDocumentDeleted` triggers with reciprocal
+   transactional checks are their own task, deployed and verified before this
+   plan's additive gate. They fix three defects that exist in production today
+   and are what allows COH-007's archive freeze to be total with no allowlist.
+3. **Additive gate.** Ship task writers, archive loader/UI, the **transitional**
+   ruleset (A13), function code, monitoring entry, and all indexes — including
+   the `completedAt` trailing field from A10 — without changing the active
    listeners or enabling production archiving. Verify the exact archive queries
-   return an empty, authorized result rather than an index/rules error.
+   return an empty, authorized result rather than an index/rules error, and
+   verify an unbackfilled legacy task and its comments remain fully usable.
 4. **Backfill gate.** Use an idempotent script to add `archived:false` and
    `archivedAt:null` to every existing `type:'task'` document. Required sequence:
    backup, dry run, counts by church/status, explicit owner execution approval,
@@ -375,8 +483,10 @@ This is a staged schema/read-path change, not a combined deploy.
    before- and after-image of every document it writes and refuses to restore one
    a user has touched since, rather than blindly reverting. Verification follows
    `scripts/verify-coh006-gate3.mjs`.
-5. **Reader gate.** After coverage and index probes pass, deploy the active
-   query constraints. Verify two accounts against team, own, assigned, shared,
+5. **Reader gate.** After coverage and index probes pass, deploy the **final**
+   ruleset (A13) and the active query constraints. Coverage must compare both
+   `archived` and `archivedAt` against the type-task baseline, and the
+   unbackfilled-task sentinel must fail under the final rules. Verify two accounts against team, own, assigned, shared,
    private-negative, stale-recipient-negative, and archived fixtures. Confirm a
    task leaving the last active query disappears without publishing a partial
    store.
@@ -427,6 +537,17 @@ cache and a dead listener are indistinguishable to the test. Any COH-007
 assertion that a task *leaves* an active listener must enable metadata events, or
 it can pass while broken. `scripts/verify-coh006-listener-oracle.mjs` is the
 ordering-independent regression that pins this.
+
+**[A16, 2026-09-05] Codex's review carries the concrete cases; integrate them
+rather than paraphrasing.** `docs/COH-007-PLAN-REVIEW-2026-09-05.md` contains
+written fixtures and assertions for the forged-link/confused-deputy negative, the
+reciprocal-clear positive with retry, the concurrent-relink race, the
+cross-tenant link, the canonical-uid visibility case, the Insights/board
+separation, the transitional-versus-final rules pair, the exact-reopen allowlist
+with the recurrence-successor assertion, the archiver query/write race, and the
+`completedAt <= cutoff` ordering **measurement**. Codex could not run any of
+them — no emulator in its sandbox — so every one is a proposed case that Claude
+integrates and runs, and none may be reported as independently verified.
 
 ### UI/E2E coverage
 

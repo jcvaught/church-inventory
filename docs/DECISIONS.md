@@ -669,7 +669,7 @@ authorization-sensitive query shapes.
 ### DEC-2026-017 — Whether an archived task's backlinks stay writable
 
 - Date: 2026-09-05
-- Status: **Proposed — awaiting the product owner**
+- Status: **Accepted 2026-09-05 — option 3, with mandatory reciprocal checks**
 - Deciders: Product owner
 - Related tasks/docs: COH-007,
   `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md` (amendment A6),
@@ -791,7 +791,24 @@ task). No recursion risk: the trigger's writes are updates, and only deletes
 fire it. Scope for that task also includes removing the four fire-and-forget
 client cleanups at `useFirestore.js:758`, `:852`, `:1276`, `:1342`.
 
-**Options.**
+**Decision.** Option 3, the server-side fix, **with the safety requirement Codex
+raised in review finding H1**. Claude's original framing — that a delete trigger
+adds no new permission question because the delete was already authorized — is
+wrong about the *target* write. No rule constrains link fields on create, so a
+member can create a task naming any job, delete it, and have an Admin-privileged
+trigger clear a backlink on a job they cannot touch. The trigger is approved only
+with: a transaction that clears solely when the target's backlink reciprocates
+the deleted document's **bare** id; bare-id-only inputs constructed beneath the
+event's own church; missing target and already-null treated as successful no-ops;
+transient failures rejected so Eventarc retries; and the existing client cleanup
+retained until the triggers are verified, then removed in a later gate. A blind
+post-delete Admin update is **not** an available option.
+
+Consequence: COH-007's archive freeze is total, with no backlink allowlist. This
+ships as its own task ahead of COH-007's additive gate, because it fixes three
+production defects on its own.
+
+**The cheaper options, not taken.**
 
 1. **Carve the two fields out of the archived write-lock.**
    `linkedTicketDocId` and `linkedJobDocId` stay writable on an archived task by
@@ -820,7 +837,7 @@ implementation should not begin until it is answered.
 ### DEC-2026-018 — Archive reads are bounded by time, not by downloading everything
 
 - Date: 2026-09-05
-- Status: **Proposed — recommended by Claude, awaiting the owner's window choice**
+- Status: **Accepted 2026-09-05 — 12-month default window**
 - Deciders: Product owner
 - Related tasks/docs: COH-007,
   `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md`,
@@ -867,9 +884,8 @@ required by amendment A2 simply gain `completedAt` as their trailing ordered
 field. The queries gain one range constraint. Only the archive UI's window
 control and its copy are genuinely new.
 
-**Open for the owner:** the default window. **12 months recommended.** Longer is
-fine — the architecture is unchanged — it only shifts how often anyone needs the
-widen control.
+**Window: 12 months** (owner, 2026-09-05). Longer would not change the
+architecture; it only shifts how often anyone reaches for the widen control.
 
 **Explicitly rejected.** Downloading full history with no bound (works now,
 quietly worsens forever, and forces a promise change later). Silent pagination
