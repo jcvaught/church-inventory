@@ -11,6 +11,7 @@ const { calculateNextDue } = require('./lib/recurrence');
 const { buildDigestSignals, digestVisibleTasks, isDigestCacheUsable, DIGEST_POLICY_VERSION } = require('./lib/attention');
 const { syncShepherdPeople, setPcoElderAssignment, buildElderDigest } = require('./lib/shepherd');
 const { resolveRoster, isElderEmail, buildNormalizer } = require('./lib/roster');
+const { archiveCutoffISO, evaluateArchiveCandidate } = require('./lib/archiveEligibility');
 
 // COH-006 gate 1 — server twin of uidsOf() in src/utils/taskVisibility.js.
 // Rules cannot search inside the `[{uid, name}]` arrays the UI stores, so every
@@ -3811,6 +3812,120 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
   }
 }));
 
+// ── archiveCompletedTasks (COH-007) ────────────────────────────────────────
+// Soft-archives tasks that have been Complete for more than six weeks: two
+// fields on the existing document, nothing moved and nothing deleted.
+//
+// SHIPPED INERT. Until the automation gate this runs as a DRY RUN — it executes
+// the real eligibility query and reports what it would have archived, and writes
+// nothing. That is deliberate: it makes the daily job observable, gives the
+// owner a real eligible-count to approve before any production data changes, and
+// measures A3's null-ordering question against production rather than reasoning
+// about it. Flip ARCHIVER_WRITES_ENABLED at the automation gate, with explicit
+// owner approval, per the plan's rollout.
+const ARCHIVER_WRITES_ENABLED = false;
+// Per-run ceiling on documents examined. A runaway guard, not a page: the
+// measured population is 134 work items across every church for the life of the
+// app, so a run near this bound means something is wrong and the summary should
+// say so rather than quietly truncating.
+const ARCHIVER_MAX_CANDIDATES = 5000;
+// Concurrent archive transactions in flight.
+const ARCHIVER_WRITE_CONCURRENCY = 25;
+
+// Test seam only — mirrors _setClock and _setBacklinkHook. Fires after the
+// eligibility snapshot and before the first transaction, which is precisely the
+// window a blind batch gets wrong. Production never sets this.
+let _archiverHook = null;
+exports._setArchiverHook = (fn) => { _archiverHook = fn; };
+exports._resetArchiverHook = () => { _archiverHook = null; };
+
+async function runArchiveCompletedTasks({ writesEnabled = ARCHIVER_WRITES_ENABLED } = {}) {
+  const db = getFirestore();
+  const cutoff = archiveCutoffISO(nowDate());
+
+  // `archived == false` is what keeps this off maintenance tickets and off the
+  // tasks a previous run already handled — and, with `status`, what makes the
+  // scan proportional to the completed backlog rather than the collection.
+  const snap = await db.collectionGroup('workItems')
+    .where('status', '==', 'Complete')
+    .where('archived', '==', false)
+    .where('completedAt', '<=', cutoff)
+    .limit(ARCHIVER_MAX_CANDIDATES)
+    .get();
+
+  const summary = {
+    cutoff,
+    examined: snap.size,
+    eligible: 0,
+    archived: 0,
+    // Named for exactly what it measures (A12). The range query never returns a
+    // document whose completedAt is ABSENT, nor one whose malformed value sorts
+    // outside the range, so this counts the malformed values the query actually
+    // handed us — not the population.
+    malformedReturnedByEligibilityQuery: 0,
+    skippedTooRecent: 0,
+    skippedOther: 0,
+    conflicted: 0,
+    failed: 0,
+    dryRun: !writesEnabled,
+    truncated: snap.size >= ARCHIVER_MAX_CANDIDATES,
+  };
+
+  const candidates = [];
+  for (const d of snap.docs) {
+    const verdict = evaluateArchiveCandidate(d.data(), cutoff);
+    if (verdict.eligible) { candidates.push(d.ref); summary.eligible++; continue; }
+    if (verdict.reason === 'malformed-completed-at') summary.malformedReturnedByEligibilityQuery++;
+    else if (verdict.reason === 'too-recent') summary.skippedTooRecent++;
+    else summary.skippedOther++;
+  }
+
+  if (_archiverHook) await _archiverHook(summary);
+
+  if (!writesEnabled) {
+    console.log(`archiveCompletedTasks: DRY RUN — examined ${summary.examined}, would archive ${summary.eligible}, malformed ${summary.malformedReturnedByEligibilityQuery}`);
+    return summary;
+  }
+
+  // Re-read and re-check inside a transaction rather than writing the snapshot's
+  // verdict. A task can be reopened between the query and the write, and a blind
+  // batch would archive it back out from under the person who just reopened it.
+  // A losing race is a counted conflict, reconsidered on the next run.
+  for (let i = 0; i < candidates.length; i += ARCHIVER_WRITE_CONCURRENCY) {
+    const chunk = candidates.slice(i, i + ARCHIVER_WRITE_CONCURRENCY);
+    await Promise.all(chunk.map(async (ref) => {
+      try {
+        await db.runTransaction(async (t) => {
+          const fresh = await t.get(ref);
+          if (!fresh.exists) { summary.conflicted++; return; }
+          if (!evaluateArchiveCandidate(fresh.data(), cutoff).eligible) { summary.conflicted++; return; }
+          t.update(ref, {
+            archived: true,
+            archivedAt: FieldValue.serverTimestamp(),
+            updatedAt: new Date().toISOString(),
+          });
+          summary.archived++;
+        });
+      } catch (err) {
+        summary.failed++;
+        // Path only. Never a task name, description, comment, or recipient —
+        // this job runs across every church, including private tasks.
+        console.error(`archiveCompletedTasks: failed for ${ref.path}`, err?.message);
+        Sentry.captureException(err, { tags: { area: 'task-archiver' } });
+      }
+    }));
+  }
+
+  console.log(`archiveCompletedTasks: examined ${summary.examined}, archived ${summary.archived}, conflicted ${summary.conflicted}, malformed ${summary.malformedReturnedByEligibilityQuery}, failed ${summary.failed}`);
+  return summary;
+}
+exports._runArchiveCompletedTasks = runArchiveCompletedTasks;
+
+// Daily at 3am Central — after closePastJobs (2am) and before the 8am recurring
+// generator, so a day's archiving never races the day's task creation.
+exports.archiveCompletedTasks = onSchedule({ schedule: '0 3 * * *', timeZone: 'America/Chicago' }, async () =>
+  withScheduledRun('archiveCompletedTasks', async () => runArchiveCompletedTasks()));
+
 // ── Shepherd Hub PCO read-sync (Phase 1) ──────────────────────────────────
 // Pulls the FXCC congregation from Planning Center into a minimized,
 // elder-indexed Firestore cache (churches/{id}/shepherdPeople + a
@@ -4118,6 +4233,7 @@ const SCHEDULED_JOB_REGISTRY = [
   { name: 'sendEmptyJobMorningAlert',      cadence: 'hourly', maxRunMs:  10 * 60 * 1000 },
   { name: 'closePastJobs',                 cadence: 'daily',  maxRunMs:   5 * 60 * 1000 },
   { name: 'generateRecurringTemplateTasks', cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },
+  { name: 'archiveCompletedTasks',         cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },
   { name: 'syncShepherdPeople',            cadence: 'daily',  maxRunMs:  10 * 60 * 1000 },
 ];
 // Hourly gets a 2h grace beyond 1h; daily gets a 2h grace beyond 24h; weekly

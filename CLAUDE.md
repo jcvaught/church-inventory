@@ -76,7 +76,15 @@ npm run test:handlers # Cloud Functions HANDLER integration tests — boots fire
                   # in the repo: a v2 onDocumentDeleted handler is invoked as
                   # `fn.run({ data: { data: () => doc }, params })`, since the
                   # platform supplies params rather than the document. Covers the
-                  # confused-deputy negatives). 58 tests, all green.
+                  # confused-deputy negatives); and COH-007's daily archiver
+                  # (archiveCompletedTasks.test.mjs — the eligibility boundary,
+                  # the query/write race a blind batch fails, and the A3
+                  # MEASUREMENT of `completedAt <= <iso>` membership, which
+                  # CONTRADICTED the plan's hypothesis: the emulator's range
+                  # filter returns neither null-valued nor missing fields, so the
+                  # skip guard is defensive, not load-bearing. Emulator evidence
+                  # only — the first production dry run is the authority).
+                  # 72 tests, all green.
 ```
 
 ### Local sandbox — Firebase Emulator Suite (2026-06-07)
