@@ -675,6 +675,44 @@ authorization-sensitive query shapes.
   `docs/COH-007-TASK-ARCHIVING-PLAN-2026-09-03.md` (amendment A6),
   DEC-2026-015 (residual 1)
 
+**In plain language.** Some tasks have a maintenance ticket or a job attached to
+them. When somebody deletes that ticket or job, the app reaches back to the task
+and removes the now-dead link, so the task doesn't keep showing a button that
+goes nowhere.
+
+Archiving is supposed to freeze a task — nothing about it changes once it's
+archived. But that freeze would also block this bit of tidying up. Delete a
+ticket that was attached to an archived task, and the task keeps a link to
+something that no longer exists. Nobody sees an error; the link just quietly
+goes bad.
+
+**What you're deciding:** whether "frozen" means *completely* frozen, or frozen
+except for this one bit of housekeeping.
+
+- **Option 1 — allow the tidy-up.** Archived tasks stay frozen except that the
+  app may remove a dead link to a deleted ticket or job. Simplest fix, and
+  archived tasks stay accurate. The cost is that "archived means nothing
+  changes" is no longer strictly true, and the rule gets a small named
+  exception.
+- **Option 2 — keep the freeze total.** Archived tasks never change, full stop.
+  Some archived tasks will carry links to deleted tickets and jobs, and the
+  archive screen has to notice a dead link and hide it. The cost is storing
+  something we know is wrong, and the hiding has to be built either way.
+- **Option 3 — do the tidy-up on the server.** The server has no restrictions, so
+  it can clean up the link regardless. This is the only option that also fixes a
+  related problem that already exists today: an admin who deletes a ticket
+  attached to someone's *private* task can't clean up that link either, so that
+  one already goes bad. The cost is real extra work COH-007 didn't budget for —
+  a new server function to build, secure, and monitor.
+
+Option 1 is the cheap fix. Option 3 is the real fix and costs more. Option 2 is
+only worth it if "archived never changes" matters to you as a promise.
+
+---
+
+*The rest of this entry is the precise version, for the implementing and
+reviewing agents.*
+
 **Context.** COH-006 gate 4 recorded a residual: deleting a linked maintenance
 ticket or job clears the corresponding backlink on a task through a direct update
 outside `updateTask`, and that write is denied when the actor cannot read the
