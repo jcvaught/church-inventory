@@ -4,6 +4,45 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-09-07 — COH-007 completed-task archiving and archive search
+
+Tasks Complete for more than six weeks now archive automatically and move to a
+searchable **Tasks → Archived** view. Lossless: nothing moves collection,
+nothing is deleted, and `canSeeWorkItem()` gained no archived arm — archiving
+changes nothing about who can read a task.
+
+Shipped as four gates in one day, each verified in production before the next:
+
+- **Additive** — `archived`/`archivedAt` on both task writers, the transitional
+  ruleset, nine indexes, the archive reader and view, and the archiver **shipped
+  inert**. Probes 26/26. Fixed two live defects on the way past: `canSeeTask()`
+  read the stale presentation arrays instead of the canonical uid ones (hiding
+  authorized tasks on the ACTIVE board), and a linked task missing from the store
+  was described as deleted.
+- **Backfill** — 92 tasks, 0 skipped, 0 outstanding, coverage checked by two
+  tools that share no code. A3's null-ordering hypothesis **refuted against
+  production** with a non-empty baseline: 0 of 2 explicitly-null completions
+  enter the range filter.
+- **Reader** — the four active arms cut over to `archived == false` and the
+  final ruleset deployed with them. 24/24, including a departure proved on one
+  held, server-backed subscription.
+- **Automation** — 35 tasks archived on the first run, matched by document path
+  against a pre-flip capture; the 14 newer Complete tasks correctly untouched.
+
+Nine Codex review findings across four passes, all fixed. Two ideas worth
+carrying forward: **ship a scheduled mutation inert and let it dry-run through
+the earlier gates**, so the flip is a boolean rather than a leap; and a
+**narrowing change breaks things nothing warns you about** — tightening the
+archive shape nearly denied every maintenance comment in every church, because
+maintenance was passing through the permissive arm incidentally.
+
+Receipts: `docs/COH-007-ADDITIVE-GATE-DEPLOY-RECEIPT-2026-09-07.md`,
+`docs/COH-007-BACKFILL-GATE-RECEIPT-2026-09-07.md`,
+`docs/COH-007-READER-GATE-DEPLOY-RECEIPT-2026-09-07.md`,
+`docs/COH-007-AUTOMATION-GATE-RECEIPT-2026-09-07.md`.
+
+---
+
 ## 2026-08-29 — COH-002 core authorization hardening
 
 Closed the four owner-approved authorization gaps from the COH-001 threat model.

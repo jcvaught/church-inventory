@@ -4,6 +4,12 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-09-07',
+    tag: 'New',
+    title: 'Completed tasks tidy themselves away',
+    body: "Your Tasks board now keeps itself focused on current work. Once a task has been Complete for more than six weeks it moves to Tasks → Archived, so old finished work stops crowding the board, the filters, and search. Nothing is deleted: an archived task keeps its comments, photos, links, task number and history, and Reopen puts it straight back on the board in Backlog if the work comes around again. Open Archived to search your archive by name, description, tag or task number — it shows the last twelve months by default, says on screen which dates that covers, and has a control to look further back. Archiving changes nothing about who can see a task: a private task stays private, and nobody sees an archived task they couldn't see before.",
+  },
+  {
     date: '2026-08-04',
     tag: 'New',
     title: 'Shepherd Hub: log a contact in one tap',
