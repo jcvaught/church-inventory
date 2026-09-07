@@ -495,11 +495,42 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   every index READY while queries still rejected for about a minute afterwards.
   The message text is the only discriminator; the probe now names it. Mistaking
   it for a missing index is how a healthy deploy gets rolled back.
-- **Next, in order:** **backfill gate** (backup / dry run / counts / explicit approval / execute /
+- **BACKFILL GATE DONE 2026-09-07 — 92 tasks written, 0 skipped, 0 malformed, 0
+  outstanding.** Receipt: `docs/COH-007-BACKFILL-GATE-RECEIPT-2026-09-07.md`.
+  Script `scripts/backfill-task-archive.cjs`; rollback manifest at
+  `~/apps/coh007-migration/manifest-2026-09-07.jsonl` (conditional and
+  transactional — it refuses any document a person has edited since, and exits
+  non-zero rather than reporting a clean rollback). Coverage checked twice by
+  different tools: `--verify --baseline 92` at 0 outstanding, and the
+  additive-gate shape audit independently at 92 active / 42 maintenance absent /
+  0 malformed. Rollback stops being safe once the reader gate ships — after
+  cutover, undoing it is a forward migration.
+  **A3 IS NOW MEASURED, and the hypothesis stays refuted.** This was the first
+  moment it was answerable: before the backfill the `archived == false` filter
+  matched nothing, so any result was vacuous. Baseline 2 explicit-null documents,
+  **0 of 2** appear in the range query — a real answer rather than an absence of
+  one, which is exactly what Codex's Q2 correction demanded. Production excludes
+  explicit nulls, matching the emulator. The skip guard stays defensive, its null
+  counter expected to stay zero, and it ships regardless.
+  **The number the automation gate needs: 35 eligible.** With the pair present
+  the archiver's dry run examines real documents for the first time — 35 of 49
+  Complete tasks are older than six weeks, `malformed: 0`, still writing nothing.
+  Re-check it immediately before the flip rather than assuming it holds.
+  **One correction of my own, applied in three places:** I had written that the
+  reader gate needs the shape audit's `absent` count at zero. Wrong — that
+  script counts every work item, so after the backfill its `absent` total is the
+  42 MAINTENANCE items, which must never carry the pair (A1). The go/no-go is
+  `--verify` at 0 outstanding, which counts tasks only. As written it would have
+  blocked the reader gate on a condition that must never be true.
+- **Next, in order:** **reader gate** (backup / dry run / counts / explicit approval / execute /
   independent coverage / delta; `audit-coh007-archive-shape.mjs` is the
   independent baseline, and the A3 null-ordering measurement belongs here) →
-  reader gate (its FIRST commit is Q1's final-ruleset sentinel; `absent` must be
-  zero before the final rules deploy) → automation gate.
+  (its FIRST commit is Q1's final-ruleset sentinel; the go/no-go is
+  `backfill-task-archive.cjs --verify` at 0 outstanding — TASKS only, not the
+  shape audit's raw `absent`, which stays at 42 for the maintenance items; and
+  the final ruleset ships WITH the reader change, not before it) → automation
+  gate (flip `ARCHIVER_WRITES_ENABLED` and `ARCHIVING_ENABLED`, with a
+  controlled threshold verification against the eligible count).
 - Prior status, kept for the record: **Plan amended — awaiting Codex pre-implementation review.** The
   COH-006 dependency is **cleared** (all four gates deployed and verified
   2026-09-03, `main` at `2ced910`), so the file-overlap hold on

@@ -189,7 +189,12 @@ Three things this establishes, and one it deliberately does not.
    execute / independent coverage / delta sequence.
    `scripts/audit-coh007-archive-shape.mjs` is the independent baseline, and the
    A3 measurement belongs here.
-2. **Reader gate** — its FIRST commit is Q1's final-ruleset sentinel, and
-   `absent` must be **zero** in the shape audit before the final rules deploy.
+2. **Reader gate** — its FIRST commit is Q1's final-ruleset sentinel, and no
+   TASK may be unbackfilled before the final rules deploy. The go/no-go is
+   `backfill-task-archive.cjs --verify` reaching 0 outstanding, which counts
+   tasks only — **not** the shape audit's raw `absent` total, which legitimately
+   stays at 42 because maintenance items must never carry the pair (A1).
+   Corrected here after the backfill gate; the original phrasing would have
+   blocked the reader gate on a condition that must never be true.
 3. **Automation gate** — flip `ARCHIVER_WRITES_ENABLED` and
    `ARCHIVING_ENABLED`, with a controlled threshold verification.

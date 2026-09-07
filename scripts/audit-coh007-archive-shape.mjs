@@ -6,14 +6,21 @@
 // real task already in a shape the new rules would refuse to let its church edit?
 //
 // Run it at each remaining gate, not just this one:
-//   • additive gate  — every task must be `absent`; anything else is locked.
-//   • backfill gate  — the coverage baseline, and the delta pass afterwards.
-//                      Compare `absent` going to zero and `active` to the task
-//                      count, independently of what the backfill script reports
-//                      about itself.
-//   • reader gate    — `absent` MUST be zero before the final ruleset deploys.
-//                      An unbackfilled task failing under the final rules is the
-//                      cutover signal, never an acceptable production state.
+//   • additive gate  — every TASK must be `absent`; anything else is locked.
+//   • backfill gate  — the independent coverage check: `active` should equal the
+//                      task count, checked without trusting what the backfill
+//                      script reports about itself.
+//   • reader gate    — no TASK may be `absent`. An unbackfilled task failing
+//                      under the final rules is the cutover signal, never an
+//                      acceptable production state.
+//
+// ⚠️ READ THE `absent` COUNT CORRECTLY. This script counts every work item, so
+// after the backfill its `absent` total is the MAINTENANCE items — which must
+// never carry the pair (A1). "absent reaches zero" is therefore the wrong
+// go/no-go and would block the reader gate on a condition that must never hold.
+// The gate is `backfill-task-archive.cjs --verify` reaching 0 outstanding, which
+// counts tasks only. Use this script to corroborate that number, not to replace
+// it.
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { readFileSync } from 'node:fs';
