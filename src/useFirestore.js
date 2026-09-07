@@ -290,17 +290,26 @@ export function useFirestore(churchId, userProfile) {
     // work-items slot reports done once every listener has produced a first
     // snapshot, so the app does not render a half-populated board.
     //
-    // COH-007: the four task arms now come from taskQueryArms() so the archive
-    // reader cannot drift from the board — a drifted arm returns a different set
-    // of tasks to a different screen and raises no error at all. `archived: null`
-    // means the discriminator is OMITTED here: the additive gate changes no
-    // listener, and `archived: false` arrives at the reader gate. The maintenance
-    // arm stays hand-built and unconstrained (A1).
+    // COH-007 READER GATE: `archived: false` is now on all four task arms, so
+    // archived work leaves the always-live listeners at the query layer rather
+    // than being hidden in JSX. This is the line the whole feature exists for,
+    // and the one with the sharpest failure mode — a task that does not carry
+    // `archived` matches this filter not at all, which is why the backfill had
+    // to reach zero outstanding first and why the final ruleset ships with it.
+    //
+    // Both readers build their arms from taskQueryArms() so the board and the
+    // archive cannot drift: a drifted arm returns a different set of tasks to a
+    // different screen and raises no error at all.
+    //
+    // The maintenance arm stays hand-built and UNCONSTRAINED (A1). Maintenance
+    // documents carry no `archived` field, and an equality filter on a missing
+    // field matches nothing, so adding it here would empty the maintenance board
+    // for every church.
     const workRef = collection(db, 'churches', churchId, 'workItems');
     const myUid = userProfile?.uid;
     const workQueries = [
       ['maintenance', query(workRef, where('type', '==', 'maintenance'))],
-      ...taskQueryArms({ uid: myUid, archived: null })
+      ...taskQueryArms({ uid: myUid, archived: false })
         .map(arm => [arm.key, query(workRef, ...armConstraints(arm))]),
     ];
     const workStore = createWorkStore(workQueries.map(([key]) => key));

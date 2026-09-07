@@ -32,11 +32,23 @@ test('the shared arm keeps BOTH constraints', () => {
   ]);
 });
 
-test('archived: null leaves the discriminator off — the additive gate keeps the board unchanged', () => {
+test('archived: null leaves the discriminator off entirely', () => {
+  // The shape the additive gate deployed, kept because it is what makes the
+  // reader cutover a one-value change rather than a rewrite.
   for (const arm of taskQueryArms({ uid: ME })) {
     assert.equal(arm.filters.some(([f]) => f === 'archived'), false, arm.key);
     assert.equal(arm.order, undefined);
     assert.equal(arm.limit, undefined);
+  }
+});
+
+test('the deployed active board asks archived == false on every task arm', () => {
+  // The reader gate, pinned. A missing filter here would put archived tasks
+  // back on the board; a filter on the maintenance arm would empty it.
+  const arms = taskQueryArms({ uid: ME, archived: false });
+  assert.deepEqual(keys(arms), ['team', 'own', 'assigned', 'shared']);
+  for (const arm of arms) {
+    assert.deepEqual(arm.filters.at(-1), ['archived', '==', false], arm.key);
   }
 });
 
