@@ -48,9 +48,14 @@ const as = (uid) => env.authenticatedContext(uid).firestore();
 async function seed(path, data) {
   await env.withSecurityRulesDisabled(async (e) => { await setDoc(doc(e.firestore(), path), data); });
 }
+// COH-007 reader gate: the final ruleset requires the archive pair on every
+// task create and update, so the shared fixture carries it. These cases are
+// about VISIBILITY; the archive lifecycle has its own file, and the
+// transitional-vs-final difference has the sentinel.
 const task = (over = {}) => ({
   type: 'task', name: 't', status: 'Backlog', taskNumber: 'TSK-001',
   createdAt: '2026-01-01T00:00:00.000Z', createdBy: 'creator',
+  archived: false, archivedAt: null,
   assignees: [], sharedWith: [], assigneeUids: [], sharedWithUids: [], ...over,
 });
 const put = (id, data) => seed(P(`workItems/${id}`), data);

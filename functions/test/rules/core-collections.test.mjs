@@ -156,8 +156,10 @@ test('workItems: a maintenance item can only be created by admin/manager', async
   await assertFails(setDoc(doc(ctx('memberA'), P('workItems/w1')), { type: 'maintenance', title: 'Fix HVAC' }));
   await assertSucceeds(setDoc(doc(ctx('adminA'), P('workItems/w2')), { type: 'maintenance', title: 'Fix HVAC' }));
 });
+// COH-007 reader gate: the final ruleset requires the archive pair on create.
 const newTask = (over = {}) => ({
-  type: 'task', createdBy: 'memberA', visibility: 'team', assigneeUids: [], sharedWithUids: [], ...over,
+  type: 'task', createdBy: 'memberA', visibility: 'team', assigneeUids: [], sharedWithUids: [],
+  archived: false, archivedAt: null, ...over,
 });
 // The SDK rejects an explicit `undefined` before the rules ever see it, so an
 // omitted field has to be omitted, not set to undefined.
@@ -207,7 +209,7 @@ test('workItems: maintenance creates are unaffected by the task create shape', a
 test('workItems: an assignee can read a private task they did not create', async () => {
   await seedMembers();
   await seed(P('workItems/task_p1'), {
-    type: 'task', createdBy: 'memberA', visibility: 'private',
+    type: 'task', createdBy: 'memberA', visibility: 'private', archived: false, archivedAt: null,
     assignees: [{ uid: 'memberB', name: 'Member B' }], assigneeUids: ['memberB'],
   });
   await assertSucceeds(getDoc(doc(ctx('memberB'), P('workItems/task_p1'))));
@@ -216,7 +218,7 @@ test('workItems: an assignee can read a private task they did not create', async
 test('workItems: a non-assignee still cannot read someone else\'s private task', async () => {
   await seedMembers();
   await seed(P('workItems/task_p2'), {
-    type: 'task', createdBy: 'memberA', visibility: 'private',
+    type: 'task', createdBy: 'memberA', visibility: 'private', archived: false, archivedAt: null,
     assignees: [{ uid: 'memberA', name: 'Member A' }], assigneeUids: ['memberA'],
   });
   await assertFails(getDoc(doc(ctx('memberB'), P('workItems/task_p2'))));
@@ -225,14 +227,14 @@ test('workItems: a non-assignee still cannot read someone else\'s private task',
 });
 test('workItems: a legacy private task with no assigneeUids field is unaffected', async () => {
   await seedMembers();
-  await seed(P('workItems/task_p3'), { type: 'task', createdBy: 'memberA', visibility: 'private' });
+  await seed(P('workItems/task_p3'), { type: 'task', createdBy: 'memberA', visibility: 'private', archived: false, archivedAt: null });
   await assertSucceeds(getDoc(doc(ctx('memberA'), P('workItems/task_p3'))));
   await assertFails(getDoc(doc(ctx('memberB'), P('workItems/task_p3'))));
 });
 test('workItems: an empty assigneeUids array grants nobody', async () => {
   await seedMembers();
   await seed(P('workItems/task_p4'), {
-    type: 'task', createdBy: 'memberA', visibility: 'private', assignees: [], assigneeUids: [],
+    type: 'task', createdBy: 'memberA', visibility: 'private', archived: false, archivedAt: null, assignees: [], assigneeUids: [],
   });
   await assertFails(getDoc(doc(ctx('memberB'), P('workItems/task_p4'))));
 });
@@ -242,7 +244,7 @@ test('workItems: a malformed map in assigneeUids authorizes nobody', async () =>
   // deliver (gate-1 review L-1).
   await seedMembers();
   await seed(P('workItems/task_p6'), {
-    type: 'task', createdBy: 'memberA', visibility: 'private', assigneeUids: { memberB: true },
+    type: 'task', createdBy: 'memberA', visibility: 'private', archived: false, archivedAt: null, assigneeUids: { memberB: true },
   });
   await assertFails(getDoc(doc(ctx('memberB'), P('workItems/task_p6'))));
 });
@@ -253,7 +255,7 @@ test('workItems: a private task carrying a stale shared recipient stays creator-
   // why the gate-3 shared listener also constrains visibility == 'shared'.
   await seedMembers();
   await seed(P('workItems/task_p7'), {
-    type: 'task', createdBy: 'memberA', visibility: 'private',
+    type: 'task', createdBy: 'memberA', visibility: 'private', archived: false, archivedAt: null,
     sharedWith: [{ uid: 'memberB', name: 'Member B' }], sharedWithUids: ['memberB'],
   });
   await assertFails(getDoc(doc(ctx('memberB'), P('workItems/task_p7'))));
@@ -262,7 +264,7 @@ test('workItems: a private task carrying a stale shared recipient stays creator-
 test('workItems: the assignee arm does not cross the tenant boundary', async () => {
   await seedMembers();
   await seed(P('workItems/task_p5'), {
-    type: 'task', createdBy: 'memberA', visibility: 'private', assigneeUids: ['outsider'],
+    type: 'task', createdBy: 'memberA', visibility: 'private', archived: false, archivedAt: null, assigneeUids: ['outsider'],
   });
   await assertFails(getDoc(doc(ctx('outsider'), P('workItems/task_p5'))));
 });

@@ -1,3 +1,16 @@
+// PINNED SNAPSHOT — the COH-007 TRANSITIONAL ruleset, exactly as deployed to
+// production on 2026-09-07 at the additive gate.
+//
+// This file is a test fixture, never deployed. It exists so the cutover sentinel
+// in coh007-cutover-sentinel.test.mjs can run the SAME fixtures against both
+// rulesets and prove the difference between them, which is the one thing prose
+// cannot do (Codex, review Q1). Without a pinned copy, "the final rules are
+// stricter than the transitional ones" is an assertion nobody can execute.
+//
+// Do not edit it to match a later firestore.rules. If it drifts, the sentinel
+// silently starts comparing the final ruleset against itself and passes for the
+// wrong reason.
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -69,24 +82,22 @@ service cloud.firestore {
         && canSeeWorkItem(get(/databases/$(database)/documents/churches/$(churchId)/workItems/$(itemId)).data);
     }
 
-    // ── COH-007 archive lifecycle — FINAL ruleset (reader gate) ──────────────
+    // ── COH-007 archive lifecycle — TRANSITIONAL ruleset (additive gate) ──────
     //
-    // The legacy tolerance is GONE, and that removal is the whole point of this
-    // gate. The transitional ruleset (pinned for the sentinel at
-    // functions/test/rules/fixtures/transitional-archive-2026-09-07.rules)
-    // treated a task carrying NEITHER field as active, because until the
-    // backfill ran that described every task in production and denying them
-    // would have frozen every church's board mid-rollout (plan A13, review H4).
+    // This ships BEFORE the backfill, so most tasks in production carry neither
+    // `archived` nor `archivedAt`. Every predicate below therefore defaults a
+    // MISSING field to "active": an unbackfilled task and its comments stay
+    // fully usable. Written the obvious way instead — direct field access, or
+    // `archived == false` — this rule would deny every ordinary edit and comment
+    // write on every legacy task the moment it deployed, freezing the whole
+    // board mid-rollout (plan A13, review finding H4).
     //
-    // From this gate on, the active board asks `archived == false`. A task
-    // without the field does not match that filter — it is not false, it is
-    // absent — so a client still able to drop the pair could make a task vanish
-    // from its own board. Both fields are therefore required on every task
-    // create and update, and an unbackfilled task is REFUSED rather than
-    // tolerated. That refusal is the cutover signal, proved by
-    // coh007-cutover-sentinel.test.mjs against both rulesets; it is never an
-    // acceptable production state, which is why the backfill reached zero
-    // outstanding before this shipped.
+    // That tolerance is deliberately temporary. The FINAL ruleset, deployed with
+    // the reader cutover, requires both fields on every task update; the
+    // unbackfilled-task sentinel failing under it is the cutover signal, never an
+    // acceptable production state. Leaving this permissive default in place
+    // afterwards is the opposite failure — a client could delete the pair and
+    // vanish from both equality-filtered readers.
     // Exactly THREE recognised shapes, and everything else is malformed
     // (review H1). The first implementation asked only `archived == true` and
     // treated every other value as active, which held for content updates —
@@ -99,9 +110,6 @@ service cloud.firestore {
     //
     // A malformed or half-written pair now permits nothing at all. It can only
     // be repaired by the Admin SDK, which these rules do not bind.
-    // Retained though the final ruleset no longer admits this shape anywhere:
-    // it names the thing being refused, and the sentinel's pinned transitional
-    // fixture still depends on the same vocabulary.
     function archiveFieldsAbsent(d) {
       return !('archived' in d) && !('archivedAt' in d);
     }
@@ -113,11 +121,11 @@ service cloud.firestore {
     function archiveFieldsFrozen(d) {
       return 'archived' in d && d.archived is bool && d.archived == true;
     }
-    // FINAL: exactly ONE shape permits ordinary work — a shaped active task
-    // carrying both fields. The transitional ruleset also admitted
-    // `archiveFieldsAbsent(d)` here; removing that arm is the cutover.
+    // The two shapes that permit ordinary work: a legacy task carrying neither
+    // field (the whole population until the backfill runs), and a shaped active
+    // one carrying both. Nothing in between.
     function archiveStateUsable(d) {
-      return archiveFieldsActive(d);
+      return archiveFieldsAbsent(d) || archiveFieldsActive(d);
     }
 
     // The ONE archived -> active transition, as an exact field allowlist (plan
@@ -135,43 +143,30 @@ service cloud.firestore {
              .hasOnly(['archived', 'archivedAt', 'status', 'completedAt', 'updatedAt']);
     }
 
-    // Every client task update, as one transition table. FINAL form:
+    // Every client task update, as one transition table:
     //
-    //   frozen    -> exactly the reopen write, and nothing else
-    //   active    -> must STAY active. Deleting the pair is denied as firmly as
-    //                forging it: a task with neither field matches neither
-    //                equality-filtered reader, so a client able to drop them
-    //                could make a task vanish from its own board.
-    //   legacy    -> NOTHING. The transitional ruleset let a legacy task be
-    //                edited and brought forward; this one refuses it outright.
-    //                The backfill reached zero outstanding before this shipped,
-    //                so the only documents this can refuse are ones created by
-    //                a stale tab after the cutover — which is exactly what it
-    //                exists to stop.
+    //   frozen  -> exactly the reopen write, and nothing else
+    //   active  -> must STAY active. Deleting the pair is denied as firmly as
+    //              forging it: a task with neither field matches neither
+    //              equality-filtered reader once the cutover lands, so a client
+    //              able to drop them could make a task vanish from both.
+    //   legacy  -> may stay legacy (the ordinary unbackfilled edit) or become
+    //              active. It may never become archived.
     //   malformed -> nothing.
     function archiveTransitionAllowed(pre, post) {
       return archiveFieldsFrozen(pre)
         ? isReopenTransition(pre, post)
-        : (archiveFieldsActive(pre) && archiveFieldsActive(post));
+        : (archiveFieldsActive(pre)
+            ? archiveFieldsActive(post)
+            : (archiveFieldsAbsent(pre)
+               && (archiveFieldsAbsent(post) || archiveFieldsActive(post))));
     }
 
-    // Comment writes follow the parent's archive state — but ONLY where the
-    // parent has one. A maintenance item carries neither field by design (A1)
-    // and has no archive lifecycle at all, so gating its comments on the task
-    // shape would deny every maintenance comment in every church.
-    //
-    // The transitional ruleset did not have to say this: `absent` was one of its
-    // usable shapes, so maintenance passed incidentally. Tightening tasks to
-    // `active` removed that accident, which is exactly the kind of collateral a
-    // narrowing change makes and nothing warns about.
-    //
-    // Short-circuits behind canSeeWorkItemById at every call site, so the get()
-    // is both cached and known to exist.
-    function workItemCommentable(d) {
-      return d.get('type', '') == 'maintenance' || archiveStateUsable(d);
-    }
+    // Comment writes follow the parent's archive state. Short-circuits behind
+    // canSeeWorkItemById at every call site, so the get() is both cached and
+    // known to exist.
     function workItemArchiveUsable(churchId, itemId) {
-      return workItemCommentable(get(/databases/$(database)/documents/churches/$(churchId)/workItems/$(itemId)).data);
+      return archiveStateUsable(get(/databases/$(database)/documents/churches/$(churchId)/workItems/$(itemId)).data);
     }
 
     // Shepherd Hub (P2): elder status is a server-set custom auth claim
@@ -382,12 +377,14 @@ service cloud.firestore {
             && request.resource.data.visibility in ['team', 'private', 'shared']
             && request.resource.data.assigneeUids is list
             && request.resource.data.sharedWithUids is list
-            // COH-007 FINAL: a task is born active, carrying BOTH fields.
-            // The transitional ruleset also accepted neither, so a stale tab
-            // could keep creating tasks through the additive gate; from the
-            // reader cutover that same tab would be minting tasks invisible to
-            // the new readers, so it is refused instead.
-            && archiveFieldsActive(request.resource.data))
+            // COH-007: a task is born active, carrying BOTH fields or
+            // NEITHER. Absence is tolerated on purpose — a browser tab still
+            // running the pre-COH-007 bundle must keep being able to create a
+            // task through the additive gate — but a half-written pair is not,
+            // because a document created that way would be locked on arrival
+            // by the malformed-state rule below. The FINAL ruleset requires
+            // the pair outright.
+            && archiveStateUsable(request.resource.data))
       );
 
       // update: authorization is decided from resource.data — the PRE-state —

@@ -1,4 +1,11 @@
-// COH-007 additive gate — the TRANSITIONAL archive ruleset.
+// COH-007 — the archive ruleset in firestore.rules, now in its FINAL form.
+//
+// This file follows the deployed ruleset. At the additive gate that was the
+// transitional one; from the reader gate it is the final one, which requires
+// the archive pair on every task create and update. The transitional behaviour
+// has not been deleted — it is pinned as a fixture and exercised side by side
+// with this one in coh007-cutover-sentinel.test.mjs, which owns the difference
+// between the two.
 //
 // Written to the cases Codex wrote in docs/COH-007-PLAN-REVIEW-2026-09-05.md
 // (H4's legacy/shaped pair, M1's exact-reopen allowlist) and the reopen actor
@@ -82,14 +89,19 @@ const REOPEN = {
 
 // ── H4: the legacy-state transition contract ────────────────────────────────
 
-test('additive rules keep an unbackfilled task and its comments usable', async () => {
-  // The whole reason this ruleset is transitional. Written with direct field
-  // access instead of get(_, false), every assertion here is a denial and the
-  // board freezes for every church until the backfill reaches it.
+test('FINAL: an unbackfilled task is refused, and that refusal is the cutover signal', async () => {
+  // Under the transitional ruleset both of these succeeded, and had to — until
+  // the backfill ran, this described every task in production. The backfill
+  // reached zero outstanding before the final rules shipped, so the only
+  // documents this can now refuse are ones a stale tab created after the
+  // cutover, which is precisely what it exists to stop.
+  // The transitional half of this contract lives in coh007-cutover-sentinel.
   await put('task_old', legacy({ visibility: 'private', createdBy: 'creator' }));
-  await assertSucceeds(updateDoc(ref('creator', 'task_old'), { name: 'edited', updatedAt: 'now' }));
-  await assertSucceeds(addDoc(collection(as('creator'), P('workItems/task_old/comments')),
+  await assertFails(updateDoc(ref('creator', 'task_old'), { name: 'edited', updatedAt: 'now' }));
+  await assertFails(addDoc(collection(as('creator'), P('workItems/task_old/comments')),
     { text: 'still active', authorId: 'creator', authorName: 'Creator', createdAt: 'now' }));
+  // Reading is never withheld. An unbackfilled task is unwritable, not hidden.
+  await assertSucceeds(getDoc(ref('creator', 'task_old')));
 });
 
 test('a shaped active task cannot delete or corrupt archive state', async () => {
@@ -136,19 +148,18 @@ test('malformed archive discriminators fail closed for content, comments and del
   }
 });
 
-test('a legacy task with BOTH fields absent stays fully usable — the compatibility boundary', async () => {
-  // The companion to the case above: fail-closed repair must not freeze the
-  // live unbackfilled board, which is every task in production today.
+test('FINAL: a legacy task cannot even be brought forward by a client', async () => {
+  // The transitional ruleset allowed legacy -> active as a client write. That
+  // arm is gone: repair is the backfill's job, under the Admin SDK, with a
+  // manifest and a rollback path — not an ad-hoc client write with no record.
   await put('task_legacy', legacy({ visibility: 'private' }));
   await seed(P('workItems/task_legacy/comments/c1'),
     { text: 'before', authorId: 'creator', authorName: 'Creator', createdAt: 'then' });
-  await assertSucceeds(updateDoc(ref('creator', 'task_legacy'), { name: 'edited', updatedAt: 'now' }));
-  await assertSucceeds(addDoc(collection(as('creator'), P('workItems/task_legacy/comments')),
-    { text: 'after', authorId: 'creator', authorName: 'Creator', createdAt: 'now' }));
-  await assertSucceeds(updateDoc(doc(as('creator'), P('workItems/task_legacy/comments/c1')), { text: 'edited' }));
-  // A legacy task may also be brought forward to the shaped active pair.
-  await assertSucceeds(updateDoc(ref('creator', 'task_legacy'), { archived: false, archivedAt: null, updatedAt: 'now' }));
-  await assertSucceeds(deleteDoc(ref('creator', 'task_legacy')));
+  await assertFails(updateDoc(ref('creator', 'task_legacy'), { archived: false, archivedAt: null, updatedAt: 'now' }));
+  await assertFails(updateDoc(doc(as('creator'), P('workItems/task_legacy/comments/c1')), { text: 'edited' }));
+  await assertFails(deleteDoc(ref('creator', 'task_legacy')));
+  // Its history stays readable throughout.
+  await assertSucceeds(getDoc(doc(as('creator'), P('workItems/task_legacy/comments/c1'))));
 });
 
 test('create refuses a half-written pair, which would be locked on arrival', async () => {
@@ -168,13 +179,14 @@ test('no client may archive a task — that transition is the scheduled job alon
 
 // ── create ──────────────────────────────────────────────────────────────────
 
-test('create: a task is born active, and a stale client that omits the pair still works', async () => {
+test('FINAL create: a task is born active, and the pair is now required', async () => {
   const base = { ...legacy(), createdBy: 'creator' };
   const { archived: _a, archivedAt: _b, ...noPair } = base;
   await assertSucceeds(setDoc(ref('creator', 'task_c1'), { ...base, archived: false, archivedAt: null }));
-  // A browser tab still running the pre-COH-007 bundle. Denying this would
-  // break task creation for every user who has not reloaded.
-  await assertSucceeds(setDoc(ref('creator', 'task_c2'), noPair));
+  // The transitional ruleset accepted this, so a browser tab on the old bundle
+  // could keep creating tasks through the additive gate. From the cutover that
+  // same tab would be minting tasks invisible to the new readers.
+  await assertFails(setDoc(ref('creator', 'task_c2'), noPair));
   await assertFails(setDoc(ref('creator', 'task_c3'), { ...base, archived: true, archivedAt: null }));
   await assertFails(setDoc(ref('creator', 'task_c4'), { ...base, archived: false, archivedAt: serverTimestamp() }));
 });
