@@ -42,7 +42,7 @@ npm run test:unit # Pure-logic unit tests (node --test functions/test/*.test.mjs
 npm run test:rules # Firestore + Storage RULES tests via @firebase/rules-unit-testing — boots the
                   # Firestore + Storage emulators (needs Java; runs --test-concurrency=1 so the
                   # files don't race on the shared emulator via clearFirestore) and runs
-                  # functions/test/rules/*.test.mjs (29 tests). Covers: Shepherd Hub privacy
+                  # functions/test/rules/*.test.mjs (112 tests). Covers: Shepherd Hub privacy
                   # (shepherd-rules.test.mjs — contact-info write-lock, per-elder note privacy,
                   # audit admin-read-only + immutability, careThread author pinning, SEC-2
                   # email_verified gate); the CORE multi-tenant model (core-collections.test.mjs
@@ -50,7 +50,12 @@ npm run test:rules # Firestore + Storage RULES tests via @firebase/rules-unit-te
                   # immutability, task private-visibility, workItems maintenance-vs-task create
                   # split, Jobs Hub roster read-gating + CF-only writes, no-self-escalation user
                   # rules, webhook-only subscription doc); and Storage (storage.test.mjs — tenant
-                  # isolation, active-account + image-only + 5MB upload gates). Add rule
+                  # isolation, active-account + image-only + 5MB upload gates); the COH-007
+                  # archive lifecycle (coh007-archive.test.mjs — the three-shape model, the
+                  # exact reopen allowlist, the freeze); and the COH-007 CUTOVER SENTINEL
+                  # (coh007-cutover-sentinel.test.mjs — runs the same fixtures against the
+                  # FINAL ruleset and a pinned snapshot of the transitional one, digest-
+                  # checked, proving the difference the staged rollout depended on). Add rule
                   # assertions here, NOT to test:unit (that glob runs without an emulator).
 npm run test:handlers # Cloud Functions HANDLER integration tests — boots firestore+auth
                   # emulators (needs Java) and runs functions/test/handlers/*.test.mjs against
@@ -84,7 +89,7 @@ npm run test:handlers # Cloud Functions HANDLER integration tests — boots fire
                   # filter returns neither null-valued nor missing fields, so the
                   # skip guard is defensive, not load-bearing. Emulator evidence
                   # only — the first production dry run is the authority).
-                  # 73 tests, all green.
+                  # 74 tests, all green.
 ```
 
 ### Local sandbox — Firebase Emulator Suite (2026-06-07)
