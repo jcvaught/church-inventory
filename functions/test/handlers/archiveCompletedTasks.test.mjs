@@ -214,12 +214,30 @@ test('a task deleted between query and write is a counted conflict, not a failur
 
 // ── the shipped state ───────────────────────────────────────────────────────
 
-test('the shipped default is a DRY RUN: it reports and writes nothing', async () => {
-  // What the additive gate deploys. If this ever passes with archived == true,
-  // production data changed at a gate that had no owner approval to change it.
+test('the shipped default now ARCHIVES — the automation gate flipped it', async () => {
+  // Through the additive and reader gates this asserted the opposite: the
+  // shipped default was a dry run, and a failure here meant production data had
+  // changed at a gate with no approval to change it. The owner approved the flip
+  // on 2026-09-07 against a measured eligible count, so the guard is repointed
+  // rather than deleted — it still pins what the deployed default DOES, which is
+  // the only reason it was ever worth having.
   const funcs = await loadFunctions();
   await put('old', task({ completedAt: '2026-01-01T00:00:00.000Z' }));
   const summary = await run(funcs);
+  assert.equal(summary.dryRun, false);
+  assert.equal(summary.eligible, 1);
+  assert.equal(summary.archived, 1);
+  assert.equal((await get('old')).archived, true);
+  assert.ok((await get('old')).archivedAt);
+});
+
+test('the kill switch still works: writesEnabled false reports and writes nothing', async () => {
+  // ARCHIVER_WRITES_ENABLED back to false is the stop button, and it has to keep
+  // working after the flip or there is no way to halt archiving without a code
+  // change that removes the job entirely.
+  const funcs = await loadFunctions();
+  await put('old', task({ completedAt: '2026-01-01T00:00:00.000Z' }));
+  const summary = await run(funcs, { writesEnabled: false });
   assert.equal(summary.dryRun, true);
   assert.equal(summary.eligible, 1);
   assert.equal(summary.archived, 0);

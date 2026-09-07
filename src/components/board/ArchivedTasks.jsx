@@ -29,12 +29,12 @@ import { PriorityBadge, initials, assigneeColor } from './boardUI.jsx';
 // pagination under unchanged copy would make a fruitless search untrustworthy.
 const DEFAULT_WINDOW_MONTHS = 12;
 
-// Flip to true at the AUTOMATION gate, when the daily archiver is deployed and
-// enabled. Until then this view is real, reachable and correct — and always
-// empty — so the empty state must not promise archiving that is not yet running.
-// A user told "tasks move here automatically" by a screen that will never fill
-// has been told something false.
-const ARCHIVING_ENABLED = false;
+// True since the automation gate, 2026-09-07: the daily archiver is deployed and
+// writing. Before that this view was real, reachable and correct — and always
+// empty — so the empty state deliberately did not promise archiving that was not
+// yet running. A user told "tasks move here automatically" by a screen that will
+// never fill has been told something false.
+const ARCHIVING_ENABLED = true;
 
 function windowStartISO(months) {
   if (!months) return null;

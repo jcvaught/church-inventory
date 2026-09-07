@@ -3816,14 +3816,19 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
 // Soft-archives tasks that have been Complete for more than six weeks: two
 // fields on the existing document, nothing moved and nothing deleted.
 //
-// SHIPPED INERT. Until the automation gate this runs as a DRY RUN — it executes
-// the real eligibility query and reports what it would have archived, and writes
-// nothing. That is deliberate: it makes the daily job observable, gives the
-// owner a real eligible-count to approve before any production data changes, and
-// measures A3's null-ordering question against production rather than reasoning
-// about it. Flip ARCHIVER_WRITES_ENABLED at the automation gate, with explicit
-// owner approval, per the plan's rollout.
-const ARCHIVER_WRITES_ENABLED = false;
+// LIVE since the automation gate, 2026-09-07, on explicit owner approval.
+//
+// It shipped inert and ran daily as a dry run for the two gates before this one,
+// which is what made the flip a decision rather than a leap: the owner approved
+// a real, measured eligible count, the collection-group index was already proven
+// in production, and the heartbeat was already on the monitor. Set this back to
+// false to stop archiving; that is the kill switch, and it takes effect on the
+// next scheduled run without touching any data.
+//
+// Undoing an initial run is a separate migration with its own backup, dry run
+// and approval — see the plan's rollout. The set this run archived is recorded
+// at ~/apps/coh007-migration/pre-automation-eligible-2026-09-07.json.
+const ARCHIVER_WRITES_ENABLED = true;
 // Per-run ceiling on documents examined. A runaway guard, not a page: the
 // measured population is 134 work items across every church for the life of the
 // app, so a run near this bound means something is wrong and the summary should
