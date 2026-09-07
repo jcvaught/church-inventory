@@ -522,15 +522,37 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   42 MAINTENANCE items, which must never carry the pair (A1). The go/no-go is
   `--verify` at 0 outstanding, which counts tasks only. As written it would have
   blocked the reader gate on a condition that must never be true.
-- **Next, in order:** **reader gate** (backup / dry run / counts / explicit approval / execute /
+- **READER GATE DEPLOYED AND VERIFIED 2026-09-07 — the cutover is live, 24/24
+  production checks.** Receipt:
+  `docs/COH-007-READER-GATE-DEPLOY-RECEIPT-2026-09-07.md`. Trail: review
+  `22cf9a4` (H1/M1/L1/L2, changes requested) → fixes `936a402` → confirmation
+  `c322352` (**approved with follow-up**) → L3 fixed `3f4c8d0`.
+  Codex's **H1** was the sharpest finding of the whole task: my production
+  oracle cited the COH-006 listener oracle in its own header and then did not
+  follow it — unsubscribing on presence and opening a NEW listener for absence
+  (two query states at two moments, not a live listener publishing a removal),
+  and accepting cached snapshots, since `includeMetadataChanges` makes CACHE
+  callbacks visible rather than making callbacks server-backed. Both fixed; the
+  production run then proved the removal on one held, server-backed subscription.
+  **AN ORDERING SLIP OF MINE, worth more than the incident.** The agreed order
+  was rules-then-web; `main` auto-deploys to Vercel, so pushing the reader commit
+  shipped the bundle FIRST — exactly the window Codex warned about. Measured the
+  moment it was noticed: 92 tasks, all shaped, 0 unbackfilled; nothing came
+  through, and the rules deploy closed it. **"Deploy A then B" is not a plan when
+  pushing to `main` IS deploying B** — on this repo ordering must be enforced by
+  what gets pushed, not by command order.
+  Also removed `archiveFieldsAbsent` after the deploy warned it was unused: dead
+  code in an authorization file is worth less than the warning that finds it.
+  Re-tested 112/112 and re-verified 24/24 against the redeployed rules.
+- **Next, and the only gate left:** **automation gate** (backup / dry run / counts / explicit approval / execute /
   independent coverage / delta; `audit-coh007-archive-shape.mjs` is the
   independent baseline, and the A3 null-ordering measurement belongs here) →
-  (its FIRST commit is Q1's final-ruleset sentinel; the go/no-go is
-  `backfill-task-archive.cjs --verify` at 0 outstanding — TASKS only, not the
-  shape audit's raw `absent`, which stays at 42 for the maintenance items; and
-  the final ruleset ships WITH the reader change, not before it) → automation
-  gate (flip `ARCHIVER_WRITES_ENABLED` and `ARCHIVING_ENABLED`, with a
-  controlled threshold verification against the eligible count).
+ — flip `ARCHIVER_WRITES_ENABLED` (functions) and `ARCHIVING_ENABLED` (the
+  Archived view's empty-state copy), re-checking the eligible count immediately
+  before the flip rather than trusting the recorded one, then a controlled
+  threshold verification and a pass over archive search, detail, links, reopen,
+  metrics and the heartbeat. **Currently 35 eligible**, dry run, writing nothing.
+  This is the first gate whose effect users will see.
 - Prior status, kept for the record: **Plan amended — awaiting Codex pre-implementation review.** The
   COH-006 dependency is **cleared** (all four gates deployed and verified
   2026-09-03, `main` at `2ced910`), so the file-overlap hold on

@@ -99,12 +99,11 @@ service cloud.firestore {
     //
     // A malformed or half-written pair now permits nothing at all. It can only
     // be repaired by the Admin SDK, which these rules do not bind.
-    // Retained though the final ruleset no longer admits this shape anywhere:
-    // it names the thing being refused, and the sentinel's pinned transitional
-    // fixture still depends on the same vocabulary.
-    function archiveFieldsAbsent(d) {
-      return !('archived' in d) && !('archivedAt' in d);
-    }
+    // `archiveFieldsAbsent` lived here through the additive gate and is gone with
+    // the final ruleset, which admits that shape nowhere. The deploy's
+    // "Unused function" warning was the signal, and dead code in an
+    // authorization file is worth less than the warning that finds it. The
+    // transitional ruleset still carries it, pinned as the sentinel's fixture.
     function archiveFieldsActive(d) {
       return 'archived' in d && 'archivedAt' in d
         && d.archived is bool && d.archived == false
