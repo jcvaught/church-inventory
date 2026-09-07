@@ -258,7 +258,6 @@ export function BlogPost({ slug, onGetStarted }) {
         </div>
         <div style={{ maxWidth: 1100, margin: '20px auto 0', paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: 13, color: 'rgba(255,255,255,0.40)', fontFamily: f1, textAlign: mob ? 'left' : 'center' }}>
           More from our network:{' '}
-          <a href="https://courtclimber.com/blog" rel="noopener" style={{ color: 'rgba(255,255,255,0.6)' }}>Pickleball club software</a>{' · '}
           <a href="https://masteryhelp.com/blog" rel="noopener" style={{ color: 'rgba(255,255,255,0.6)' }}>Learn Biblical Greek &amp; Hebrew</a>{' · '}
           <a href="https://repcrew.fit/blog" rel="noopener" style={{ color: 'rgba(255,255,255,0.6)' }}>Workout accountability</a>
         </div>
