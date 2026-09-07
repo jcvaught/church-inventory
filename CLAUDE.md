@@ -463,6 +463,8 @@ gcloud firestore indexes composite create \
   --field-config=field-path=scheduledDate,order=ascending
 ```
 
+**Case A2 — a BUILDING index and a MISSING index return the same error code (2026-09-07, COH-007).** A newly created composite rejects queries with `failed-precondition` while it builds — byte-identical in code to a missing index. The only discriminator is the message text ("That index is currently building and cannot be used yet"). Worse, the state flag and query availability are **not simultaneous**: `gcloud firestore indexes composite list` reported every index `READY` while queries kept rejecting for roughly another minute. Any post-deploy index probe must (a) match on the message, not just the code, and (b) re-run after the reported-ready moment. Reading a building index as a missing one is how a healthy deploy gets needlessly rolled back or "fixed" with a duplicate `gcloud` index. `scripts/verify-coh007-additive-gate.mjs` encodes both rules.
+
 **Case B — COLLECTION_GROUP field-override indexes.** A `fieldOverrides` entry with a `COLLECTION_GROUP` index (e.g. `signups.uid`, `waitlist.uid` for the Jobs Hub roster) is not created by `firebase deploy`. `gcloud firestore indexes fields list --collection-group=<cg>` shows `Listed 0 items`, and `collectionGroup(...).where('uid','==',x)` fails. `gcloud firestore indexes fields update` can't fix it (its `--index` flag has no query-scope key) — create directly via the Firestore Admin REST API:
 
 ```bash
