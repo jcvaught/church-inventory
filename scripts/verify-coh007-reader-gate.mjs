@@ -260,11 +260,22 @@ async function main() {
     record('but is absent from the board — the reason it must not exist',
       !(await serverIds(armsA.team, PREFIX)).includes(IDS.legacy));
   } finally {
+    // Cleanup must FAIL LOUDLY (confirmation L3). An earlier version swallowed
+    // every delete error and then recorded success unconditionally, so a
+    // transient Admin SDK failure would leave probe documents in a real project
+    // while the script printed "removed every probe fixture" and exited zero.
+    // Every path is still attempted — one failure must not strand the rest.
     console.log('\nCleanup:');
+    const undeleted = [];
     for (const id of [...all, `${PREFIX}staleCreate`]) {
-      try { await adminDb.doc(P(`workItems/${id}`)).delete(); } catch { /* never existed */ }
+      try {
+        await adminDb.doc(P(`workItems/${id}`)).delete();
+      } catch (err) {
+        undeleted.push(`${id} (${err?.code || err?.message})`);
+      }
     }
-    record('removed every probe fixture', true, `${all.length + 1} path(s)`);
+    record('removed every probe fixture', undeleted.length === 0,
+      undeleted.length ? `LEFT BEHIND: ${undeleted.join(', ')}` : `${all.length + 1} path(s)`);
     await signOutClient();
   }
 
