@@ -369,7 +369,129 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-007 — Completed-task archiving and archive search
 
-- Status: **Plan amended — awaiting Codex pre-implementation review.** The
+- Status: **ADDITIVE GATE (3 of 4) DEPLOYED AND VERIFIED IN PRODUCTION
+  2026-09-07.** Rules + indexes are live on `church-inventory-9615c`; probes
+  26/26. Receipt: `docs/COH-007-ADDITIVE-GATE-DEPLOY-RECEIPT-2026-09-07.md`.
+  **Cloud Functions are NOT deployed** — `archiveCompletedTasks` and its monitor
+  entry still need owner authorization (DEC-2026-014). No production task data
+  was written or changed; the two new fields are inert and no reader filters on
+  them. Rollback is one rules redeploy.
+  Codex "approved with follow-up" 2026-09-06 after four passes; the one
+  follow-up (an audit-trail citation typo) is closed. Branch
+  `claude/coh-007-additive-gate` from `main` at `6dbc6c6`. Trail: implementation
+  `a7d490d` → `e4230c3` → `d62e92b` → handoff `5d2ac1b` → **Codex review
+  `1a89784`** (`docs/COH-007-ADDITIVE-GATE-REVIEW-2026-09-06.md`, two High /
+  three Medium / no Critical, **changes requested**) → fixes `94ee913` →
+  **Codex re-review `96aa947`**
+  (`docs/COH-007-ADDITIVE-GATE-REREVIEW-2026-09-06.md`, **changes requested**;
+  original H1/M1/M2/M3 **CLOSED**, one new High + one Medium, both on the H2
+  fix) → fixes `f562c7d` → **Codex confirmation `ccb8600`**
+  (`docs/COH-007-ADDITIVE-GATE-CONFIRMATION-2026-09-06.md`, **changes
+  requested**; one High + one Medium, again on the H2 lineage, and **no
+  regression anywhere else**) → fixes `4a98171` → SHA correction `f6a2e20` →
+  **Codex final `f8975d7`**
+  (`docs/COH-007-ADDITIVE-GATE-FINAL-2026-09-06.md`, **APPROVED WITH
+  FOLLOW-UP**) → follow-up closed.
+  **The re-review's High is the first review's H2 in a narrower window, and the
+  distinction is worth keeping:** my fix captured the active baseline when the
+  four archive reads *settled*, so an arm could snapshot without `x`, the worker
+  archive `x` so the live listeners dropped it, and the read settle with `x` in
+  neither half and never recorded — the predicate cannot detect an id its caller
+  never supplies. The baseline now covers the **interval** rather than the
+  instant. Its Medium: staleness watched every board row, so deleting an old
+  Backlog task with no date in either metric window flipped the presentation to
+  "out of date" while both figures were byte-for-byte unchanged — a drip of
+  false warnings that teaches people to ignore the real one. Now narrowed to
+  tasks that actually contribute to the figures.
+  Codex explicitly approved the three-shape rules model and the create
+  tightening, confirming no supported client generation writes only one archive
+  field.
+  Handoff: `docs/COH-007-ADDITIVE-GATE-HANDOFF-2026-09-06.md`.
+  **Both High findings were the same mistake in two places: a state that could
+  not be classified was treated as the permissive one.** **H1** — the archive
+  discriminator asked only `archived == true`, so a malformed or half-written
+  pair read as active and stayed commentable and permanently DELETABLE; content
+  updates were already denied, which is what disguised it. The rules now
+  recognise exactly three shapes (absent / active / frozen) and anything else
+  permits no write at all, reads never withheld — and create was tightened to
+  both-or-neither, because the fix would otherwise have left a half-written
+  document locked on arrival to its own creator. **H2** — a task archived after
+  the Insights one-shot read falls out of both halves of the join while the
+  label still claims a complete history; live-wins precedence cannot reach that
+  direction, only noticing it can, so the load records the active set at settle
+  time and a torn history stops using the complete presentation.
+  Mediums: `Date.parse` normalizes calendar overflow (Feb 30 would have archived
+  as a valid completion); transaction-callback retries overcounted the daily
+  heartbeat; an archived task's comment-listener error rendered as "No comments
+  yet".
+  **Codex also corrected a claim of mine** (Q2): the production dry run cannot
+  re-measure A3's null-ordering question, because a zero malformed count cannot
+  distinguish "production excludes nulls" from "there were none to find". It
+  needs an independent `completedAt == null` baseline compared by document id —
+  and since no production document carries `archived` until the backfill runs,
+  that measurement belongs to the **backfill gate**, not the next dry run.
+  Q1 (pin the final-ruleset sentinel as an executable test) is scheduled as the
+  **reader gate's first commit**, per the review's verdict.
+  **No reader changed shape** — the four task arms now come from one shared
+  builder called with `archived: null`, so the board asks exactly the questions
+  it asked yesterday, and `archived: false` is a one-line change at the reader
+  gate. Ships: both task writers, the transitional ruleset, nine indexes, the
+  archive reader and Tasks → Archived view, `insightTasks`, and
+  `archiveCompletedTasks` **as a dry run** (`ARCHIVER_WRITES_ENABLED = false`),
+  registered on the scheduled-job monitor.
+  Two live defects fixed on the way past, neither needing archiving to be a
+  defect: `canSeeTask()` now reads the canonical uid arrays (a task with a stale
+  object array was hidden **on the active board** from someone the rules
+  authorize), and a linked task absent from the active store is no longer
+  described as deleted.
+  **The A3 measurement contradicted the plan.** Executed with Codex's exact
+  fixture, `completedAt <= '<iso cutoff>'` returns neither the null-valued nor
+  the missing-field document — so the skip-malformed guard is defensive, not
+  load-bearing, and its counter is expected to be zero for nulls. The guard ships
+  either way, as A3 requires. **Emulator evidence only**; the first production
+  dry run re-measures it and is the authority.
+  **Every finding across all three passes has landed on the same feature — the
+  Insights history join — and each pass found the previous fix correct but
+  scoped one step too narrowly:** the predicate was right but its baseline was
+  captured too late; the baseline then covered the interval but the shared slot
+  could be detached by a superseded load; the watched set was narrowed to the
+  board, then to the figures, and finally to each figure's own date floor. The
+  rules, archiver and archive reader have drawn no finding since the first pass.
+  `npm run test:rules` 104/104, `test:handlers` 73/73, `test:unit` 165/165,
+  `lint` 0 errors, `build` clean. Codex independently ran `test:unit`, `lint` and
+  `build` in its clone; it **cannot bind the emulator ports**, so **no rules or
+  handler result is reproduced by a second party**. **Not run:** `test:e2e` (its cases cannot fire
+  before the reader/automation gates and the rules are undeployed) and the
+  production index/query probes (the gate's own acceptance step — needs the
+  owner's authorization to deploy rules + indexes).
+- **Deploy verification, 2026-09-07.** Indexes were read back and diffed against
+  `firestore.indexes.json` rather than trusted: 1 workItems composite before, 10
+  after, **0 declared-but-missing** — the 2026-05 silent-skip did not recur, and
+  the equality-first field order recorded as an assumption is now settled by
+  probe. The client-SDK probe (`scripts/verify-coh007-additive-gate.mjs`) passed
+  26/26: four archived arms, four bounded arms, the collection-group scan
+  (`permission-denied`, NOT `failed-precondition` — the index is present and the
+  rules deny a client), A10's completedAt-absent task returned by the active arm
+  and excluded from the bounded one, A13's stale-client legacy task fully
+  editable and commentable, and six direct-client attacks on the freeze all
+  denied.
+  **The residual risk was the transitional ruleset, and it was measured rather
+  than argued** (`scripts/audit-coh007-archive-shape.mjs`): all **134** production
+  work items — 92 task, 42 maintenance — carry NEITHER archive field, the legacy
+  shape the rules leave fully usable. Zero malformed, zero already-archived.
+  **One false alarm worth remembering:** a building index returns
+  `failed-precondition`, the same code as a missing one, and `gcloud` reported
+  every index READY while queries still rejected for about a minute afterwards.
+  The message text is the only discriminator; the probe now names it. Mistaking
+  it for a missing index is how a healthy deploy gets rolled back.
+- **Next, in order:** owner-authorized **Cloud Functions deploy** (DEC-2026-014
+  — ships the archiver as a dry run, writing nothing, plus its monitor entry) →
+  **backfill gate** (backup / dry run / counts / explicit approval / execute /
+  independent coverage / delta; `audit-coh007-archive-shape.mjs` is the
+  independent baseline, and the A3 null-ordering measurement belongs here) →
+  reader gate (its FIRST commit is Q1's final-ruleset sentinel; `absent` must be
+  zero before the final rules deploy) → automation gate.
+- Prior status, kept for the record: **Plan amended — awaiting Codex pre-implementation review.** The
   COH-006 dependency is **cleared** (all four gates deployed and verified
   2026-09-03, `main` at `2ced910`), so the file-overlap hold on
   `src/useFirestore.js`, `firestore.rules`, `firestore.indexes.json`, the work

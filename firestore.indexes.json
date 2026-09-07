@@ -5,6 +5,85 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "visibility", "order": "ASCENDING" },
+        { "fieldPath": "archived", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "workItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdBy", "order": "ASCENDING" },
+        { "fieldPath": "archived", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "workItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "archived", "order": "ASCENDING" },
+        { "fieldPath": "assigneeUids", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "workItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "visibility", "order": "ASCENDING" },
+        { "fieldPath": "archived", "order": "ASCENDING" },
+        { "fieldPath": "sharedWithUids", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "workItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "visibility", "order": "ASCENDING" },
+        { "fieldPath": "archived", "order": "ASCENDING" },
+        { "fieldPath": "completedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "workItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdBy", "order": "ASCENDING" },
+        { "fieldPath": "archived", "order": "ASCENDING" },
+        { "fieldPath": "completedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "workItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "archived", "order": "ASCENDING" },
+        { "fieldPath": "assigneeUids", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "completedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "workItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "visibility", "order": "ASCENDING" },
+        { "fieldPath": "archived", "order": "ASCENDING" },
+        { "fieldPath": "sharedWithUids", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "completedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "workItems",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "archived", "order": "ASCENDING" },
+        { "fieldPath": "completedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "workItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "visibility", "order": "ASCENDING" },
         { "fieldPath": "sharedWithUids", "arrayConfig": "CONTAINS" }
       ]
     },

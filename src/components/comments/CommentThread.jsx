@@ -64,7 +64,11 @@ function AutoGrowTextarea({ value, onChange, style, autoFocus }) {
   return <textarea ref={ref} value={value} onChange={e => onChange(e.target.value)} style={style} autoFocus={autoFocus} />;
 }
 
-export function CommentThread({ comments, loading, newComment, onChange, onPost, posting, userId, canOperate, onEdit, onDelete, users = [] }) {
+// `readOnly` renders the thread as a record rather than a conversation: no
+// composer, no edit/delete affordances. COH-007 uses it for an archived task,
+// whose comments the rules keep readable and freeze against every write — so
+// offering a Post button here would only produce a permission-denied.
+export function CommentThread({ comments, loading, newComment, onChange, onPost, posting, userId, canOperate, onEdit, onDelete, users = [], readOnly = false }) {
   const listRef = useRef(null);
   const commentInputWrapRef = useRef(null);
   const [editingId, setEditingId] = useState(null);
@@ -109,7 +113,7 @@ export function CommentThread({ comments, loading, newComment, onChange, onPost,
             ? <div style={{ color: B.textLight, fontSize: 13 }}>No comments yet.</div>
             : comments.map(c => {
                 const isOwn = c.authorId === userId;
-                const canModify = isOwn || canOperate;
+                const canModify = !readOnly && (isOwn || canOperate);
                 return (
                   <div key={c.id} style={{ background: isOwn ? B.tealPale : B.warmGray, borderRadius: 10, padding: '10px 14px', border: isOwn ? '1px solid ' + B.tealLight : '1px solid transparent' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3, gap: 6 }}>
@@ -144,7 +148,7 @@ export function CommentThread({ comments, loading, newComment, onChange, onPost,
               })
         }
       </div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+      {!readOnly && <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
         <div ref={commentInputWrapRef} style={{ flex: 1, position: 'relative' }}>
           <RichTextarea
             value={newComment}
@@ -170,7 +174,7 @@ export function CommentThread({ comments, loading, newComment, onChange, onPost,
             <button type="button" onMouseDown={e => { e.preventDefault(); setMentionOpen(v => !v); }} style={{ ...btnS, padding: '6px 12px', fontSize: 12, textAlign: 'center' }}>@ Mention</button>
           )}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

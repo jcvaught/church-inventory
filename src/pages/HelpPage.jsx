@@ -806,6 +806,13 @@ export function HelpPage({ onBack }) {
               <Tip>Use Private for your own to-do items, Shared for tasks you're collaborating on with one other person, and Team for anything the whole staff should see.</Tip>
             </Accordion>
 
+            <Accordion title="Archived tasks">
+              <P>Completed tasks eventually move out of the way. Once a task has been <strong>Complete</strong> for more than six weeks it is archived: it leaves the board, the filters, and Global Search, and moves to <strong>Tasks → Archived</strong>.</P>
+              <P>Archiving never deletes anything. The task keeps its comments, photos, links, task number, and history — and it keeps exactly the same visibility it always had. A private task stays private in the archive; nobody sees an archived task they could not see before, and there is no administrator override.</P>
+              <P>Open <strong>Archived</strong> to search your archive by name, description, tag, or task number. It loads the last twelve months by default, says on screen which dates are included, and has a control to search further back. An archived task opens read-only — including its comments — until you <strong>Reopen</strong> it, which returns it to the board in Backlog and clears its completion date so it can be worked again.</P>
+              <Note>Automatic archiving is being rolled out. Until it is switched on for your church, the Archived view will be empty — nothing has been archived yet, and nothing has been lost.</Note>
+            </Accordion>
+
             <Accordion title="Task defaults">
               <P>Click the <strong>⚙ Defaults</strong> button (next to the view toggle) to set your personal defaults for new tasks. New tasks start Private unless you save a different default visibility here; you can also save a default share-with list so you don't have to re-select it every time you create a task.</P>
               <Tip>If you almost always share tasks with the same person, save them as your default share-with. They'll be pre-filled whenever you open the New Task form.</Tip>

@@ -1,4 +1,5 @@
 import { useState, useMemo, useContext, useEffect, useLayoutEffect, useRef, memo } from 'react';
+import { LinkedTaskRef } from '../../components/board/LinkedTaskRef.jsx';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, collectionGroup, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
 import * as Sentry from '@sentry/react';
@@ -1987,9 +1988,12 @@ export function JobsPage({ store, userProfile, initialView }) {
           )}
           {/* Linked task chip */}
           {liveDetail.linkedTaskDocId && (
-            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14, padding:'8px 12px', borderRadius:8, background:'#EDF2FF', border:'1px solid #C7D2FE' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14, padding:'8px 12px', borderRadius:8, background:'#EDF2FF', border:'1px solid #C7D2FE', flexWrap:'wrap' }}>
               <span style={{ fontSize:13, color:'#4F46E5', fontFamily:f1, fontWeight:700 }}>✓ Linked Task</span>
-              <span style={{ fontSize:12, color:'#4F46E5', fontFamily:'monospace' }}>{liveDetail.linkedTaskDocId.slice(0,8)}…</span>
+              {/* COH-007: name the task's real state — active, archived, deleted,
+                  or (for someone who cannot read it) nothing at all. The bare id
+                  alone could not tell those apart. */}
+              <LinkedTaskRef churchId={userProfile?.churchId} bareId={liveDetail.linkedTaskDocId} style={{ fontSize:12 }} />
             </div>
           )}
           {/* Action row */}

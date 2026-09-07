@@ -75,3 +75,46 @@ test('uidsOf returns an empty array for missing or non-array input', () => {
   assert.deepEqual(uidsOf(null), []);
   assert.deepEqual(uidsOf('not-an-array'), []);
 });
+
+// ── COH-007 A5 / review H2 — the canonical uid arrays govern ────────────────
+// DEC-2026-012 made assigneeUids/sharedWithUids canonical for authorization, but
+// this predicate kept reading the [{uid, name}] presentation arrays. That is a
+// LIVE defect on the active board, not merely an archive concern: a task whose
+// object array has gone stale is hidden from someone the rules authorize.
+
+test('canonical assignee remains visible when the presentation array is stale', () => {
+  const t = {
+    _docId: 'x', type: 'task', visibility: 'private', createdBy: 'creator',
+    assigneeUids: ['assignee'], assignees: [], archived: true,
+  };
+  assert.equal(canSeeTask(t, 'assignee'), true);
+});
+
+test('canonical recipient remains visible when the presentation array is stale', () => {
+  const t = {
+    visibility: 'shared', createdBy: 'creator',
+    sharedWithUids: ['recipient'], sharedWith: [],
+  };
+  assert.equal(canSeeTask(t, 'recipient'), true);
+});
+
+test('canSeeTask falls back only when the canonical projection is absent', () => {
+  const staleObject = [{ uid: 'old-recipient' }];
+  // A genuine pre-projection document: no canonical array exists to consult.
+  assert.equal(canSeeTask({ visibility: 'shared', sharedWith: staleObject }, 'old-recipient'), true);
+  // An EMPTY canonical array is an answer, not a gap. It means nobody.
+  assert.equal(canSeeTask({ visibility: 'shared', sharedWithUids: [], sharedWith: staleObject }, 'old-recipient'), false);
+  assert.equal(canSeeTask({ visibility: 'private', createdBy: 'creator', assignees: staleObject }, 'old-recipient'), true);
+  assert.equal(canSeeTask({ visibility: 'private', createdBy: 'creator', assigneeUids: [], assignees: staleObject }, 'old-recipient'), false);
+});
+
+test('a malformed map projection grants nobody, mirroring the rules', () => {
+  assert.equal(canSeeTask({ visibility: 'shared', sharedWithUids: { recipient: true } }, 'recipient'), false);
+  assert.equal(canSeeTask({ visibility: 'private', createdBy: 'c', assigneeUids: 'assignee' }, 'assignee'), false);
+});
+
+test('archiving changes nothing about who can see a task', () => {
+  const t = { visibility: 'shared', createdBy: 'creator', sharedWithUids: ['recipient'] };
+  assert.equal(canSeeTask({ ...t, archived: true }, 'recipient'), canSeeTask(t, 'recipient'));
+  assert.equal(canSeeTask({ ...t, archived: true }, 'stranger'), canSeeTask(t, 'stranger'));
+});

@@ -32,6 +32,13 @@ function buildResults(store, canSeeHub, q) {
   }
 
   // Tasks (tasks hub)
+  //
+  // ACTIVE tasks only, deliberately (COH-007). `store.tasks` is the live merged
+  // work store, which archived tasks leave at the reader gate, and this search
+  // must never open an archive subscription of its own — the whole point of
+  // archiving is to keep old completed work out of the always-live listeners.
+  // Archived search lives in Tasks → Archived, where its on-demand reads, its
+  // loaded window, and its loading/error states are all explicit.
   if (canSeeHub('tasks')) {
     take((store.tasks || []).filter(t =>
       m(t.name, q) || m(t.title, q) || m(t.description, q) || m(t.taskNumber, q)),
