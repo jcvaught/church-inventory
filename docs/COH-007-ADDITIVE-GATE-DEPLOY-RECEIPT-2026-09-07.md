@@ -6,10 +6,10 @@ any command and passed explicitly as `--project` on every one.
 **Source:** `claude/coh-007-additive-gate` at `ac248e6`
 (Codex-approved, `docs/COH-007-ADDITIVE-GATE-FINAL-2026-09-06.md`).
 
-**Deployed:** `firestore:indexes`, then `firestore:rules`.
-**NOT deployed:** Cloud Functions. `archiveCompletedTasks` and its monitor entry
-are still un-deployed and require separate owner authorization (DEC-2026-014).
-No production task data was written or changed.
+**Deployed, in three authorized steps:** `firestore:indexes` → `firestore:rules`
+→ (second authorization) merge to `main` for the Vercel web deploy, and the
+Cloud Functions deploy. **No production task data was written or changed.**
+The archiver is live but writing nothing: `ARCHIVER_WRITES_ENABLED = false`.
 
 ## What was deployed
 
@@ -122,11 +122,74 @@ git checkout main -- firestore.rules
 The indexes are additive and unused by any deployed reader; leaving them costs
 nothing and removing them is a separate, riskier operation.
 
+## Web deploy — `main` at `e5ed2ec`
+
+Merged and pushed on the owner's second authorization; Vercel production
+deployment `dpl_Co9pBEtonngNWe178JTgEYSzQxee` **READY**. This is the moment the
+client half went live: the Archived tab (reachable, always empty, with copy
+saying archiving is not switched on yet), the `canSeeTask` canonical-uid fix,
+`insightTasks`, `LinkedTaskRef`, and the writers that stamp
+`archived`/`archivedAt` on every new task.
+
+Merging also brings `main` back in step with the deployed rules. Left unmerged,
+the next deploy from `main` would have silently reverted them — which is the
+kind of regression nobody attributes correctly weeks later.
+
+The writers are the part with a real deadline: they must be live **before** the
+backfill, or tasks created after it would lack the pair and the coverage
+baseline would go stale the moment it was taken.
+
+## Cloud Functions — `archiveCompletedTasks` + `monitorScheduledJobs`
+
+Deployed with `--only functions:archiveCompletedTasks,functions:monitorScheduledJobs`,
+deliberately scoped. A blanket `--only functions` would have redeployed every
+HTTP function, and gen-2 deploys can strip the `allUsers` invoker binding and
+produce a silent 403 — a hazard this repository has already paid for. Both
+functions here are `onSchedule`, so that hazard does not apply to them, and
+nothing else was touched.
+
+```text
+functions[archiveCompletedTasks(us-central1)]  Successful create operation.
+functions[monitorScheduledJobs(us-central1)]   Successful update operation.
+Cloud Scheduler: firebase-schedule-archiveCompletedTasks-us-central1
+                 0 3 * * * (America/Chicago) — ENABLED
+```
+
+### The first production dry run — triggered, not waited for
+
+```text
+status      : completed        durationMs : 1308
+lastError   : null
+lastSummary : { dryRun: true, examined: 0, eligible: 0, archived: 0,
+                conflicted: 0, failed: 0, truncated: false,
+                malformedReturnedByEligibilityQuery: 0,
+                skippedTooRecent: 0, skippedOther: 0,
+                cutoff: "2026-07-27T11:42:14.830Z" }
+```
+
+Three things this establishes, and one it deliberately does not.
+
+- The function runs, the COLLECTION_GROUP eligibility index serves it from the
+  Admin SDK, and the heartbeat lands — so `monitorScheduledJobs` has a
+  `finishedAt` and will not alert.
+- The dry-run posture is real: `dryRun: true`, `archived: 0`, no writes.
+- **`examined: 0` empirically confirms Codex's Q2 correction.** The eligibility
+  query filters `archived == false`, and no pre-existing production document
+  carries the field at all, so the query matches nothing. A pre-backfill run is
+  vacuous **by construction**, exactly as reasoned — now measured rather than
+  argued.
+- What it does NOT establish is the A3 null-ordering question. A zero malformed
+  count here distinguishes nothing, because the query examined nothing. That
+  measurement needs the backfill's independent `completedAt == null` baseline
+  compared by document id, and it belongs to the backfill gate.
+
 ## Still requiring owner authorization
 
-1. **Cloud Functions deploy** (DEC-2026-014) — ships `archiveCompletedTasks` as a
-   dry run (`ARCHIVER_WRITES_ENABLED = false`) plus its scheduled-job monitor
-   entry. It writes nothing; it makes the job observable.
-2. **Backfill gate** — its own backup / dry run / counts / explicit approval /
+1. **Backfill gate** — its own backup / dry run / counts / explicit approval /
    execute / independent coverage / delta sequence.
-3. **Reader gate**, then the **automation gate**.
+   `scripts/audit-coh007-archive-shape.mjs` is the independent baseline, and the
+   A3 measurement belongs here.
+2. **Reader gate** — its FIRST commit is Q1's final-ruleset sentinel, and
+   `absent` must be **zero** in the shape audit before the final rules deploy.
+3. **Automation gate** — flip `ARCHIVER_WRITES_ENABLED` and
+   `ARCHIVING_ENABLED`, with a controlled threshold verification.

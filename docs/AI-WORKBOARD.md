@@ -372,10 +372,21 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 - Status: **ADDITIVE GATE (3 of 4) DEPLOYED AND VERIFIED IN PRODUCTION
   2026-09-07.** Rules + indexes are live on `church-inventory-9615c`; probes
   26/26. Receipt: `docs/COH-007-ADDITIVE-GATE-DEPLOY-RECEIPT-2026-09-07.md`.
-  **Cloud Functions are NOT deployed** — `archiveCompletedTasks` and its monitor
-  entry still need owner authorization (DEC-2026-014). No production task data
-  was written or changed; the two new fields are inert and no reader filters on
-  them. Rollback is one rules redeploy.
+  **The gate is fully shipped:** rules + indexes, the Vercel web deploy of
+  `main` at `e5ed2ec` (Archived tab, `canSeeTask` canonical-uid fix,
+  `insightTasks`, and the writers), and the Cloud Functions deploy of
+  `archiveCompletedTasks` + `monitorScheduledJobs`, scoped with `--only` so the
+  gen-2 `allUsers` invoker hazard could not touch the HTTP functions. **No
+  production task data was written or changed** — the archiver is live but
+  writing nothing (`ARCHIVER_WRITES_ENABLED = false`), the two fields are inert,
+  and no reader filters on them. Rollback is one rules redeploy.
+  **First production dry run: completed, 1308 ms, no error, `dryRun: true`,
+  `examined: 0`.** That zero is not a null result — it empirically confirms
+  Codex's Q2 correction: the eligibility query filters `archived == false` and no
+  pre-existing document carries the field, so a pre-backfill run is vacuous BY
+  CONSTRUCTION. It also means the A3 null-ordering question is still unmeasured
+  and belongs to the backfill gate, where the independent `completedAt == null`
+  baseline can be compared by document id.
   Codex "approved with follow-up" 2026-09-06 after four passes; the one
   follow-up (an audit-trail citation typo) is closed. Branch
   `claude/coh-007-additive-gate` from `main` at `6dbc6c6`. Trail: implementation
@@ -484,9 +495,7 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   every index READY while queries still rejected for about a minute afterwards.
   The message text is the only discriminator; the probe now names it. Mistaking
   it for a missing index is how a healthy deploy gets rolled back.
-- **Next, in order:** owner-authorized **Cloud Functions deploy** (DEC-2026-014
-  — ships the archiver as a dry run, writing nothing, plus its monitor entry) →
-  **backfill gate** (backup / dry run / counts / explicit approval / execute /
+- **Next, in order:** **backfill gate** (backup / dry run / counts / explicit approval / execute /
   independent coverage / delta; `audit-coh007-archive-shape.mjs` is the
   independent baseline, and the A3 null-ordering measurement belongs here) →
   reader gate (its FIRST commit is Q1's final-ruleset sentinel; `absent` must be
