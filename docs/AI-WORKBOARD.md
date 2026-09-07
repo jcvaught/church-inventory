@@ -369,10 +369,15 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-007 — Completed-task archiving and archive search
 
-- Status: **ADDITIVE GATE (3 of 4) IMPLEMENTED AND APPROVED — Codex "approved
-  with follow-up" 2026-09-06 after four passes; the one follow-up (an audit-trail
-  citation typo) is closed. NOTHING DEPLOYED — the next step needs the owner's
-  authorization.** Branch
+- Status: **ADDITIVE GATE (3 of 4) DEPLOYED AND VERIFIED IN PRODUCTION
+  2026-09-07.** Rules + indexes are live on `church-inventory-9615c`; probes
+  26/26. Receipt: `docs/COH-007-ADDITIVE-GATE-DEPLOY-RECEIPT-2026-09-07.md`.
+  **Cloud Functions are NOT deployed** — `archiveCompletedTasks` and its monitor
+  entry still need owner authorization (DEC-2026-014). No production task data
+  was written or changed; the two new fields are inert and no reader filters on
+  them. Rollback is one rules redeploy.
+  Codex "approved with follow-up" 2026-09-06 after four passes; the one
+  follow-up (an audit-trail citation typo) is closed. Branch
   `claude/coh-007-additive-gate` from `main` at `6dbc6c6`. Trail: implementation
   `a7d490d` → `e4230c3` → `d62e92b` → handoff `5d2ac1b` → **Codex review
   `1a89784`** (`docs/COH-007-ADDITIVE-GATE-REVIEW-2026-09-06.md`, two High /
@@ -459,13 +464,33 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   before the reader/automation gates and the rules are undeployed) and the
   production index/query probes (the gate's own acceptance step — needs the
   owner's authorization to deploy rules + indexes).
-- **AWAITING THE OWNER.** The gate is code-complete and approved; every
-  remaining step is a production action the owner must authorize.
-- **Next, in order:** owner-authorized
-  `firestore:rules` + `firestore:indexes` deploy (probe all nine shapes; a green
-  deploy is not evidence, and redeploy rules afterwards) → Cloud Functions deploy
-  (DEC-2026-014) → production board smoke test on a real church → **backfill
-  gate** → reader gate → automation gate.
+- **Deploy verification, 2026-09-07.** Indexes were read back and diffed against
+  `firestore.indexes.json` rather than trusted: 1 workItems composite before, 10
+  after, **0 declared-but-missing** — the 2026-05 silent-skip did not recur, and
+  the equality-first field order recorded as an assumption is now settled by
+  probe. The client-SDK probe (`scripts/verify-coh007-additive-gate.mjs`) passed
+  26/26: four archived arms, four bounded arms, the collection-group scan
+  (`permission-denied`, NOT `failed-precondition` — the index is present and the
+  rules deny a client), A10's completedAt-absent task returned by the active arm
+  and excluded from the bounded one, A13's stale-client legacy task fully
+  editable and commentable, and six direct-client attacks on the freeze all
+  denied.
+  **The residual risk was the transitional ruleset, and it was measured rather
+  than argued** (`scripts/audit-coh007-archive-shape.mjs`): all **134** production
+  work items — 92 task, 42 maintenance — carry NEITHER archive field, the legacy
+  shape the rules leave fully usable. Zero malformed, zero already-archived.
+  **One false alarm worth remembering:** a building index returns
+  `failed-precondition`, the same code as a missing one, and `gcloud` reported
+  every index READY while queries still rejected for about a minute afterwards.
+  The message text is the only discriminator; the probe now names it. Mistaking
+  it for a missing index is how a healthy deploy gets rolled back.
+- **Next, in order:** owner-authorized **Cloud Functions deploy** (DEC-2026-014
+  — ships the archiver as a dry run, writing nothing, plus its monitor entry) →
+  **backfill gate** (backup / dry run / counts / explicit approval / execute /
+  independent coverage / delta; `audit-coh007-archive-shape.mjs` is the
+  independent baseline, and the A3 null-ordering measurement belongs here) →
+  reader gate (its FIRST commit is Q1's final-ruleset sentinel; `absent` must be
+  zero before the final rules deploy) → automation gate.
 - Prior status, kept for the record: **Plan amended — awaiting Codex pre-implementation review.** The
   COH-006 dependency is **cleared** (all four gates deployed and verified
   2026-09-03, `main` at `2ced910`), so the file-overlap hold on
