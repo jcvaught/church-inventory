@@ -367,7 +367,7 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 - **Requires owner authorization to deploy** (Cloud Functions), per DEC-2026-014.
 
 
-### COH-007 — Completed-task archiving and archive search
+### COH-007 — Completed-task archiving and archive search — ✅ COMPLETE 2026-09-07
 
 - Status: **ADDITIVE GATE (3 of 4) DEPLOYED AND VERIFIED IN PRODUCTION
   2026-09-07.** Rules + indexes are live on `church-inventory-9615c`; probes
@@ -544,7 +544,31 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   Also removed `archiveFieldsAbsent` after the deploy warned it was unused: dead
   code in an authorization file is worth less than the warning that finds it.
   Re-tested 112/112 and re-verified 24/24 against the redeployed rules.
-- **Next, and the only gate left:** **automation gate** (backup / dry run / counts / explicit approval / execute /
+- **AUTOMATION GATE LIVE 2026-09-07 — COH-007 IS COMPLETE.** Receipt:
+  `docs/COH-007-AUTOMATION-GATE-RECEIPT-2026-09-07.md`. First real run archived
+  **35 tasks, 0 failed, 0 conflicted**, exactly the set captured beforehand at
+  `~/apps/coh007-migration/pre-automation-eligible-2026-09-07.json`.
+  **Threshold verified by document path, not by count:** 0 missing, 0
+  unexpected, 0 without a timestamp, and the 14 Complete tasks newer than the
+  cutoff all stayed on the board (oldest still-active completion 2026-08-18).
+  Board 92 → 57 active; maintenance 42, untouched. Second run examined 0, so the
+  job is idempotent rather than merely harmless. Reader-gate acceptance re-run
+  post-flip: 24/24.
+  **Not production-verified, and not to be read as if it were:** none of these
+  35 tasks had comments, photos or links, so archiving's losslessness for those
+  rests on the handler test, not on this run. Worth checking the first archived
+  task that carries a discussion.
+  Kill switch: `ARCHIVER_WRITES_ENABLED = false` + redeploy; effective next run,
+  touches no data, and a handler test pins that it still works.
+- **The flip was a decision, not a leap, because the job shipped inert** and ran
+  daily as a dry run through two gates — so the index was proven, the heartbeat
+  was on the monitor, and the owner approved a measured count rather than an
+  estimate. Worth repeating for any future scheduled mutation.
+- **Follow-ups, none blocking:** (1) remove the four client backlink cleanups
+  once a day of clean Sentry traffic on `area:backlink-cleanup` — the last open
+  item from COH-008; (2) close the losslessness property above against the first
+  archived task with comments or photos; (3) DEC-2026-018's read/latency tripwire
+  is recorded but not instrumented. (backup / dry run / counts / explicit approval / execute /
   independent coverage / delta; `audit-coh007-archive-shape.mjs` is the
   independent baseline, and the A3 null-ordering measurement belongs here) →
  — flip `ARCHIVER_WRITES_ENABLED` (functions) and `ARCHIVING_ENABLED` (the
