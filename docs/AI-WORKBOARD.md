@@ -301,8 +301,22 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   created Eventarc trigger is not yet delivering when `Deploy complete!` prints,
   proven by the total absence of a log entry for that delete; it passed in 3s on
   two re-runs once warm. Generalised into `CLAUDE.md` Known Pitfalls.
-  **Remaining gate:** the four client cleanups stay until a day of real Sentry
-  traffic on `area:backlink-cleanup` is clean.
+  **Remaining gate — and it is UNMEASURED, not clean (checked 2026-09-07).**
+  The condition is a day of real traffic on `area:backlink-cleanup` coming back
+  clean. Logs since deploy: **zero errors, zero warnings — and zero real-church
+  invocations.** The only invocations that did any work were the deploy-day
+  verifications in scratch churches; the 2026-09-07 invocations came from
+  COH-007's own probe scripts deleting unlinked fixtures, so the handler no-oped
+  and logged nothing. Zero errors is equally consistent with "it works" and
+  "nothing exercised it", which is the same empty-baseline trap as A3's null
+  measurement — do not read it as the gate passing.
+  **Owner decision needed**, because deleting a linked ticket/job/task is rare
+  enough that this gate could wait indefinitely: either keep waiting for genuine
+  traffic, or set a concrete criterion (N real clean invocations, or a fixed
+  window with the Sentry alert rule confirmed live). The triggers were verified
+  in production at deploy with real deletes, including both security negatives
+  observed firing, so the risk of removing the client cleanups is already low;
+  what is missing is evidence from ordinary use, not evidence of correctness.
 - Prior status, kept for the record: **IMPLEMENTED AND REVIEWED — approved with
   follow-up. Awaiting owner authorization for the Cloud Functions deploy.**
   Trail: implementation `e1a7146` → review `040d97d`
