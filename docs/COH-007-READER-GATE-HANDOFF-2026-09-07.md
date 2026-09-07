@@ -110,6 +110,51 @@ queries, so the production probe is not optional here.
 
 Findings as test cases wherever one can be written.
 
+## Review outcome (2026-09-07)
+
+Codex reviewed `9729767` (`docs/COH-007-READER-GATE-REVIEW-2026-09-07.md`,
+committed `22cf9a4`): **changes requested** — one High, one Medium, two Low, no
+Critical. The rules cutover, the reader construction and the maintenance
+carve-out were approved by inspection. All four findings are fixed.
+
+- **H1 (High) — the production oracle did not observe a departure on one live,
+  server-confirmed listener.** Correct, and the sharpest possible version of the
+  criticism: this script's own header cites the COH-006 listener oracle, and then
+  did not follow it. Two defects in one. It unsubscribed the moment the fixture
+  appeared and opened a *new* listener to see the absence — proving two query
+  states at two moments, not that an already-live board listener publishes the
+  removal, which is the entire claim of the cutover. And it accepted any
+  snapshot: enabling `includeMetadataChanges` does not make a callback
+  server-backed, it makes *cache* callbacks visible too, so an absence predicate
+  could resolve against an initially empty cached view before the server had
+  answered at all. Replaced with `watchArm()` — one subscription spanning the
+  write, resolving only on `metadata.fromCache === false`.
+- **M1 (Medium) — the script was narrower than rollout step 5.** Correct: one
+  account, one arm. It now seeds a two-account fixture set and asserts exact ids
+  from **server** reads across all four active arms for both members, plus the
+  private-non-creator negative and the stale-recipient-on-a-private-task
+  negative (the gate-1 H-1 shape). Codex's judgement that one *live departure*
+  arm suffices — the builder is shared and the pure tests pin all four — is
+  accepted; what it did not make redundant was the authorization matrix.
+- **L1 (Low) — source inequality is not a provenance guard.** Correct. The old
+  guard proved only that *some* non-comment difference existed, which a fixture
+  replaced by any later source would also satisfy. Now pinned to the SHA-256 of
+  the deployed transitional ruleset,
+  `3fa73a8d32a6d184a5ae842b90ab288a87b66bd6ec2d482fafeac987a9953aeb` — computed
+  independently on both sides, and confirmed byte-identical to
+  `e5ed2ec:firestore.rules`.
+- **L2 (Low) — the script claimed readability without testing a read.** Correct;
+  a `getDoc()` assertion now backs the claim. Unwritable is not hidden, and that
+  distinction should be executable rather than asserted in a comment.
+
+Answers accepted on all four questions: the maintenance carve-out is correct in
+both directions (a task cannot exploit it — update pins post-state `type` to
+pre-state, and ordinary members cannot create maintenance items); the sentinel's
+behaviour matrix does prove the cutover difference; **rules-first then web is
+confirmed correct and safer than the reverse**, with the
+`--verify --baseline 92` delta pass immediately before the rules deploy; and one
+live departure arm is sufficient given the shared builder.
+
 ## Reviewer Findings
 
 - Critical:

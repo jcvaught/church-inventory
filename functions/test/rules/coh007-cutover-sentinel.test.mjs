@@ -26,12 +26,22 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { doc, setDoc, updateDoc, deleteDoc, deleteField, addDoc, collection, getDoc } from 'firebase/firestore';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const TRANSITIONAL = readFileSync(join(here, 'fixtures/transitional-archive-2026-09-07.rules'), 'utf8');
+const FIXTURE = readFileSync(join(here, 'fixtures/transitional-archive-2026-09-07.rules'), 'utf8');
+// The fixture is a 13-line explanatory header followed by the pinned source.
+const FIXTURE_HEADER_LINES = 13;
+const TRANSITIONAL = FIXTURE.split('\n').slice(FIXTURE_HEADER_LINES).join('\n');
 const FINAL = readFileSync(join(here, '../../../firestore.rules'), 'utf8');
+
+// The SHA-256 of the transitional ruleset AS DEPLOYED — byte-for-byte
+// `e5ed2ec:firestore.rules`, the additive-gate merge that went to production on
+// 2026-09-07. Independently confirmed by Codex during the reader-gate review.
+const DEPLOYED_TRANSITIONAL_SHA256 =
+  '3fa73a8d32a6d184a5ae842b90ab288a87b66bd6ec2d482fafeac987a9953aeb';
 
 const CHURCH = 'church-A';
 const P = (sub) => `churches/${CHURCH}/${sub}`;
@@ -74,11 +84,19 @@ const archived = (over = {}) => legacy({
   archived: true, archivedAt: new Date('2026-08-12T00:00:00.000Z'), ...over,
 });
 
-test('the two rules sources are actually different', () => {
-  // Guards the fixture. A drifted snapshot makes every assertion below pass
-  // while comparing the final ruleset against itself.
-  assert.notEqual(TRANSITIONAL.replace(/^\/\/.*$/gm, '').trim(), FINAL.replace(/^\/\/.*$/gm, '').trim(),
-    'the pinned transitional fixture has drifted into the final ruleset');
+test('the pinned fixture IS the deployed transitional ruleset', () => {
+  // Provenance, not mere difference (review L1). The first version of this
+  // guard only asserted that the two sources differed somewhere outside their
+  // comments — which a fixture replaced by any later source carrying any
+  // unrelated change would also satisfy, while no longer being the artifact
+  // production actually ran. A digest answers the question the guard is
+  // actually for: is this the deployed transitional ruleset, or something else?
+  const digest = createHash('sha256').update(TRANSITIONAL).digest('hex');
+  assert.equal(digest, DEPLOYED_TRANSITIONAL_SHA256,
+    'the pinned transitional fixture is no longer the ruleset deployed at the additive gate');
+  // And the final ruleset must not have become it, or every case below would
+  // compare the final rules with themselves and pass for the wrong reason.
+  assert.notEqual(createHash('sha256').update(FINAL).digest('hex'), DEPLOYED_TRANSITIONAL_SHA256);
 });
 
 test('THE SENTINEL — an unbackfilled task is usable under transitional and REFUSED under final', async () => {

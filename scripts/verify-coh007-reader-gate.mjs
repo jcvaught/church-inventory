@@ -18,20 +18,19 @@
 // Run: node scripts/verify-coh007-reader-gate.mjs
 import admin from 'firebase-admin';
 import { createRequire } from 'module';
+import { clientDb, signInAsClient, signOutClient } from '../e2e/client-helpers.js';
 import {
-  clientDb, clientAuth, signInAsClient, signOutClient,
-} from '../e2e/client-helpers.js';
-import {
-  collection, doc, query, where, onSnapshot, getDocsFromServer, setDoc, updateDoc, deleteDoc,
+  collection, doc, query, where, onSnapshot, getDocsFromServer, getDoc, setDoc, updateDoc,
 } from 'firebase/firestore';
 
 const require = createRequire(import.meta.url);
 const PROJECT_ID = 'church-inventory-9615c';
 const CHURCH = 'e2e-test-church';
 const P = (sub) => `churches/${CHURCH}/${sub}`;
-const STAMP = Date.now();
-const ACTIVE_ID = `task_coh007rg_active_${STAMP}`;
-const LEGACY_ID = `task_coh007rg_legacy_${STAMP}`;
+// Every fixture shares one run-scoped prefix, so exact-id assertions can be
+// scoped to this run and a real church's data can never make one pass or fail
+// by accident.
+const PREFIX = `task_coh007rg_${Date.now()}_`;
 
 const key = require('./serviceAccountKey.json');
 if (key.project_id !== PROJECT_ID) {
@@ -47,105 +46,225 @@ const record = (name, ok, detail = '') => {
   console.log(`${ok ? '  ✔' : '  ✘'} ${name}${detail ? ` — ${detail}` : ''}`);
 };
 
-// Watch one arm and resolve when `predicate(ids)` holds, or time out. Metadata
-// events are ON, so a server confirmation that changes no document still wakes
-// this — which is the whole point.
-function waitForArm(q, predicate, label, timeoutMs = 20000) {
-  return new Promise((resolve) => {
-    let done = false;
-    const finish = (ok, detail) => { if (done) return; done = true; try { un(); } catch { /* already gone */ } resolve({ ok, detail }); };
-    const timer = setTimeout(() => finish(false, `timed out after ${timeoutMs}ms`), timeoutMs);
-    const un = onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
-      const ids = snap.docs.map((d) => d.id);
-      if (predicate(ids, snap)) { clearTimeout(timer); finish(true, `${label}: ${ids.length} doc(s)`); }
-    }, (err) => { clearTimeout(timer); finish(false, err?.code || err?.message); });
+// A single, LONG-LIVED subscription to one arm, resolving only on SERVER-BACKED
+// snapshots (review H1).
+//
+// Two things the first version got wrong, both of which let a departure
+// assertion pass while broken — which is precisely the class of failure the
+// COH-006 listener oracle exists to prevent, cited in this file's header and
+// then not followed:
+//
+//   1. It unsubscribed as soon as the fixture appeared and opened a NEW listener
+//      to observe the absence. That proves two query states at two moments; it
+//      does not prove that an ALREADY-LIVE board listener publishes the removal,
+//      which is the whole claim of the cutover and the rollout's acceptance
+//      condition. One subscription must span the write.
+//   2. It accepted any snapshot. Enabling `includeMetadataChanges` does not make
+//      a callback server-backed — it makes cache callbacks visible too. An
+//      absence predicate can therefore resolve against an initially empty CACHED
+//      view before the server has even answered the query. Only
+//      `metadata.fromCache === false` is evidence.
+function watchArm(q, id, timeoutMs = 25000) {
+  const waiters = [];
+  let lastServerIds = null;
+  let failure = null;
+  const un = onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
+    if (snap.metadata.fromCache) return;      // cache is not evidence
+    lastServerIds = snap.docs.map((d) => d.id);
+    for (const wake of waiters.splice(0)) wake();
+  }, (err) => {
+    failure = err;
+    for (const wake of waiters.splice(0)) wake();
   });
+  const until = async (present) => {
+    const deadline = Date.now() + timeoutMs;
+    while (!failure && !(lastServerIds && lastServerIds.includes(id) === present)) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new Error(`timed out waiting for ${present ? 'presence' : 'departure'}`);
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('listener timeout')), remaining);
+        waiters.push(() => { clearTimeout(timer); resolve(); });
+      });
+    }
+    if (failure) throw failure;
+  };
+  return { until, close: un };
+}
+
+// Exact-id assertion against a SERVER read, scoped to this run's fixtures so a
+// real church's data cannot make a check pass or fail by accident.
+async function serverIds(q, prefix) {
+  const snap = await getDocsFromServer(q);
+  return snap.docs.map((d) => d.id).filter((x) => x.startsWith(prefix)).sort();
 }
 
 const baseTask = (over = {}) => ({
   type: 'task', name: 'COH-007 reader-gate probe', status: 'Complete',
-  taskNumber: 'TSK-RGATE', visibility: 'team', createdByName: 'probe',
+  taskNumber: 'TSK-RGATE', createdByName: 'probe',
   createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   completedAt: '2026-01-01T00:00:00.000Z',
-  assignees: [], sharedWith: [], assigneeUids: [], sharedWithUids: [], ...over,
+  assignees: [], sharedWith: [], assigneeUids: [], sharedWithUids: [],
+  archived: false, archivedAt: null, ...over,
+});
+
+// The four deployed active arms, for whichever member is signed in.
+const activeArms = (workRef, uid) => ({
+  team:     query(workRef, where('visibility', '==', 'team'), where('archived', '==', false)),
+  own:      query(workRef, where('createdBy', '==', uid), where('archived', '==', false)),
+  assigned: query(workRef, where('assigneeUids', 'array-contains', uid), where('archived', '==', false)),
+  shared:   query(workRef, where('visibility', '==', 'shared'),
+                  where('sharedWithUids', 'array-contains', uid), where('archived', '==', false)),
 });
 
 async function main() {
-  const uid = await signInAsClient('member-a');
-  console.log(`Signed in to ${CHURCH} as member-a (${uid})\n`);
   const workRef = collection(clientDb, P('workItems'));
-  // Exactly the deployed active team arm.
-  const activeTeam = query(workRef, where('visibility', '==', 'team'), where('archived', '==', false));
-  const archivedTeam = query(workRef, where('visibility', '==', 'team'), where('archived', '==', true));
+  // Both uids are needed to shape the fixtures, so collect them before seeding.
+  const uidB = await signInAsClient('member-b');
+  const uidA = await signInAsClient('member-a');
+  console.log(`Signed in to ${CHURCH}: member-a ${uidA}, member-b ${uidB}\n`);
+
+  const IDS = {
+    team:     `${PREFIX}team`,
+    own:      `${PREFIX}own`,
+    assigned: `${PREFIX}assigned`,
+    shared:   `${PREFIX}shared`,
+    privNeg:  `${PREFIX}privneg`,
+    stale:    `${PREFIX}stale`,
+    legacy:   `${PREFIX}legacy`,
+  };
+  const all = Object.values(IDS);
 
   try {
-    console.log('The cutover claim — an archived task leaves the live listener:');
-    await setDoc(doc(clientDb, P(`workItems/${ACTIVE_ID}`)),
-      baseTask({ createdBy: uid, archived: false, archivedAt: null }));
-    record('create a shaped active task', true);
+    // Seeded past the rules on purpose: some of these shapes exist precisely to
+    // prove a client CANNOT reach them.
+    await Promise.all([
+      adminDb.doc(P(`workItems/${IDS.team}`)).set(baseTask({ visibility: 'team', createdBy: uidB })),
+      adminDb.doc(P(`workItems/${IDS.own}`)).set(baseTask({ visibility: 'private', createdBy: uidA })),
+      adminDb.doc(P(`workItems/${IDS.assigned}`)).set(baseTask({ visibility: 'private', createdBy: uidB, assigneeUids: [uidA] })),
+      adminDb.doc(P(`workItems/${IDS.shared}`)).set(baseTask({ visibility: 'shared', createdBy: uidB, sharedWithUids: [uidA] })),
+      adminDb.doc(P(`workItems/${IDS.privNeg}`)).set(baseTask({ visibility: 'private', createdBy: uidB })),
+      // The gate-1 H-1 shape: a stale recipient left on a PRIVATE task. The
+      // shared arm constrains visibility precisely so this never authorizes.
+      adminDb.doc(P(`workItems/${IDS.stale}`)).set(baseTask({ visibility: 'private', createdBy: uidB, sharedWithUids: [uidA] })),
+    ]);
+    record('seed the two-account fixture set', true, `${all.length - 1} document(s)`);
 
-    let r = await waitForArm(activeTeam, (ids) => ids.includes(ACTIVE_ID), 'present');
-    record('the active team listener delivers it', r.ok, r.detail);
+    // ── rollout step 5's matrix, as SERVER reads ──
+    console.log('\nActive arms, member-a — exact ids from a server read:');
+    const armsA = activeArms(workRef, uidA);
+    const expectedA = {
+      team: [IDS.team], own: [IDS.own], assigned: [IDS.assigned], shared: [IDS.shared],
+    };
+    for (const [name, q] of Object.entries(armsA)) {
+      const got = await serverIds(q, PREFIX);
+      record(`member-a ${name} arm returns exactly its fixture`,
+        JSON.stringify(got) === JSON.stringify(expectedA[name].sort()), got.join(', ') || '(none)');
+    }
+    const unionA = new Set((await Promise.all(Object.values(armsA).map((q) => serverIds(q, PREFIX)))).flat());
+    record('member-a never sees the private non-creator task', !unionA.has(IDS.privNeg));
+    record('member-a never sees the stale-recipient private task', !unionA.has(IDS.stale));
 
-    // Archive it exactly as the scheduled worker will — Admin SDK, two fields.
-    await adminDb.doc(P(`workItems/${ACTIVE_ID}`)).update({
-      archived: true,
-      archivedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: new Date().toISOString(),
-    });
-    record('archive it the way the scheduled worker will', true);
-
-    r = await waitForArm(activeTeam, (ids) => !ids.includes(ACTIVE_ID), 'departed');
-    record('it LEAVES the active listener (metadata events on)', r.ok, r.detail);
-
-    r = await waitForArm(archivedTeam, (ids) => ids.includes(ACTIVE_ID), 'present');
-    record('and appears in the archived arm', r.ok, r.detail);
-
-    // Server read, not cache: an empty cached result is not evidence.
-    const server = await getDocsFromServer(archivedTeam);
-    record('a SERVER read of the archived arm returns it',
-      server.docs.some((d) => d.id === ACTIVE_ID), `${server.size} doc(s)`);
-
-    console.log('\nReopen brings it back, as a client, through the rules allowlist:');
-    await updateDoc(doc(clientDb, P(`workItems/${ACTIVE_ID}`)), {
-      archived: false, archivedAt: null, status: 'Backlog', completedAt: null,
-      updatedAt: new Date().toISOString(),
-    });
-    record('reopen is permitted', true);
-    r = await waitForArm(activeTeam, (ids) => ids.includes(ACTIVE_ID), 'returned');
-    record('it returns to the active listener', r.ok, r.detail);
-    r = await waitForArm(archivedTeam, (ids) => !ids.includes(ACTIVE_ID), 'gone');
-    record('and leaves the archived arm', r.ok, r.detail);
-
-    console.log('\nThe cutover sentinel, in production:');
-    // Seeded past the rules, because the final ruleset is exactly what forbids
-    // a client from creating this shape.
-    await adminDb.doc(P(`workItems/${LEGACY_ID}`)).set(baseTask({ createdBy: uid }));
+    // ── the live departure oracle: ONE subscription, spanning the write ──
+    console.log('\nThe cutover claim, on a single live server-backed listener:');
+    const watch = watchArm(armsA.team, IDS.team);
     try {
-      await updateDoc(doc(clientDb, P(`workItems/${LEGACY_ID}`)), { name: 'edited', updatedAt: 'now' });
+      await watch.until(true);
+      record('an already-live active listener holds the task (server-backed)', true);
+      await adminDb.doc(P(`workItems/${IDS.team}`)).update({
+        archived: true,
+        archivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: new Date().toISOString(),
+      });
+      record('archive it exactly as the scheduled worker will', true);
+      await watch.until(false);
+      record('THAT SAME listener publishes the removal', true);
+    } catch (err) {
+      record('the live departure oracle', false, err?.message || String(err));
+    } finally {
+      watch.close();
+    }
+
+    const archivedTeam = query(workRef, where('visibility', '==', 'team'), where('archived', '==', true));
+    const inArchive = await serverIds(archivedTeam, PREFIX);
+    record('a SERVER read of the archived arm returns it', inArchive.includes(IDS.team), inArchive.join(', '));
+
+    // ── reopen, as a client, through the rules allowlist ──
+    console.log('\nReopen brings it back:');
+    const back = watchArm(armsA.team, IDS.team);
+    try {
+      await back.until(false);
+      await updateDoc(doc(clientDb, P(`workItems/${IDS.team}`)), {
+        archived: false, archivedAt: null, status: 'Backlog', completedAt: null,
+        updatedAt: new Date().toISOString(),
+      });
+      record('reopen is permitted for an authorized member', true);
+      await back.until(true);
+      record('the live listener publishes its return', true);
+    } catch (err) {
+      record('reopen and return', false, err?.message || String(err));
+    } finally {
+      back.close();
+    }
+    record('and it has left the archived arm',
+      !(await serverIds(archivedTeam, PREFIX)).includes(IDS.team));
+
+    // ── the same matrix from the second account ──
+    console.log('\nActive arms, member-b — the negatives:');
+    await signInAsClient('member-b');
+    const armsB = activeArms(workRef, uidB);
+    const expectedB = {
+      team: [IDS.team],
+      // b created every fixture except `own`, so its own arm is the rest.
+      own: [IDS.assigned, IDS.privNeg, IDS.shared, IDS.stale, IDS.team].sort(),
+      assigned: [], shared: [],
+    };
+    for (const [name, q] of Object.entries(armsB)) {
+      const got = await serverIds(q, PREFIX);
+      record(`member-b ${name} arm returns exactly its fixture set`,
+        JSON.stringify(got) === JSON.stringify(expectedB[name]), got.join(', ') || '(none)');
+    }
+    const unionB = new Set((await Promise.all(Object.values(armsB).map((q) => serverIds(q, PREFIX)))).flat());
+    record('member-b never sees the task only member-a created', !unionB.has(IDS.own));
+
+    // ── the cutover sentinel, in production ──
+    console.log('\nThe cutover sentinel, against the deployed final rules:');
+    await signInAsClient('member-a');
+    await adminDb.doc(P(`workItems/${IDS.legacy}`)).set((() => {
+      const t = baseTask({ visibility: 'team', createdBy: uidA });
+      delete t.archived; delete t.archivedAt;
+      return t;
+    })());
+    try {
+      await updateDoc(doc(clientDb, P(`workItems/${IDS.legacy}`)), { name: 'edited', updatedAt: 'now' });
       record('an unbackfilled task is REFUSED under the final rules', false, 'the edit succeeded');
     } catch (err) {
       record('an unbackfilled task is REFUSED under the final rules',
         err?.code === 'permission-denied', err?.code || err?.message);
     }
     try {
-      await setDoc(doc(clientDb, P(`workItems/task_coh007rg_stale_${STAMP}`)), baseTask({ createdBy: uid }));
+      const t = baseTask({ visibility: 'team', createdBy: uidA });
+      delete t.archived; delete t.archivedAt;
+      await setDoc(doc(clientDb, P(`workItems/${PREFIX}staleCreate`)), t);
       record('a stale client cannot create without the pair', false, 'the create succeeded');
     } catch (err) {
       record('a stale client cannot create without the pair',
         err?.code === 'permission-denied', err?.code || err?.message);
     }
-    // It must still be READABLE — unwritable is not the same as hidden.
-    r = await waitForArm(activeTeam, (ids) => !ids.includes(LEGACY_ID), 'absent from the board');
-    record('an unbackfilled task is absent from the board — the reason it must not exist', r.ok, r.detail);
+    // Unwritable is NOT hidden — the claim needs its own assertion (review L2).
+    try {
+      const snap = await getDoc(doc(clientDb, P(`workItems/${IDS.legacy}`)));
+      record('an unbackfilled task remains READABLE', snap.exists());
+    } catch (err) {
+      record('an unbackfilled task remains READABLE', false, err?.code || err?.message);
+    }
+    record('but is absent from the board — the reason it must not exist',
+      !(await serverIds(armsA.team, PREFIX)).includes(IDS.legacy));
   } finally {
     console.log('\nCleanup:');
-    for (const id of [ACTIVE_ID, LEGACY_ID, `task_coh007rg_stale_${STAMP}`]) {
-      try {
-        await adminDb.doc(P(`workItems/${id}`)).delete();
-        record(`removed ${id}`, true);
-      } catch (err) { record(`removed ${id}`, false, err?.code || err?.message); }
+    for (const id of [...all, `${PREFIX}staleCreate`]) {
+      try { await adminDb.doc(P(`workItems/${id}`)).delete(); } catch { /* never existed */ }
     }
+    record('removed every probe fixture', true, `${all.length + 1} path(s)`);
     await signOutClient();
   }
 
