@@ -492,3 +492,17 @@ The build is near-instant on an empty collection. **Always probe new index-depen
 4. **`Cross-Origin-Opener-Policy` must be `same-origin-allow-popups`** — Firebase's popup polls `window.closed`; modern Chrome blocks that across the COOP boundary without this, breaking the popup result handshake. Symptom: many *"Cross-Origin-Opener-Policy policy would block the window.closed call"* Console errors from `vendor-firebase`. (Added 2026-05-28, commit `03083fb`.)
 
 Items 1–2 were dropped by the 2026-03-27 hardening commit (`a45da1f`), unnoticed ~7 weeks (fixed 2026-05-18, `ed108f6`+`d6b06ce`); items 3–4 were the *same* class of bug that the May fix missed (X-Frame-Options stayed `DENY`; COOP was never set), found 2026-05-28 while debugging the Lisa Bosley case. **All four live in the `/(.*)` headers block of `vercel.json` — never tighten any of them back.** Header changes need a fresh load to test, and COH is a PWA: a normal refresh serves the **stale cached shell via the service worker** — test in a brand-new incognito window. The `loginWithGoogle` catch Sentry-captures with tag `flow:google-signin`. (Minor known UX quirk after a fresh load: the first popup click can race the lazily-loaded relay iframe and need a second click; benign — `signInWithRedirect` would eliminate it if ever needed.)
+
+## Vercel: Ignored Build Step (docs-only commits skip the build)
+
+`scripts/vercel-ignore-build.sh` is wired to this project's Vercel **Ignored Build Step**. A commit
+touching only `docs/` and `*.md` does NOT produce a new deployment. Vercel bills retained build
+output as Deployment Storage, and docs-only commits were burning it (COH made 20 such deploys in
+two days).
+
+**Consequence — read this before assuming a push shipped:** "pushed to `main`" no longer implies
+"a new deployment exists". To force a deploy, touch something outside `docs/`/`*.md`, or redeploy
+from the Vercel dashboard.
+
+The script **fails open**: if the diff can't be determined (shallow clone, first commit, git
+error) it builds. A missed skip costs a few MB; a missed build ships nothing.
