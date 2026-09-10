@@ -7,23 +7,24 @@ This is the canonical list of **open** work. Update it here (not scattered acros
 Ranked under the **FXCC-first** frame: proven FXCC exposure first, proven FXCC
 friction second, speculative product value last — behind *asking FXCC*. Agreed
 by Claude and Codex after two review rounds; Codex's ordering was adopted over
-Claude's on items 1, 5 and 10.
+Claude's on items 1, 5 and 11. Item 9 was added 2026-09-10, discovered
+mid-deploy during COH-011.
 
 | # | Item | Why here |
 |---|---|---|
-| 1 | ~~**Offboarding is a false promise**~~ (COH-011) | ✅ **COMPLETE 2026-09-10, all four stages verified in production.** Seven rules bypasses closed, 22 callables guarded, `setMemberActive` live, `active` pinned callable-only. One gap: `identifyItem` (blocked by a pre-existing ANTHROPIC_API_KEY collision — now item 9b) |
+| 1 | ~~**Offboarding is a false promise**~~ (COH-011) | ✅ **COMPLETE 2026-09-10, all four stages verified in production.** Seven rules bypasses closed, 22 callables guarded, `setMemberActive` live, `active` pinned callable-only. One gap: `identifyItem` (blocked by a pre-existing ANTHROPIC_API_KEY collision — now item 9) |
 | 2 | **D-8 reservation approval** (COH-005) | Any member can approve their own booking. **Not blocked** — the approver picker only offers admins/managers, so there is no designated-approver conflict |
-| 3 | **Shepherd scoping + roll-off revocation** | `isElder()` is a bare claim: no church binding, no `active` check, reads every `shepherdPeople` doc incl. `medicalNotes`. Roll-off does not revoke. **Level-2 note encryption is NOT the first fix** — useless against a compromised authorized elder, adds key-loss risk, and does not cover the `medicalNotes` cache |
+| 3 | **Shepherd scoping + roster roll-off** — *partly done* | COH-011 closed the `active` half (`isElder()` now requires an active profile; deactivation strips the claim). **Still open:** (a) no church binding — an `elder:true` claim reads `shepherdPeople` under ANY `{churchId}`, deliberately left out of COH-011 as needing its own decision (D6 recorded it as intentional); (b) **removal from `config/shepherdRoster` revokes nothing until that person next signs in**, because `claimElderRole` only self-corrects on call; (c) whether every elder needs the whole directory and every `medicalNotes`, rather than their own flock. **Level-2 note encryption is NOT the first fix** — useless against a compromised authorized elder, adds key-loss risk, and does not cover the `medicalNotes` cache |
 | 4 | **Complete the Shepherd rollout** (D-2/D-3 in the launch plan) | No code. A purpose-built FXCC workflow has been live since 2026-08-04 with one of eight elders signed up and the digest still dark. Activating built work beats building more |
 | 5 | **Restore rehearsal + runbook scope** | Backups and PITR verified healthy, so the copy exists; what is unknown is recovery *time and procedure*. Scope honestly: a Firestore restore does not restore Auth, Storage photos, secrets, or PCO state |
 | 6 | **AC-07 — maintenance field authority** | `type == 'maintenance'` short-circuits the whole update guard (`firestore.rules:403`); any member rewrites cost, assignment, recurrence, status. Accepted under a multi-tenant frame; reconsider under this one, where the risk is accidental damage by real volunteers |
 | 7 | **Pin comment attribution + timestamps** | `authorId`/`authorName`/timestamps unpinned and forgeable; update/delete authorization *depends* on `authorId`. Fix before general audit-log atomicity |
 | 8 | **D-3 supplies** (COH-005); D-7 UI parity follows | Small, already decided |
-| 9b | **`ANTHROPIC_API_KEY` is configured twice** | Secret Manager binding + a `functions/.env` copy; Cloud Run refuses the overlap, so **`identifyItem` cannot be redeployed at all** and is the one callable missing COH-011's guard. Decide: move the AI digest onto the secret binding (stronger, touches a working feature) or drop to `.env` everywhere (simpler, weaker) |
-| 9 | **Budget + Sentry alerts** | Console-only. **A budget alert notifies; it is not a spending ceiling.** `SENTRY-ALERTS.md` still references SendGrid post-Brevo |
-| 10 | **Ask FXCC** before Sunday-readiness, templates, or deep-linking | All three are *hypotheses*. Deep-linking is verified thin (6 of 7 search result types open only the containing hub) but its cost to FXCC is unmeasured |
+| 9 | **`ANTHROPIC_API_KEY` is configured twice** | Secret Manager binding + a `functions/.env` copy; Cloud Run refuses the overlap, so **`identifyItem` cannot be redeployed at all** and is the one callable missing COH-011's guard. Decide: move the AI digest onto the secret binding (stronger, touches a working feature) or drop to `.env` everywhere (simpler, weaker) |
+| 10 | **Budget + Sentry alerts** | Console-only. **A budget alert notifies; it is not a spending ceiling.** `SENTRY-ALERTS.md` still references SendGrid post-Brevo |
+| 11 | **Ask FXCC** before Sunday-readiness, templates, or deep-linking | All three are *hypotheses*. Deep-linking is verified thin (6 of 7 search result types open only the containing hub) but its cost to FXCC is unmeasured |
 
-Below 10, in order: subscription/data-loading reduction · general audit-log
+Below 11, in order: subscription/data-loading reduction · general audit-log
 atomicity · server timestamps beyond `activityLog` · centralized entitlement
 policy matrix · photo cleanup on delete · accessibility and mobile interaction ·
 navigation consolidation · request inbox · volunteer expiring-links. Demoted by
