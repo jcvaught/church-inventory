@@ -14,7 +14,22 @@ The risky work (live Tasks/Jobs migration, billing changes, foundation refactors
 - **Deploy:** Vercel auto-deploys on push to `main`. Firestore rules/indexes + Cloud Functions deploy via the `firebase` CLI.
 - **Tests:** the Playwright E2E suite runs **against PROD**, isolated to a dedicated `e2e-test-church` tenant. Good for regression, **not safe for destructive schema migrations.**
 - **No Firebase emulator usage today** (MasteryHelp uses emulators; COH doesn't yet).
-- **No documented scheduled Firestore backups** (there's a billing-budget TODO, nothing on data backup).
+- ~~**No documented scheduled Firestore backups**~~ — **WRONG WHEN WRITTEN; corrected
+  2026-09-10.** Managed backups already existed on `church-inventory-9615c`
+  before this document was written: a **daily** schedule (7-day retention) and a
+  **weekly Sunday** schedule (98-day retention), both created 2026-05-31, plus
+  **PITR enabled**. Verified live 2026-09-10 — most recent snapshot 2026-09-09,
+  all `READY`. Backups live in **`us-east4`** (the database's location); listing
+  them against `nam5` returns "Listed 0 items" and is how this was nearly
+  mis-read a second time:
+  `gcloud firestore backups list --location=us-east4 --project=church-inventory-9615c`.
+  **What is genuinely missing is a restore REHEARSAL** — no backup has ever been
+  restored, so recovery time and procedure are unknown. Note the scope limit: a
+  Firestore restore does not restore Firebase Auth users, Storage photos,
+  functions secrets, or external PCO state, so a database drill is not business
+  continuity.
+- The billing-budget TODO is still genuinely open (console-only). A budget alert
+  **notifies**; it is not a spending ceiling.
 
 The four upgrades below close those gaps.
 

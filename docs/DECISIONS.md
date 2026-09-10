@@ -1022,3 +1022,50 @@ seams.
   (1,644 lines) and 3 of 5 files in `src/hooks/` already read Firestore
   directly: **the extraction pattern exists and is applied inconsistently — it
   is not absent.**
+
+### DEC-2026-020 — ChurchOpsHub is an FXCC-first internal tool; other churches are upside
+
+- Date: 2026-09-10
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: Codex application review 2026-08-28; Codex priority review
+  2026-09-10; `docs/backlog.md` ("Priority order")
+
+**Owner statement:** *"My church uses it, which is what matters; if others do
+that is just a bonus."*
+
+**Why this is a decision and not a mood.** It changes what counts as important,
+and it had already been silently assumed both ways. Six tenants exist, zero pay,
+FXCC is grandfathered. Prioritisation must follow from *FXCC's* exposure and
+*FXCC's* workflow friction, not from conversion.
+
+**What it demotes** (not cancels — demotes): activation-funnel instrumentation,
+the new-church activation checklist, landing-page positioning, pricing
+experimentation, the post-trial two-free-hubs question, and SaaS entitlement
+automation. Trial/entitlement *regression coverage* stays low-but-not-zero: the
+five non-FXCC tenants still exercise non-grandfathered paths, and Inventory /
+Supplies must remain free.
+
+**What it promotes.** The threat model inverts. The realistic adversary is not
+an anonymous attacker across a tenant boundary but **an ordinary member or
+volunteer inside FXCC**, and the data at risk is a real congregation's,
+including pastoral and medical-adjacent notes. Within-tenant authority, honest
+offboarding, and Shepherd Hub scoping all rise. So does anything serving weekly
+church operations.
+
+**Two guardrails, both from the 2026-09-10 review, both recorded because the
+first draft of this frame got them wrong:**
+
+1. **"Known internal users" is NOT a reason to relax security.** Cross-tenant
+   isolation does not matter less — the other five tenants hold real people's
+   data and payment status is irrelevant to confidentiality. The frame narrows
+   *what we build*, never *who we protect*.
+2. **Do not substitute feature intuition for evidence.** Dropping growth metrics
+   does not license guessing what FXCC wants. Under an internal-tool frame the
+   correct instrument is **asking FXCC staff**, and a feature justified only by
+   product instinct ("this is obviously the highest-value view") is not
+   prioritised above a *proven* exposure or a *proven* friction.
+
+- Consequences: `docs/backlog.md` gains a "Priority order" section derived from
+  this decision. Work is ranked by proven FXCC exposure first, proven FXCC
+  friction second, and speculative product value last — behind asking.
