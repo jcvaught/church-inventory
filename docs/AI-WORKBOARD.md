@@ -285,6 +285,61 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ## Proposed Queue
 
+### COH-011 — Deactivation that actually revokes
+
+- Status: **STAGES 1-3 DEPLOYED 2026-09-10. One gap and one final stage remain
+  (below).** Owner: Claude · Reviewer: Codex (plan reviewed before
+  implementation, DEC-2026-011 — **changes requested**, all applied).
+- Priority: **#1** under DEC-2026-020.
+- **The bug, in one line:** the confirm dialog promised a deactivated member
+  "will lose access to the app immediately"; `active:false` wrote one Firestore
+  field and nothing else.
+- **Seven bypasses, all now closed in rules:** Storage reads, `users` reads,
+  `publicRequests` read/update/**delete**, the church parent `get`, roster
+  self-reads, `users` delete (BOTH arms — any inactive user could self-delete),
+  and the `users` update admin arm.
+- **The one neither review caught, found while inventorying:** *a deactivated
+  admin could reactivate themselves.* The admin arm required only
+  `userIsAdmin() && userChurchId() == …` — pinning neither `active` nor `role` —
+  and `userIsAdmin()` reads the actor's own still-present `role:'admin'`.
+  Deactivation was not enforceable against an admin at all.
+- **The one Codex caught that changed the task's size:** **the callables never
+  checked `active` either.** ~46 exported functions read the caller's profile
+  and checked `churchId`/`role` while ignoring `active`; the whole file
+  contained 11 active checks. Firebase verifies a callable's ID token signature
+  and expiry, **not its revocation**, so `revokeRefreshTokens` alone leaves an
+  outstanding token usable for up to an hour. `assertActiveCaller` now guards 22
+  callables. The owner chose the full scope over narrowing the promise.
+- `isElder()` no longer trusts the claim alone — Rules cannot retract an issued
+  token, and a stale elder claim reaches `medicalNotes`, private notes, care
+  threads and `setElderAssignment` (**which writes to Planning Center**).
+  Deliberately fail-CLOSED; both production elders were verified to hold active
+  profiles before deploying. **Church binding was deliberately NOT folded in** —
+  that is the separate Shepherd-scoping item.
+- `setMemberActive` replaces the direct write. Ordering is load-bearing both
+  ways: deactivate writes Firestore first (a later crash still leaves them
+  denied); reactivate enables Auth first (Firestore first could restore access
+  to a stale token if the Auth enable then failed).
+- Verification: `test:rules` **129/129** (+17), `test:handlers` **87/87** (+13),
+  `test:unit` 166/166, lint 0 errors, build clean. All 23 redeployed callables
+  probed for the gen-2 `allUsers` invoker strip — all returned JSON, none
+  stripped.
+- **KNOWN GAP — `identifyItem` is the one callable without the guard.** Its
+  deploy is blocked by a **pre-existing** defect unrelated to this task:
+  `ANTHROPIC_API_KEY` is configured BOTH as a Secret Manager binding (declared
+  on that function) and as a plain env var (`functions/.env`, which every
+  function receives), and Cloud Run refuses the overlap —
+  *"Secret environment variable overlaps non secret environment variable."*
+  It cannot be redeployed at all today. Fixing it means moving the AI-digest
+  path onto the secret binding and removing the `.env` copy, which risks a
+  working feature for one function out of 24 — deliberately **not** bundled into
+  a security fix. Residual exposure is bounded: a deactivated member's Auth
+  account is disabled and tokens revoked, so only an already-issued token works,
+  for at most an hour. **Filed as its own item.**
+- **REMAINING STAGE 4:** pin `active` on the `users` update admin arm so
+  `setMemberActive` is the only path. Deferred until the web deploy carrying the
+  callable is live, or the old bundle's Deactivate button breaks.
+
 ### COH-009 — Close COH-007's two recorded follow-ups — ✅ COMPLETE 2026-09-10
 
 - Status: **COMPLETE 2026-09-10. Documentation only — no code, no rules, no

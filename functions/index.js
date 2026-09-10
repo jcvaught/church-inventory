@@ -69,6 +69,39 @@ function wrapCall(name, handler) {
   };
 }
 
+// ── COH-011: the shared active-caller guard ──────────────────────────────────
+// `firestore.rules` revokes a deactivated member through isMember(), but the
+// CALLABLES never looked. ~46 exported functions read the caller's profile and
+// check churchId (and sometimes role) while ignoring `active`, so a deactivated
+// member could still withdraw from shifts, open Stripe portals, send mention
+// emails and run the elder operations. Firebase verifies a callable's ID token
+// signature and EXPIRY, not its revocation, so `revokeRefreshTokens` does not
+// close this either: an outstanding ID token stays valid for up to an hour.
+//
+// Semantics, deliberately matched to the rules layer:
+//   • unauthenticated  -> pass through; the handler's own auth check applies.
+//   • no profile yet   -> pass. A registering/joining user has no users/{uid}
+//                         doc and cannot have been deactivated.
+//   • active === false -> DENY. Explicit `=== false`, not `!== true`, so a
+//                         legacy profile with no `active` field still works —
+//                         the same fail-open that isMember()'s
+//                         `.get('active', true)` chose deliberately (D-1
+//                         addendum). Diverging here would deny in the callable
+//                         what the rules allow.
+//
+// Costs one extra user read per authenticated call. Handlers that already fetch
+// the caller doc were deliberately NOT refactored to share it: this is a
+// security fix, and AGENTS.md says not to bundle opportunistic refactors into
+// one.
+async function assertActiveCaller(req) {
+  if (!req.auth) return;
+  const snap = await getFirestore().doc(`users/${req.auth.uid}`).get();
+  if (!snap.exists) return;
+  if (snap.data().active === false) {
+    throw new HttpsError('permission-denied', 'Your account has been deactivated.');
+  }
+}
+
 // Email via Brevo (transactional REST API; Node 22 global fetch, no SDK).
 // Migrated off SendGrid 2026-06-01 (its free tier dropped to 0/month post-trial).
 // sendViaBrevo maps the existing SendGrid-shaped msg ({to,from,replyTo,subject,
@@ -449,6 +482,7 @@ exports.identifyItem = onCall(
   { secrets: [ANTHROPIC_API_KEY], cors: true },
   wrapCall('identifyItem', async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    await assertActiveCaller(req); // COH-011
 
     // Task 1: validate caller has a church profile to prevent unauthorized API credit usage
     const db = getFirestore();
@@ -496,6 +530,7 @@ exports.getChurchStats = onCall(
   { cors: true },
   wrapCall('getChurchStats', async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    await assertActiveCaller(req); // COH-011
 
     const userRecord = await getAuth().getUser(req.auth.uid);
     if (!OWNER_EMAILS.includes(userRecord.email)) {
@@ -530,10 +565,90 @@ exports.getChurchStats = onCall(
 // Owner-only. Backs the in-app email-suppression management UI (audit L9).
 // The emailSuppressions collection is Admin-SDK-write-only in firestore.rules,
 // so re-subscribing an address (set active:false) must route through here.
+// ── COH-011: setMemberActive — deactivation that actually revokes ────────────
+// Replaces the client's direct `updateUser(uid,{active:false})`, which wrote one
+// Firestore field while the confirm dialog promised the member "will lose access
+// to the app immediately."
+//
+// ORDER IS LOAD-BEARING in both directions, for safe partial failure:
+//   • Deactivate: validate -> Firestore active:false -> strip the elder claim
+//     (preserving every other claim) -> disable Auth -> revoke refresh tokens.
+//     Firestore first means a crash anywhere later still leaves the member
+//     denied by rules and by assertActiveCaller.
+//   • Reactivate: enable Auth FIRST, write active:true LAST. Writing Firestore
+//     first would restore rules access to a stale token even if the Auth enable
+//     then failed.
+// Idempotent at every step, so a retry is safe.
+//
+// NOTE the residual, which this function cannot close: Firebase Rules and
+// callables verify an ID token's signature and expiry, not its revocation, so an
+// outstanding token remains valid for up to an hour. assertActiveCaller and the
+// rules' active checks are what actually close that window — this function makes
+// the state change; those two enforce it.
+exports.setMemberActive = onCall(
+  { cors: true },
+  wrapCall('setMemberActive', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    await assertActiveCaller(req);
+
+    const { uid: targetUid, active } = req.data || {};
+    if (!targetUid || typeof active !== 'boolean') {
+      throw new HttpsError('invalid-argument', 'uid and a boolean active are required.');
+    }
+    if (targetUid === req.auth.uid) {
+      // The UI already blocks this (SettingsPage: `u.id !== userProfile.id`),
+      // but the server must not depend on the UI for it — an admin locking
+      // themselves out is unrecoverable without console access.
+      throw new HttpsError('failed-precondition', 'You cannot change your own active status.');
+    }
+
+    const db = getFirestore();
+    const [callerSnap, targetSnap] = await Promise.all([
+      db.doc(`users/${req.auth.uid}`).get(),
+      db.doc(`users/${targetUid}`).get(),
+    ]);
+    if (!callerSnap.exists || callerSnap.data().role !== 'admin') {
+      throw new HttpsError('permission-denied', 'Admins only.');
+    }
+    if (!targetSnap.exists) throw new HttpsError('not-found', 'No such member.');
+    if (targetSnap.data().churchId !== callerSnap.data().churchId) {
+      throw new HttpsError('permission-denied', 'Not a member of your church.');
+    }
+
+    // The owner account is never deactivatable, by anyone, including itself.
+    const targetRecord = await getAuth().getUser(targetUid).catch(() => null);
+    if (targetRecord && OWNER_EMAILS.includes(targetRecord.email)) {
+      throw new HttpsError('permission-denied', 'This account cannot be deactivated.');
+    }
+
+    if (active === false) {
+      await db.doc(`users/${targetUid}`).update({ active: false });
+      if (targetRecord) {
+        // Strip ONLY the elder claim; preserve everything else Firebase or a
+        // future feature put there. isElder() in firestore.rules trusts the
+        // claim alone, so leaving it would keep Shepherd Hub open.
+        const claims = { ...(targetRecord.customClaims || {}) };
+        if (claims.elder) {
+          delete claims.elder;
+          await getAuth().setCustomUserClaims(targetUid, claims);
+        }
+        await getAuth().updateUser(targetUid, { disabled: true });
+        await getAuth().revokeRefreshTokens(targetUid);
+      }
+      return { ok: true, active: false, authDisabled: !!targetRecord };
+    }
+
+    if (targetRecord) await getAuth().updateUser(targetUid, { disabled: false });
+    await db.doc(`users/${targetUid}`).update({ active: true });
+    return { ok: true, active: true, authDisabled: false };
+  })
+);
+
 exports.setEmailSuppressionActive = onCall(
   { cors: true },
   async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    await assertActiveCaller(req); // COH-011
     const userRecord = await getAuth().getUser(req.auth.uid);
     if (!OWNER_EMAILS.includes(userRecord.email)) {
       throw new HttpsError('permission-denied', 'Not authorized.');
@@ -560,6 +675,7 @@ exports.setEmailSuppressionActive = onCall(
 // quotas (not configured today — flagged for follow-up).
 exports.lookupChurchByCode = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  await assertActiveCaller(req); // COH-011
   const code = (req.data?.code || '').toString().trim().toUpperCase();
   if (!code) throw new HttpsError('invalid-argument', 'Code required.');
   const db = getFirestore();
@@ -665,6 +781,7 @@ exports.createCheckoutSession = onCall(
   { secrets: [STRIPE_SECRET_KEY], cors: true },
   wrapCall('createCheckoutSession', async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    await assertActiveCaller(req); // COH-011
 
     const { item, successUrl, cancelUrl } = req.data;
     const priceId = PRICE_IDS[item];
@@ -711,6 +828,7 @@ exports.createPortalSession = onCall(
   { secrets: [STRIPE_SECRET_KEY], cors: true },
   async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    await assertActiveCaller(req); // COH-011
 
     const { returnUrl } = req.data;
 
@@ -1690,6 +1808,7 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
 // data: { toEmail, toName, churchName, eventName, resourceDesc, eventDate, actionBy, status }
 exports.sendReservationEmail = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  await assertActiveCaller(req); // COH-011
   if (!emailConfigured()) return { sent: false };
 
   const { toEmail, toName, churchName, eventName, resourceDesc, eventDate, actionBy, status } = req.data;
@@ -1727,6 +1846,7 @@ exports.sendReservationEmail = onCall({ cors: true }, async (req) => {
 // data: { toEmail, toName, churchName, ticketNumber, ticketName, assignedBy }
 exports.sendTicketAssignedEmail = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  await assertActiveCaller(req); // COH-011
   if (!emailConfigured()) return { sent: false };
 
   // F-39 from the 2026-05-12 audit: this CF is reused by Tasks Hub for task
@@ -1769,6 +1889,7 @@ exports.sendTicketAssignedEmail = onCall({ cors: true }, async (req) => {
 // the client — failures here never block the underlying action.
 exports.notify = onCall({ cors: true }, wrapCall('notify', async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  await assertActiveCaller(req); // COH-011
   const { churchId, recipientUids, type, title, body, link } = req.data || {};
   if (!churchId || !title) return { ok: false };
   const db = getFirestore();
@@ -1787,6 +1908,7 @@ exports.notify = onCall({ cors: true }, wrapCall('notify', async (req) => {
 // Fetches all active users with job hub access server-side and emails them.
 exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  await assertActiveCaller(req); // COH-011
   if (!emailConfigured()) { console.warn('sendJobAnnouncementEmails: Brevo not configured, skipping.'); return { sent: 0 }; }
 
   const { churchId, title, body } = req.data;
@@ -1821,6 +1943,7 @@ exports.sendJobAnnouncementEmails = onCall({ cors: true }, async (req) => {
 // data: { churchId, jobDocId }
 exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  await assertActiveCaller(req); // COH-011
   if (!emailConfigured()) { console.warn('sendJobCancelledEmails: Brevo not configured, skipping.'); return { sent: 0 }; }
 
   const { churchId, jobDocId } = req.data;
@@ -2692,6 +2815,7 @@ async function buildAttentionDigest(db, churchId, churchName, todayStr, { force 
 // panel. Returns the cached weekly digest, or regenerates when stale / forced.
 exports.getAttentionDigest = onCall({ cors: true }, wrapCall('getAttentionDigest', async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  await assertActiveCaller(req); // COH-011
   const db = getFirestore();
   const userSnap = await db.doc(`users/${req.auth.uid}`).get();
   if (!userSnap.exists) throw new HttpsError('not-found', 'User profile not found.');
@@ -3128,6 +3252,7 @@ exports.sendNewJobsDigest = onSchedule({ schedule: '0 * * * *', timeZone: 'Ameri
 // data: { churchId, jobDocId, event: 'withdrawal'|'admin_removal'|'cancellation', actorUid, actorName, removedName? }
 exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  await assertActiveCaller(req); // COH-011
   if (!emailConfigured()) return { sent: 0 };
 
   const { churchId, jobDocId, event, actorUid, actorName, removedName } = req.data;
@@ -3420,6 +3545,7 @@ async function sendWaitlistPromotionNotifications(db, churchId, jobData, promote
 // data: { churchId, jobDocId, waiverAccepted }
 exports.jobSignUp = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  await assertActiveCaller(req); // COH-011
   const { churchId, jobDocId, waiverAccepted } = req.data || {};
   if (!churchId || !jobDocId) throw new HttpsError('invalid-argument', 'churchId and jobDocId required.');
   const db = getFirestore();
@@ -3507,6 +3633,7 @@ exports.jobSignUp = onCall({ cors: true }, async (req) => {
 // data: { churchId, jobDocId, uid? }
 exports.jobWithdraw = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  await assertActiveCaller(req); // COH-011
   const { churchId, jobDocId, uid: targetUidRaw } = req.data || {};
   if (!churchId || !jobDocId) throw new HttpsError('invalid-argument', 'churchId and jobDocId required.');
   const db = getFirestore();
@@ -3565,6 +3692,7 @@ exports.jobWithdraw = onCall({ cors: true }, async (req) => {
 // data: { churchId, jobDocId, uid, attended }
 exports.jobSetAttendance = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  await assertActiveCaller(req); // COH-011
   const { churchId, jobDocId, uid: targetUid, attended } = req.data || {};
   if (!churchId || !jobDocId || !targetUid) {
     throw new HttpsError('invalid-argument', 'churchId, jobDocId and uid required.');
@@ -3594,6 +3722,7 @@ exports.jobSetAttendance = onCall({ cors: true }, async (req) => {
 // kept for reconciliation / admin-edit paths). data: { churchId, jobDocId }
 exports.promoteFromWaitlist = onCall({ cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  await assertActiveCaller(req); // COH-011
   const { churchId, jobDocId } = req.data || {};
   if (!churchId || !jobDocId) return { promoted: false };
   const db = getFirestore();
@@ -3629,6 +3758,7 @@ exports.sendTaskMentionEmail = onCall({ cors: true }, async (req) => {
   const { churchId, taskNumber, taskName, commentText, mentionedUids, commentAuthorName } = req.data;
   const uid = req.auth?.uid;
   if (!uid || !churchId) throw new HttpsError('invalid-argument', 'Auth and churchId required');
+  await assertActiveCaller(req); // COH-011
   if (!emailConfigured()) return { sent: 0 };
 
   const db = getFirestore();
@@ -3991,6 +4121,7 @@ exports.refreshShepherdPeople = onCall(
   { secrets: [PCO_APP_ID, PCO_SECRET], cors: true },
   wrapCall('refreshShepherdPeople', async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    await assertActiveCaller(req); // COH-011
     const db = getFirestore();
     const userRecord = await getAuth().getUser(req.auth.uid);
     // John-only (OWNER_EMAILS) — drives the roster manager's "Save & re-sync".
@@ -4033,7 +4164,15 @@ exports.claimElderRole = onCall(
     // unaffected; an email/password elder just verifies once. (D6: minimal — no
     // provider/churchId gate.)
     const rostered = isElderEmail(roster, userRecord.email);
-    const shouldBeElder = rostered && userRecord.emailVerified === true;
+    // COH-011: a DEACTIVATED caller computes to shouldBeElder=false rather than
+    // being rejected. That distinction is load-bearing — this function's whole
+    // purpose is to be self-correcting, so throwing for an inactive caller would
+    // leave a lingering `elder:true` claim in place forever. Computing false
+    // means the existing revoke branch below strips it on their next sign-in.
+    // Deliberately NOT wrapped in assertActiveCaller for the same reason.
+    const callerProfile = await db.doc(`users/${req.auth.uid}`).get();
+    const callerActive = !callerProfile.exists || callerProfile.data().active !== false;
+    const shouldBeElder = rostered && userRecord.emailVerified === true && callerActive;
     const isElder = userRecord.customClaims?.elder === true;
     if (shouldBeElder === isElder) {
       // Tell a rostered-but-unverified caller why they didn't get in, so the
@@ -4075,6 +4214,7 @@ exports.setElderAssignment = onCall(
   { secrets: [PCO_APP_ID, PCO_SECRET], cors: true },
   wrapCall('setElderAssignment', async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    await assertActiveCaller(req); // COH-011
     const db = getFirestore();
     // Read the elder claim off the token (the canonical place — propagates from
     // setCustomUserClaims on refresh; getUser().customClaims would miss it).
@@ -4156,6 +4296,7 @@ exports.exportMyShepherdNotes = onCall(
   { cors: true },
   wrapCall('exportMyShepherdNotes', async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    await assertActiveCaller(req); // COH-011
     if (req.auth.token?.elder !== true) throw new HttpsError('permission-denied', 'Elders only.');
     const db = getFirestore();
     const uid = req.auth.uid;
@@ -4186,6 +4327,7 @@ exports.purgeElderShepherdNotes = onCall(
   { cors: true },
   wrapCall('purgeElderShepherdNotes', async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    await assertActiveCaller(req); // COH-011
     const email = req.auth.token?.email || '';
     const emailVerified = req.auth.token?.email_verified === true;
     if (!(OWNER_EMAILS.includes(email) && emailVerified)) {

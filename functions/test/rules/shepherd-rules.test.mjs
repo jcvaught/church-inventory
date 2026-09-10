@@ -26,7 +26,19 @@ before(async () => {
   });
 });
 after(async () => { await env.cleanup(); });
-beforeEach(async () => { await env.clearFirestore(); });
+beforeEach(async () => {
+  await env.clearFirestore();
+  // COH-011: isElder() now requires an ACTIVE users/{uid} profile as well as the
+  // custom claim, because Rules cannot retract an already-issued ID token — a
+  // deactivated elder would otherwise keep `elder:true` (and Shepherd access)
+  // for up to an hour. These tests previously seeded no profile at all and
+  // passed only because the claim alone was trusted; every one of them needs a
+  // real profile now, which also matches production (claimElderRole writes
+  // allowedHubs on the user doc at first grant, so an elder always has one).
+  await seed('users/elderA', { churchId: CHURCH, role: 'user', name: 'Elder A', active: true });
+  await seed('users/elderB', { churchId: CHURCH, role: 'user', name: 'Elder B', active: true });
+  await seed('users/member', { churchId: CHURCH, role: 'user', name: 'Member', active: true });
+});
 
 // Auth contexts (the `elder` custom claim + email/email_verified standard claims).
 const elderA = () => env.authenticatedContext('elderA', { elder: true, email: 'a@fxcc.org', email_verified: true }).firestore();
@@ -85,4 +97,45 @@ test('shepherdCare last-contact stamp: elder read/write, non-elder denied', asyn
   await assertSucceeds(getDoc(doc(elderA(), P('shepherdCare/p1'))));
   await assertFails(setDoc(doc(member(), P('shepherdCare/p1')), { lastCareAt: serverTimestamp() }));
   await assertFails(getDoc(doc(member(), P('shepherdCare/p1'))));
+});
+
+// ══ COH-011 — a deactivated elder loses Shepherd access immediately ═══════════
+// isElder() used to trust `request.auth.token.elder` alone. Revoking refresh
+// tokens does not retract an ID token already in a browser, so a deactivated
+// elder kept full pastoral access for up to an hour: reading every person
+// (incl. medicalNotes), writing private notes and care threads, and appending
+// audit rows. The profile check is re-evaluated on every request, so it closes
+// that window at once.
+//
+// The context below is deliberately REALISTIC — `elder:true` AND a real
+// users/{uid} doc with active:false. An inactive-elder test with no profile at
+// all would pass for the wrong reason (a missing doc denies regardless).
+const inactiveElder = () => env.authenticatedContext('elderGone', { elder: true, email: 'gone@fxcc.org', email_verified: true }).firestore();
+async function seedInactiveElder() {
+  await seed('users/elderGone', { churchId: CHURCH, role: 'user', name: 'Former Elder', active: false });
+}
+
+test('COH-011: a deactivated elder cannot read the congregation cache', async () => {
+  await seedInactiveElder();
+  await seed(P('shepherdPeople/p1'), { name: 'Jane', medicalNotes: 'sensitive' });
+  await assertSucceeds(getDoc(doc(elderA(), P('shepherdPeople/p1'))));   // control: active elder still can
+  await assertFails(getDoc(doc(inactiveElder(), P('shepherdPeople/p1'))));
+});
+
+test('COH-011: a deactivated elder cannot write a private note or a care thread', async () => {
+  await seedInactiveElder();
+  await seed(P('shepherdPeople/p1'), { name: 'Jane' });
+  await assertFails(setDoc(doc(inactiveElder(), P('shepherdPeople/p1/privateNotes/elderGone')), { text: 'still here' }));
+  await assertFails(setDoc(doc(inactiveElder(), P('shepherdPeople/p1/careThread/c1')), { text: 'still here', authorUid: 'elderGone' }));
+});
+
+test('COH-011: a deactivated elder cannot append an audit row', async () => {
+  await seedInactiveElder();
+  await assertFails(setDoc(doc(inactiveElder(), P('shepherdAudit/a1')), { actorUid: 'elderGone', action: 'view' }));
+});
+
+test('COH-011: a deactivated elder cannot read a private note they previously wrote', async () => {
+  await seedInactiveElder();
+  await seed(P('shepherdPeople/p1/privateNotes/elderGone'), { text: 'written while active' });
+  await assertFails(getDoc(doc(inactiveElder(), P('shepherdPeople/p1/privateNotes/elderGone'))));
 });

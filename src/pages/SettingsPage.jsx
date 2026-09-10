@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useCallback } from 'react';
 import { B, f1, f2, inp, btnP, btnS } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { isOwnerEmail } from '../utils/owners.js';
@@ -106,6 +106,29 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const [teamHubFilter, setTeamHubFilter] = useState('all');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [undo, setUndo] = useState(null);
+  // COH-011: a failed activation change MUST be visible. Silently swallowing it
+  // (the convention a few handlers in this file use) would recreate exactly the
+  // bug this task fixes — an admin believing someone lost access when they did
+  // not.
+  const [memberError, setMemberError] = useState('');
+
+  // COH-011: member activation goes through the server, never a direct
+  // Firestore write. `updateUser(uid,{active:...})` only ever wrote one field,
+  // while the confirm dialog promised the member loses access "immediately" —
+  // it did not disable their Auth account, revoke their refresh tokens, or
+  // strip a lingering elder claim. The rules now also pin `active`, so a direct
+  // write is refused outright. All three paths below (Deactivate, Reactivate,
+  // and the Undo toast) share this one function so none can drift back.
+  const setMemberActive = useCallback(async (uid, active) => {
+    setMemberError('');
+    try {
+      const fn = httpsCallable(getFunctions(app), 'setMemberActive');
+      await fn({ uid, active });
+    } catch (err) {
+      setMemberError(err?.message || 'Could not update that member. Please try again.');
+      throw err;
+    }
+  }, [app]);
   const { confirm, ConfirmHost } = useConfirm();
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -1043,6 +1066,11 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             <button onClick={() => setShowUpgradeModal(true)} style={{ ...btnP, padding:"7px 16px", fontSize:12, whiteSpace:"nowrap" }}>Upgrade</button>
           </div>
         )}
+        {memberError && (
+          <div role="alert" style={{ background:B.redPale, border:'1px solid #FECACA', borderRadius:10, padding:'10px 14px', marginBottom:10, fontSize:13, color:B.textDark, fontFamily:f1 }}>
+            {memberError}
+          </div>
+        )}
         {users.length === 0 ? <p style={{ color:B.textLight, fontSize:14 }}>No team members yet.</p> :
          filteredUsers.length === 0 ? <p style={{ color:B.textLight, fontSize:14 }}>No team members have access to {HUB_LABELS[teamHubFilter] || teamHubFilter}.</p> :
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -1059,10 +1087,10 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                   danger: true,
                 });
                 if (!ok) return;
-                await updateUser(u.id, {active:false});
+                try { await setMemberActive(u.id, false); } catch { return; }
                 setUndo({
                   message: `${u.name} deactivated.`,
-                  onUndo: () => updateUser(u.id, {active:true}),
+                  onUndo: () => setMemberActive(u.id, true).catch(() => {}),
                 });
               };
               const handleRemove = async () => {
@@ -1080,7 +1108,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                 { key:'edit', label:'Edit Access', onClick:() => openEditAccess(u), style:{} },
                 u.active
                   ? { key:'deact', label:'Deactivate', onClick:handleDeactivate, style:{ color:B.red, borderColor:"#FECACA" } }
-                  : { key:'react', label:'Reactivate', onClick:() => updateUser(u.id, {active:true}), style:{ color:B.teal, borderColor:B.tealPale } },
+                  : { key:'react', label:'Reactivate', onClick:() => setMemberActive(u.id, true).catch(() => {}), style:{ color:B.teal, borderColor:B.tealPale } },
                 { key:'remove', label:'Remove', onClick:handleRemove, style:{ color:B.red, borderColor:"#FECACA" } },
               ];
               const menuOpen = teamRowMenuFor === u.id;

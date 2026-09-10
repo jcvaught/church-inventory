@@ -15,6 +15,13 @@ service cloud.firestore {
     // creation path has written active:true since user profiles were introduced.
     function isMember(churchId)     { return request.auth != null && userData().get('active', true) == true && userChurchId() == churchId; }
     function isChurchAdmin(churchId)          { return isMember(churchId) && userIsAdmin(); }
+    // COH-011: the active half of isMember(), for the handful of rules that
+    // legitimately do NOT check churchId the same way (self-scoped reads, the
+    // users collection, the church parent). Same `.get('active', true)`
+    // fail-open as isMember — a legacy profile with no `active` field still
+    // works, which the D-1 addendum chose deliberately. Every rule that used
+    // userChurchId() or userIsAdmin() WITHOUT this was a deactivation bypass.
+    function actorActive()          { return request.auth != null && userData().get('active', true) == true; }
     function isChurchAdminOrManager(churchId) { return isMember(churchId) && userIsAdminOrManager(); }
 
     // ── COH-006 work-item visibility ─────────────────────────────────────────
@@ -177,7 +184,17 @@ service cloud.firestore {
     // (`elder: true`), granted by claimElderRole against the email allow-list —
     // NOT a Firestore-doc role (those are raceable/readable). Baked into the
     // signed token; this reads it directly with no get().
-    function isElder() { return request.auth != null && request.auth.token.elder == true; }
+    // COH-011: the claim alone is not enough. Rules cannot retract an
+    // already-issued ID token, so a deactivated elder keeps `elder:true` for up
+    // to an hour after revokeRefreshTokens — long enough to read every
+    // shepherdPeople doc incl. medicalNotes, write private notes and care
+    // threads, and drive setElderAssignment (which writes to Planning Center).
+    // The profile check is evaluated fresh on every request, so it closes that
+    // window immediately. NB this is deliberately fail-CLOSED: an elder with no
+    // users/{uid} doc is denied, which is the right default for pastoral data.
+    // Church binding is deliberately NOT folded in here — that is the separately
+    // ranked Shepherd-scoping item and needs its own decision.
+    function isElder() { return request.auth != null && request.auth.token.elder == true && actorActive(); }
     // Shepherd Hub admin access is restricted to John specifically (NOT any
     // church admin) — pastoral data is need-to-know. Mirrors OWNER_EMAILS in
     // functions/index.js. Elders get in via isElder(); this is the only
@@ -244,7 +261,7 @@ service cloud.firestore {
     match /churches/{churchId} {
       allow get:    if request.auth != null && (
                       request.auth.uid + '-church' == churchId ||
-                      userChurchId() == churchId
+                      (actorActive() && userChurchId() == churchId)
                     );
       allow create: if request.auth != null && request.auth.uid + '-church' == churchId;
       allow update, delete: if isChurchAdmin(churchId);
@@ -496,10 +513,10 @@ service cloud.firestore {
     //    the jobsRosterVisibility setting permits (canSeeJobRoster). Writes are
     //    Cloud Functions only (Admin SDK bypasses these rules).
     match /{path=**}/signups/{signupId} {
-      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid && actorActive();
     }
     match /{path=**}/waitlist/{waitlistId} {
-      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid && actorActive();
     }
     match /churches/{churchId}/jobListings/{jobId}/signups/{signupId} {
       allow read:  if canSeeJobRoster(churchId, jobId);
@@ -665,14 +682,14 @@ service cloud.firestore {
         && request.resource.data.notes is string
         && request.resource.data.notes.size() <= 2000
         && request.resource.data.status == 'pending';
-      allow read, update, delete: if request.auth != null && userChurchId() == churchId;
+      allow read, update, delete: if request.auth != null && actorActive() && userChurchId() == churchId;
     }
 
     // ── User profiles ─────────────────────────────────────────────────────────
     match /users/{userId} {
       allow read: if request.auth != null && (
         request.auth.uid == userId ||
-        userChurchId() == resource.data.churchId
+        (actorActive() && userChurchId() == resource.data.churchId)
       );
 
       // New users can create their own profile.
@@ -703,7 +720,14 @@ service cloud.firestore {
           && request.resource.data.get('allowedHubs', null) == resource.data.get('allowedHubs', null)
         )
         || (
-          userIsAdmin()
+          // COH-011: `userIsAdmin()` reads the ACTOR's own profile, and
+          // deactivation never changed their `role`. Without actorActive() a
+          // deactivated admin satisfied this arm on their OWN document — which
+          // pins neither `active` nor `role` — and could simply set
+          // `active: true` back on themselves. Deactivation was therefore not
+          // enforceable against an admin at all.
+          actorActive()
+          && userIsAdmin()
           && userChurchId() == resource.data.churchId
           && request.resource.data.churchId == resource.data.churchId
           && request.resource.data.get('phone', '') == resource.data.get('phone', '')
@@ -713,7 +737,7 @@ service cloud.firestore {
       );
 
       // Self-delete or admin in same church
-      allow delete: if request.auth != null && (
+      allow delete: if request.auth != null && actorActive() && (
         request.auth.uid == userId ||
         (userIsAdmin() && userChurchId() == resource.data.churchId)
       );

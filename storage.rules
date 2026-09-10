@@ -5,7 +5,16 @@ service firebase.storage {
       function userProfile() {
         return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
       }
-      allow read: if request.auth != null && userProfile().churchId == churchId;
+      // COH-011: reads require an ACTIVE profile too. Until now this rule
+      // checked churchId only — the comment on the next line has always said
+      // writes require an active user, which made the asymmetry visible without
+      // anyone closing it, so a deactivated member kept read access to every
+      // photo in the church. `.get('active', true)` matches isMember() in
+      // firestore.rules: a legacy profile with no `active` field still works.
+      // No public surface is affected — this rule already required auth.
+      allow read: if request.auth != null
+        && userProfile().churchId == churchId
+        && userProfile().get('active', true) == true;
       // Writes also require: active user, image content type only, max 5MB
       allow write: if request.auth != null
         && userProfile().churchId == churchId

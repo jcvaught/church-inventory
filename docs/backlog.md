@@ -11,7 +11,7 @@ Claude's on items 1, 5 and 10.
 
 | # | Item | Why here |
 |---|---|---|
-| 1 | **Offboarding is a false promise** (COH-011) | The deactivate dialog says a member "will lose access immediately." Untrue on four paths. Live, in the church actually using the product |
+| 1 | ~~**Offboarding is a false promise**~~ (COH-011) | ✅ **Stages 1-3 deployed 2026-09-10.** Seven rules bypasses closed, 22 callables guarded, `setMemberActive` live. Remaining: the stage-4 `active` pin, and `identifyItem` (blocked by a pre-existing ANTHROPIC_API_KEY collision — its own item) |
 | 2 | **D-8 reservation approval** (COH-005) | Any member can approve their own booking. **Not blocked** — the approver picker only offers admins/managers, so there is no designated-approver conflict |
 | 3 | **Shepherd scoping + roll-off revocation** | `isElder()` is a bare claim: no church binding, no `active` check, reads every `shepherdPeople` doc incl. `medicalNotes`. Roll-off does not revoke. **Level-2 note encryption is NOT the first fix** — useless against a compromised authorized elder, adds key-loss risk, and does not cover the `medicalNotes` cache |
 | 4 | **Complete the Shepherd rollout** (D-2/D-3 in the launch plan) | No code. A purpose-built FXCC workflow has been live since 2026-08-04 with one of eight elders signed up and the digest still dark. Activating built work beats building more |

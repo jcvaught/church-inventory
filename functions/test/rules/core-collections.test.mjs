@@ -353,3 +353,85 @@ test('config/subscription: members read, but no client can update it', async () 
   await assertSucceeds(getDoc(doc(ctx('memberA'), P('config/subscription'))));
   await assertFails(updateDoc(doc(ctx('adminA'), P('config/subscription')), { plan: 'all_in' }));
 });
+
+// ══ COH-011 — deactivation must actually revoke ═══════════════════════════════
+// COH-002 put the active check in isMember(). Every rule that instead used
+// userChurchId() or userIsAdmin() — neither of which checks active — was a
+// bypass. These tests pin each one closed.
+//
+// The fixtures deliberately include `inactiveAdmin`: seedMembers()' inactiveA is
+// role:'user', which cannot exercise the admin arm at all.
+async function seedInactiveAdmin() {
+  await seed('users/inactiveAdmin', { churchId: CHURCH, role: 'admin', name: 'Deactivated Admin', active: false });
+}
+
+test('COH-011: a deactivated ADMIN cannot reactivate themselves', async () => {
+  await seedMembers();
+  await seedInactiveAdmin();
+  // The admin arm pinned neither `active` nor `role`, and userIsAdmin() reads
+  // the actor's own still-present role:'admin' — so this was permitted, making
+  // deactivation unenforceable against any admin.
+  await assertFails(updateDoc(doc(ctx('inactiveAdmin'), 'users/inactiveAdmin'), { active: true }));
+});
+
+test('COH-011: a deactivated admin cannot change an UNRELATED allowed field either', async () => {
+  await seedMembers();
+  await seedInactiveAdmin();
+  // Separated from the test above on purpose. If the only assertion were
+  // self-reactivation, it could pass because of the (later) `active` field pin
+  // rather than because the ACTOR is inactive. Renaming another member is
+  // ordinarily allowed for an admin, so denying it here isolates the actor gate.
+  await assertFails(updateDoc(doc(ctx('inactiveAdmin'), 'users/memberA'), { name: 'Renamed by a deactivated admin' }));
+});
+
+test('COH-011: an ACTIVE admin keeps ordinary profile management (regression guard)', async () => {
+  await seedMembers();
+  await assertSucceeds(updateDoc(doc(ctx('adminA'), 'users/memberA'), { name: 'Renamed by an active admin' }));
+  await assertSucceeds(updateDoc(doc(ctx('adminA'), 'users/memberA'), { role: 'manager' }));
+});
+
+test('COH-011: a deactivated admin cannot delete a user, and no user can self-delete while inactive', async () => {
+  await seedMembers();
+  await seedInactiveAdmin();
+  await assertFails(deleteDoc(doc(ctx('inactiveAdmin'), 'users/memberA')));
+  // The self-delete arm was `request.auth.uid == userId` with no active check,
+  // so ANY deactivated user could delete their own profile — and a church
+  // creator could then re-exercise the self-create path.
+  await assertFails(deleteDoc(doc(ctx('inactiveA'), 'users/inactiveA')));
+});
+
+test('COH-011: a deactivated member cannot read user profiles', async () => {
+  await seedMembers();
+  await assertSucceeds(getDoc(doc(ctx('memberA'), 'users/memberB')));
+  await assertFails(getDoc(doc(ctx('inactiveA'), 'users/memberB')));
+  // Reading your OWN profile stays allowed — the client needs it to discover
+  // that it has been deactivated.
+  await assertSucceeds(getDoc(doc(ctx('inactiveA'), 'users/inactiveA')));
+});
+
+test('COH-011: a deactivated member cannot read, update or delete public requests', async () => {
+  await seedMembers();
+  await seed(P('publicRequests/r1'), { name: 'Visitor', itemDescription: 'Chairs', status: 'pending' });
+  await assertSucceeds(getDoc(doc(ctx('memberA'), P('publicRequests/r1'))));
+  await assertFails(getDoc(doc(ctx('inactiveA'), P('publicRequests/r1'))));
+  await assertFails(updateDoc(doc(ctx('inactiveA'), P('publicRequests/r1')), { status: 'dismissed' }));
+  await assertFails(deleteDoc(doc(ctx('inactiveA'), P('publicRequests/r1'))));
+});
+
+test('COH-011: a deactivated member cannot read the church parent doc', async () => {
+  await seedMembers();
+  await seed(`churches/${CHURCH}`, { churchName: 'First Church', churchCode: 'FXCC' });
+  await assertSucceeds(getDoc(doc(ctx('memberA'), `churches/${CHURCH}`)));
+  await assertFails(getDoc(doc(ctx('inactiveA'), `churches/${CHURCH}`)));
+});
+
+test('COH-011: a LEGACY profile with no active field is unaffected everywhere', async () => {
+  await seedMembers();
+  await seed(`churches/${CHURCH}`, { churchName: 'First Church' });
+  await seed(P('publicRequests/r1'), { name: 'Visitor', itemDescription: 'Chairs' });
+  // The `.get('active', true)` fail-open is deliberate (D-1 addendum): defaulting
+  // missing-to-inactive would lock out every profile predating the field.
+  await assertSucceeds(getDoc(doc(ctx('legacyA'), `churches/${CHURCH}`)));
+  await assertSucceeds(getDoc(doc(ctx('legacyA'), P('publicRequests/r1'))));
+  await assertSucceeds(getDoc(doc(ctx('legacyA'), 'users/memberA')));
+});

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { doc, setDoc } from 'firebase/firestore';
-import { ref, uploadBytes } from 'firebase/storage';
+import { ref, uploadBytes, getBytes } from 'firebase/storage';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PROJECT = 'demo-shepherd-rules';
@@ -69,4 +69,50 @@ test('an unauthenticated user cannot read or upload', async () => {
   await seedUser('memberA', { churchId: CHURCH, role: 'user', active: true });
   const storage = env.unauthenticatedContext().storage();
   await assertFails(uploadBytes(ref(storage, path(CHURCH)), png(), meta));
+});
+
+// ── COH-011: READ requires an active profile ─────────────────────────────────
+// Until now the read rule checked churchId only, so a deactivated member kept
+// read access to every photo in the church while their WRITES were blocked —
+// an asymmetry the rule's own comment described without anyone closing it.
+//
+// EVERY test below seeds a REAL object first. Reading a path that holds no
+// object fails whether or not the rules deny it, so an assertFails against a
+// missing object passes for the wrong reason and proves nothing. The seeded
+// read by an active member is what proves the negatives are about rules.
+
+async function seedObject(church) {
+  await env.withSecurityRulesDisabled(async (e) => {
+    await uploadBytes(ref(e.storage(), path(church)), png(), meta);
+  });
+}
+
+test('COH-011: an active member CAN read a seeded object (control for the negatives)', async () => {
+  await seedUser('memberA', { churchId: CHURCH, role: 'user', active: true });
+  await seedObject(CHURCH);
+  await assertSucceeds(getBytes(ref(env.authenticatedContext('memberA').storage(), path(CHURCH))));
+});
+
+test('COH-011: a DEACTIVATED member cannot read a seeded object', async () => {
+  await seedUser('memberA', { churchId: CHURCH, role: 'user', active: false });
+  await seedObject(CHURCH);
+  await assertFails(getBytes(ref(env.authenticatedContext('memberA').storage(), path(CHURCH))));
+});
+
+test('COH-011: a DEACTIVATED admin cannot read a seeded object either', async () => {
+  await seedUser('adminA', { churchId: CHURCH, role: 'admin', active: false });
+  await seedObject(CHURCH);
+  await assertFails(getBytes(ref(env.authenticatedContext('adminA').storage(), path(CHURCH))));
+});
+
+test('COH-011: a LEGACY profile with no active field can still read (fail-open, matches isMember)', async () => {
+  await seedUser('legacy', { churchId: CHURCH, role: 'user' });
+  await seedObject(CHURCH);
+  await assertSucceeds(getBytes(ref(env.authenticatedContext('legacy').storage(), path(CHURCH))));
+});
+
+test('COH-011: cross-tenant read of a seeded object is still denied', async () => {
+  await seedUser('memberA', { churchId: CHURCH, role: 'user', active: true });
+  await seedObject(OTHER);
+  await assertFails(getBytes(ref(env.authenticatedContext('memberA').storage(), path(OTHER))));
 });

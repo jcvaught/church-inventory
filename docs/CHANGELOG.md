@@ -4,6 +4,52 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-09-10 — COH-011: deactivation now actually revokes access
+
+Deactivating a team member told the admin they "will lose access to the app
+immediately." That was not true. `active:false` wrote one Firestore field; it
+blocked every rule routing through `isMember()` and nothing else.
+
+**Closed in rules:** Storage reads, `users` reads, `publicRequests`
+read/update/**delete**, the church parent `get`, roster self-reads, and `users`
+delete — whose self-arm let ANY inactive user delete their own profile.
+
+**A deactivated admin could reactivate themselves.** The `users` update admin arm
+checked only `userIsAdmin() && userChurchId() == …`, pinning neither `active` nor
+`role`, and `userIsAdmin()` reads the actor's own profile — whose `role` never
+changed. Deactivation was unenforceable against any admin.
+
+**The callables never checked `active` either.** ~46 exported functions read the
+caller's profile and checked `churchId`/`role` while ignoring `active`; the file
+held 11 active checks total. Firebase verifies a callable's ID token signature
+and expiry, **not its revocation** — so revoking refresh tokens still leaves an
+outstanding token usable for up to an hour. `assertActiveCaller` now guards 22
+callables, matching `isMember()`'s `.get('active', true)` fail-open so a legacy
+profile is not denied in the callable what the rules allow.
+
+`isElder()` no longer trusts the custom claim alone: Rules cannot retract an
+issued token, and a stale elder claim reaches `medicalNotes`, private notes, care
+threads, and `setElderAssignment`, which writes to Planning Center. Fail-closed;
+both production elders were verified to hold active profiles first. Church
+binding was deliberately left to the separate Shepherd-scoping item.
+
+New `setMemberActive` callable replaces the client's direct write and disables
+the Auth account, revokes refresh tokens, and strips the `elder` claim while
+preserving other claims. Ordering is load-bearing in both directions: deactivate
+writes Firestore first so a later crash still leaves the member denied;
+reactivate enables Auth first, because writing Firestore first could restore
+access to a stale token if the Auth enable then failed.
+
+`test:rules` 129/129 (+17), `test:handlers` 87/87 (+13), `test:unit` 166/166.
+All 23 redeployed callables probed for the gen-2 invoker strip; none stripped.
+
+**Known gap:** `identifyItem` is the one callable without the guard — its deploy
+is blocked by a pre-existing `ANTHROPIC_API_KEY` collision (Secret Manager
+binding + `functions/.env` copy; Cloud Run refuses the overlap). Filed
+separately rather than bundled into a security fix.
+
+---
+
 ## 2026-09-10 — COH-007 fully closed, and a placement rule for the concentration files
 
 Documentation and policy only. No application behavior changed, no rules
