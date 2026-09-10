@@ -11,7 +11,7 @@ Claude's on items 1, 5 and 10.
 
 | # | Item | Why here |
 |---|---|---|
-| 1 | ~~**Offboarding is a false promise**~~ (COH-011) | ✅ **Stages 1-3 deployed 2026-09-10.** Seven rules bypasses closed, 22 callables guarded, `setMemberActive` live. Remaining: the stage-4 `active` pin, and `identifyItem` (blocked by a pre-existing ANTHROPIC_API_KEY collision — its own item) |
+| 1 | ~~**Offboarding is a false promise**~~ (COH-011) | ✅ **COMPLETE 2026-09-10, all four stages verified in production.** Seven rules bypasses closed, 22 callables guarded, `setMemberActive` live, `active` pinned callable-only. One gap: `identifyItem` (blocked by a pre-existing ANTHROPIC_API_KEY collision — now item 9b) |
 | 2 | **D-8 reservation approval** (COH-005) | Any member can approve their own booking. **Not blocked** — the approver picker only offers admins/managers, so there is no designated-approver conflict |
 | 3 | **Shepherd scoping + roll-off revocation** | `isElder()` is a bare claim: no church binding, no `active` check, reads every `shepherdPeople` doc incl. `medicalNotes`. Roll-off does not revoke. **Level-2 note encryption is NOT the first fix** — useless against a compromised authorized elder, adds key-loss risk, and does not cover the `medicalNotes` cache |
 | 4 | **Complete the Shepherd rollout** (D-2/D-3 in the launch plan) | No code. A purpose-built FXCC workflow has been live since 2026-08-04 with one of eight elders signed up and the digest still dark. Activating built work beats building more |
@@ -19,6 +19,7 @@ Claude's on items 1, 5 and 10.
 | 6 | **AC-07 — maintenance field authority** | `type == 'maintenance'` short-circuits the whole update guard (`firestore.rules:403`); any member rewrites cost, assignment, recurrence, status. Accepted under a multi-tenant frame; reconsider under this one, where the risk is accidental damage by real volunteers |
 | 7 | **Pin comment attribution + timestamps** | `authorId`/`authorName`/timestamps unpinned and forgeable; update/delete authorization *depends* on `authorId`. Fix before general audit-log atomicity |
 | 8 | **D-3 supplies** (COH-005); D-7 UI parity follows | Small, already decided |
+| 9b | **`ANTHROPIC_API_KEY` is configured twice** | Secret Manager binding + a `functions/.env` copy; Cloud Run refuses the overlap, so **`identifyItem` cannot be redeployed at all** and is the one callable missing COH-011's guard. Decide: move the AI digest onto the secret binding (stronger, touches a working feature) or drop to `.env` everywhere (simpler, weaker) |
 | 9 | **Budget + Sentry alerts** | Console-only. **A budget alert notifies; it is not a spending ceiling.** `SENTRY-ALERTS.md` still references SendGrid post-Brevo |
 | 10 | **Ask FXCC** before Sunday-readiness, templates, or deep-linking | All three are *hypotheses*. Deep-linking is verified thin (6 of 7 search result types open only the containing hub) but its cost to FXCC is unmeasured |
 

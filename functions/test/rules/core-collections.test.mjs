@@ -435,3 +435,21 @@ test('COH-011: a LEGACY profile with no active field is unaffected everywhere', 
   await assertSucceeds(getDoc(doc(ctx('legacyA'), P('publicRequests/r1'))));
   await assertSucceeds(getDoc(doc(ctx('legacyA'), 'users/memberA')));
 });
+
+test('COH-011 stage 4: even an ACTIVE admin cannot write `active` directly', async () => {
+  await seedMembers();
+  // Separated from the inactive-admin test on purpose: that one could pass
+  // purely because the ACTOR was inactive. This proves the FIELD pin, using an
+  // actor who is allowed to do everything else to the same document.
+  await assertFails(updateDoc(doc(ctx('adminA'), 'users/memberA'), { active: false }));
+  await assertFails(updateDoc(doc(ctx('adminA'), 'users/inactiveA'), { active: true }));
+  // ...while ordinary profile management on that same document still works,
+  // so the pin is narrow rather than a blanket denial.
+  await assertSucceeds(updateDoc(doc(ctx('adminA'), 'users/memberA'), { name: 'Still editable' }));
+});
+
+test('COH-011 stage 4: a member still cannot flip their own active flag', async () => {
+  await seedMembers();
+  await assertFails(updateDoc(doc(ctx('memberA'), 'users/memberA'), { active: false }));
+  await assertFails(updateDoc(doc(ctx('inactiveA'), 'users/inactiveA'), { active: true }));
+});

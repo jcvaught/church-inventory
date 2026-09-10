@@ -287,8 +287,8 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-011 — Deactivation that actually revokes
 
-- Status: **STAGES 1-3 DEPLOYED 2026-09-10. One gap and one final stage remain
-  (below).** Owner: Claude · Reviewer: Codex (plan reviewed before
+- Status: **COMPLETE — ALL FOUR STAGES DEPLOYED AND VERIFIED IN PRODUCTION
+  2026-09-10.** One known gap remains (`identifyItem`, below), filed separately. Owner: Claude · Reviewer: Codex (plan reviewed before
   implementation, DEC-2026-011 — **changes requested**, all applied).
 - Priority: **#1** under DEC-2026-020.
 - **The bug, in one line:** the confirm dialog promised a deactivated member
@@ -336,9 +336,15 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   a security fix. Residual exposure is bounded: a deactivated member's Auth
   account is disabled and tokens revoked, so only an already-issued token works,
   for at most an hour. **Filed as its own item.**
-- **REMAINING STAGE 4:** pin `active` on the `users` update admin arm so
-  `setMemberActive` is the only path. Deferred until the web deploy carrying the
-  callable is live, or the old bundle's Deactivate button breaks.
+- **STAGE 4 DONE.** `active` is pinned on the `users` update admin arm, so
+  `setMemberActive` (Admin SDK, unbound by rules) is the only path. Applied only
+  after the web deploy carrying the callable went live (buildId `32e326a`) —
+  pinning earlier would have broken Deactivate for anyone on the previous
+  bundle. **Verified against PRODUCTION rules**, not just the emulator: an
+  active admin in the isolated `e2e-test-church` tenant was denied writing
+  `active` on their own profile (`permission-denied`) while a rename on the same
+  document still succeeded — proving the pin is narrow rather than a blanket
+  denial. `test:rules` 131/131.
 
 ### COH-009 — Close COH-007's two recorded follow-ups — ✅ COMPLETE 2026-09-10
 
