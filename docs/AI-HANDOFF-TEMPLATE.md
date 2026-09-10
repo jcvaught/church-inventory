@@ -24,6 +24,12 @@ file list.
 - Files/components changed:
 - Data, rules, or API changes:
 - Documentation changed:
+- **Concentration files** (DEC-2026-019): did this task add to
+  `functions/index.js`, `src/useFirestore.js`, `src/App.jsx`, or
+  `src/pages/hubs/WorkBoard.jsx`? If so — should that responsibility stay there?
+  If yes, why? (Placement is decided by cohesion and independent testability,
+  never by line count. Adding a new test-only seam to a central file is a
+  signal.)
 
 ## Decisions and Assumptions
 

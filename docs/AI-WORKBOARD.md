@@ -285,6 +285,54 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ## Proposed Queue
 
+### COH-009 — Close COH-007's two recorded follow-ups — ✅ COMPLETE 2026-09-10
+
+- Status: **COMPLETE 2026-09-10. Documentation only — no code, no rules, no
+  deploy. COH-007 is now fully closed.**
+- Owner: Claude · Reviewer: Codex (plan reviewed before implementation,
+  DEC-2026-011) · Authorized by: owner, 2026-09-10
+- Outcome: both follow-ups resolved without building anything.
+  1. **Losslessness against a task carrying comments or photos — closed on
+     existing evidence.** The data half was already proven by
+     `functions/test/handlers/archiveCompletedTasks.test.mjs:146` and the
+     authorization half by `functions/test/rules/coh007-archive.test.mjs:256`
+     (which asserts BOTH `getDoc` and `getDocs` succeed on a frozen task's
+     comments). The residual was React rendering an array it already holds.
+     Owner confirmed tasks do not require comments or photos, so waiting to
+     observe one organically could have waited indefinitely.
+  2. **DEC-2026-018's tripwire — reworded, not instrumented.** The deferral
+     condition is now demand-based; see that decision's 2026-09-10 amendment.
+- **The finding worth keeping:** both items were already covered by tests
+  nobody had checked. The first plan proposed a production audit script and
+  browser telemetry; Codex's review established that the script tested the
+  wrong layer and the telemetry was not a tripwire at all (no budget, no
+  reviewer, no alert) and would have measured the wrong quantity
+  (`items.length` is deduplicated tasks, not billed reads) through a client
+  that lazy-loads after first paint. **Check existing coverage before
+  proposing new machinery.**
+- Files: `docs/DECISIONS.md`, `docs/backlog.md`, `docs/CHANGELOG.md`.
+
+### COH-010 — Placement rule for the concentration files — ✅ COMPLETE 2026-09-10
+
+- Status: **COMPLETE 2026-09-10. Documentation and policy only — no code, no
+  refactor authorized, none scheduled.**
+- Owner: Claude · Reviewer: Codex · Authorized by: owner, 2026-09-10
+- Outcome: **DEC-2026-019** — placement is decided by cohesion and independent
+  testability, never by line count; the stronger default applies to
+  `src/useFirestore.js`, the conditional rule to `functions/index.js`. Recorded
+  in `AGENTS.md` ("Where new code goes") and enforced through one added question
+  in `docs/AI-HANDOFF-TEMPLATE.md` rather than a new review ritual.
+- Origin: Codex's 2026-08-28 application review flagged three concentration
+  points; no rule had ever been decided.
+- **Rejected during review, recorded so they are not revived:** a line-count
+  threshold (a sample-of-one number dressed as measurement); a recurring
+  "measure the files" review (no owner, no outcome, no enforcement point — the
+  same failure mode as the unmeasured tripwire above); `index.js`-as-manifest
+  (the deploy-blast-radius argument was factually wrong — `--only
+  functions:<name>` already works — and a manifest does not improve cold
+  starts); big-bang decomposition; splitting `WorkBoard.jsx`.
+- Files: `docs/DECISIONS.md`, `AGENTS.md`, `docs/AI-HANDOFF-TEMPLATE.md`.
+
 ### COH-008 — Server-side backlink cleanup on delete
 
 - Status: **COMPLETE — DEPLOYED AND VERIFIED IN PRODUCTION 2026-09-06,

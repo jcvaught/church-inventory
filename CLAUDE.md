@@ -9,6 +9,12 @@ Before planning, reviewing, or changing the repository, read `AGENTS.md` and
 verification, and handoff rules used by both Claude and Codex. Follow the active
 task assignment and do not edit another agent's branch or worktree.
 
+**Before adding code to `functions/index.js`, `src/useFirestore.js`,
+`src/App.jsx` or `src/pages/hubs/WorkBoard.jsx`**, read `AGENTS.md` → "Where new
+code goes" (DEC-2026-019). Placement is decided by cohesion and independent
+testability, never by line count — and no refactor of those files is authorized
+or scheduled.
+
 ## Further Reading
 
 - `docs/DATA_MODEL.md` — Firestore collection schemas and rules summary

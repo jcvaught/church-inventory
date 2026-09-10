@@ -4,6 +4,62 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-09-10 — COH-007 fully closed, and a placement rule for the concentration files
+
+Documentation and policy only. No application behavior changed, no rules
+changed, nothing deployed.
+
+**COH-007's two open follow-ups are closed (COH-009).** Neither needed code.
+
+- *Confirm losslessness against a task carrying comments or photos* — closed on
+  evidence that already existed. `functions/test/handlers/archiveCompletedTasks.test.mjs:146`
+  already seeds `photos:['p']` plus a comment document and asserts both survive
+  archiving; `functions/test/rules/coh007-archive.test.mjs:256` already asserts
+  that a frozen task's comments stay readable via BOTH `getDoc` and `getDocs`
+  while every write fails. `photos` is a plain array on the task document with
+  no separate read path. What remained was React rendering an array it already
+  holds — no data and no authorization dependency. Since tasks do not require
+  comments or photos (owner), waiting to observe one organically could have
+  waited indefinitely.
+- *DEC-2026-018's read/latency tripwire* — **reworded rather than
+  instrumented.** The original wording deferred richer archive search behind a
+  "recorded latency/read budget" that was never recorded and had no reviewer,
+  cadence or alert attached. The amended condition is demand-based: revisit when
+  churches actually reach the end of the 12-month window, or when archive volume
+  grows by an order of magnitude. At six churches and 134 lifetime work items,
+  complaints are an adequate sensor. Two measurement traps are recorded in the
+  amendment so the same telemetry is not re-proposed: a count of returned
+  archive items is not a count of billed reads (`loadArchivedTasks` merges
+  several authorization query arms and can return a fast, small, *partially
+  denied* result), and PostHog lazy-loads after first paint so it can miss the
+  event it would exist to catch.
+
+**DEC-2026-019 — where new code goes (COH-010).** Placement is decided by
+cohesion and independent testability, **never by line count**. The stronger
+default applies to `src/useFirestore.js` (a new domain opens a hook in
+`src/hooks/`); `functions/index.js` gets a conditional rule, since new handlers
+still need infrastructure private to it. Recorded in `AGENTS.md` and enforced by
+one added question in `docs/AI-HANDOFF-TEMPLATE.md` rather than a new ritual.
+
+Two arguments for splitting `functions/index.js` were retracted as factually
+wrong and are recorded so they are not revived: splitting does **not** narrow
+deploy blast radius (Firebase deploys by exported function name — `--only
+functions:<name>` already works with one file, which is how COH-007's scoped
+deploy avoided the gen-2 invoker hazard), and a re-export manifest does **not**
+improve cold starts (an eager `require()` loads the same dependency graph). What
+does survive as a real cost: handler tests must load the whole entrypoint and
+depend on test-only seams (`_setClock`, `_setBacklinkHook`, `_setArchiverHook`),
+so **each new seam is evidence of a testability cost**. Also rejected: a
+line-count threshold, a recurring file-measuring review, big-bang decomposition,
+and splitting `WorkBoard.jsx` (which is large *because* it absorbed
+`MaintenancePage.jsx` in the Phase-4 engine dedup — the fix for a real drift-bug
+class).
+
+Baseline measured on `main` 2026-09-10: `functions/index.js` 4,443 ·
+`WorkBoard.jsx` 2,923 · `useFirestore.js` 1,730 · `App.jsx` 1,081.
+
+---
+
 ## 2026-09-07 — COH-007 completed-task archiving and archive search
 
 Tasks Complete for more than six weeks now archive automatically and move to a

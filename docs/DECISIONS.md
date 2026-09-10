@@ -881,10 +881,9 @@ day one is honest at every size and never has to be walked back.
    page per authorization arm, with the window stated on screen and an explicit
    control to search further back. Search covers the loaded window and the UI
    says so, so the promise stays true as the archive grows.
-3. **No tokenized search field and no search service in v1.** Defer both behind
-   a tripwire: if churches routinely reach the end of the default window, or
-   archive opens exceed a recorded latency/read budget, revisit with real
-   numbers rather than speculation.
+3. **No tokenized search field and no search service in v1.** Defer both.
+   **Amended 2026-09-10 — see the amendment below; the original wording named a
+   "recorded latency/read budget" that was never recorded and could not be.**
 
 **Cost of doing this now.** Close to nothing. The four composite indexes already
 required by amendment A2 simply gain `completedAt` as their trailing ordered
@@ -903,3 +902,123 @@ subcollections, task numbers, and links, for a storage problem that does not
 exist at this scale). A per-church denormalized archive index (cannot honour
 per-user private and shared visibility without a fan-out write, and would put a
 second authorization projection alongside DEC-2026-012's).
+
+#### Amendment 2026-09-10 — the deferral condition is demand-based, not a metric
+
+- Status: **Accepted 2026-09-10** (owner)
+- Supersedes: part 3's "recorded latency/read budget" wording above.
+
+**What changed and why.** Part 3 deferred richer archive search behind a
+condition that nothing measured, and nothing ever did. A tripwire whose sensor
+was never built is a deferral with no end date — it reads like diligence and
+functions as an open loop. Rather than build the sensor, the condition itself is
+replaced with one a person can evaluate without instrumentation.
+
+**The condition is now:** revisit archive search when churches actually reach
+the end of the 12-month window and say so, or when archive volume grows by a
+meaningful order of magnitude. **At six churches and 134 lifetime work items
+(measured 2026-09-05), user complaints are an adequate sensor** and cost
+nothing. The owner does not review product analytics, so telemetry added for
+this purpose would have gone unread — an event nobody reads is worse than no
+event, because it costs a code path and implies a monitoring that does not
+exist.
+
+**Two measurement traps found while scoping the instrumentation that is now NOT
+being built.** Recorded so the same design is not re-proposed later:
+
+1. **A count of returned archive items is not a count of reads.**
+   `loadArchivedTasks` (`src/useFirestore.js:889`) issues several authorization
+   query arms and merges them, so one task can cost several billed reads while
+   appearing once in the result. It also returns `failures[]`, so a
+   partially-denied load looks fast and small — i.e. healthy — when it is
+   neither.
+2. **PostHog is lazy-loaded after first paint** (`src/main.jsx:67`), so
+   client-side telemetry on an early archive open can miss the very event it
+   exists to catch.
+
+**Unchanged:** the 12-month default window, the on-screen window copy, the
+explicit widen control, and every rejection listed above. This amendment governs
+only *when we would reconsider*, not what shipped.
+
+### DEC-2026-019 — Where new code goes: cohesion and testability, never line count
+
+- Date: 2026-09-10
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: Codex application review 2026-08-28; `AGENTS.md`
+  ("Where new code goes"); `docs/AI-HANDOFF-TEMPLATE.md`
+- Context: The 2026-08-28 review flagged three concentration points
+  (`functions/index.js`, `src/useFirestore.js`, `src/App.jsx`). No rule was ever
+  decided, so there was no answer to "where does this new function go?" beyond
+  "wherever the last one went."
+
+**The framing that was rejected first.** The initial proposal was a file-size
+policy — a line-count threshold plus a periodic review. Two arguments for it
+collapsed under review and are recorded here so they are not revived:
+
+- **Deploy blast radius.** Splitting `functions/index.js` does **not** narrow
+  deploys. Firebase deploys by exported function name; `--only functions:<name>`
+  already works with all ~46 exports in one file, and this repo relies on that
+  (COH-007's scoped deploy avoided the gen-2 `allUsers` invoker hazard exactly
+  this way).
+- **Cold start.** A one-line re-export manifest does not help either: an eager
+  `require()` loads the handler and its dependency graph precisely as before. A
+  manifest is not a lazy-loading strategy.
+
+**What survives as a real cost.** Handler tests load the entire function
+entrypoint and depend on test-only global seams — `_setClock`
+(`functions/index.js:137`), `_setBacklinkHook`, `_setArchiverHook` (`:3844`).
+**Each new seam is evidence that the file's shape is imposing a testability
+cost**, and unlike the two arguments above it is directly observable by counting
+seams.
+
+**Decisions:**
+
+1. **Placement is decided by cohesion and independent testability, never by line
+   count.** Put a new function in its own handler module when it forms a
+   cohesive, independently testable area **and** can consume shared
+   infrastructure without duplication or circular imports. `index.js` stays
+   registration and bootstrap. **Do not split solely for size.**
+2. **Asymmetric default.** Apply the *stronger* default to `src/useFirestore.js`
+   — a new domain's subscriptions and lifecycle open a hook in `src/hooks/`,
+   where precedent already exists. `functions/index.js` gets the conditional
+   rule in (1): not exempt forever, not forced now, because new handlers
+   routinely need infrastructure still private to that file (Sentry setup,
+   `wrapCall`, mail helpers, secrets, timezone helpers, initialized Firebase
+   services). Forcing a module before that infrastructure is shareable produces
+   duplication or circular imports, which is worse than a long file.
+3. **Decompose only where you are already working.** A task that substantially
+   touches an area may lift that area into a module as a **separate,
+   behavior-preserving commit placed before the feature commit**. Never bundled
+   with a behavior change; never as its own justification.
+4. **Evaluate placement at the plan review that already happens**, using
+   structural questions rather than a threshold: does this introduce a new
+   domain or an independently testable handler; does it require another
+   test-only seam in a central file; does it add another subscription/loading
+   lifecycle to the global store; has this area caused a branch conflict or
+   forced task serialization; would extracting reduce dependencies or merely
+   relocate lines? Churn may be recorded for diagnosis. **It is not a gate.**
+
+- Consequences: No refactor is authorized by this decision and none is
+  scheduled. It governs the margin — where the *next* piece of code lands.
+  `docs/AI-HANDOFF-TEMPLATE.md` gains one question so the decision rides on
+  process already in use rather than a new ritual.
+- **Explicitly rejected:** a big-bang decomposition; a hard line-count limit or
+  lint rule (it would fire mid-task and be suppressed, teaching everyone to
+  ignore it); a recurring "measure the files" review (no owner, no outcome, no
+  enforcement point — it gets skipped exactly when a large task makes it
+  inconvenient, which is the same failure mode as DEC-2026-018's unmeasured
+  tripwire); and splitting `src/pages/hubs/WorkBoard.jsx`, which is large
+  *because* it absorbed `MaintenancePage.jsx` in the Phase-4 engine dedup — a
+  consolidation that fixed a real class of drift bug.
+- **`src/App.jsx` is deferred, but not because it is fine.** Its growth is slow
+  (787 → 1,081 lines Apr–Sep 2026), and rev 1 of the plan wrongly treated that
+  as proof it is not a concentration problem. The original concern was
+  coordination and coupling, not size. Deferring is reasonable; the honest
+  justification is that coupling has not yet caused a measurable problem.
+- Measured baseline, `main`, 2026-09-10 — `functions/index.js` 4,443 ·
+  `src/useFirestore.js` 1,730 · `src/App.jsx` 1,081 · `WorkBoard.jsx` 2,923.
+  For context, `functions/lib/` already holds 8 parity-tested pure-logic modules
+  (1,644 lines) and 3 of 5 files in `src/hooks/` already read Firestore
+  directly: **the extraction pattern exists and is applied inconsistently — it
+  is not absent.**

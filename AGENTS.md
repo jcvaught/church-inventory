@@ -356,6 +356,44 @@ and let it reconcile its own branch.
 - Keep `docs/DATA_MODEL.md`, business rules, migration notes, and code comments
   aligned with behavior.
 
+### Where new code goes (DEC-2026-019)
+
+Four files carry disproportionate responsibility. Adding to them is allowed;
+adding to them *by default, without asking* is not:
+
+| File | Lines (2026-09-10) |
+|---|---|
+| `functions/index.js` | 4,443 (~46 exported functions) |
+| `src/pages/hubs/WorkBoard.jsx` | 2,923 |
+| `src/useFirestore.js` | 1,730 |
+| `src/App.jsx` | 1,081 |
+
+- **Placement is decided by cohesion and independent testability — never by line
+  count.** Put a new function in its own module when it forms a cohesive,
+  independently testable area **and** can consume shared infrastructure without
+  duplication or circular imports. Do not split solely for size.
+- **`src/useFirestore.js` carries the stronger default:** a new domain's
+  subscriptions and lifecycle open a hook in `src/hooks/`. Precedent exists —
+  `useNotifications`, `useSubscription` and `useGlobalBanner` already read
+  Firestore directly, and nine files outside `useFirestore.js` do too. The
+  pattern is inconsistently applied, not absent.
+- **`functions/index.js` gets the conditional rule, not a forced split.** New
+  handlers routinely need infrastructure still private to it (Sentry setup,
+  `wrapCall`, mail helpers, secrets, timezone helpers, initialized Firebase
+  services); extracting a module before that infrastructure is shareable causes
+  duplication or circular imports, which is worse than a long file. Note that
+  splitting it would **not** narrow deploys (`--only functions:<name>` already
+  does that) and a re-export manifest would **not** improve cold starts.
+- **Adding another test-only seam to a central file is a signal**, not a
+  neutral act — `_setClock`, `_setBacklinkHook`, `_setArchiverHook` each exist
+  because handler tests must load the whole entrypoint.
+- **Decompose only where you are already working**, as a separate
+  behavior-preserving commit placed *before* the feature commit — never bundled
+  with a behavior change, never as its own justification. No refactor is
+  authorized by this rule and none is scheduled.
+- Answer the concentration-file question in `docs/AI-HANDOFF-TEMPLATE.md` when
+  a task touches one of the four.
+
 ## Verification and Definition of Done
 
 Choose verification proportional to the change, and record exact commands and
