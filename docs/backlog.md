@@ -24,12 +24,29 @@ mid-deploy during COH-011.
 | 10 | **Budget + Sentry alerts** | Console-only. **A budget alert notifies; it is not a spending ceiling.** `SENTRY-ALERTS.md` still references SendGrid post-Brevo |
 | 11 | **Ask FXCC** before Sunday-readiness, templates, or deep-linking | All three are *hypotheses*. Deep-linking is verified thin (6 of 7 search result types open only the containing hub) but its cost to FXCC is unmeasured |
 
-Below 11, in order: subscription/data-loading reduction · general audit-log
-atomicity · server timestamps beyond `activityLog` · centralized entitlement
-policy matrix · photo cleanup on delete · accessibility and mobile interaction ·
-navigation consolidation · request inbox · volunteer expiring-links. Demoted by
-DEC-2026-020: activation checklist, funnel analytics, positioning, pricing
-experimentation, two-free-hubs, SaaS entitlement automation.
+**Re-ranked 2026-09-16 by DEC-2026-022** (disposition of the 2026-08-28 Codex
+review remainder):
+
+- **NEW, above most of this list — FXCC-facing and proven.**
+  `sendWeeklyInsightsDigest` (`functions/index.js:2308`) filters a Timestamp
+  field with a string, so it computes over **173 of FXCC's 213** in-window
+  activity rows and trends to zero coverage. COH-012 part B.
+- **NEW, small.** COH-007 gave tasks an archive arm and gave maintenance nothing
+  (`src/useFirestore.js:311`).
+- **CLOSED as done** — subscription/data-loading reduction. Mostly shipped
+  before the review named it; the remainder has no data behind it (FXCC: 0
+  reservations, 135 workItems lifetime). Tripwire: ~2,000 workItems or ~500
+  reservations.
+- **CLOSED as accepted** — server timestamps beyond `activityLog`.
+- **SUPERSEDED by DEC-2026-021** — centralized entitlement policy matrix, the
+  stale `$5/$7` artifacts, two-free-hubs.
+- **Re-filed under #11 (ask FXCC)** — request inbox, volunteer expiring links,
+  navigation consolidation.
+
+Still below 11, in order: general audit-log atomicity (narrowed — COH-012 part
+C) · photo cleanup on delete · accessibility and mobile interaction (narrowed —
+COH-012 part D). Demoted by DEC-2026-020: activation checklist, funnel
+analytics, positioning, SaaS entitlement automation.
 
 ## Keystone migration (unblocks most else)
 Plan: `docs/WORK-UNIFICATION-AND-PRICING-PLAN-2026-06-06.md`. Decision (#7): **TWO collections** — `workItems` (tasks+maintenance merged) + jobs stays its own collection. **Jobs merge (old Phase 3) is now DEFERRED INDEFINITELY (owner 2026-06-23);** the remaining Work step is the Tasks+Maintenance **UI** merge (rescoped Phase 4).

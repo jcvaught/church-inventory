@@ -21,6 +21,28 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ## Active Tasks
 
+### COH-012 — Flat pricing, entitlement collapse, review disposition
+
+- Status: **A.3 SHIPPED + DEPLOYED 2026-09-16 (`1521053`). A.4/A.5 NOT STARTED.**
+- Plan: `docs/COH-012-PRICING-AND-REVIEW-DISPOSITION-PLAN-2026-09-16.md` (rev 6)
+- Decisions: DEC-2026-021 (flat $5 model), DEC-2026-022 (review disposition)
+- Plan review: Codex ×4, all REWORK, all findings verified and closed. Loop
+  stopped at rev 5 once remaining blockers were owner decisions; those are
+  answered in the plan's "Owner decisions" table.
+- **Next action:** A.4.0 — extract `src/lib/entitlement.js` + `functions/lib`
+  CJS twin + parity test as a **behavior-preserving commit**, before any model
+  change. Do not hand-enumerate consumers; the plan carries a generated
+  inventory (14 files, 3 scripts, 1 e2e spec). Three prior revisions each
+  shipped an incomplete hand-written list.
+- **Blocked on owner:** one production write — grandfather TrueNorth
+  (`Nxy6GTxK0bhuDy97lWFCwECmWg43-church`). Asked for at Q4, but production
+  writes were declined generally at Q7; held for an explicit yes.
+- **Independent of all of the above:** Part B — `sendWeeklyInsightsDigest`
+  (`functions/index.js:2308`) filters a Timestamp field with a string and is
+  computing over 173 of FXCC's 213 in-window activity rows. FXCC-facing,
+  unshipped, no dependency on the pricing work.
+
+
 ### COH-006 — Enforce private and shared task visibility
 
 - Status: **COMPLETE — all four gates deployed and verified in production

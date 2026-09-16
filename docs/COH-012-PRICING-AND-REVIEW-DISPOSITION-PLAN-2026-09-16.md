@@ -4,12 +4,12 @@
 - Owner: Product owner (John)
 - Implementation: Claude (DEC-2026-011)
 - Reviewer: Codex (plan review before implementation)
-- Status: **PLAN — rev 5, not started.** Four Codex rounds, all **REWORK**:
-  rev 1 (`97de92a`) five blockers / three gaps; rev 2 (`8da9992`) three / two;
-  rev 3 (`a7128db`) three / two, of which two "gaps" were confirmations rather
-  than defects. Every finding was verified against the code before being
-  accepted, and every one was correct — including one in rev 3 where the plan
-  would have introduced a concurrency bug. See "Review history".
+- Status: **rev 6 — A.3 SHIPPED, A.4/A.5 blocked on nothing but execution.**
+  Owner decisions taken 2026-09-16 (see "Owner decisions" below); DEC-2026-021 +
+  DEC-2026-022 recorded in `docs/DECISIONS.md` (`397f090`). Four Codex rounds,
+  all REWORK, all findings verified and closed — see "Review history". The
+  review loop was stopped deliberately at rev 5: the remaining blockers had
+  become owner decisions, and those are now answered.
 - Base commit: `f429b86` (2026-09-10), working tree clean
 - Related: Codex application review 2026-08-28; DEC-2026-019; DEC-2026-020;
   `docs/backlog.md` "Priority order"
@@ -45,6 +45,44 @@ ChurchOpsHub trial ends in 7 days"* email on or about **2026-09-22**, and
 processes their expiry on **2026-09-30 02:00 America/Chicago**. That email's copy
 promises a feature Part A deletes. Part A phase 1 must land before 09-22, or the
 cron must be paused.
+
+---
+
+## Owner decisions — 2026-09-16
+
+All seven open questions answered. These supersede the "open question" framing
+left in A.0, A.1, A.1b and A.4 §3 below; those sections are kept for their
+reasoning, not their status.
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | Ship the neutral email rewrite, or pause the cron? | **Ship.** Done — see A.3 status |
+| 2 | Change the model? | **Yes.** DEC-2026-021 |
+| 3 | Day 91 behavior | **"They can't add more."** Not full read-only — a lapsed church finishes what it started but starts nothing new |
+| 4 | Do Inventory/Reservations lose `free: true`? | **Yes for everyone — except TrueNorth, which is grandfathered like FXCC** |
+| 5 | Does $5 include unlimited members? | **Yes.** No seat cap in any state |
+| 6 | $50/year? | **Yes** |
+| 7 | Grace window for the two lapsed churches? | **No grace.** New model applies immediately (modified for TrueNorth by #4) |
+
+**Two interpretations applied, both flagged to the owner and neither corrected:**
+
+1. **#3 "can't add more" is implemented literally.** A lapsed church can return
+   equipment, complete a task, close a reservation; it cannot create an item,
+   task, reservation, or **member**. Full read-only would freeze a church
+   mid-week with equipment checked out and no way to record its return. Two
+   consequences: inviting a person is blocked, and **server-side automation must
+   respect the rule too** — `generateRecurringTemplateTasks` would otherwise keep
+   creating records for a lapsed church.
+2. **#4 and #7 conflicted on TrueNorth.** Read as: no grace window for anyone
+   (#7), and TrueNorth separately grandfathered (#4), making grace moot for it.
+   St Olaf gets the new model immediately.
+
+**Still needs one explicit approval:** grandfathering TrueNorth is a production
+data write on `churches/Nxy6GTxK0bhuDy97lWFCwECmWg43-church/config/subscription`
+(`grandfathered: true`). The owner declined production writes generally at #7
+and asked for this one specifically at #4, so it is held pending a plain yes.
+Supporting data: TrueNorth is the only non-FXCC tenant with real content — **15
+supplies**, 101 activity rows, last active **2026-08-24**.
 
 ---
 
@@ -282,7 +320,26 @@ outcome available.
 - **e2e-test-church** — grandfathered; fixtures must be checked for any
   assumption about `freeHubsSelected` or `trialHubs`.
 
-### A.3 Phase 1 — stop the false promise (MUST land before 2026-09-22)
+### A.3 Phase 1 — stop the false promise — ✅ SHIPPED 2026-09-16
+
+**Deployed to `church-inventory-9615c`, commit `1521053`.** Scheduler confirmed
+ENABLED (`0 2 * * *` America/Chicago). Ranking deleted, `freeHubsSelected` no
+longer written at expiry, both emails model-neutral. `status` stays `'active'`
+rather than a new `'lapsed'` value, because `SettingsPage.jsx:925-926` renders
+`subscription.status` verbatim and colours anything else red — the lapsed state
+is modelled in A.4 with the client that presents it.
+
+**First tests for this function** (`functions/test/handlers/trialExpirations.test.mjs`,
+7 tests). It had none while it emailed strangers and mutated their subscription
+documents. They caught a `ReferenceError` at `index.js:1736` on the first green
+run — the trailing log still referenced the deleted `freeHubsSelected`, which
+would have thrown for every expiring church *after* its email had gone out.
+Gates: handlers 94/94 · unit 166/166 · lint 0 errors · build clean.
+
+Highland's 7-day warning (~2026-09-22) and expiry (2026-09-30) now run on the
+neutral copy.
+
+#### Original scope, for the record
 
 This phase is deliberately separable and reversible, so it can ship on its own if
 the rest slips.

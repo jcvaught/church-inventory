@@ -57,13 +57,28 @@ lookup (no Stripe call), and archived products/prices still resolve via the API 
 FXCC and the e2e test church carry `grandfathered: true` and keep full access regardless of plan name.
 No à-la-carte payers existed at cutover, so the historical "migrate over-payers down to flat" step was a no-op.
 
-## 90-Day Free Trial (unchanged)
+## 90-Day Free Trial
 
 New churches get all paid features free for 90 days. `useAuth.js` writes
 `trialStartedAt`/`trialEndsAt`/`trialHubs`/`freeHubsSelected: null` at church creation.
-`processTrialExpirations` CF (2am Central daily) auto-selects the 2 most-used hubs from `activityLog`
-and writes `freeHubsSelected` on expiry (soft landing). After the trial a church keeps free Inventory
-(+ its 2 auto-selected hubs) until it subscribes to the $15 plan.
+`processTrialExpirations` CF (2am Central daily) flips an expired trial out of `trialing`,
+stamps `trialExpiredAt`, and emails the admin; a second pass sends a 7-day warning.
+
+**The 2-most-used-hubs auto-selection was DELETED 2026-09-16 (COH-012 A.3, `1521053`).**
+It never worked. Both churches it ever processed received the same pair —
+`['accountability','coordination']` — which is the alphabetical tie-break on all-zero
+counts; TrueNorth's 101 activity rows were all supply actions and supplies was never a
+trial hub, so nothing could rank. The email meanwhile told the admin these were their
+"two most-used hubs". **`freeHubsSelected` is no longer written at expiry** — it stays
+`null`, and with `trialEndsAt` past, `hasHub()` already returns false for every paid hub.
+Both trial emails are now model-neutral: no hub named, no price named.
+
+⚠️ **This section describes the CURRENT running code. The pricing model above is being
+replaced** — see DEC-2026-021 (90 days of everything, then $5/mo or $50/yr for
+everything, no free tier, unlimited members) and
+`docs/COH-012-PRICING-AND-REVIEW-DISPOSITION-PLAN-2026-09-16.md`. The $15/$150 table and
+the free-Inventory promise in this file are amended when COH-012 phase A.4 ships, not
+before — until then they are still true of what is deployed.
 
 ## Feature Gating
 
