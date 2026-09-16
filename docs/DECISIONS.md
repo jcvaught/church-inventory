@@ -1069,3 +1069,104 @@ first draft of this frame got them wrong:**
 - Consequences: `docs/backlog.md` gains a "Priority order" section derived from
   this decision. Work is ranked by proven FXCC exposure first, proven FXCC
   friction second, and speculative product value last — behind asking.
+
+### DEC-2026-021 — Flat pricing: 90 days of everything, then $5/month for everything
+
+- Date: 2026-09-16
+- Status: Accepted
+- Deciders: Product owner
+- Related tasks/docs: `docs/COH-012-PRICING-AND-REVIEW-DISPOSITION-PLAN-2026-09-16.md`;
+  Codex application review 2026-08-28; DEC-2026-020
+
+**The model.** Every new church gets 90 days of every feature. After 90 days it
+is **$5/month or $50/year for every feature**, with **unlimited members**. There
+is no free tier and no per-hub purchase.
+
+**What it supersedes.** DEC-2026-020's guardrail *"Inventory / Supplies must
+remain free"* is withdrawn. So is the same promise in `AGENTS.md:25-26`, the
+pricing table in `docs/BUSINESS_MODEL.md:12-18`, and the free-tier language in
+`src/components/legal/TermsBody.jsx:20,29`. **Those three are amended in the
+same commit as the behavior change that makes them false, not before** — today
+they still describe the running code. The rest of DEC-2026-020 stands.
+
+**Why the free tier goes.** It exists as an acquisition wedge. Measured
+2026-09-16: five non-FXCC signups, four with zero documents of any kind, one
+(TrueNorth) that used supplies and stopped. **No Stripe customer has ever been
+created on any tenant.** The wedge has never converted anyone, because no tenant
+has ever activated. It is not earning the gating complexity it costs.
+
+**Why the price is not expected to do anything.** No checkout session has ever
+been started, so there is no evidence $15 was ever the obstacle — the problem is
+activation, not conversion. $5 is a statement of what the product is (an
+internal tool others may share the cost of), not a conversion lever. **Do not
+justify this decision, retroactively or in any later plan, by projected
+conversion.**
+
+**At day 91 a church cannot add more.** Not full read-only. A lapsed church can
+still *finish* what it started — return equipment, complete a task, close out a
+reservation — but cannot *start* anything: no new items, tasks, reservations, or
+**people**. Full read-only would freeze a church mid-week with equipment checked
+out and no way to record its return, which reads as broken rather than expired.
+Two consequences: inviting a member is "adding more" and is blocked; and the
+**server-side automation must respect the same rule** — recurring-task
+generation would otherwise keep creating records for a lapsed church, violating
+it from the inside.
+
+**Entitlement is enforced in the client and callables, not in Firestore rules.**
+Entitlement is not a security boundary; the `churchId` tenant boundary and
+within-tenant authority are, and those are unchanged. A lapsed customer writing
+to *their own church's* records through the raw SDK is a billing problem, not a
+breach — confirmed by adversarial review, which found no cross-tenant or
+privilege-escalation path. Accepted, and recorded so it is not rediscovered as a
+vulnerability. The existing rules-layer Jobs gate stays; it is simply not
+extended.
+
+**Existing tenants.** FXCC is `grandfathered: true` and unaffected. The three
+trialing churches (Highland 2026-09-29, New Life 2026-10-11, Compassion
+2026-12-11) keep their existing end dates — they were promised 90 days of
+everything and still get exactly that. St Olaf gets the new model with no grace
+window. **TrueNorth is to be grandfathered like FXCC** (owner, 2026-09-16) — it
+is the only non-FXCC tenant with real data (15 supplies, last active
+2026-08-24); that write is pending explicit owner approval as a production data
+change under DEC-2026-014.
+
+- Consequences: COH-012 phases A.3 (shipped 2026-09-16) through A.5. The trial
+  auto-selection and `freeHubsSelected` are deleted; `hasHub` collapses to
+  `grandfathered || trialing || paid` across all four implementations.
+
+### DEC-2026-022 — Disposition of the 2026-08-28 Codex review remainder
+
+- Date: 2026-09-16
+- Status: Accepted
+- Deciders: Product owner (via COH-012 plan review)
+- Related tasks/docs: `docs/COH-012-PRICING-AND-REVIEW-DISPOSITION-PLAN-2026-09-16.md`
+
+**Closed as done — "subscription / data-loading reduction."** Most of it shipped
+*before* the review flagged it: activityLog capped at 100
+(`src/useFirestore.js:210-218`), jobListings at 500 (`:359`), People Access
+role-aware (`:404-455`), tasks scoped `archived:false` (`:310-314`). The
+remainder has no data behind it — FXCC has **0 reservations** and **135
+workItems** lifetime. Tripwire instead of work: revisit past ~2,000 workItems or
+~500 reservations.
+
+**Closed as accepted — "server timestamps beyond `activityLog`."** 82
+`toISOString()` writes against 8 `serverTimestamp()`. The threat is a wrong or
+manipulated client clock; the chronology that matters for security is the audit
+trail, and it is already server-stamped (DEC-2026-005).
+
+**Re-filed under "ask FXCC"** — request inbox, volunteer expiring links,
+navigation consolidation. Plausible bets resting entirely on a guess about how
+FXCC works.
+
+**Superseded by DEC-2026-021** — the stale `$5/$7` pricing artifacts, the
+two-free-hubs question, and the "centralized entitlement policy matrix." The
+matrix was the right diagnosis and the wrong prescription: three-layer policy
+machinery for one rules-gated hub. Deleting the divergence beats testing it.
+
+**Kept, and raised** — a **new** FXCC-facing defect found while measuring the
+above: `sendWeeklyInsightsDigest` (`functions/index.js:2308`) filters a
+Timestamp field with a string, so it computes over 173 of FXCC's 213 in-window
+activity rows and trends to zero coverage. COH-012 part B.
+
+**New small item** — COH-007 gave tasks an archive arm and gave maintenance
+nothing (`src/useFirestore.js:311`).
