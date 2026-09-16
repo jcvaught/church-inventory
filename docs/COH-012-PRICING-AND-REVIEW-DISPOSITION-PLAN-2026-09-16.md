@@ -4,7 +4,7 @@
 - Owner: Product owner (John)
 - Implementation: Claude (DEC-2026-011)
 - Reviewer: Codex (plan review before implementation)
-- Status: **PLAN — rev 4, not started.** Three Codex rounds, all **REWORK**:
+- Status: **PLAN — rev 5, not started.** Four Codex rounds, all **REWORK**:
   rev 1 (`97de92a`) five blockers / three gaps; rev 2 (`8da9992`) three / two;
   rev 3 (`a7128db`) three / two, of which two "gaps" were confirmations rather
   than defects. Every finding was verified against the code before being
@@ -260,6 +260,21 @@ outcome available.
   `status: 'trialing'` and `trialEndsAt: 2026-10-31T23:59:59Z` on both
   documents. No new field, no new predicate, no new branch to test — it rides
   the path every trialing church already exercises, and it expires on its own.
+
+  **Round 4 found the cost of that reuse, and it was measured rather than
+  assumed.** The 7-day warning pass selects on `status == 'trialing'` and
+  `trialEndsAt` seven days out (`functions/index.js:1758-1769`), so a grace
+  church would be mailed *"Your trial ends in 7 days"* on 2026-10-24 — months
+  after its trial actually ended. **Verified not-live for these two tenants:**
+  both already carry `trialWarningEmailSentAt` (St Olaf `2026-07-15`, TrueNorth
+  `2026-08-05`), and the pass skips on that field (`:1767`), so neither would
+  be mailed.
+
+  That is luck, not design — the guard is an idempotency stamp, not a
+  grace-aware condition. **Constraint on implementation:** the grace write must
+  not clear `trialWarningEmailSentAt`, and if grace is ever extended to a church
+  without that stamp, the warning pass needs an explicit grace exclusion first.
+  Record this beside the write, not only here.
   This is a **production data write on two tenant documents** and is therefore
   the owner's to approve as a separate, explicit step (DEC-2026-014).
   Both have zero inventory/work/reservation data; TrueNorth has 101 supply
@@ -302,11 +317,22 @@ data); no stranger receives a false claim.
    this implicit and round 3 caught it: the purchase path writes `update.hubs`
    and `update.freeHubsSelected` (`:933-940`) and the cancellation path writes
    `hubs: []`, `freeHubsSelected: []` (`:973-978`). Under the new model those
-   fields have no meaning. Either stop writing them (preferred — a document that
-   still carries them invites a future reader to trust them) or write them and
-   say why. **`functions/test/handlers/stripeWebhook.test.mjs:80-81` asserts
-   both** (`sub.hubs === PRO_HUBS`, `sub.freeHubsSelected === PRO_HUBS`) and
-   changes with the shape.
+   fields have no meaning. Stop writing them.
+
+   **But stopping is not enough, and round 4 caught why.** The retained legacy
+   mappings keep their own `hubs` writes: `config.type === 'hub'` does
+   `update.hubs = arrayUnion(config.hub)` (`:928-931`) and the cancellation
+   branch does `arrayRemove` (`:968-971`). Those branches are live — the tests
+   exercise them at `stripeWebhook.test.mjs:118-125` and `:173-182` — so a
+   legacy event arriving after cutover would resurrect the field the
+   consolidation just declared dead.
+
+   **Specify legacy-event normalization:** any legacy paid event (per-hub,
+   team, all_in, pro) resolves to the **flat paid state**; any legacy
+   cancellation resolves to the **flat lapsed state**. No branch writes `hubs`
+   at all. Update the three test groups together
+   (`stripeWebhook.test.mjs:80-81`, `:118-125`, `:173-182`) — they are the
+   specification of the old shape, and they are how this gets proven.
 2. **Change every checkout caller in the same commit — there are two, and the
    one rev 2 fixed is the lesser.**
    - `src/components/primitives/UpgradeGate.jsx:27` — `item: 'pro_monthly'`.
@@ -402,24 +428,60 @@ files, which is what makes the rest of A.4 verifiable rather than hopeful.
 symbol above must return only sites this plan names. Rev 2 claimed this gate and
 still failed it, because the gate was written after the list instead of before.
 
+### A.1b Second open question the owner must answer: seats
+
+**Does $5/month include unlimited members?** The plan has been silent on this
+through four revisions and round 4 was right to call it: seat policy is a live,
+load-bearing part of the current model that the new one does not mention.
+
+Today: `FREE_PLAN_MAX_USERS = 10` (`src/hooks/useSubscription.js:5`) caps every
+non-`pro` church, `canAddUser` short-circuits for `pro`/`team_unlimited`/`all_in`
+(`:43-47`), and `SettingsPage` independently derives the cap
+(`:177-179` — `team_25 ? 25 : 10`) and a plan label including "Team Unlimited"
+(`:497`). Two retired Stripe price IDs, `team_25` and `team_unlimited`
+(`functions/index.js:454-455`), are still mapped.
+
+Three sub-decisions, none of which implementation can make:
+
+1. Does the $5 plan carry unlimited members (as $15 does), or a cap?
+2. What is the seat cap **during** the 90-day trial?
+3. What is it **after lapse** — and can a lapsed church over the cap still have
+   all its people, or does it go read-only on membership too?
+
+Whatever is chosen, add a fixture for adding an **11th member** in each of
+`{trialing, paid, lapsed}` (round 4's suggestion, adopted). Seat policy also has
+to appear in the same four-implementation consolidation as `hasHub` — `maxUsers`
+is derived in both `useSubscription` and `SettingsPage` today.
+
 ### A.5 Phase 3 — public copy
 
-Rev 1 said "eleven claim sites" and counted only marketing copy. The real set
-also includes in-product copy and the canonical business-model document:
+Rev 1 said "eleven claim sites"; round 2 found more; round 4 found more again,
+including the **Terms of Service**. Three wrong counts is the same failure as the
+consumer enumeration, so A.5 takes the same fix: **the list is generated, not
+remembered.**
 
-- `src/pages/LandingPage.jsx` (2), `src/pages/HelpPage.jsx` (3),
-  `src/data/blogPosts.js` (5), `src/data/whatsNew.js` (1)
-- **`src/pages/SettingsPage.jsx:1592,1603`** — `$15` / `$150` hardcoded in the
-  checkout markup, plus the "2 MONTHS FREE" badge whose arithmetic changes
-- **`src/pages/SettingsPage.jsx:1613`** — *"Inventory, supplies & reservations
-  stay free. Cancel anytime."*
-- **`src/pages/SettingsPage.jsx:946`** — the two-most-used-hubs claim
-- **`src/pages/HubsPage.jsx:405`** — current-product pricing copy
-- **`docs/BUSINESS_MODEL.md:12-18`** — the canonical pricing table, *"Inventory
-  is **never** paid. It's the permanent free wedge."* This is the document the
-  rest of the repo defers to; leaving it means the repository contradicts its
-  own decision. Treat it as a **precondition alongside `AGENTS.md`**, not as
-  trailing copy work.
+Generated 2026-09-16 over free-tier and price claims (`free tier` · `free base
+tier` · `permanently free` · `stay free` · `no time limit` · `$15` · `$150` ·
+`two most-used` · `free Inventory`), file-level counts:
+
+| File | Sites | Nature |
+|---|---|---|
+| `src/data/blogPosts.js` | 21 | indexed, ranking — sentence-level edits only |
+| `src/pages/HelpPage.jsx` | 14 | public help centre; `:175`, `:1005-1012`, `:1082` promise free Inventory and $15/unlimited |
+| `src/pages/LandingPage.jsx` | 3 | marketing |
+| `src/pages/SettingsPage.jsx` | 2 | in-product (`:1613` free-hubs line, checkout markup) |
+| **`src/components/legal/TermsBody.jsx`** | **2** | **contract** — `:20` and `:29` promise "a free tier and optional paid hubs" |
+| `src/pages/HubsPage.jsx` | 1 | in-product |
+| `src/hooks/useSubscription.js` | 1 | code comment |
+| `src/data/whatsNew.js` | 1 | changelog entry |
+| `docs/BUSINESS_MODEL.md` | 1 | canonical pricing table |
+
+**`TermsBody.jsx` is not copy — it is the agreement the user accepted**, shared
+by the auth-screen modal and `/terms` so the two cannot drift. Shipping a model
+its own Terms contradict is a different class of problem from stale marketing.
+Treat it as a **precondition alongside `AGENTS.md` and `BUSINESS_MODEL.md`**, and
+consider whether existing churches need notice of a Terms change at all — a
+question this plan raises but does not answer.
 
 Blog posts are indexed and ranking; edit the pricing sentences in place rather
 than restructuring posts. Add a What's New entry.
@@ -662,9 +724,35 @@ have caught: a phase-ordering contradiction, a concurrency regression, and two
 confirmations. That is the review moving from "your inventory is wrong" to "your
 engineering is wrong", which is where it should have been at round 1.
 
-**Not yet reviewed:** rev 4. The open question for round 4 is narrow: with
-`hubs` added, is the A.4.0 inventory now closed, and does the three-mechanism
-Part C hold?
+### Round 4 — Codex, 2026-09-16 (`gpt-5.6-terra`), verdict **REWORK**
+
+Two blockers, three gaps — one of which was a confirmation. **No
+consumer-enumeration miss in A.4.0's code inventory**: the findings moved to
+policy and to copy.
+
+| # | Finding | Disposition in rev 5 |
+|---|---|---|
+| B12 | `hubs` cannot be declared dead while retained **legacy** mappings still write it (`:928-931` arrayUnion, `:968-971` arrayRemove), exercised by `stripeWebhook.test.mjs:118-125,173-182` | A.4 §1 — legacy-event **normalization** specified: every legacy paid event → flat paid state, every legacy cancellation → flat lapsed state, no branch writes `hubs` |
+| B13 | A.5 still incomplete — public Help copy and, more seriously, **`TermsBody.jsx:20,29`**, which promises "a free tier and optional paid hubs" | A.5 rewritten around a **generated** inventory (44 sites, 9 files); Terms promoted to a precondition, since it is the accepted agreement, not marketing |
+| G10 | Seat policy is undecided: `FREE_PLAN_MAX_USERS`, `maxUsers`, `team_25`, `team_unlimited` — does $5 include unlimited members? | **New A.1b** — a second owner decision, with three sub-questions and round 4's 11th-member fixture adopted |
+| G11 | Grace-via-`trialing` would mail already-expired churches "your trial ends in 7 days" (`:1758-1799`) | A.2 — **measured, and narrower than stated**: both tenants already carry `trialWarningEmailSentAt` (2026-07-15, 2026-08-05) and the pass skips on it (`:1767`), so neither would be mailed. Recorded as luck rather than design, with two constraints on the grace write |
+| G12 | *Confirmation:* Part C's three mechanisms are sound; `useSupply` must keep `runTransaction` and can `tx.set` its audit row atomically | Settled |
+
+**Where the four rounds landed.** Rounds 1–2 found missed consumers (twice).
+Round 3 found one omission plus a phase-ordering contradiction and a concurrency
+regression. Round 4 found **no** code-inventory miss — it found two undecided
+policies and a copy surface. The defect class has moved from "the plan does not
+know the codebase" to "the owner has not decided", which is the boundary where
+plan review stops being useful.
+
+**Recommendation on the review loop itself:** rev 5 is the point to stop
+iterating with Codex and hand to the owner. The remaining blockers are
+**A.0** (amend `AGENTS.md`, `BUSINESS_MODEL.md`, `TermsBody.jsx`), **A.1**
+(day-91 behavior), **A.1b** (seats), and **A.4 §3** (the `free: true` flag) —
+all four are decisions, not findings, and no further review round can close
+them.
+
+**Not yet reviewed:** rev 5.
 
 ---
 
