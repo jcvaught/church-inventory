@@ -1618,18 +1618,24 @@ exports.cleanupJobListingBacklinks = onDocumentDeleted(
 );
 
 // ── processTrialExpirations ───────────────────────────────────────────────
-// Runs daily at 2:00 AM Central time.
-// Finds churches whose trial just expired, auto-selects their 2 most-used hubs
-// from the activity log, writes freeHubsSelected, and emails the admin.
-const TRIAL_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'people_access', 'tasks', 'jobs'];
-const HUB_ACTIONS = {
-  maintenance: ['add_ticket','update_ticket','complete_ticket','delete_ticket','assign_ticket','reopen_ticket'],
-  coordination: ['create_bundle','checkout_bundle','return_bundle','delete_bundle'],
-  accountability: ['start_audit','complete_audit','delete_audit'],
-  people_access: ['add_person','update_person','add_record','update_record','delete_record'],
-  tasks: ['add_task','update_task','complete_task','delete_task','create_template','delete_template'],
-  jobs: ['post_job','signup_job','withdraw_job','update_job','delete_job','post_announcement','update_announcement','delete_announcement'],
-};
+// Runs daily at 2:00 AM Central time. Flips an expired trial out of `trialing`
+// and emails the admin; a second pass sends a 7-day warning.
+//
+// COH-012 phase A.3 (2026-09-16): the two-most-used-hubs auto-selection is GONE.
+// It never worked. Across both churches it ever processed it returned the same
+// pair — `['accountability','coordination']` — because that is the alphabetical
+// tie-break on all-zero counts (TrueNorth's 101 activity rows were all supply
+// actions, and supplies was never a trial hub), while the email told the admin
+// these were their "two most-used hubs". Deleting it also removes a latent
+// string-vs-Timestamp query bug: the ranking filtered `timestamp >=
+// trialStartedAt` with an ISO STRING, and activityLog moved to
+// `serverTimestamp()` in 812f15e, so post-2026-08-29 rows were invisible to it.
+// The same defect still lives in sendWeeklyInsightsDigest — see COH-012 part B.
+//
+// These emails are deliberately MODEL-NEUTRAL: they say the trial is ending and
+// that nothing was deleted. They do not name a price, because the flat plan's
+// Stripe prices do not exist yet (COH-012 phase A.4) and this phase deploys
+// functions only. Do not reintroduce a price here before checkout can charge it.
 
 exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('processTrialExpirations', async () => {
   const db = getFirestore();
@@ -1651,53 +1657,37 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
     const sub = subDoc.data();
     if (!sub.trialEndsAt) continue;
     if (new Date(sub.trialEndsAt) > now) continue; // trial still active
-    if (sub.freeHubsSelected !== null && sub.freeHubsSelected !== undefined) continue; // already processed
 
     const churchId = subDoc.ref.parent.parent.id;
-
-    // Count activity log entries per hub during the trial window
-    let activitySnap;
-    try {
-      activitySnap = await db.collection(`churches/${churchId}/activityLog`)
-        .where('timestamp', '>=', sub.trialStartedAt || '')
-        .get();
-    } catch (err) {
-      console.error('processTrialExpirations: activity log read failed', { churchId, err: err.message });
-      Sentry.captureException(err);
-      continue;
-    }
-
-    const hubCounts = {};
-    for (const hubName of TRIAL_HUBS) hubCounts[hubName] = 0;
-    // insights has no activity log entries; it starts at 0 (lower priority in auto-selection)
-
-    for (const entry of activitySnap.docs) {
-      const action = entry.data().action || '';
-      for (const [hub, actions] of Object.entries(HUB_ACTIONS)) {
-        if (actions.includes(action)) { hubCounts[hub]++; break; }
-      }
-    }
-
-    // Pick top 2 hubs by usage count; break ties alphabetically for determinism
-    const sorted = TRIAL_HUBS
-      .slice()
-      .sort((a, b) => hubCounts[b] - hubCounts[a] || a.localeCompare(b));
-    const freeHubsSelected = sorted.slice(0, 2);
 
     // F-RC-4 from the 2026-05-12 audit: do the read-validate-write inside a
     // transaction so a concurrent Stripe webhook (e.g. customer.subscription
     // .updated arriving at trial expiry from a same-day paid upgrade) can't
-    // race with this cron. If the webhook already flipped status/freeHubsSelected
-    // between the prefetch above and this point, the txn re-check aborts.
+    // race with this cron. If the webhook already flipped `status` between the
+    // prefetch above and this point, the txn re-check aborts.
     try {
       await db.runTransaction(async (t) => {
         const fresh = await t.get(subDoc.ref);
         if (!fresh.exists) return;
         const freshData = fresh.data();
         if (freshData.status !== 'trialing') return; // webhook already moved it on
-        if (freshData.freeHubsSelected !== null && freshData.freeHubsSelected !== undefined) return;
         if (!freshData.trialEndsAt || new Date(freshData.trialEndsAt) > now) return;
-        t.update(subDoc.ref, { freeHubsSelected, status: 'active' });
+        // `status` is the idempotency key now that freeHubsSelected is no longer
+        // written: the outer query selects on status=='trialing', and this
+        // re-check inside the transaction is what stops a double-send if a
+        // Stripe webhook moved the church on between the prefetch and here.
+        // NOT a new status value. `SettingsPage.jsx:925-926` renders
+        // `subscription.status` verbatim as user-visible text and colours
+        // anything other than 'active' red, so writing 'lapsed' here would put
+        // an undesigned red label in Settings from a functions-only deploy.
+        // The lapsed state gets modelled in phase A.4 together with the client
+        // that presents it. Today's semantics are unchanged: with
+        // freeHubsSelected left null and trialEndsAt in the past, the client's
+        // hasHub() already returns false for every paid hub and isTrialing is
+        // false — which is the correct lapsed presentation with the CURRENT UI.
+        // trialExpiredAt is additive breadcrumb: freeHubsSelected used to be the
+        // only record that a trial had been processed, and it is gone.
+        t.update(subDoc.ref, { status: 'active', trialExpiredAt: nowStr });
       });
     } catch (err) {
       console.error('processTrialExpirations: update failed', { churchId, err: err.message });
@@ -1722,21 +1712,16 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
     }
     if (!adminEmail) continue;
 
-    const hubLabel = h => ({ maintenance:'Maintenance', insights:'Insights', coordination:'Coordination', accountability:'Accountability', people_access:'People Access', tasks:'Tasks', jobs:'Job Hub' }[h] || h);
-    const freeNames = freeHubsSelected.map(hubLabel).join(' and ');
     const firstName = adminName ? adminName.split(' ')[0] : 'there';
 
-    const subject = 'Your ChurchOpsHub trial has ended — here\'s what\'s free';
+    const subject = 'Your ChurchOpsHub trial has ended';
     const html = `<p>Hi ${escapeHtml(firstName)},</p>
-<p>Your 90-day free trial has ended. Based on how your team used ChurchOpsHub, we've automatically kept your two most-used hubs active for free:</p>
-<div style="background:#F0FDF4;border-left:4px solid #0D9488;padding:12px 16px;margin:16px 0;border-radius:4px">
-  <p style="font-weight:700;margin:0;font-size:15px">${escapeHtml(freeNames)} — free forever</p>
-</div>
-<p>The Inventory Hub remains free as always. To unlock additional hubs, you can upgrade anytime from <strong>Settings → Subscription</strong>.</p>
-<p>All your data is still there — nothing was deleted.</p>
-<p>Thank you for trying ChurchOpsHub. Reply to this email with any questions.</p>
+<p>Your 90-day free trial of ChurchOpsHub has ended.</p>
+<p><strong>All your data is still there — nothing was deleted.</strong></p>
+<p>I'm changing how ChurchOpsHub is priced, and I'd rather tell you the new terms once they're final than guess at them now. I'll email you with the details shortly.</p>
+<p>In the meantime, reply to this email if you need anything at all — including access to your own records.</p>
 <p>— John Vaught<br><span style="font-size:13px;color:#666">ChurchOpsHub</span></p>`;
-    const text = `Hi ${firstName},\n\nYour 90-day free trial has ended. Based on your team's usage, we've kept your two most-used hubs active for free:\n\n${freeNames}\n\nThe Inventory Hub remains free as always. To unlock additional hubs, go to Settings → Subscription.\n\nAll your data is still there — nothing was deleted.\n\nThank you for trying ChurchOpsHub.\n\n— John Vaught\nChurchOpsHub`;
+    const text = `Hi ${firstName},\n\nYour 90-day free trial of ChurchOpsHub has ended.\n\nAll your data is still there — nothing was deleted.\n\nI'm changing how ChurchOpsHub is priced, and I'd rather tell you the new terms once they're final than guess at them now. I'll email you with the details shortly.\n\nIn the meantime, reply to this email if you need anything at all — including access to your own records.\n\n— John Vaught\nChurchOpsHub`;
 
     try {
       await sendEmailSafe({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject, html, text });
@@ -1748,7 +1733,7 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
     // 7-day warning email (separate pass — send when 7 days remain)
     // Handled by the daily run: if trialEndsAt is exactly 7 days from now, send warning.
     // This is checked separately below in the same scheduled run.
-    console.log('processTrialExpirations: processed', { churchId, freeHubsSelected, nowStr });
+    console.log('processTrialExpirations: processed', { churchId, nowStr });
   }
 
   // Second pass: send 7-day warning emails
@@ -1787,11 +1772,12 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
 
     const warnSubject = 'Your ChurchOpsHub trial ends in 7 days';
     const warnHtml = `<p>Hi ${escapeHtml(firstName)},</p>
-<p>Your 90-day free trial of all ChurchOpsHub hubs ends on <strong>${escapeHtml(trialEndDisplay)}</strong> — just 7 days away.</p>
-<p>After the trial, we'll automatically keep your two most-used hubs active for free. To keep every feature, upgrade to the <strong>ChurchOpsHub plan ($15/mo or $150/yr)</strong> from Settings → Subscription.</p>
-<p><a href="https://churchopshub.com" style="color:#0D9488;font-weight:600">Log in to ChurchOpsHub</a> to review your hubs before the trial ends.</p>
+<p>Your 90-day free trial of ChurchOpsHub ends on <strong>${escapeHtml(trialEndDisplay)}</strong> — just 7 days away.</p>
+<p>Nothing will be deleted when it does. Your records stay exactly where they are.</p>
+<p>I'm changing how ChurchOpsHub is priced and will email you the new terms before they take effect.</p>
+<p><a href="https://churchopshub.com" style="color:#0D9488;font-weight:600">Log in to ChurchOpsHub</a> any time, and reply to this email with any questions.</p>
 <p>— John Vaught<br><span style="font-size:13px;color:#666">ChurchOpsHub</span></p>`;
-    const warnText = `Hi ${firstName},\n\nYour 90-day free trial ends on ${trialEndDisplay} — just 7 days away.\n\nAfter the trial, we'll automatically keep your two most-used hubs active for free. To keep every feature, upgrade to the ChurchOpsHub plan ($15/mo or $150/yr) from Settings → Subscription.\n\nLog in at churchopshub.com to review your hubs.\n\n— John Vaught\nChurchOpsHub`;
+    const warnText = `Hi ${firstName},\n\nYour 90-day free trial of ChurchOpsHub ends on ${trialEndDisplay} — just 7 days away.\n\nNothing will be deleted when it does. Your records stay exactly where they are.\n\nI'm changing how ChurchOpsHub is priced and will email you the new terms before they take effect.\n\nLog in at churchopshub.com any time, and reply to this email with any questions.\n\n— John Vaught\nChurchOpsHub`;
 
     try {
       await sendEmailSafe({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject: warnSubject, html: warnHtml, text: warnText });
