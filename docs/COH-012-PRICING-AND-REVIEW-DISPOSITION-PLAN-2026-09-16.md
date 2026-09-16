@@ -4,9 +4,11 @@
 - Owner: Product owner (John)
 - Implementation: Claude (DEC-2026-011)
 - Reviewer: Codex (plan review before implementation)
-- Status: **PLAN — rev 2, not started.** Rev 1 (`97de92a`) reviewed by Codex
-  2026-09-16: **REWORK**, five blockers and three gaps, all verified against the
-  code and all fixed below. See "Review history".
+- Status: **PLAN — rev 3, not started.** Two Codex rounds, both **REWORK**:
+  rev 1 (`97de92a`) drew five blockers and three gaps; rev 2 (`8da9992`) drew
+  three more blockers and two gaps. Every finding was verified against the code
+  before being accepted, and every one was correct. See "Review history" — the
+  pattern in them mattered more than any single finding.
 - Base commit: `f429b86` (2026-09-10), working tree clean
 - Related: Codex application review 2026-08-28; DEC-2026-019; DEC-2026-020;
   `docs/backlog.md` "Priority order"
@@ -20,8 +22,9 @@ One plan, five parts, one hard date.
 **Part A** replaces the trial/free-hub entitlement model with a flat one: 90 days
 of everything, then **$5/month for everything**, no per-hub tier. This deletes
 the auto-selection cron, `freeHubsSelected`, `trialHubs`, the per-hub `hasHub`
-logic in all three places it is implemented, and the dead `$5/$7` artifacts. It
-requires amending a guardrail in DEC-2026-020.
+logic in **all four** places it is implemented, and the dead `$5/$7` artifacts.
+It requires amending a guardrail in DEC-2026-020, the invariants list in
+`AGENTS.md`, and the canonical `docs/BUSINESS_MODEL.md`.
 
 **Part B** fixes a live, FXCC-facing defect found while measuring Part A: a
 string-vs-Timestamp query type mismatch that is silently hiding 19% of FXCC's
@@ -285,51 +288,121 @@ data); no stranger receives a false claim.
    `pro_annual` in `PRICE_IDS` for webhook resolution exactly as the legacy
    per-hub IDs already are (`functions/index.js:444-458`) — do not delete them;
    an in-flight webhook must still resolve.
-2. **Change the checkout caller in the same commit.** `UpgradeGate` submits
-   `item: 'pro_monthly'` (`src/components/primitives/UpgradeGate.jsx:27`).
-   Retaining that key for webhook resolution while leaving the caller unchanged
-   means **checkout keeps charging $15** — new prices that nothing selects.
-   Point the caller at the new key and add an annual option if the $50/yr price
-   ships. Rev 1 missed this entirely.
-3. **Subscription shape.** `hasHub` becomes `grandfathered || trialing || paid`
+2. **Change every checkout caller in the same commit — there are two, and the
+   one rev 2 fixed is the lesser.**
+   - `src/components/primitives/UpgradeGate.jsx:27` — `item: 'pro_monthly'`.
+   - **`src/pages/SettingsPage.jsx:1595,1606`** — `handleCheckout('pro_monthly')`
+     and `handleCheckout('pro_annual')`, the *primary* subscription surface,
+     with **`$15` and `$150` hardcoded in the markup** at `:1592` and `:1603`
+     and a "2 MONTHS FREE" badge whose arithmetic changes at $5/$50.
+
+   Retaining the legacy keys for webhook resolution while leaving either caller
+   unchanged means **checkout keeps charging the old prices**. Rev 1 missed both;
+   rev 2 fixed one and asserted a grep gate that would have found the other.
+
+3. **Free-hub flags must be resolved, not inherited.** `HubsPage.jsx:43,51`
+   mark Inventory and Reservations `free: true`, and free hubs bypass
+   `UpgradeGate` entirely (`:248`). Under "$5 for every feature" that flag is
+   either deleted — making them paid like everything else — or it is retained
+   and the model is not what A.0 says it is. **This is an owner decision, not an
+   implementation detail**, and it interacts directly with A.1: if Inventory
+   stays free, a lapsed church keeps a working product and the paywall premise
+   weakens further. Recommended: delete the flag, since a free wedge that has
+   never converted anyone (see A.0) is exactly what this plan is retiring.
+4. **Subscription shape.** `hasHub` becomes `grandfathered || trialing || paid`
    in **all four** implementations. Rev 1 listed three and missed the fourth:
    - `src/hooks/useSubscription.js:29-40`
    - `functions/index.js:1212-1223`
    - `firestore.rules:214-221` (Jobs only — see A.1(i), it stays)
-   - **`src/pages/SettingsPage.jsx:174-177,386-388`** — reads
-     `subscription.hubs` directly to build `churchHubs`, `maxUsers`,
-     `allHubsUnlocked`, `hasJobsHub`, `hasInsightsHub`, and gates the Jobs,
-     Insights and People settings panels on them. It also carries its own copy
-     of the `plan === 'pro'` test, which is more evidence for Finding 3.
+   - **`src/pages/SettingsPage.jsx`** — four distinct consumers, not one.
+     Rev 2 named the first and round 2 found the rest:
+     - `:174-177,386-388` — `churchHubs`, `maxUsers`, `allHubsUnlocked`,
+       `hasJobsHub`, `hasInsightsHub`, gating the Jobs, Insights and People
+       panels. Carries its own copy of the `plan === 'pro'` test (Finding 3).
+     - `:495` — `isTrialing` derived from `freeHubsSelected === null`. Delete
+       the field and **every church silently reads as not trialing**, which is
+       the most damaging single line in this list.
+     - `:498` — `activeHubs` renders `trialHubs` / `hubs[]` as user-visible text.
+     - `:946` — *"After the trial, your two most-used hubs stay free"* — the
+       same false claim as the expiry email, in the UI.
    `trialHubs`, `freeHubsSelected`, and `hubs[]` stop being read. Leave the
    fields on existing documents; do not migrate data that nothing reads.
-4. **Church creation.** `src/useAuth.js:267-277` writes the initial subscription
+5. **Church creation.** `src/useAuth.js:267-277` writes the initial subscription
    document with `hubs: []`, `trialHubs: TRIAL_HUBS`, `freeHubsSelected: null`.
    Update it to the new shape. A new church created after cutover must not be
    born carrying fields the model no longer has.
-5. **Trial banner.** `src/App.jsx:839` renders trial state from these fields;
+6. **Trial banner.** `src/App.jsx:839` renders trial state from these fields;
    update with the rest.
-6. **Rules.** Under A.1(i), `firestore.rules` is left alone apart from whatever
+7. **Rules.** Under A.1(i), `firestore.rules` is left alone apart from whatever
    `jobsHubActive()` needs to keep working against the new document shape —
    including adding the missing `plan == 'pro'` branch (Finding 3) rather than
    deleting the function. Rev 1 proposed dissolving it; A.1(i) keeps it.
-7. **Client copy.** Delete `UPGRADE_PRICES`, the seven `price:` fields, and the
+8. **Client copy.** Delete `UPGRADE_PRICES`, the seven `price:` fields, and the
    dangling `hubPrice` prop (`HubsPage.jsx:57-147,295`). Update the hardcoded
    figure in `UpgradeGate.jsx:63`.
-8. **Per-user `allowedHubs` is untouched.** It is an admin permission, not an
+9. **Per-user `allowedHubs` is untouched.** It is an admin permission, not an
    entitlement (`AGENTS.md:29`), and it stays.
 
-**Grep gate before this phase is called done:** `freeHubsSelected`, `trialHubs`,
-`UPGRADE_PRICES`, `pro_monthly` and `subscription?.hubs` must each return only
-the sites this plan names. Rev 1's blocker list was produced by exactly this
-grep, run by the reviewer instead of by the plan.
+### A.4.0 Consolidate first, then change behavior (rev 3)
+
+**Rev 1 listed three entitlement consumers. Round 1 found a fourth. Rev 2 named
+four. Round 2 found four more sites inside that same fourth file.** The plan's
+method was the defect: hand-enumerating consumers in prose and hoping the list
+was complete. Rev 3 stops doing that.
+
+**Step 1 — take the inventory mechanically, not from memory.** Generated
+2026-09-16, file-level counts:
+
+| Symbol | Files |
+|---|---|
+| `freeHubsSelected` | `functions/index.js` (14), `useSubscription.js` (5), `BUSINESS_MODEL.md` (4), `firestore.rules` (3), `useAuth.js`, `SettingsPage.jsx`, `App.jsx`, `scripts/setup-e2e-tenant.mjs`, `scripts/seed-emulator.mjs` |
+| `trialHubs` | `useSubscription.js` (2), `useAuth.js`, `SettingsPage.jsx`, `functions/index.js`, `firestore.rules`, `BUSINESS_MODEL.md`, `scripts/setup-e2e-tenant.mjs` |
+| `trialEndsAt` | `functions/index.js` (9), `useSubscription.js` (4), `useAuth.js` (2), `SettingsPage.jsx` (2), `scripts/setup-e2e-tenant.mjs` (2), `App.jsx`, `BUSINESS_MODEL.md` |
+| `grandfathered` | `SettingsPage.jsx` (5), `useSubscription.js` (3), `scripts/setup-e2e-tenant.mjs` (3), `scripts/export-tenant-to-emulator.cjs` (3), `BUSINESS_MODEL.md` (3), `useAuth.js` (2), `scripts/seed-emulator.mjs` (2), `HubsPage.jsx`, `functions/index.js`, `firestore.rules`, `e2e/authenticated/work-merge.spec.js` |
+| `pro_monthly` / `pro_annual` | `functions/index.js` (4), `BUSINESS_MODEL.md` (3), **`SettingsPage.jsx` (2)**, `UpgradeGate.jsx` |
+| `TRIAL_HUBS` / `PRO_HUBS` | `functions/index.js` (6), `useAuth.js` (2) |
+| `hasHub` / `subHasHub` | `functions/index.js` (20), `src/lib/attention.js` (10), `HubsPage.jsx` (9), `EventDayPage.jsx` (6), `App.jsx` (4), `useSubscription.js` (2), `UpgradeGate.jsx` (2), `Dashboard.jsx`, `firestore.rules`, `scripts/setup-e2e-tenant.mjs` |
+
+Fourteen files, plus three scripts and an e2e spec. That is the real surface,
+and no prose list was ever going to hold it.
+
+**Step 2 — collapse four implementations into one before changing any
+behavior.** Extract a pure `src/lib/entitlement.js` — `hasHub`, `isTrialing`,
+`canAddUser`, `planLabel` — with a CJS twin at `functions/lib/entitlement.js`
+and a **parity test**, exactly as `attention.js`, `occurrences.js` and
+`people.js` already do (DEC-2026-019 §3: a behavior-preserving commit placed
+*before* the feature commit). Repoint `useSubscription.js`, `SettingsPage.jsx`,
+and `functions/index.js:subHasHub` at it. `firestore.rules` necessarily keeps
+its own copy; the parity test pins it.
+
+Only after that lands does the model change — in one module instead of four
+files, which is what makes the rest of A.4 verifiable rather than hopeful.
+
+**Step 3 — the grep gate runs as a check, not as the discovery method.** Each
+symbol above must return only sites this plan names. Rev 2 claimed this gate and
+still failed it, because the gate was written after the list instead of before.
 
 ### A.5 Phase 3 — public copy
 
-Eleven claim sites: `src/pages/LandingPage.jsx` (2), `src/pages/HelpPage.jsx`
-(3), `src/data/blogPosts.js` (5), `src/data/whatsNew.js` (1). Blog posts are
-indexed and ranking; edit the pricing sentences in place rather than restructuring
-posts. Add a What's New entry.
+Rev 1 said "eleven claim sites" and counted only marketing copy. The real set
+also includes in-product copy and the canonical business-model document:
+
+- `src/pages/LandingPage.jsx` (2), `src/pages/HelpPage.jsx` (3),
+  `src/data/blogPosts.js` (5), `src/data/whatsNew.js` (1)
+- **`src/pages/SettingsPage.jsx:1592,1603`** — `$15` / `$150` hardcoded in the
+  checkout markup, plus the "2 MONTHS FREE" badge whose arithmetic changes
+- **`src/pages/SettingsPage.jsx:1613`** — *"Inventory, supplies & reservations
+  stay free. Cancel anytime."*
+- **`src/pages/SettingsPage.jsx:946`** — the two-most-used-hubs claim
+- **`src/pages/HubsPage.jsx:405`** — current-product pricing copy
+- **`docs/BUSINESS_MODEL.md:12-18`** — the canonical pricing table, *"Inventory
+  is **never** paid. It's the permanent free wedge."* This is the document the
+  rest of the repo defers to; leaving it means the repository contradicts its
+  own decision. Treat it as a **precondition alongside `AGENTS.md`**, not as
+  trailing copy work.
+
+Blog posts are indexed and ranking; edit the pricing sentences in place rather
+than restructuring posts. Add a What's New entry.
 
 ---
 
@@ -372,9 +445,20 @@ fallback (`src/useFirestore.js:663-679`, DEC-2026-005). What remains is that the
 trail is a separate fire-and-forget write at 36 call sites, failing to Sentry
 with `silent: true`.
 
-1. Do **not** batch all 36. Batch the five where a missing row changes an answer
-   someone will actually ask: item checkout/return, supply consumption,
-   reservation approval, member deactivation, access-record change.
+1. Do **not** batch all 36. Rev 1 named five targets; round 2 established that
+   **two of them cannot be batched at all**, for different reasons:
+   - `addAccessRecord` / `updateAccessRecord`
+     (`src/useFirestore.js:1203-1215`) have **no `logActivity` call to batch**.
+     Auditing them is *new* behavior — specify the action name and payload
+     schema, or drop them from this part.
+   - Member deactivation runs through the `setMemberActive` **callable**
+     (`src/pages/SettingsPage.jsx:1090`, COH-011). A client-side batch is
+     impossible; its audit row must be written server-side inside the callable,
+     where it is already atomic with the mutation. Different work entirely.
+
+   That leaves **three** genuine client-batch sites: item checkout/return,
+   supply consumption, reservation approval. Scope Part C to those three, and
+   file the other two separately rather than counting them here.
 2. **Each of those five call sites must be restructured, not wrapped.** Rev 1
    specified a test that "forces the audit write to fail and asserts the primary
    write rolls back" — that test would pass vacuously today and prove nothing.
@@ -498,8 +582,31 @@ boundary**, and rev 1 was proposing rules-layer machinery to enforce billing.
 Rev 2 enforces lapse in the client and callables, leaves the rules alone, and
 records the residual SDK-write exposure as accepted.
 
-**Not yet reviewed:** rev 2. Round 2 should focus on whether A.1(i) is now
-under-enforcing, and on the A.4 grep gate's completeness.
+### Round 2 — Codex, 2026-09-16 (`gpt-5.6-terra`), verdict **REWORK**
+
+Three blockers, two gaps. All five checked against the code; all five correct.
+
+| # | Finding | Disposition in rev 3 |
+|---|---|---|
+| B6 | Inventory and Reservations are `free: true` (`HubsPage.jsx:43,51`) and bypass `UpgradeGate` (`:248`); "$5 for every feature" never reaches them | A.4 §3 — surfaced as an explicit owner decision, not an implementation detail |
+| B7 | `SettingsPage.jsx:1595,1606` is the **primary** checkout surface, still submitting `pro_monthly`/`pro_annual` with `$15`/`$150` in the markup | A.4 §2 — both callers, and the price strings, move together |
+| B8 | Four more Settings consumers: `isTrialing` off `freeHubsSelected` (`:495`), `activeHubs` (`:498`), the two-most-used copy (`:946`) | A.4 §4 |
+| G4 | "Eleven claim sites" missed in-product copy and `docs/BUSINESS_MODEL.md:12-18`, the canonical pricing document | A.5 — BUSINESS_MODEL.md promoted to a precondition beside `AGENTS.md` |
+| G5 | Part C's "access-record change" has no `logActivity` call to batch, and deactivation runs through a callable | C.1 — narrowed to three real sites; the other two respecified |
+
+**The pattern, which matters more than any single finding.** Round 1 found a
+consumer rev 1 had missed. Rev 2 added it and asserted a grep gate. Round 2 then
+found four more consumers *in the same file rev 2 had just edited*, plus the
+primary checkout surface. Three passes of hand-enumeration produced three
+incomplete lists.
+
+Rev 3's response is not a fourth list. **A.4.0 replaces enumeration with a
+generated inventory and requires consolidating four implementations into one
+module before any behavior changes.** The grep gate demotes to a check. If round
+3 finds another missed consumer, that is evidence the consolidation step should
+come earlier still — not that the list needs another entry.
+
+**Not yet reviewed:** rev 3.
 
 ---
 
@@ -509,18 +616,20 @@ under-enforcing, and on the A.4 grep gate's completeness.
    wrong.** The two REST counts are reproducible; the conclusion drawn from them
    is the part worth attacking. Is `sendWeeklyInsightsDigest` actually degraded,
    and is the late-November projection right?
-2. **Round 1 answered the old question 2 (read-only fans out — it does).** The
-   new question: with lapse enforced only in the client and callables, is
-   A.1(i) **under**-enforcing in a way that matters? Name a concrete path where
-   a lapsed church's SDK write causes real harm rather than unpaid usage. If
-   there is none, say none — the accepted-risk framing stands or falls on that.
-3. **Does Part A.4 delete anything load-bearing on a path rev 2 still has not
-   listed?** Round 1 found `SettingsPage`, `useAuth` and `App.jsx` this way.
-   Rev 2 adds a grep gate; check whether it is sufficient, especially for
-   `allowedHubs`, the e2e fixtures, and the callables using `subHasHub`.
-4. **Is deleting the ranking (A.3 step 2) safe to ship without the rest of Part
+2. **With lapse enforced only in the client and callables, is A.1(i)
+   under-enforcing in a way that matters?** Name a concrete path where a lapsed
+   church's raw SDK write causes real harm rather than unpaid usage. If there is
+   none, say none — the accepted-risk framing stands or falls on that.
+3. **Attack A.4.0, not the consumer list.** Rev 3 stops enumerating and requires
+   consolidation into one `entitlement` module first. Two questions: does the
+   generated inventory miss a *symbol* (not a site) — and can the consolidation
+   actually land as a behavior-preserving commit, given `firestore.rules` must
+   keep its own copy and `SettingsPage` derives rather than calls?
+4. **Is the `free: true` decision (A.4 §3) separable from the rest?** If
+   Inventory stays free, does anything else in Part A stop making sense?
+5. **Is deleting the ranking (A.3 step 2) safe to ship without the rest of Part
    A?** Phase 1 assumes it is.
-5. **Argue against the pricing change on its merits.** The plan asserts the free
+6. **Argue against the pricing change on its merits.** The plan asserts the free
    tier is not earning its complexity from five tenants' data. Five is a small
    number. If that inference is unsound, the whole of Part A rests on it.
-6. Findings as test cases wherever one can be written — fixture and assertion.
+7. Findings as test cases wherever one can be written — fixture and assertion.
