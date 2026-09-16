@@ -4,7 +4,9 @@
 - Owner: Product owner (John)
 - Implementation: Claude (DEC-2026-011)
 - Reviewer: Codex (plan review before implementation)
-- Status: **PLAN — not started**
+- Status: **PLAN — rev 2, not started.** Rev 1 (`97de92a`) reviewed by Codex
+  2026-09-16: **REWORK**, five blockers and three gaps, all verified against the
+  code and all fixed below. See "Review history".
 - Base commit: `f429b86` (2026-09-10), working tree clean
 - Related: Codex application review 2026-08-28; DEC-2026-019; DEC-2026-020;
   `docs/backlog.md` "Priority order"
@@ -159,9 +161,21 @@ them today. Part A removes them along with the model they describe.
 church is **$5/month (or $50/year) for every feature**. There is no free tier and
 no per-hub purchase.
 
-**This amends DEC-2026-020.** That decision's guardrail reads *"Inventory /
-Supplies must remain free."* DEC-2026-021 supersedes that clause and must say so
-explicitly, with the reasoning below; the rest of DEC-2026-020 stands unchanged.
+**Two binding statements must be amended first, and both are the owner's to
+amend — not this plan's.** Implementation may not begin until they are:
+
+1. **`AGENTS.md:25-26`** — *"Inventory and supplies are permanently included in
+   the free product. The current paid offering is one ChurchOpsHub plan:
+   $15/month or $150/year."* This sits in the repo's binding-invariants list,
+   which every agent reads before working. It must be rewritten in the **same
+   commit** as the first behavior change (`feedback_doc_with_behavior_change`),
+   not after.
+2. **DEC-2026-020's guardrail** — *"Inventory / Supplies must remain free."*
+   DEC-2026-021 supersedes that clause explicitly, with the reasoning below. The
+   rest of DEC-2026-020 stands unchanged.
+
+Rev 1 named only the second. A decision document cannot quietly outrank the
+invariants file; the owner changes the invariant, or the plan does not proceed.
 
 **Why the free tier is not worth keeping.** It exists as an acquisition wedge.
 Measured: five non-FXCC signups, four with zero documents of any kind, one
@@ -184,18 +198,43 @@ glossed.
 
 **What happens at day 91 to a church that does not pay?**
 
-- **(i) Read-only** *(recommended)* — members keep read access and export; all
-  writes are refused. Rules become `allow read: if member; allow write: if
-  member && subscriptionActive`. This is simpler than the per-hub gating it
-  replaces, keeps the church's data reachable, and avoids "we locked you out of
-  your own records."
-- (ii) Full lockout — simplest to state, worst to receive, and raises a data
-  retention question the app has no answer for.
-- (iii) Keep inventory free — preserves the wedge but retains per-hub gating,
-  which forfeits most of Part A's simplification.
+**Rev 1 got the cost of this wrong and the correction changes the
+recommendation.** Rev 1 claimed read-only-after-lapse was a localized change to
+`jobsHubActive()` and therefore *simpler* than the per-hub gating it replaces.
+It is not. Writes to items, supplies and reservations authorize on membership
+alone (`firestore.rules:336-368`), as do most collections; read-only would mean
+editing **every write predicate in the file** and adding a subscription `get()`
+to each — a billed document read per write evaluation, against the 10-`get()`
+ceiling per single-document request. That is a larger and riskier change than
+the thing it replaces, and the simplification argument for it collapses.
 
-The rest of Part A is written assuming **(i)**. If the owner picks (iii), phases
-A.3 and A.4 shrink to a copy change and this plan should be re-reviewed.
+The correction also exposes a category error in rev 1. **Entitlement is not a
+security boundary.** The `churchId` tenant boundary is, and so is per-user
+authority inside a tenant — those are what `AGENTS.md:21-24` protects and what
+COH-002/006/011 hardened. A lapsed customer writing to *their own church's*
+records is a billing problem, not a breach. Rev 1 treated the two as the same
+kind of thing and proposed rules-layer machinery accordingly.
+
+Options, restated honestly:
+
+- **(i) Lapse enforced in the client and callables; rules unchanged**
+  *(recommended)*. A lapsed church sees a paywall and its callables refuse;
+  a determined member could still write through the raw SDK, and that is
+  accepted and recorded. Cheapest, no rules risk, no per-write read cost.
+  **The existing rules-layer Jobs gate (`firestore.rules:214-221`) stays** —
+  it is written, tested, and removing it would be a weakening; it is simply not
+  extended to anything else.
+- (ii) Read-only enforced in rules — every write predicate, plus a `get()` per
+  write. Defensible only if the owner wants billing enforced against the SDK,
+  which no evidence suggests is needed at 0 payers.
+- (iii) Full lockout — worst to receive, and raises a data-retention question
+  the app cannot currently answer.
+- (iv) Keep inventory free — preserves the wedge, retains per-hub gating,
+  forfeits most of Part A.
+
+The rest of Part A assumes **(i)**. Under (i), A.4's rules work reduces to
+leaving `firestore.rules` almost entirely alone, which is also the lowest-risk
+outcome available.
 
 ### A.2 Treatment of the five existing tenants
 
@@ -204,10 +243,22 @@ A.3 and A.4 shrink to a copy change and this plan should be re-reviewed.
 - **Highland, New Life, Compassion** — keep their existing `trialEndsAt`
   unchanged. They were promised 90 days of everything and still receive exactly
   that. Only what happens *after* changes, and they are told before it does.
-- **St Olaf, TrueNorth** — currently hold two free hubs by auto-selection. They
-  are notified that those fold into the $5 plan, with a grace window ending no
-  earlier than **2026-10-31**. Both have zero inventory/work/reservation data;
-  TrueNorth has 101 supply actions and no supplies.
+- **St Olaf, TrueNorth** — currently hold two free hubs by auto-selection.
+  Rev 1 promised them a grace window to 2026-10-31 without saying what state
+  represented it. There is none: `processTrialExpirations` writes
+  `status: 'active'` at expiry (`functions/index.js:1700`), so a lapsed church
+  is indistinguishable from a paying one by status alone, and the new
+  `grandfathered || trialing || paid` predicate would drop them the moment it
+  ships.
+
+  **Implement the grace by reusing `trialing`, not by inventing a state.** Set
+  `status: 'trialing'` and `trialEndsAt: 2026-10-31T23:59:59Z` on both
+  documents. No new field, no new predicate, no new branch to test — it rides
+  the path every trialing church already exercises, and it expires on its own.
+  This is a **production data write on two tenant documents** and is therefore
+  the owner's to approve as a separate, explicit step (DEC-2026-014).
+  Both have zero inventory/work/reservation data; TrueNorth has 101 supply
+  actions and no supplies.
 - **e2e-test-church** — grandfathered; fixtures must be checked for any
   assumption about `freeHubsSelected` or `trialHubs`.
 
@@ -234,20 +285,44 @@ data); no stranger receives a false claim.
    `pro_annual` in `PRICE_IDS` for webhook resolution exactly as the legacy
    per-hub IDs already are (`functions/index.js:444-458`) — do not delete them;
    an in-flight webhook must still resolve.
-2. **Subscription shape.** `hasHub` becomes
-   `grandfathered || trialing || paid` in all three implementations:
-   `src/hooks/useSubscription.js:29-40`, `functions/index.js:1212-1223`,
-   `firestore.rules:214-221`. `trialHubs`, `freeHubsSelected`, and `hubs[]` stop
-   being read. Leave the fields on existing documents; do not migrate data that
-   nothing reads.
-3. **Rules.** `jobsHubActive()` becomes a plan-level `subscriptionActive()`.
-   Under A.1(i), add the read/write split. Finding 3's `plan == 'pro'` gap
-   disappears with the function that contained it.
-4. **Client.** Delete `UPGRADE_PRICES`, the seven `price:` fields, and the
-   dangling `hubPrice` prop (`HubsPage.jsx:57-147,295`). `UpgradeGate` already
-   hardcodes the plan price; update the figure and copy.
-5. **Per-user `allowedHubs` is untouched.** It is an admin permission, not an
-   entitlement, and it stays.
+2. **Change the checkout caller in the same commit.** `UpgradeGate` submits
+   `item: 'pro_monthly'` (`src/components/primitives/UpgradeGate.jsx:27`).
+   Retaining that key for webhook resolution while leaving the caller unchanged
+   means **checkout keeps charging $15** — new prices that nothing selects.
+   Point the caller at the new key and add an annual option if the $50/yr price
+   ships. Rev 1 missed this entirely.
+3. **Subscription shape.** `hasHub` becomes `grandfathered || trialing || paid`
+   in **all four** implementations. Rev 1 listed three and missed the fourth:
+   - `src/hooks/useSubscription.js:29-40`
+   - `functions/index.js:1212-1223`
+   - `firestore.rules:214-221` (Jobs only — see A.1(i), it stays)
+   - **`src/pages/SettingsPage.jsx:174-177,386-388`** — reads
+     `subscription.hubs` directly to build `churchHubs`, `maxUsers`,
+     `allHubsUnlocked`, `hasJobsHub`, `hasInsightsHub`, and gates the Jobs,
+     Insights and People settings panels on them. It also carries its own copy
+     of the `plan === 'pro'` test, which is more evidence for Finding 3.
+   `trialHubs`, `freeHubsSelected`, and `hubs[]` stop being read. Leave the
+   fields on existing documents; do not migrate data that nothing reads.
+4. **Church creation.** `src/useAuth.js:267-277` writes the initial subscription
+   document with `hubs: []`, `trialHubs: TRIAL_HUBS`, `freeHubsSelected: null`.
+   Update it to the new shape. A new church created after cutover must not be
+   born carrying fields the model no longer has.
+5. **Trial banner.** `src/App.jsx:839` renders trial state from these fields;
+   update with the rest.
+6. **Rules.** Under A.1(i), `firestore.rules` is left alone apart from whatever
+   `jobsHubActive()` needs to keep working against the new document shape —
+   including adding the missing `plan == 'pro'` branch (Finding 3) rather than
+   deleting the function. Rev 1 proposed dissolving it; A.1(i) keeps it.
+7. **Client copy.** Delete `UPGRADE_PRICES`, the seven `price:` fields, and the
+   dangling `hubPrice` prop (`HubsPage.jsx:57-147,295`). Update the hardcoded
+   figure in `UpgradeGate.jsx:63`.
+8. **Per-user `allowedHubs` is untouched.** It is an admin permission, not an
+   entitlement (`AGENTS.md:29`), and it stays.
+
+**Grep gate before this phase is called done:** `freeHubsSelected`, `trialHubs`,
+`UPGRADE_PRICES`, `pro_monthly` and `subscription?.hubs` must each return only
+the sites this plan names. Rev 1's blocker list was produced by exactly this
+grep, run by the reviewer instead of by the plan.
 
 ### A.5 Phase 3 — public copy
 
@@ -264,9 +339,15 @@ Independent of Part A and, under the FXCC-first frame, the highest-value item in
 this plan: it is a *proven* defect against *FXCC's* data.
 
 1. Fix `sendWeeklyInsightsDigest` (`functions/index.js:2308`) to query both type
-   lanes and merge, mirroring the client's `loadActivityLogSince`
-   (`src/useFirestore.js:1648-1670`). Reuse that logic rather than writing a
-   second version of it.
+   lanes and merge. Rev 1 said "reuse the client's `loadActivityLogSince`"
+   (`src/useFirestore.js:1648-1670`); that is not possible — it is a `useCallback`
+   closed over `churchId` and the browser Firestore SDK, and a Cloud Function
+   cannot import it. Follow the repo's established pattern instead: a **pure
+   lane-splitting helper** (given a window, return the two query bounds and merge
+   two result sets into one ISO-shaped list) in `src/lib/`, with a CJS twin in
+   `functions/lib/` and a **parity test**, exactly as `attention.js` and
+   `occurrences.js` already do. The query execution stays SDK-specific on each
+   side; only the lane logic is shared.
 2. Add a regression test that seeds **both** a string-timestamped and a
    Timestamp-timestamped activity row inside the window and asserts the digest
    counts both. A test that seeds only one lane passes today and proves nothing.
@@ -294,10 +375,21 @@ with `silent: true`.
 1. Do **not** batch all 36. Batch the five where a missing row changes an answer
    someone will actually ask: item checkout/return, supply consumption,
    reservation approval, member deactivation, access-record change.
-2. Wire a Sentry alert on `op: logActivity`. Today the failure is invisible to
+2. **Each of those five call sites must be restructured, not wrapped.** Rev 1
+   specified a test that "forces the audit write to fail and asserts the primary
+   write rolls back" — that test would pass vacuously today and prove nothing.
+   Checkout/return commits its primary write *before* calling `logActivity`
+   (`src/useFirestore.js:503`), and `logActivity` catches and suppresses its own
+   failure (`:663-679`), so there is no path for a failed audit write to affect
+   anything. The work is to have those five callers *build* the audit document
+   and commit it in one `writeBatch` with the primary mutation. The assertion is
+   then "both documents exist or neither does", not "a rollback happened".
+   Enumerate all five paths before starting; the `silent: true` suppression stays
+   for the other 31.
+3. Wire a Sentry alert on `op: logActivity`. Today the failure is invisible to
    everyone. This is the code half of backlog #10; the console half (budget +
    alert configuration) stays the owner's and stays open.
-3. Refresh `docs/SENTRY-ALERTS.md`, which still references SendGrid post-Brevo.
+4. Refresh `docs/SENTRY-ALERTS.md`, which still references SendGrid post-Brevo.
 
 ---
 
@@ -346,11 +438,14 @@ rules-gated hub. Deleting the divergence beats testing it.
 | Item | How it is verified |
 |---|---|
 | A.3 emails | Render both templates against a fixture church; assert no "most-used" string survives anywhere in `functions/` |
-| A.4 entitlement | Parity test asserting all three `hasHub` implementations agree across the matrix of `{grandfathered, trialing, paid, lapsed}` — the test Finding 3 would have caught |
-| A.4 rules | `npm run test:rules`; add lapsed-tenant read-allowed / write-denied cases |
+| A.4 entitlement | Parity test asserting **all four** `hasHub` implementations agree across the matrix of `{grandfathered, trialing, paid, lapsed}` — including `SettingsPage`'s inline copy. This is the test Finding 3 would have caught and the test that would have caught rev 1's own omission |
+| A.4 completeness | The grep gate in A.4: `freeHubsSelected`, `trialHubs`, `UPGRADE_PRICES`, `pro_monthly`, `subscription?.hubs` return only named sites |
+| A.4 checkout | End-to-end: a checkout session created after cutover resolves to the **$5** price, not `pro_monthly` |
+| A.4 rules | `npm run test:rules` — asserting the Jobs gate still passes for `plan: 'pro'`, which it does not today (Finding 3) |
 | A.4 Stripe | Webhook test for a legacy `pro_monthly` event arriving after cutover, and a new `$5` event |
-| B | Dual-lane digest test seeding **both** timestamp types; re-run the two REST counts above and confirm the digest's count equals 213, not 173 |
-| C | Batch atomicity test: force the audit write to fail and assert the primary write rolls back |
+| A.2 grace | After the owner-approved write, St Olaf and TrueNorth read `status: 'trialing'`, `trialEndsAt: 2026-10-31`, and `hasHub` returns true for them in all four implementations |
+| B | Parity test between the `src/lib` helper and its `functions/lib` twin; digest test seeding **both** timestamp types in-window; re-run the two REST counts and confirm the digest counts 213, not 173 |
+| C | For each of the five restructured call sites: assert primary + audit document both exist, and that a rejected batch leaves **neither**. A test that only forces `logActivity` to throw proves nothing — see C.2 |
 | A.2 | Re-run the tenant census after deploy; assert FXCC's subscription document is byte-identical |
 | Regression | Full `npm test`, `npm run test:rules`, and the E2E suite against the Firebase test tenant |
 
@@ -376,18 +471,53 @@ before the web push that depends on them.
 
 ---
 
+## Review history
+
+### Round 1 — Codex, 2026-09-16 (`gpt-5.6-terra`), verdict **REWORK**
+
+Five blockers and three gaps. All eight were checked against the code before
+being accepted; all eight were correct.
+
+| # | Finding | Disposition in rev 2 |
+|---|---|---|
+| B1 | `AGENTS.md:25-26` carries the free-inventory / $15 invariant; a DEC cannot supersede it | A.0 — owner-gated precondition, amended in the same commit as the behavior change |
+| B2 | `SettingsPage.jsx:174-177,386-388` is a fourth entitlement consumer | A.4 §3 — listed, plus a grep gate so the next one is found by the plan, not the reviewer |
+| B3 | `UpgradeGate.jsx:27` hardcodes `item: 'pro_monthly'` — new prices would never be charged | A.4 §2 — caller changes in the same commit |
+| B4 | Read-only after lapse is not localized; writes authorize on membership across the rules file | **A.1 rewritten and the recommendation changed** — see below |
+| B5 | The 10-31 grace window had no state; post-expiry churches are `status: 'active'` | A.2 — grace implemented by reusing `trialing` + `trialEndsAt`, owner-approved write |
+| G1 | `useAuth.js:267-277` and `App.jsx:839` read the fields being deleted | A.4 §4-5 |
+| G2 | Part B cannot reuse a client `useCallback` from a Cloud Function | B.1 — shared pure helper + CJS twin + parity test, per the `attention.js` precedent |
+| G3 | Part C's rollback test would pass vacuously | C.2 — restructure the five callers into batches; assert both-or-neither |
+
+**The one that changed a decision, not just a detail:** B4. Rev 1 argued
+read-only-after-lapse was *simpler* than the per-hub gating it replaced, and
+most of Part A's justification leaned on that. It is not simpler — it touches
+every write predicate and adds a billed `get()` per write. Correcting it
+surfaced a category error worth keeping: **entitlement is not a security
+boundary**, and rev 1 was proposing rules-layer machinery to enforce billing.
+Rev 2 enforces lapse in the client and callables, leaves the rules alone, and
+records the residual SDK-write exposure as accepted.
+
+**Not yet reviewed:** rev 2. Round 2 should focus on whether A.1(i) is now
+under-enforcing, and on the A.4 grep gate's completeness.
+
+---
+
 ## Review focus (for Codex)
 
 1. **Check Finding 2 against the code and tell me if the type-ordering claim is
    wrong.** The two REST counts are reproducible; the conclusion drawn from them
    is the part worth attacking. Is `sendWeeklyInsightsDigest` actually degraded,
    and is the late-November projection right?
-2. **Is A.1(i) (read-only after lapse) actually simpler in rules than what it
-   replaces, or does it fan out across every collection?** If it fans out, say
-   so — the simplification argument is most of Part A's justification.
-3. **Does Part A.4 delete anything that is load-bearing for a path I have not
-   listed?** Specifically `allowedHubs`, the e2e fixtures, and anything reading
-   `hubs[]` outside the three `hasHub` sites.
+2. **Round 1 answered the old question 2 (read-only fans out — it does).** The
+   new question: with lapse enforced only in the client and callables, is
+   A.1(i) **under**-enforcing in a way that matters? Name a concrete path where
+   a lapsed church's SDK write causes real harm rather than unpaid usage. If
+   there is none, say none — the accepted-risk framing stands or falls on that.
+3. **Does Part A.4 delete anything load-bearing on a path rev 2 still has not
+   listed?** Round 1 found `SettingsPage`, `useAuth` and `App.jsx` this way.
+   Rev 2 adds a grep gate; check whether it is sufficient, especially for
+   `allowedHubs`, the e2e fixtures, and the callables using `subHasHub`.
 4. **Is deleting the ranking (A.3 step 2) safe to ship without the rest of Part
    A?** Phase 1 assumes it is.
 5. **Argue against the pricing change on its merits.** The plan asserts the free
