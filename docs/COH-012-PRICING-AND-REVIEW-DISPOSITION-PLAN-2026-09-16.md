@@ -4,11 +4,12 @@
 - Owner: Product owner (John)
 - Implementation: Claude (DEC-2026-011)
 - Reviewer: Codex (plan review before implementation)
-- Status: **PLAN — rev 3, not started.** Two Codex rounds, both **REWORK**:
-  rev 1 (`97de92a`) drew five blockers and three gaps; rev 2 (`8da9992`) drew
-  three more blockers and two gaps. Every finding was verified against the code
-  before being accepted, and every one was correct. See "Review history" — the
-  pattern in them mattered more than any single finding.
+- Status: **PLAN — rev 4, not started.** Three Codex rounds, all **REWORK**:
+  rev 1 (`97de92a`) five blockers / three gaps; rev 2 (`8da9992`) three / two;
+  rev 3 (`a7128db`) three / two, of which two "gaps" were confirmations rather
+  than defects. Every finding was verified against the code before being
+  accepted, and every one was correct — including one in rev 3 where the plan
+  would have introduced a concurrency bug. See "Review history".
 - Base commit: `f429b86` (2026-09-10), working tree clean
 - Related: Codex application review 2026-08-28; DEC-2026-019; DEC-2026-020;
   `docs/backlog.md` "Priority order"
@@ -123,10 +124,11 @@ timestamp lane  (invisible to the digest)   →   40 docs
 ```
 
 **FXCC's weekly insights digest is currently computing over 173 of 213
-entries — 81%.** The string-era rows age out of the trailing window
-continuously; on or about **2026-11-27** the window becomes entirely
-post-migration and the digest will report zero activity while appearing to
-succeed.
+entries — 81%.** That figure is measured. The string-era rows age out of the
+trailing window continuously, so coverage falls on its own; the **2026-11-27**
+zero-coverage date is a **projection from current data, not a code-verifiable
+claim** (round 3 made this distinction and it is kept). The direction is
+certain; the date is an estimate.
 
 The client already solved this. `loadActivityLogSince`
 (`src/useFirestore.js:1648-1670`) queries **both type lanes** and merges them,
@@ -271,8 +273,15 @@ This phase is deliberately separable and reversible, so it can ship on its own i
 the rest slips.
 
 1. Rewrite the 7-day warning email and the trial-expiry email
-   (`functions/index.js:1707-1800`) to describe the new model. Remove every
-   "two most-used hubs" claim.
+   (`functions/index.js:1707-1800`) to be **model-neutral**. Remove every "two
+   most-used hubs" claim — and do **not** announce $5/$50 here.
+
+   Round 3 caught this: A.3 deploys functions only, so checkout is still wired
+   to the $15/$150 price IDs (`functions/index.js:445-446`) and both client
+   callers still submit `pro_monthly`. An A.3 that advertised the new price
+   would email a product **that cannot be purchased**. The phase's job is to
+   stop the false claim, not to launch the new model. Say the trial is ending
+   and where to see options; announce pricing in phase 2, with the prices.
 2. Delete the usage ranking and `freeHubsSelected` selection
    (`functions/index.js:1655-1700`); the cron's remaining job is to flip
    `status` at expiry and send mail.
@@ -288,6 +297,16 @@ data); no stranger receives a false claim.
    `pro_annual` in `PRICE_IDS` for webhook resolution exactly as the legacy
    per-hub IDs already are (`functions/index.js:444-458`) — do not delete them;
    an in-flight webhook must still resolve.
+
+   **Decide what the webhook writes, not just what readers read.** Rev 3 left
+   this implicit and round 3 caught it: the purchase path writes `update.hubs`
+   and `update.freeHubsSelected` (`:933-940`) and the cancellation path writes
+   `hubs: []`, `freeHubsSelected: []` (`:973-978`). Under the new model those
+   fields have no meaning. Either stop writing them (preferred — a document that
+   still carries them invites a future reader to trust them) or write them and
+   say why. **`functions/test/handlers/stripeWebhook.test.mjs:80-81` asserts
+   both** (`sub.hubs === PRO_HUBS`, `sub.freeHubsSelected === PRO_HUBS`) and
+   changes with the shape.
 2. **Change every checkout caller in the same commit — there are two, and the
    one rev 2 fixed is the lesser.**
    - `src/components/primitives/UpgradeGate.jsx:27` — `item: 'pro_monthly'`.
@@ -362,6 +381,7 @@ was complete. Rev 3 stops doing that.
 | `pro_monthly` / `pro_annual` | `functions/index.js` (4), `BUSINESS_MODEL.md` (3), **`SettingsPage.jsx` (2)**, `UpgradeGate.jsx` |
 | `TRIAL_HUBS` / `PRO_HUBS` | `functions/index.js` (6), `useAuth.js` (2) |
 | `hasHub` / `subHasHub` | `functions/index.js` (20), `src/lib/attention.js` (10), `HubsPage.jsx` (9), `EventDayPage.jsx` (6), `App.jsx` (4), `useSubscription.js` (2), `UpgradeGate.jsx` (2), `Dashboard.jsx`, `firestore.rules`, `scripts/setup-e2e-tenant.mjs` |
+| **`hubs` (the field itself)** | **Round 3 found this row missing.** A bare `hubs` grep is noisy — the word appears in UI prose across 38 files — so the gate must target the *load-bearing writers and readers*, not the string: `functions/index.js:928-939` (webhook **writes** `update.hubs`), `:966-978` (cancellation writes `update.hubs = []`), `useAuth.js:267-277` (church creation), `useSubscription.js`, `SettingsPage.jsx`, `firestore.rules`, `scripts/setup-e2e-tenant.mjs`, and `functions/test/handlers/stripeWebhook.test.mjs:80-81` |
 
 Fourteen files, plus three scripts and an e2e spec. That is the real surface,
 and no prose list was ever going to hold it.
@@ -459,17 +479,28 @@ with `silent: true`.
    That leaves **three** genuine client-batch sites: item checkout/return,
    supply consumption, reservation approval. Scope Part C to those three, and
    file the other two separately rather than counting them here.
-2. **Each of those five call sites must be restructured, not wrapped.** Rev 1
-   specified a test that "forces the audit write to fail and asserts the primary
-   write rolls back" — that test would pass vacuously today and prove nothing.
-   Checkout/return commits its primary write *before* calling `logActivity`
-   (`src/useFirestore.js:503`), and `logActivity` catches and suppresses its own
-   failure (`:663-679`), so there is no path for a failed audit write to affect
-   anything. The work is to have those five callers *build* the audit document
-   and commit it in one `writeBatch` with the primary mutation. The assertion is
-   then "both documents exist or neither does", not "a rollback happened".
-   Enumerate all five paths before starting; the `silent: true` suppression stays
-   for the other 31.
+2. **Each of those three call sites must be restructured, not wrapped — and
+   not all three take the same mechanism.** Rev 1 specified a test that "forces
+   the audit write to fail and asserts the primary write rolls back"; that test
+   would pass vacuously today, because checkout/return commits before calling
+   `logActivity` (`src/useFirestore.js:503`) and `logActivity` catches and
+   suppresses its own failure (`:663-679`). Nothing a failed audit write does
+   can affect anything.
+
+   **`writeBatch` is the right tool for only two of the three.** Round 3 caught
+   the third: **`useSupply` is a `runTransaction`** (`:604-620`) that reads
+   `quantity`, computes `max(0, qty - n)`, and writes it back. Replacing that
+   with a batch would discard the read-modify-write guarantee and reintroduce
+   lost updates under concurrent consumption — a real regression, traded for an
+   audit-trail improvement. **The audit document must be added *inside* the
+   existing transaction (`tx.set(auditRef, …)`), not batched around it.**
+
+   - checkout / return → `writeBatch`
+   - reservation approval → `writeBatch`
+   - supply consumption → **audit write inside the existing `runTransaction`**
+
+   The assertion is "both documents exist or neither does", not "a rollback
+   happened". The `silent: true` suppression stays for the other 33 sites.
 3. Wire a Sentry alert on `op: logActivity`. Today the failure is invisible to
    everyone. This is the code half of backlog #10; the console half (budget +
    alert configuration) stays the owner's and stays open.
@@ -529,7 +560,9 @@ rules-gated hub. Deleting the divergence beats testing it.
 | A.4 Stripe | Webhook test for a legacy `pro_monthly` event arriving after cutover, and a new `$5` event |
 | A.2 grace | After the owner-approved write, St Olaf and TrueNorth read `status: 'trialing'`, `trialEndsAt: 2026-10-31`, and `hasHub` returns true for them in all four implementations |
 | B | Parity test between the `src/lib` helper and its `functions/lib` twin; digest test seeding **both** timestamp types in-window; re-run the two REST counts and confirm the digest counts 213, not 173 |
-| C | For each of the five restructured call sites: assert primary + audit document both exist, and that a rejected batch leaves **neither**. A test that only forces `logActivity` to throw proves nothing — see C.2 |
+| C | For each of the **three** restructured call sites: assert primary + audit document both exist, and that a rejected batch/transaction leaves **neither**. A test that only forces `logActivity` to throw proves nothing — see C.2 |
+| C — contention | **Round 3's fixture, adopted verbatim:** two concurrent `useSupply` calls against `quantity: 1`; assert final quantity is 0 **and two audit rows exist**. This is the test that fails if the transaction is ever downgraded to a batch |
+| A.4 webhook shape | `functions/test/handlers/stripeWebhook.test.mjs:80-81` updated to the new document shape, and a cancellation-path assertion alongside it |
 | A.2 | Re-run the tenant census after deploy; assert FXCC's subscription document is byte-identical |
 | Regression | Full `npm test`, `npm run test:rules`, and the E2E suite against the Firebase test tenant |
 
@@ -606,7 +639,32 @@ module before any behavior changes.** The grep gate demotes to a check. If round
 3 finds another missed consumer, that is evidence the consolidation step should
 come earlier still — not that the list needs another entry.
 
-**Not yet reviewed:** rev 3.
+### Round 3 — Codex, 2026-09-16 (`gpt-5.6-terra`), verdict **REWORK**
+
+Three blockers and four gaps — but two of the "gaps" were **confirmations**, and
+one blocker caught the plan introducing a bug rather than omitting a site. The
+shape changed, which is itself a signal that A.4.0 addressed the right thing.
+
+| # | Finding | Disposition in rev 4 |
+|---|---|---|
+| B9 | A.3 cannot ship alone while announcing $5: checkout is still wired to the $15/$150 IDs, so it would email a product that cannot be bought | A.3 §1 — the phase-1 emails become **model-neutral**; pricing is announced in phase 2, with the prices |
+| B10 | A.4.0's inventory omits `hubs` itself; the webhook **writes** it at `:928-939` and `:966-978`, so consolidation could not prove the old shape unused | A.4.0 — `hubs` row added, targeting load-bearing writers/readers rather than the noisy string; A.4 §1 now specifies what the webhook writes |
+| B11 | **Part C would have caused a regression.** `useSupply` is a `runTransaction` (`:604-620`); the specified `writeBatch` discards the read-modify-write guarantee and reintroduces lost updates | C.2 — two sites batch, supply consumption puts its audit **inside the existing transaction**. Also fixed the three-vs-five inconsistency rev 3 left behind |
+| G6 | `stripeWebhook.test.mjs:80-81` asserts the legacy `hubs`/`freeHubsSelected` state | A.4 §1 + verification table |
+| G7 | Add a supply-contention fixture: two concurrent `useSupply` against quantity 1 | Adopted verbatim into the verification table |
+| G8 | *Confirmation:* the Timestamp-before-String conclusion is sound; the November date is a data projection, not code-verifiable | Finding 2 reworded to separate the measured 81% from the projected date |
+| G9 | *Confirmation:* no concrete cross-tenant or privilege-escalation harm from A.1(i)'s raw SDK writes; residual is accepted unpaid own-tenant use | **Review-focus question 2 is answered. A.1(i) stands as written** |
+
+**What rev 3's structural change bought.** Rounds 1 and 2 each found consumers
+the plan had missed — the same failure, twice. Round 3 found **one** such
+omission (`hubs`), and spent the rest of its budget on things a list could never
+have caught: a phase-ordering contradiction, a concurrency regression, and two
+confirmations. That is the review moving from "your inventory is wrong" to "your
+engineering is wrong", which is where it should have been at round 1.
+
+**Not yet reviewed:** rev 4. The open question for round 4 is narrow: with
+`hubs` added, is the A.4.0 inventory now closed, and does the three-mechanism
+Part C hold?
 
 ---
 
