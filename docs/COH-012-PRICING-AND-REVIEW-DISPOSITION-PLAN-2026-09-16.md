@@ -4,7 +4,11 @@
 - Owner: Product owner (John)
 - Implementation: Claude (DEC-2026-011)
 - Reviewer: Codex (plan review before implementation)
-- Status: **rev 7 (2026-09-17) — A.3 SHIPPED; round 5 closed; A.4.0 next.**
+- Status: **rev 8 (2026-09-17) — A.3, A.4.0a/b, A.4.1–A.4.5 SHIPPED + DEPLOYED.
+  A.5 (public copy + Terms notice email) and Part B next.** See "A.4 as shipped"
+  below for the two calls made during implementation that the plan did not
+  anticipate.
+- Prior: rev 7 (2026-09-17) — A.3 SHIPPED; round 5 closed; A.4.0 next.**
   Owner decisions taken 2026-09-16 + 2026-09-17 (see "Owner decisions" below);
   DEC-2026-021 + DEC-2026-022 recorded in `docs/DECISIONS.md` (`397f090`). Five
   Codex rounds, all REWORK, all findings verified and closed — see "Review
@@ -390,7 +394,43 @@ the rest slips.
 `processTrialExpirations` schedule. No church loses anything (Highland has zero
 data); no stranger receives a false claim.
 
-### A.4 Phase 2 — collapse the entitlement model
+### A.4 as shipped — 2026-09-17, five commits, all deployed
+
+| Commit | What | Verified |
+|---|---|---|
+| `e47b99f` A.4.1 | Flat predicate in one module + generated twin; 18-fixture matrix incl. every legacy shape; `jobsHubActive()` rewritten and **rules deployed same day** (B14 closed 13 days before Highland's expiry); AGENTS.md invariant in the same commit; **TrueNorth grandfathered** (owner #9) | unit 174 / handlers 94 / rules 160 |
+| `2b46b9c` A.4.2 | $5/$50 prices created on the ChurchOpsHub product; only `flat_*` purchasable; legacy events normalized; `paidAt`/`canceledAt` from Stripe timestamps (the re-delivery idempotency test caught a clock write) | handlers 101; invoker probe |
+| `d2e8de0` A.4.3 | No paywall on hubs; `LapsedBanner` + `SubscribeButton` replace `UpgradeGate`; hub grid all Included; flat signup shape + rules pin on the self-created doc; Settings per state | **browser: lapsed / trialing / paid all rendered** in the emulator sandbox |
+| `c70ef8e` A.4.4 | Create guard on 15 store paths → modal; `lookupChurchByCode` refuses a lapsed church; recurring generator uses `canCreate`; `jobSignUp` allows a lapsed church | **browser, real gestures:** create blocked + nothing written; complete an existing task succeeds |
+| A.4.5 | `BUSINESS_MODEL.md` rewritten; DEC-2026-020 clause annotated; this section | — |
+
+**Two calls the plan did not anticipate, made during implementation:**
+
+1. **`hasHub` is not the billing state.** The plan said `hasHub` becomes
+   `grandfathered || trialing || paid`. Combined with owner #3 ("they can't
+   add more"), that was a contradiction: `hasHub` false hides whole hubs
+   (`UpgradeGate`, `userCanSeeHub`, `attention.js`, Event Day), which is a
+   paywall, not "finish what you started". Shipped: `hasHub(sub)` = "a
+   subscription document exists" — a lapsed church HAS every hub;
+   `isEntitled()` carries billing and `canCreate()` carries day-91. Only the
+   one server consumer that *creates* (`generateRecurringTemplateTasks`)
+   switched to `canCreate`; sign-ups, reminders, feeds and digests keep
+   running for a lapsed church. A.1(i)'s phrase "its callables refuse" is
+   therefore narrower than written: they refuse *creates*.
+2. **Rules gate Jobs *create* only.** `canUseJobsHub` (reads, swap requests)
+   and the update/delete rules on listings and announcements no longer test
+   entitlement — a lapsed church must still see Saturday's job, sign up, mark
+   attendance and clean up. The pin test names this. Also added, unplanned:
+   the signup `create` on `config/subscription` now pins the trial shape (a
+   self-created document could previously be born `grandfathered: true`).
+
+**Verification scope, stated:** rendered and gestured in the emulator sandbox
+(one church, one admin, the Work hub); not exercised in production, not on a
+phone, not as a non-admin member. The Stripe checkout was not driven to a
+real session. Highland's 09-30 expiry is the first production exercise of the
+lapsed path — watch it.
+
+### A.4 Phase 2 — collapse the entitlement model (as planned, rev 7)
 
 1. **Stripe.** Add `$5/mo` and `$50/yr` price IDs. Retain `pro_monthly` /
    `pro_annual` in `PRICE_IDS` for webhook resolution exactly as the legacy

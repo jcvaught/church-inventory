@@ -1044,7 +1044,9 @@ the new-church activation checklist, landing-page positioning, pricing
 experimentation, the post-trial two-free-hubs question, and SaaS entitlement
 automation. Trial/entitlement *regression coverage* stays low-but-not-zero: the
 five non-FXCC tenants still exercise non-grandfathered paths, and Inventory /
-Supplies must remain free.
+Supplies must remain free. *(The "must remain free" clause was superseded by
+DEC-2026-021 on 2026-09-16 and the code followed on 2026-09-17 — COH-012 A.4.
+The rest of this decision stands.)*
 
 **What it promotes.** The threat model inverts. The realistic adversary is not
 an anonymous attacker across a tenant boundary but **an ordinary member or

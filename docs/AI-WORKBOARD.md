@@ -23,12 +23,12 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-012 — Flat pricing, entitlement collapse, review disposition
 
-- Status: **A.3 SHIPPED 2026-09-16 (`1521053`). A.4.0a + A.4.0b SHIPPED +
-  DEPLOYED 2026-09-17 (`bb3a58c`, `e4fa3cd`; functions redeployed, invoker
-  probe clean; `identifyItem` stayed on its old revision — the known
-  ANTHROPIC_API_KEY collision, backlog item 9, unrelated). Plan at rev 7.
-  A.4 NEXT — needs two new Stripe prices ($5/mo, $50/yr) before the
-  checkout/webhook work; rules must deploy before 2026-09-30 (B14).**
+- Status: **A.3 + A.4 (0a, 0b, 1–5) SHIPPED + DEPLOYED 2026-09-17** — web,
+  rules and functions all live; TrueNorth grandfathered; $5/$50 prices live in
+  Stripe. Plan at rev 8. **A.5 (public copy: landing, Help, blog, Terms +14d
+  notice email, What's New) and Part B (insights digest timestamp lanes)
+  NEXT.** `identifyItem` still on its old revision (known ANTHROPIC_API_KEY
+  collision, backlog item 9, unrelated).
 - Plan: `docs/COH-012-PRICING-AND-REVIEW-DISPOSITION-PLAN-2026-09-16.md` (rev 7)
 - Decisions: DEC-2026-021 (flat $5 model), DEC-2026-022 (review disposition);
   owner #8 (Terms notice: email on A.5 ship day, effective +14d) and #9
@@ -39,14 +39,11 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   **2026-09-30**), a fourth inventory miss (B15 — table retired for
   `scripts/entitlement-inventory.sh`), and that "repoint SettingsPage,
   behavior-preserving" was a contradiction (B17 — A.4.0 split into 0a/0b).
-- **Next action:** A.4 — the model change, in `src/lib/entitlement.js` +
-  twin first (new-shape matrix in `entitlement.test.mjs`), then §1 Stripe
-  (new price IDs + legacy normalization), §2 both checkout callers, §3
-  `free: true` deletion, §5 church creation, §6 trial banner, §7 rules
-  (deploy **before 09-30**), §8 client copy. TrueNorth grandfather write
-  executes with the A.4 deploy (owner #9).
-- **Owner write, approved:** grandfather TrueNorth
-  (`Nxy6GTxK0bhuDy97lWFCwECmWg43-church`) — executes with the A.4 deploy.
+- **Next action:** A.5 — generated copy inventory (44 sites / 9 files at
+  rev 5; regenerate), Terms edit with effective date = ship + 14d, notice
+  email drafted and sent on ship day (owner #8). Then Part B.
+- **Owner write, DONE 2026-09-17:** TrueNorth grandfathered
+  (`Nxy6GTxK0bhuDy97lWFCwECmWg43-church`, `trialWarningEmailSentAt` preserved).
 - **Independent of all of the above:** Part B — `sendWeeklyInsightsDigest`
   (`functions/index.js:2308`) filters a Timestamp field with a string and is
   computing over 173 of FXCC's 213 in-window activity rows. FXCC-facing,
