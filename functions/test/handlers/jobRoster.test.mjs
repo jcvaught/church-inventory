@@ -63,10 +63,19 @@ test('jobSignUp: no Jobs Hub access for the user → permission-denied', async (
     (e) => e.code === 'permission-denied');
 });
 
-test('jobSignUp: church does not have the Jobs Hub active → failed-precondition', async () => {
+test('jobSignUp: a LAPSED church still signs up for an existing job (COH-012 — finish what it started)', async () => {
   const { churchId, jobDocId } = ids();
   await db().doc(`churches/${churchId}`).set({ name: 'X' });
-  await db().doc(`churches/${churchId}/config/subscription`).set({ plan: 'free', hubs: [] });
+  await db().doc(`churches/${churchId}/config/subscription`).set({ plan: 'free', status: 'active', trialEndsAt: '2026-08-12T00:00:00Z', trialExpiredAt: '2026-08-13T00:00:00Z', grandfathered: false });
+  await seedJob(churchId, jobDocId, { spotsTotal: 2 });
+  await seedUser(churchId, 'u1', { name: 'Alice' });
+  const res = await call('jobSignUp', 'u1', { churchId, jobDocId });
+  assert.deepEqual(res, { success: true });
+});
+
+test('jobSignUp: church with NO subscription document → failed-precondition', async () => {
+  const { churchId, jobDocId } = ids();
+  await db().doc(`churches/${churchId}`).set({ name: 'X' });
   await seedJob(churchId, jobDocId);
   await seedUser(churchId, 'u1', { role: 'admin' });   // admin → effectiveHasHub true, so we hit the sub gate
   await assert.rejects(() => call('jobSignUp', 'u1', { churchId, jobDocId }),

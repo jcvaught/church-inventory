@@ -84,7 +84,7 @@ async function main() {
   let firstTaskRef;
   for (const t of tasks) {
     const ref = C('workItems').doc(`task_${C('workItems').doc().id}`);
-    await ref.set({ ...t, type: 'task', description: '', assignees: me, visibility: 'team', tags: [], checklist: [], createdBy: uid, createdByName: 'Test Admin', createdAt: NOW, sortOrder: 0 });
+    await ref.set({ ...t, type: 'task', archived: false, archivedAt: null, description: '', assignees: me, assigneeUids: [uid], sharedWithUids: [], visibility: 'team', tags: [], checklist: [], createdBy: uid, createdByName: 'Test Admin', createdAt: NOW, sortOrder: 0 });
     firstTaskRef ||= ref;
   }
   // One comment so the Work-unification migration's comment-copy path is exercised.
@@ -99,7 +99,7 @@ async function main() {
   let firstTicketRef;
   for (const t of tickets) {
     const ref = C('workItems').doc(`mnt_${C('workItems').doc().id}`);
-    await ref.set({ ...t, type: 'maintenance', description: '', assignees: me, tags: [], createdBy: uid, createdByName: 'Test Admin', createdAt: NOW });
+    await ref.set({ ...t, type: 'maintenance', archived: false, description: '', assignees: me, tags: [], createdBy: uid, createdByName: 'Test Admin', createdAt: NOW });
     firstTicketRef ||= ref;
   }
   await firstTicketRef.collection('comments').add({ text: 'Ordered the replacement filter.', authorId: uid, authorName: 'Test Admin', createdAt: NOW });

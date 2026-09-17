@@ -677,7 +677,16 @@ exports.lookupChurchByCode = onCall({ cors: true }, async (req) => {
   const db = getFirestore();
   const snap = await db.collection('churches').where('churchCode', '==', code).limit(1).get();
   if (snap.empty) return { found: false };
-  return { found: true, churchId: snap.docs[0].id };
+  const churchId = snap.docs[0].id;
+  // COH-012 A.4.4: joining is adding a member, and a lapsed church can't add
+  // more (owner #3). The code still resolves — the caller is told WHY it
+  // cannot join, and who can fix it. Failed-precondition, so the client can
+  // tell this apart from a bad code or a transport failure.
+  const subSnap = await db.doc(`churches/${churchId}/config/subscription`).get();
+  if (!entitlement.canCreate(subSnap.exists ? subSnap.data() : null)) {
+    throw new HttpsError('failed-precondition', "This church's 90 days are up and it isn't subscribed yet, so new members can't join. Ask a church admin to subscribe in Settings, then try again.");
+  }
+  return { found: true, churchId };
 });
 
 // ── getPublicJobs ─────────────────────────────────────────────────────────
@@ -1201,7 +1210,10 @@ exports.icsCalendarFeed = onRequest({ cors: true, invoker: 'public' }, async (re
 // twin of src/lib/entitlement.js — one copy, pinned by
 // functions/test/entitlement.test.mjs. This wrapper keeps the call sites stable.
 function subHasHub(sub, hubName) {
-  return entitlement.hasHub(sub, hubName);
+  // Call sites pass `snap.data() || {}`; a church with no subscription
+  // document is a broken tenant, not an entitled one — treat `{}` as absent.
+  const doc = sub && typeof sub === 'object' && Object.keys(sub).length > 0 ? sub : null;
+  return entitlement.hasHub(doc, hubName);
 }
 
 // F-21: unified per-user hub access check.

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   doc, setDoc, getDoc, deleteDoc, getDocs,
   collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction, writeBatch, startAfter,
@@ -76,7 +76,17 @@ function newTicketDocRef(churchId) {
   return { ref: doc(db, 'churches', churchId, 'workItems', `mnt_${id}`), id };
 }
 
-export function useFirestore(churchId, userProfile) {
+// COH-012 A.4.4 — the day-91 rule at the write layer. App passes
+// `{ canCreate, onCreateBlocked }`; every store function that STARTS something
+// new (an item, a task, a reservation, a job…) asks first. Reads, updates,
+// completions, comments, returns and time entries are never gated — a lapsed
+// church finishes what it started (owner decision #3). Held in a ref so the
+// store functions keep stable identities across subscription updates.
+// This is the client half; firestore.rules gates Jobs create and the
+// callables gate their own creates. Entitlement is not a security boundary.
+export function useFirestore(churchId, userProfile, createGuard = null) {
+  const createGuardRef = useRef(createGuard);
+  createGuardRef.current = createGuard;
   const [settings, setSettings] = useState(null);
   const [config, setConfig] = useState(null);
   const [items, setItems] = useState([]);
@@ -104,6 +114,14 @@ export function useFirestore(churchId, userProfile) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const clearError = useCallback(() => setError(null), []);
+  // Returns true (and surfaces the lapsed state) when a create must not proceed.
+  function createBlocked(what) {
+    const g = createGuardRef.current;
+    if (!g || typeof g.canCreate !== 'function' || g.canCreate()) return false;
+    setError(`Your 90 days are up — subscribe to add a new ${what}.`);
+    try { g.onCreateBlocked?.(what); } catch { /* presentation only */ }
+    return true;
+  }
 
   function handleErr(err, ctx = {}) {
     // Transient real-time-listener errors (2026-06-11): Firestore onSnapshot
@@ -478,6 +496,7 @@ export function useFirestore(churchId, userProfile) {
 
   // ── Items ──
   const addItem = useCallback(async (item, userId, _userName) => {
+    if (createBlocked('item')) return;
     try {
       const ref = await addDoc(collection(db, 'churches', churchId, 'items'), {
         ...item,
@@ -591,6 +610,7 @@ export function useFirestore(churchId, userProfile) {
 
   // ── Supplies ──
   const addSupply = useCallback(async (supply, userId, _userName) => {
+    if (createBlocked('supply')) return;
     try {
       await addDoc(collection(db, 'churches', churchId, 'supplies'), {
         ...supply,
@@ -681,6 +701,7 @@ export function useFirestore(churchId, userProfile) {
 
   // ── Reservations ──
   const addReservation = useCallback(async (res, userId, userName) => {
+    if (createBlocked('reservation')) return;
     try {
       await addDoc(collection(db, 'churches', churchId, 'reservations'), {
         ...res,
@@ -713,6 +734,7 @@ export function useFirestore(churchId, userProfile) {
 
   // ── Maintenance Tickets ──
   const addTicket = useCallback(async (ticket, userId, userName) => {
+    if (createBlocked('maintenance ticket')) return;
     try {
       // Atomic ticket numbering + doc create via one transaction on config/main.
       // The doc is minted in `workItems` (id `mnt_<bare>`, with a
@@ -800,6 +822,7 @@ export function useFirestore(churchId, userProfile) {
 
   // ── Tasks ──
   const addTask = useCallback(async (task, userId, userName) => {
+    if (createBlocked('task')) return;
     try {
       // The doc is minted in `workItems` (id `task_<bare>`, with a
       // `type: 'task'` discriminator); the bare id is returned for linking.
@@ -994,6 +1017,7 @@ export function useFirestore(churchId, userProfile) {
 
   // ── Task Templates ──
   const addTaskTemplate = useCallback(async (template, userId, userName) => {
+    if (createBlocked('task template')) return;
     try {
       const ref = await addDoc(collection(db, 'churches', churchId, 'taskTemplates'), {
         ...template,
@@ -1014,6 +1038,7 @@ export function useFirestore(churchId, userProfile) {
 
   // ── Bundles ──
   const addBundle = useCallback(async (bundle, userId, userName) => {
+    if (createBlocked('bundle')) return;
     try {
       await addDoc(collection(db, 'churches', churchId, 'bundles'), {
         ...bundle,
@@ -1045,6 +1070,7 @@ export function useFirestore(churchId, userProfile) {
 
   // ── Audits ──
   const addAudit = useCallback(async (audit, userId, userName) => {
+    if (createBlocked('audit')) return;
     try {
       await addDoc(collection(db, 'churches', churchId, 'audits'), {
         ...audit,
@@ -1088,6 +1114,7 @@ export function useFirestore(churchId, userProfile) {
 
   // ── Vendors ──
   const addVendor = useCallback(async (vendor) => {
+    if (createBlocked('vendor')) return;
     try {
       await addDoc(collection(db, 'churches', churchId, 'vendors'), {
         ...vendor,
@@ -1110,6 +1137,7 @@ export function useFirestore(churchId, userProfile) {
 
   // ── Rooms/Spaces ──
   const addRoom = useCallback(async (room) => {
+    if (createBlocked('space')) return;
     try {
       const ref = await addDoc(collection(db, 'churches', churchId, 'rooms'), {
         ...room,
@@ -1144,6 +1172,7 @@ export function useFirestore(churchId, userProfile) {
 
   // ── Access People ──
   const addAccessPerson = useCallback(async (person, userId) => {
+    if (createBlocked('person')) return;
     try {
       await addDoc(collection(db, 'churches', churchId, 'accessPeople'), {
         ...person,
@@ -1226,6 +1255,7 @@ export function useFirestore(churchId, userProfile) {
   }, [churchId]);
 
   const addPeopleAccessRequirement = useCallback(async (requirement) => {
+    if (createBlocked('requirement')) return;
     try {
       await updateDoc(doc(db, 'churches', churchId, 'config', 'settings'), {
         peopleAccessRequirements: arrayUnion(requirement)
@@ -1264,6 +1294,7 @@ export function useFirestore(churchId, userProfile) {
 
   // ── Job Hub ──
   const addJobListingSeries = useCallback(async (job, recurrenceFreq, seriesEndDate, userId, userName) => {
+    if (createBlocked('job')) return;
     try {
       const dates = generateRecurrenceDates(job.scheduledDate, recurrenceFreq, seriesEndDate);
       if (dates.length === 0) throw new Error('No dates generated. Check recurrence end date.');
@@ -1301,6 +1332,7 @@ export function useFirestore(churchId, userProfile) {
   }, [churchId]);
 
   const addJobListing = useCallback(async (job, userId, userName) => {
+    if (createBlocked('job')) return;
     try {
       const configRef = doc(db, 'churches', churchId, 'config', 'main');
       const newDocRef = doc(collection(db, 'churches', churchId, 'jobListings'));
@@ -1590,6 +1622,7 @@ export function useFirestore(churchId, userProfile) {
   }, [churchId]);
 
   const addJobAnnouncement = useCallback(async (ann, userId, userName) => {
+    if (createBlocked('announcement')) return;
     try {
       const ref = await addDoc(collection(db, 'churches', churchId, 'jobAnnouncements'), {
         ...ann,

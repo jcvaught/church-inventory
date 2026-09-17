@@ -31,6 +31,7 @@ import { RES_STATUS } from './utils/constants.js';
 import { useGlobalBanner } from './hooks/useGlobalBanner.js';
 import { GlobalBanner } from './components/GlobalBanner.jsx';
 import { LapsedBanner } from './components/primitives/LapsedBanner.jsx';
+import { Modal } from './components/primitives/Modal.jsx';
 import { PRICE } from './lib/entitlement.js';
 import { GlobalSearch } from './components/GlobalSearch.jsx';
 import { NotificationBell } from './components/NotificationBell.jsx';
@@ -518,8 +519,11 @@ function AppShell({ authHook }) {
   const [resentVerify, setResentVerify] = useState(false);
   const [elderUnverifiedBannerDismissed, setElderUnverifiedBannerDismissed] = useState(false);
   const [elderVerifyResent, setElderVerifyResent] = useState(false);
-  const store = useFirestore(userProfile.churchId, userProfile);
-  const { subscription, loading: subscriptionLoading, hasHub, canAddUser, isTrialing, isLapsed, trialDaysRemaining } = useSubscription(userProfile.churchId);
+  const { subscription, loading: subscriptionLoading, hasHub, canAddUser, canCreate, isTrialing, isLapsed, trialDaysRemaining } = useSubscription(userProfile.churchId);
+  // COH-012 A.4.4: what a blocked create was trying to add ('task', 'item'…);
+  // non-null opens the lapsed modal. The store calls back through the guard.
+  const [createBlocked, setCreateBlocked] = useState(null);
+  const store = useFirestore(userProfile.churchId, userProfile, { canCreate, onCreateBlocked: setCreateBlocked });
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false);
   // Volunteers (role:user, allowedHubs=['jobs']) get a jobs-first shell — see
   // isVolunteerOnly. Shepherd Hub is FXCC-only, gated by the elder custom
@@ -1002,6 +1006,9 @@ function AppShell({ authHook }) {
       {showScanner && <BarcodeScanner onScan={handleScan} onClose={() => setShowScanner(false)} />}
       {showSearch && <GlobalSearch store={store} canSeeHub={userCanSeeHub} onNavigate={handleSearchNav} onClose={() => setShowSearch(false)} />}
       {showWhatsNew && <WhatsNewModal onClose={() => setShowWhatsNew(false)} />}
+      <Modal open={!!createBlocked} onClose={() => setCreateBlocked(null)} title={`Can't add a new ${createBlocked || 'record'} yet`}>
+        <LapsedBanner isAdmin={userProfile?.role === 'admin'} source={'blocked_' + (createBlocked || 'create')} onGoToSettings={() => { setCreateBlocked(null); setTab('settings'); }} />
+      </Modal>
       <InstallPrompt />
 
       {showOnboarding && (() => {

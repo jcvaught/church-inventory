@@ -71,6 +71,13 @@ async function findChurchByCode(churchCode) {
     const res = await fn({ code });
     return res.data?.found ? res.data.churchId : null;
   } catch (err) {
+    // COH-012 A.4.4: the church exists but is lapsed — the server's message
+    // says what to do; pass it through untouched, and don't page Sentry.
+    if (err?.code === 'functions/failed-precondition') {
+      const lapsed = new Error(err.message);
+      lapsed.code = 'church-lapsed';
+      throw lapsed;
+    }
     // S-9: distinguish "code doesn't exist" (returns null) from
     // "lookup failed" (throws). Previously both returned null, so users
     // saw "Invalid church code" during transient CF outages even when
