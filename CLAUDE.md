@@ -169,7 +169,7 @@ src/
 │   │   ├── DataTableDisclosure.jsx ← Screen-reader fallback for Recharts SVGs: renders `<details>` with a real `<table>` of the underlying data. Applied to every chart in InsightsPage (audit 2026-05-24 Phase 1)
 │   │   ├── StatusDot.jsx      ← Colored dot + accessible label (visible or sr-only) for status indicators; default role="img" + aria-label. Stops color-only conveyance (audit 2026-05-24 Phase 4)
 │   │   ├── EmojiIcon.jsx      ← Wraps an emoji in either decorative (aria-hidden) or semantic (role="img" + aria-label) mode. Use whenever an emoji appears in JSX (audit 2026-05-24 Phase 4)
-│   │   └── UpgradeGate.jsx    ← Paywall component; shows upgrade card when hub inactive. Optional `previewSrc`/`previewAlt` renders a hub screenshot above the card with a `mask-image` bottom fade (audit 2026-05-24 Phase 6). Subscribe + Contact buttons fire `window.posthog?.capture('upgrade_gate_click', { hubName, action })` — telemetry is try/catch'd so it never blocks Stripe checkout. JPEG previews live in `public/upgrade-previews/<hub>.jpg`.
+│   │   └── LapsedBanner.jsx / SubscribeButton.jsx ← COH-012: the day-91 state (app strip, in-hub card, blocked-create modal) and the one checkout path. Replaced UpgradeGate (a full-hub paywall), which no longer exists. Formerly: Optional `previewSrc`/`previewAlt` renders a hub screenshot above the card with a `mask-image` bottom fade (audit 2026-05-24 Phase 6). Subscribe + Contact buttons fire `window.posthog?.capture('upgrade_gate_click', { hubName, action })` — telemetry is try/catch'd so it never blocks Stripe checkout. JPEG previews live in `public/upgrade-previews/<hub>.jpg`.
 │   ├── SEO.jsx                ← Reusable SEO component (react-helmet-async); sets title, description, canonical, OG tags, Twitter card, JSON-LD
 │   ├── UpdateBanner.jsx       ← "Update available — Reload / Later" card (bottom corner, clears mobile nav); shows when useVersionCheck detects a newer deploy. Mounted once in main.jsx (out of the anonymous ?jobs= path)
 │   └── AttentionPanel.jsx     ← Admin-only Dashboard panel; calls getAttentionDigest (AI "what needs attention this week") and renders summary + priority-tagged items + Refresh. The CF caches weekly; this just renders.
@@ -288,16 +288,18 @@ Full collection schemas and Firestore rules summary: `docs/DATA_MODEL.md`. Quick
 
 ## Business Model — Flat Pricing (2026-06-15)
 
-**"The stuff is free, what you do with the stuff is paid."** The 8-hub à-la-carte matrix (+ $29 All-In bundle + Team seat tiers) was collapsed into **one flat plan** on 2026-06-15:
+**One plan (DEC-2026-021, shipped 2026-09-17 — COH-012 A.4).** Every church gets 90 days of everything, then ChurchOpsHub is **$5/mo or $50/yr for everything**. No free tier, no per-hub purchase, no seat cap.
 
-| Tier | Users | What | Price |
-|------|-------|------|-------|
-| **Free** | 10 | Inventory + Supplies + Reservations + Activity Log (forever) | $0 |
-| **ChurchOpsHub** | Unlimited | Every paid hub (Maintenance, Insights, Coordination, Accountability, People Access, Tasks, Jobs) | **$15/mo** or **$150/yr** |
+| State | What |
+|---|---|
+| **First 90 days** | Every hub, unlimited members, $0 |
+| **ChurchOpsHub** | Every hub, unlimited members — `flat_monthly` `price_1UGntiF12bDL8YA7UjdhSqFf` ($5), `flat_annual` `price_1UGntiF12bDL8YA7ldky35B4` ($50), product `prod_Ui4uQaH7X8iO9O` |
+| **Lapsed** (day 91, unsubscribed) | *"They can't add more"* — keeps every hub and finishes what it started; cannot create an item/task/reservation/job/… or add a member |
 
-- `plan: 'pro'` is the flat plan; client `hasHub()` + server `subHasHub()` short-circuit `plan==='pro'||'all_in'` → all hubs. Stripe: `pro_monthly` `price_1TiekxF12bDL8YA7j1uH1X1i`, `pro_annual` `price_1TiekyF12bDL8YA7Z0BTmiHD` (product `prod_Ui4uQaH7X8iO9O`).
-- Legacy per-hub/`all_in`/team price IDs are retired but kept mapped in `functions/index.js` for historical webhook resolution. 0 paying churches at cutover → no payer migration. `grandfathered:true` (FXCC + e2e-test-church) still overrides everything.
-- 90-day trial of all paid features unchanged. Feature gating via `useSubscription` + `UpgradeGate`. `allowedHubs[]` is decoupled from billing (per-user access only). See `docs/BUSINESS_MODEL.md` for the full schema, Stripe IDs, grandfathering, and gating details.
+- `src/lib/entitlement.js` is the ONE implementation (`functions/lib/entitlement.js` is generated — `python3 scripts/entitlement-twin.py`; `functions/test/entitlement.test.mjs` pins twin ≡ client ≡ rules Jobs gate over 18 fixtures). States are derived, never stored: `grandfathered` · `trialing` (`status=='trialing'` + `trialEndsAt` future) · `paid` (`plan=='flat'` + `status` active/past_due) · `lapsed`. **`hasHub()` = "a subscription doc exists"** (a lapsed church has every hub); `isEntitled()` is billing; `canCreate()` is day-91.
+- Enforcement: client (`useFirestore` create guard → `LapsedBanner` modal; 15 store creates), callables (`lookupChurchByCode` refuses joins, `generateRecurringTemplateTasks` skips), rules (Jobs **create** only; signup can create `config/subscription` only in the trial shape). Entitlement is not a security boundary (AGENTS.md).
+- `LapsedBanner` + `SubscribeButton` are the only paywall/checkout surfaces (`UpgradeGate` is gone). `createCheckoutSession` accepts only `flat_*`; legacy price IDs stay mapped for webhook resolution and are normalized to the flat shape on arrival. Legacy doc fields (`hubs`, `trialHubs`, `freeHubsSelected`, `maxUsers`, `plan: 'pro'|'all_in'|'team_*'`) are no longer read; documents are not rewritten.
+- `grandfathered: true` (FXCC, TrueNorth, e2e-test-church) is entitled in every state. `allowedHubs[]` is per-user access only; billing never reads it. `scripts/entitlement-inventory.sh` prints every consumer of the model. See `docs/BUSINESS_MODEL.md`.
 
 ## Project History
 
