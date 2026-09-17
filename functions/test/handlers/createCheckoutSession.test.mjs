@@ -22,7 +22,7 @@ async function seedSub(churchId, data) {
 
 test('unauthenticated → unauthenticated', async () => {
   await assert.rejects(
-    () => funcs.createCheckoutSession.run(mockCallable(null, { item: 'pro_monthly' })),
+    () => funcs.createCheckoutSession.run(mockCallable(null, { item: 'flat_monthly' })),
     (e) => e.code === 'unauthenticated',
   );
 });
@@ -37,10 +37,20 @@ test('unconfigured price item → failed-precondition', async () => {
   );
 });
 
+test('LEGACY item (pro_monthly) → failed-precondition: a stale client cannot start a $15 checkout', async () => {
+  const u = uid();
+  await seedUser(u, `${u}-church`, { role: 'admin' });
+  installStripeStub({});
+  await assert.rejects(
+    () => funcs.createCheckoutSession.run(mockCallable(u, { item: 'pro_monthly' })),
+    (e) => e.code === 'failed-precondition',
+  );
+});
+
 test('missing user profile → not-found', async () => {
   installStripeStub({});
   await assert.rejects(
-    () => funcs.createCheckoutSession.run(mockCallable('ghost-user', { item: 'pro_monthly' })),
+    () => funcs.createCheckoutSession.run(mockCallable('ghost-user', { item: 'flat_monthly' })),
     (e) => e.code === 'not-found',
   );
 });
@@ -50,7 +60,7 @@ test('non-admin caller → permission-denied (C-02 billing gate)', async () => {
   await seedUser(u, `${u}-church`, { role: 'user' });
   installStripeStub({});
   await assert.rejects(
-    () => funcs.createCheckoutSession.run(mockCallable(u, { item: 'pro_monthly' })),
+    () => funcs.createCheckoutSession.run(mockCallable(u, { item: 'flat_monthly' })),
     (e) => e.code === 'permission-denied',
   );
 });
@@ -63,14 +73,14 @@ test('admin happy path → returns checkout url with correct price + churchId me
   installStripeStub({ checkoutUrl: 'https://stripe.test/checkout/cs_ok', onCheckout: (p) => { captured = p; } });
 
   const out = await funcs.createCheckoutSession.run(mockCallable(u, {
-    item: 'pro_monthly',
+    item: 'flat_monthly',
     successUrl: 'https://churchopshub.com/?paid=1',
     cancelUrl: 'https://churchopshub.com/?cancel=1',
   }));
 
   assert.equal(out.url, 'https://stripe.test/checkout/cs_ok');
   assert.equal(captured.mode, 'subscription');
-  assert.equal(captured.line_items[0].price, 'price_1TiekxF12bDL8YA7j1uH1X1i');
+  assert.equal(captured.line_items[0].price, 'price_1UGntiF12bDL8YA7UjdhSqFf'); // the $5 price, not pro_monthly
   assert.equal(captured.metadata.churchId, churchId);
   assert.equal(captured.subscription_data.metadata.churchId, churchId);
   assert.equal(captured.success_url, 'https://churchopshub.com/?paid=1');
@@ -82,7 +92,7 @@ test('disallowed redirect origin is replaced with the canonical site URL', async
   let captured;
   installStripeStub({ onCheckout: (p) => { captured = p; } });
   await funcs.createCheckoutSession.run(mockCallable(u, {
-    item: 'pro_annual',
+    item: 'flat_annual',
     successUrl: 'https://evil.example.com/steal',
     cancelUrl: 'https://churchopshub.com/ok',
   }));
@@ -97,7 +107,7 @@ test('existing stripeCustomerId is reused on the new session', async () => {
   await seedSub(churchId, { stripeCustomerId: 'cus_existing_42', plan: 'free' });
   let captured;
   installStripeStub({ onCheckout: (p) => { captured = p; } });
-  await funcs.createCheckoutSession.run(mockCallable(u, { item: 'pro_monthly' }));
+  await funcs.createCheckoutSession.run(mockCallable(u, { item: 'flat_monthly' }));
   assert.equal(captured.customer, 'cus_existing_42');
 });
 

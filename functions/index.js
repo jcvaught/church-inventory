@@ -437,15 +437,18 @@ const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
 // Run: firebase functions:config:set is no longer used in v2.
 // Instead set secrets: firebase functions:secrets:set STRIPE_SECRET_KEY
 // And put price IDs directly here (they are not sensitive).
-// The single flat "ChurchOpsHub" plan (2026-06-15 pricing flatten): $15/mo or
-// $150/yr unlocks every paid hub + unlimited users. `pro` is the new checkout
-// path. The legacy per-hub / team / all_in ids below are kept ONLY so existing
-// webhooks resolve (no church is on them); they are no longer offered for purchase.
-const PRO_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'tasks', 'people_access', 'jobs'];
+// COH-012 A.4 (DEC-2026-021): ONE plan — ChurchOpsHub, $5/mo or $50/yr for
+// everything. `flat_monthly` / `flat_annual` are the only purchasable items.
+// Every other id below is legacy, retained ONLY so an in-flight webhook still
+// resolves; a legacy event is NORMALIZED to the flat shape on arrival (see
+// getPriceConfig + stripeWebhook). No church has ever been on any of them —
+// zero Stripe customers existed at cutover (plan doc, tenant census).
 const PRICE_IDS = {
-  pro_monthly:    'price_1TiekxF12bDL8YA7j1uH1X1i',  // $15/mo
-  pro_annual:     'price_1TiekyF12bDL8YA7Z0BTmiHD',  // $150/yr
+  flat_monthly:   'price_1UGntiF12bDL8YA7UjdhSqFf',  // $5/mo   (created 2026-09-17)
+  flat_annual:    'price_1UGntiF12bDL8YA7ldky35B4',  // $50/yr  (created 2026-09-17)
   // ── legacy (retired, retained for webhook resolution only) ──
+  pro_monthly:    'price_1TiekxF12bDL8YA7j1uH1X1i',  // $15/mo  (2026-06-15 → 2026-09-17)
+  pro_annual:     'price_1TiekyF12bDL8YA7Z0BTmiHD',  // $150/yr
   maintenance:    'price_1TB2E2F12bDL8YA7Tw4VreQc',
   insights:       'price_1TB2E6F12bDL8YA734z4Q64M',
   coordination:   'price_1TB2E2F12bDL8YA7a0VFGB6C',
@@ -456,24 +459,16 @@ const PRICE_IDS = {
   team_unlimited: 'price_1TB2E3F12bDL8YA7P3a9xTVV',
   all_in:         'price_1TB2E7F12bDL8YA782etfOOQ',
 };
+const CHECKOUT_ITEMS = new Set(['flat_monthly', 'flat_annual']);
 // ──────────────────────────────────────────────────────────────────────────
 
+// Resolves a Stripe price id to what the webhook should write. Under the flat
+// model there is exactly one paid state, so every KNOWN price — current or
+// legacy — resolves to it; `legacy` is carried for logging only. Unknown → null.
 function getPriceConfig(priceId) {
-  const map = {
-    [PRICE_IDS.pro_monthly]:    { type: 'pro',    plan: 'pro', maxUsers: 9999, hubs: PRO_HUBS },
-    [PRICE_IDS.pro_annual]:     { type: 'pro',    plan: 'pro', maxUsers: 9999, hubs: PRO_HUBS },
-    [PRICE_IDS.maintenance]:    { type: 'hub',    hub: 'maintenance' },
-    [PRICE_IDS.insights]:       { type: 'hub',    hub: 'insights' },
-    [PRICE_IDS.coordination]:   { type: 'hub',    hub: 'coordination' },
-    [PRICE_IDS.accountability]: { type: 'hub',    hub: 'accountability' },
-    [PRICE_IDS.tasks]:          { type: 'hub',    hub: 'tasks' },
-    [PRICE_IDS.jobs]:           { type: 'hub',    hub: 'jobs' },
-    [PRICE_IDS.team_25]:        { type: 'team',   plan: 'team_25',        maxUsers: 25 },
-    [PRICE_IDS.team_unlimited]: { type: 'team',   plan: 'team_unlimited', maxUsers: 9999 },
-    [PRICE_IDS.all_in]:         { type: 'all_in', plan: 'all_in',         maxUsers: 9999,
-                                  hubs: ['maintenance', 'insights', 'coordination', 'accountability', 'tasks', 'people_access', 'jobs'] },
-  };
-  return map[priceId] || null;
+  const item = Object.keys(PRICE_IDS).find((k) => PRICE_IDS[k] === priceId);
+  if (!item) return null;
+  return { plan: entitlement.PLAN_FLAT, item, legacy: !CHECKOUT_ITEMS.has(item) };
 }
 
 // ── identifyItem ──────────────────────────────────────────────────────────
@@ -785,9 +780,12 @@ exports.createCheckoutSession = onCall(
     await assertActiveCaller(req); // COH-011
 
     const { item, successUrl, cancelUrl } = req.data;
-    const priceId = PRICE_IDS[item];
-    if (!priceId || priceId === 'price_REPLACE_ME' || priceId.startsWith('price_REPLACE_')) {
-      throw new HttpsError('failed-precondition', `The ${item} price is not configured yet. Please contact support.`);
+    // Only the flat prices are purchasable. A legacy key (pro_monthly, a
+    // per-hub id…) resolves for webhooks but must never start a checkout —
+    // that is how a stale client would keep charging $15 (COH-012 round 2, B7).
+    const priceId = CHECKOUT_ITEMS.has(item) ? PRICE_IDS[item] : null;
+    if (!priceId) {
+      throw new HttpsError('failed-precondition', `The ${item} price is not available. Please reload and try again.`);
     }
 
     const db = getFirestore();
@@ -919,26 +917,21 @@ exports.stripeWebhook = onRequest(
         const priceId = subscription.items.data[0]?.price.id;
         const config = getPriceConfig(priceId);
         if (!config) { res.sendStatus(200); return; }
+        if (config.legacy) console.warn('stripeWebhook: legacy price normalized to flat', { churchId, item: config.item });
 
+        // COH-012 A.4: the flat paid state. `status: 'active'` also exits any
+        // trial — processTrialExpirations selects on status == 'trialing'.
+        // No branch writes hubs / maxUsers / freeHubsSelected any more; the
+        // fields are simply no longer read (src/lib/entitlement.js).
         const update = {
           stripeCustomerId: session.customer,
           stripeSubscriptionId: session.subscription,
           status: 'active',
+          plan: config.plan,
         };
-
-        if (config.type === 'hub') {
-          update.hubs = FieldValue.arrayUnion(config.hub);
-        } else if (config.type === 'team') {
-          update.plan = config.plan;
-          update.maxUsers = config.maxUsers;
-        } else if (config.type === 'all_in' || config.type === 'pro') {
-          update.plan = config.plan;
-          update.maxUsers = config.maxUsers;
-          update.hubs = config.hubs;
-          // A church subscribing exits any trial state — pin freeHubsSelected so
-          // hasHub stops reading the trial branch.
-          update.freeHubsSelected = config.hubs;
-        }
+        // Timestamps come from Stripe, never from the clock: Stripe re-delivers
+        // events, and the same event must produce the same document.
+        if (typeof subscription.created === 'number') update.paidAt = new Date(subscription.created * 1000).toISOString();
 
         await db.doc(`churches/${churchId}/config/subscription`).set(update, { merge: true });
       }
@@ -949,8 +942,13 @@ exports.stripeWebhook = onRequest(
         const churchId = sub.metadata?.churchId;
         if (!churchId) { res.sendStatus(200); return; }
 
+        // Mirror Stripe's status verbatim — entitlement.PAID_STATUSES decides
+        // which of them still count as paid. A known price (legacy included)
+        // also pins plan: 'flat', so a legacy subscription's next lifecycle
+        // event normalizes it rather than leaving it readable as lapsed.
+        const config = getPriceConfig(sub.items?.data?.[0]?.price?.id);
         await db.doc(`churches/${churchId}/config/subscription`).set(
-          { status: sub.status },
+          config ? { status: sub.status, plan: config.plan } : { status: sub.status },
           { merge: true }
         );
       }
@@ -961,23 +959,13 @@ exports.stripeWebhook = onRequest(
         const churchId = sub.metadata?.churchId;
         if (!churchId) { res.sendStatus(200); return; }
 
-        const priceId = sub.items.data[0]?.price.id;
-        const config = getPriceConfig(priceId);
-
-        const update = { status: 'canceled' };
-
-        if (config?.type === 'hub') {
-          update.hubs = FieldValue.arrayRemove(config.hub);
-        } else if (config?.type === 'team') {
-          update.plan = 'free';
-          update.maxUsers = 10;
-        } else if (config?.type === 'all_in' || config?.type === 'pro') {
-          update.plan = 'free';
-          update.maxUsers = 10;
-          update.hubs = [];
-          update.freeHubsSelected = [];
-        }
-
+        // COH-012 A.4: the flat LAPSED-by-cancellation state, whatever the
+        // price was (legacy per-hub cancellations no longer arrayRemove —
+        // there is no per-hub state to remove from). stripeCustomerId stays
+        // so the billing portal keeps working.
+        const update = { status: 'canceled', plan: 'free' };
+        const endedAt = sub.ended_at || sub.canceled_at;
+        if (typeof endedAt === 'number') update.canceledAt = new Date(endedAt * 1000).toISOString();
         await db.doc(`churches/${churchId}/config/subscription`).set(update, { merge: true });
       }
     } catch (err) {

@@ -1,6 +1,8 @@
 // stripeWebhook handler tests — the money ingress. Covers signature gating,
 // the three subscription lifecycle events, churchId/church-existence guards,
-// legacy-hub vs flat-`pro` plan resolution, and idempotent re-delivery.
+// COH-012 A.4 legacy-event NORMALIZATION (every known price → the one flat
+// paid state; every cancellation → the one lapsed state; nothing writes
+// hubs / freeHubsSelected / maxUsers any more), and idempotent re-delivery.
 //
 // Signature verification is REAL (setup signs with the same secret the handler
 // reads); only stripe.subscriptions.retrieve() and the API resource calls are
@@ -12,9 +14,17 @@ import {
   installStripeStub, restoreStripe, WEBHOOK_SECRET,
 } from './setup.mjs';
 
-const PRO_MONTHLY = 'price_1TiekxF12bDL8YA7j1uH1X1i';
+const FLAT_MONTHLY = 'price_1UGntiF12bDL8YA7UjdhSqFf';
+const FLAT_ANNUAL = 'price_1UGntiF12bDL8YA7ldky35B4';
+const LEGACY_PRO_MONTHLY = 'price_1TiekxF12bDL8YA7j1uH1X1i';
 const LEGACY_TASKS = 'price_1TM9kcF12bDL8YA7m3otofk2';
-const PRO_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'tasks', 'people_access', 'jobs'];
+const PRO_MONTHLY = FLAT_MONTHLY; // default price for the generic event helpers below
+const LEGACY_FIELDS = ['hubs', 'freeHubsSelected', 'maxUsers', 'trialHubs'];
+// A write from the webhook must never touch a legacy field — assert on the
+// diff, not the absence, since a seeded doc may legitimately carry them.
+function assertLegacyUntouched(before, after) {
+  for (const f of LEGACY_FIELDS) assert.deepEqual(after[f], before[f], `webhook wrote legacy field ${f}`);
+}
 
 let funcs;
 before(async () => { funcs = await loadFunctions(); });
@@ -40,11 +50,11 @@ function subEvent(type, churchId, { status = 'active', priceId = PRO_MONTHLY } =
   return {
     id: `evt_${type}_${churchId}`,
     type,
-    data: { object: { metadata: { churchId }, status, items: { data: [{ price: { id: priceId } }] } } },
+    data: { object: { metadata: { churchId }, status, ended_at: type.endsWith('deleted') ? 1789603200 : null, items: { data: [{ price: { id: priceId } }] } } },
   };
 }
 // A stripe.subscriptions.retrieve() result with a given price.
-const stripeSub = (priceId) => ({ id: 'sub_1', items: { data: [{ price: { id: priceId } }] } });
+const stripeSub = (priceId) => ({ id: 'sub_1', created: 1789603200, items: { data: [{ price: { id: priceId } }] } });
 
 test('missing stripe-signature header → 400, no Stripe call', async () => {
   installStripeStub({});
@@ -63,23 +73,40 @@ test('invalid signature → 400', async () => {
   assert.match(String(res.body), /Invalid webhook signature/);
 });
 
-test('checkout.session.completed (pro_monthly) → writes active pro subscription', async () => {
-  const churchId = newChurchId();
-  await seedChurch(churchId, { plan: 'free', maxUsers: 10 });
-  installStripeStub({ subscription: stripeSub(PRO_MONTHLY) });
+for (const [label, priceId] of [['flat_monthly', FLAT_MONTHLY], ['flat_annual', FLAT_ANNUAL]]) {
+  test(`checkout.session.completed (${label}) → the flat paid state, and a trial is exited`, async () => {
+    const churchId = newChurchId();
+    const before = { plan: 'free', status: 'trialing', trialEndsAt: '2026-12-01T00:00:00Z', hubs: [], trialHubs: ['jobs'], freeHubsSelected: null, maxUsers: 10 };
+    await seedChurch(churchId, before);
+    installStripeStub({ subscription: stripeSub(priceId) });
 
+    const res = mockRes();
+    await funcs.stripeWebhook(signedWebhookReq(completedEvent(churchId)), res);
+
+    assert.equal(res.statusCode, 200);
+    const sub = await subDoc(churchId);
+    assert.equal(sub.status, 'active');
+    assert.equal(sub.plan, 'flat');
+    assert.equal(sub.paidAt, '2026-09-17T00:00:00.000Z'); // from subscription.created, not the clock
+    assert.equal(sub.stripeCustomerId, 'cus_1');
+    assert.equal(sub.stripeSubscriptionId, 'sub_1');
+    assert.equal(sub.trialEndsAt, before.trialEndsAt, 'trial fields left alone');
+    assertLegacyUntouched(before, sub);
+  });
+}
+
+test('checkout.session.completed (LEGACY pro_monthly) → normalized to the same flat paid state', async () => {
+  const churchId = newChurchId();
+  const before = { plan: 'free', maxUsers: 10, hubs: [] };
+  await seedChurch(churchId, before);
+  installStripeStub({ subscription: stripeSub(LEGACY_PRO_MONTHLY) });
   const res = mockRes();
   await funcs.stripeWebhook(signedWebhookReq(completedEvent(churchId)), res);
-
   assert.equal(res.statusCode, 200);
   const sub = await subDoc(churchId);
   assert.equal(sub.status, 'active');
-  assert.equal(sub.plan, 'pro');
-  assert.equal(sub.maxUsers, 9999);
-  assert.deepEqual(sub.hubs, PRO_HUBS);
-  assert.deepEqual(sub.freeHubsSelected, PRO_HUBS);
-  assert.equal(sub.stripeCustomerId, 'cus_1');
-  assert.equal(sub.stripeSubscriptionId, 'sub_1');
+  assert.equal(sub.plan, 'flat');
+  assertLegacyUntouched(before, sub);
 });
 
 test('checkout.session.completed with NO churchId metadata → 200, no write', async () => {
@@ -113,16 +140,18 @@ test('checkout.session.completed with an unknown price → 200, no subscription 
   assert.equal(sub.status, undefined);
 });
 
-test('checkout.session.completed (legacy single hub) → arrayUnion that hub', async () => {
+test('checkout.session.completed (LEGACY single hub) → flat paid state, hubs[] NOT touched', async () => {
   const churchId = newChurchId();
-  await seedChurch(churchId, { plan: 'free', hubs: ['insights'] });
+  const before = { plan: 'free', hubs: ['insights'] };
+  await seedChurch(churchId, before);
   installStripeStub({ subscription: stripeSub(LEGACY_TASKS) });
   const res = mockRes();
   await funcs.stripeWebhook(signedWebhookReq(completedEvent(churchId)), res);
   assert.equal(res.statusCode, 200);
   const sub = await subDoc(churchId);
   assert.equal(sub.status, 'active');
-  assert.deepEqual([...sub.hubs].sort(), ['insights', 'tasks']);
+  assert.equal(sub.plan, 'flat');
+  assert.deepEqual(sub.hubs, ['insights']);  // no arrayUnion — the field is dead
 });
 
 test('re-delivering the SAME completed event is idempotent (same final doc)', async () => {
@@ -143,41 +172,58 @@ test('re-delivering the SAME completed event is idempotent (same final doc)', as
   assert.deepEqual(after2, after1);         // duplicate delivery → no drift
 });
 
-test('customer.subscription.updated → mirrors Stripe status onto the doc', async () => {
+test('customer.subscription.updated → mirrors Stripe status onto the doc (past_due keeps plan flat)', async () => {
   const churchId = newChurchId();
-  await seedChurch(churchId, { plan: 'pro', status: 'active' });
+  await seedChurch(churchId, { plan: 'flat', status: 'active' });
   installStripeStub({});                     // updated path makes no Stripe API call
   const res = mockRes();
   await funcs.stripeWebhook(signedWebhookReq(subEvent('customer.subscription.updated', churchId, { status: 'past_due' })), res);
   assert.equal(res.statusCode, 200);
   const sub = await subDoc(churchId);
   assert.equal(sub.status, 'past_due');
-  assert.equal(sub.plan, 'pro');             // plan untouched on a status mirror
+  assert.equal(sub.plan, 'flat');
 });
 
-test('customer.subscription.deleted (pro) → resets church to free', async () => {
+test('customer.subscription.updated on a LEGACY pro doc → status mirrored AND plan normalized to flat', async () => {
   const churchId = newChurchId();
-  await seedChurch(churchId, { plan: 'pro', maxUsers: 9999, hubs: PRO_HUBS, freeHubsSelected: PRO_HUBS, status: 'active' });
-  installStripeStub({});                     // deleted reads the price off the event, no retrieve()
-  const res = mockRes();
-  await funcs.stripeWebhook(signedWebhookReq(subEvent('customer.subscription.deleted', churchId, { priceId: PRO_MONTHLY })), res);
-  assert.equal(res.statusCode, 200);
-  const sub = await subDoc(churchId);
-  assert.equal(sub.status, 'canceled');
-  assert.equal(sub.plan, 'free');
-  assert.equal(sub.maxUsers, 10);
-  assert.deepEqual(sub.hubs, []);
-  assert.deepEqual(sub.freeHubsSelected, []);
-});
-
-test('customer.subscription.deleted (legacy hub) → arrayRemove that hub', async () => {
-  const churchId = newChurchId();
-  await seedChurch(churchId, { plan: 'free', hubs: ['insights', 'tasks'], status: 'active' });
+  const before = { plan: 'pro', status: 'active', hubs: ['jobs'], freeHubsSelected: ['jobs'], maxUsers: 9999 };
+  await seedChurch(churchId, before);
   installStripeStub({});
   const res = mockRes();
-  await funcs.stripeWebhook(signedWebhookReq(subEvent('customer.subscription.deleted', churchId, { priceId: LEGACY_TASKS })), res);
+  await funcs.stripeWebhook(signedWebhookReq(subEvent('customer.subscription.updated', churchId, { status: 'active', priceId: LEGACY_PRO_MONTHLY })), res);
   assert.equal(res.statusCode, 200);
   const sub = await subDoc(churchId);
-  assert.equal(sub.status, 'canceled');
-  assert.deepEqual(sub.hubs, ['insights']);  // tasks removed, insights kept
+  assert.equal(sub.plan, 'flat');
+  assert.equal(sub.status, 'active');
+  assertLegacyUntouched(before, sub);
 });
+
+test('customer.subscription.updated with an UNKNOWN price → status mirrored, plan left alone', async () => {
+  const churchId = newChurchId();
+  await seedChurch(churchId, { plan: 'flat', status: 'active' });
+  installStripeStub({});
+  const res = mockRes();
+  await funcs.stripeWebhook(signedWebhookReq(subEvent('customer.subscription.updated', churchId, { status: 'unpaid', priceId: 'price_unknown' })), res);
+  assert.equal(res.statusCode, 200);
+  const sub = await subDoc(churchId);
+  assert.equal(sub.status, 'unpaid');
+  assert.equal(sub.plan, 'flat');
+});
+
+for (const [label, priceId] of [['flat', FLAT_MONTHLY], ['LEGACY pro', LEGACY_PRO_MONTHLY], ['LEGACY single hub', LEGACY_TASKS], ['unknown price', 'price_unknown']]) {
+  test(`customer.subscription.deleted (${label}) → the one lapsed-by-cancellation state; customer id kept`, async () => {
+    const churchId = newChurchId();
+    const before = { plan: 'flat', status: 'active', stripeCustomerId: 'cus_keep', hubs: ['insights', 'tasks'], freeHubsSelected: ['tasks'], maxUsers: 9999 };
+    await seedChurch(churchId, before);
+    installStripeStub({});                   // deleted reads the price off the event, no retrieve()
+    const res = mockRes();
+    await funcs.stripeWebhook(signedWebhookReq(subEvent('customer.subscription.deleted', churchId, { priceId })), res);
+    assert.equal(res.statusCode, 200);
+    const sub = await subDoc(churchId);
+    assert.equal(sub.status, 'canceled');
+    assert.equal(sub.plan, 'free');
+    assert.equal(sub.canceledAt, '2026-09-17T00:00:00.000Z'); // from ended_at, not the clock
+    assert.equal(sub.stripeCustomerId, 'cus_keep');
+    assertLegacyUntouched(before, sub);      // no arrayRemove, no hubs: [], no maxUsers: 10
+  });
+}

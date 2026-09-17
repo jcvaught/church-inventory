@@ -1571,7 +1571,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
       </div>
 
       {/* Upgrade Modal */}
-      <Modal open={showUpgradeModal} onClose={() => { setShowUpgradeModal(false); setBillingError(""); }} title="Upgrade ChurchOpsHub">
+      <Modal open={showUpgradeModal} onClose={() => { setShowUpgradeModal(false); setBillingError(""); }} title="Subscribe to ChurchOpsHub">
         {billingLoading ? (
           <div style={{ textAlign:"center", padding:"32px 0" }}><Spinner /></div>
         ) : (
@@ -1582,16 +1582,16 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
             <div style={{ background:B.navy, borderRadius:14, padding:"22px 22px 24px", marginBottom:8 }}>
               <div style={{ fontFamily:f1, fontWeight:700, fontSize:16, color:"#fff", marginBottom:6 }}>ChurchOpsHub</div>
               <p style={{ color:"rgba(255,255,255,0.65)", fontSize:13, margin:"0 0 16px", lineHeight:1.5 }}>
-                Everything beyond inventory — tasks &amp; maintenance, contractor hours, job &amp; volunteer shifts, people access &amp; compliance, insights, and accountability. <strong style={{ color:"#fff" }}>Unlimited team members.</strong>
+                Every hub — inventory &amp; supplies, reservations, tasks &amp; maintenance, contractor hours, job &amp; volunteer shifts, people access &amp; compliance, insights, and accountability. <strong style={{ color:"#fff" }}>Unlimited team members.</strong>
               </p>
               <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
                 {/* Monthly */}
                 <div style={{ flex:"1 1 180px", background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"16px 18px", border:"1px solid rgba(255,255,255,0.12)" }}>
                   <div style={{ display:"flex", alignItems:"baseline", gap:4, marginBottom:12 }}>
-                    <span style={{ fontFamily:f1, fontWeight:800, fontSize:26, color:"#fff" }}>$15</span>
+                    <span style={{ fontFamily:f1, fontWeight:800, fontSize:26, color:"#fff" }}>${entitlement.PRICE.monthly}</span>
                     <span style={{ fontSize:13, color:"rgba(255,255,255,0.55)" }}>/mo</span>
                   </div>
-                  <button onClick={() => handleCheckout('pro_monthly')} style={{ ...btnP, width:"100%", background:B.teal, fontSize:13 }}>
+                  <button onClick={() => handleCheckout('flat_monthly')} style={{ ...btnP, width:"100%", background:B.teal, fontSize:13 }}>
                     Subscribe monthly
                   </button>
                 </div>
@@ -1599,17 +1599,17 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                 <div style={{ flex:"1 1 180px", background:"rgba(255,255,255,0.06)", borderRadius:12, padding:"16px 18px", border:`1px solid ${B.gold}`, position:"relative" }}>
                   <span style={{ position:"absolute", top:-9, right:14, background:B.gold, color:B.navy, fontFamily:f1, fontWeight:800, fontSize:10, padding:"3px 10px", borderRadius:100, letterSpacing:1 }}>2 MONTHS FREE</span>
                   <div style={{ display:"flex", alignItems:"baseline", gap:4, marginBottom:12 }}>
-                    <span style={{ fontFamily:f1, fontWeight:800, fontSize:26, color:"#fff" }}>$150</span>
+                    <span style={{ fontFamily:f1, fontWeight:800, fontSize:26, color:"#fff" }}>${entitlement.PRICE.annual}</span>
                     <span style={{ fontSize:13, color:"rgba(255,255,255,0.55)" }}>/yr</span>
                   </div>
-                  <button onClick={() => handleCheckout('pro_annual')} style={{ ...btnP, width:"100%", background:B.gold, color:B.navy, fontSize:13 }}>
+                  <button onClick={() => handleCheckout('flat_annual')} style={{ ...btnP, width:"100%", background:B.gold, color:B.navy, fontSize:13 }}>
                     Subscribe yearly
                   </button>
                 </div>
               </div>
             </div>
             <p style={{ color:B.textLight, fontSize:12, textAlign:"center", margin:"0" }}>
-              Inventory, supplies &amp; reservations stay free. Cancel anytime.
+              One plan, everything included. Cancel anytime.
             </p>
           </>
         )}
