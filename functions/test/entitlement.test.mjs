@@ -40,8 +40,9 @@ export const FIXTURES = {
 
 // ── 1. PARITY ────────────────────────────────────────────────────────────────
 
-test('PARITY — FREE_PLAN_MAX_USERS agrees', () => {
+test('PARITY — constants agree', () => {
   assert.equal(server.FREE_PLAN_MAX_USERS, client.FREE_PLAN_MAX_USERS);
+  assert.deepEqual(server.PAID_HUBS, client.PAID_HUBS);
 });
 
 test('PARITY — hasHub / isTrialing / trialDaysRemaining / canAddUser agree across the matrix', () => {
@@ -56,12 +57,16 @@ test('PARITY — hasHub / isTrialing / trialDaysRemaining / canAddUser agree acr
         checked += 2;
       }
       assert.equal(server.trialDaysRemaining(sub, now), client.trialDaysRemaining(sub, now), `trialDaysRemaining ${name}`);
-      checked++;
+      assert.equal(server.inTrialWindow(sub, now), client.inTrialWindow(sub, now), `inTrialWindow ${name}`);
+      assert.equal(server.planLabel(sub, now), client.planLabel(sub, now), `planLabel ${name}`);
+      checked += 3;
     }
     for (const c of counts) {
       assert.equal(server.canAddUser(sub, c), client.canAddUser(sub, c), `canAddUser ${name}/${c}`);
       checked++;
     }
+    assert.equal(server.maxUsers(sub), client.maxUsers(sub), `maxUsers ${name}`);
+    checked++;
   }
   assert.ok(checked > 800, `matrix exercised (${checked} comparisons)`);
 });
@@ -111,6 +116,50 @@ test('PINNED — canAddUser: 10-seat cap unless pro/team_unlimited/all_in/grandf
   for (const n of ['pro', 'teamUnlimited', 'allIn', 'grandfathered']) {
     assert.equal(client.canAddUser(FIXTURES[n], 5000), true, n);
   }
+});
+
+// A.4.0b — SettingsPage's derivations, now from the module. planLabel/maxUsers
+// were moved verbatim; the one deliberate change is that a trialing church's
+// hub panels now follow hasHub (they ignored trials before).
+test('PINNED — planLabel', () => {
+  const expected = {
+    missing: 'Free', defaultFree: 'Free', grandfathered: 'All-In', pro: 'ChurchOpsHub', allIn: 'All-In',
+    trialingInWindow: '90-Day Trial', trialingJobsOnly: '90-Day Trial', expiredWithArray: 'Free',
+    expiredWithNull: 'Free', perHubOnly: 'Free', team25: 'team_25', teamUnlimited: 'Team Unlimited', canceled: 'Free',
+  };
+  for (const [name, label] of Object.entries(expected)) assert.equal(client.planLabel(FIXTURES[name], NOW), label, name);
+  assert.deepEqual(Object.keys(expected).sort(), Object.keys(FIXTURES).sort());
+});
+
+test('PINNED — maxUsers agrees with canAddUser at the boundary for every fixture', () => {
+  for (const [name, sub] of Object.entries(FIXTURES)) {
+    const cap = client.maxUsers(sub);
+    if (cap === null) assert.equal(client.canAddUser(sub, 100000), true, `${name} unlimited`);
+    else {
+      assert.equal(client.canAddUser(sub, cap - 1), true, `${name} below cap`);
+      assert.equal(client.canAddUser(sub, cap), false, `${name} at cap`);
+    }
+  }
+});
+
+test('PINNED — inTrialWindow is hub-independent and matches isTrialing over the trial hubs', () => {
+  for (const [name, sub] of Object.entries(FIXTURES)) {
+    const anyHub = ALL.some(h => client.isTrialing(sub, h, NOW));
+    const inWin = client.inTrialWindow(sub, NOW);
+    if (anyHub) assert.equal(inWin, true, name);
+    if (!inWin) assert.equal(anyHub, false, name);
+  }
+  assert.equal(client.inTrialWindow(FIXTURES.trialingInWindow, NOW), true);
+  assert.equal(client.inTrialWindow(FIXTURES.expiredWithNull, NOW), false);
+  assert.equal(client.inTrialWindow(FIXTURES.expiredWithArray, NOW), false);
+});
+
+test('PINNED — A.4.0b fix: a trialing church has every trial hub, including in the Settings panels', () => {
+  const settingsPanels = (sub) => ['jobs', 'insights', 'people_access'].filter(h => client.hasHub(sub, h, NOW));
+  assert.deepEqual(settingsPanels(FIXTURES.trialingInWindow), ['jobs', 'insights', 'people_access']);
+  assert.deepEqual(settingsPanels(FIXTURES.trialingJobsOnly), ['jobs']);
+  assert.deepEqual(settingsPanels(FIXTURES.expiredWithNull), []);
+  assert.deepEqual(settingsPanels(FIXTURES.expiredWithArray), ['jobs']);
 });
 
 test('PINNED — trialDaysRemaining rounds up and is 0 once freeHubsSelected is written', () => {

@@ -570,11 +570,19 @@ commits:
   that **empirically confirm both divergences** — `pro` without
   `freeHubsSelected` denied (Finding 3) and `expiredWithNull` allowed (B14).
   Unit 172 / handlers 94 / rules 151, all green, no existing fixture changed.
-- **A.4.0b — the named behavior change, its own commit.** Repoint
-  `SettingsPage.jsx`'s five derivations at the module. **Effect: a trialing
-  church starts seeing the Jobs, Insights and People Access settings panels.**
-  That is a fix, and it is stated as one in the commit message rather than
-  smuggled in under "consolidation".
+- **A.4.0b — the named behavior change, its own commit. ✅ SHIPPED
+  2026-09-17.** Repoint `SettingsPage.jsx`'s derivations at the module
+  (`churchHubs`, `maxUsers`, `hasJobsHub`/`hasInsightsHub`/`hasPeopleHub`,
+  `isTrialing`, `trialDaysLeft`, `planLabel`; `inTrialWindow`, `maxUsers`,
+  `planLabel`, `PAID_HUBS` added to the module + twin + parity). **Effect: a
+  trialing church starts seeing the Jobs, Insights and People Access settings
+  panels, and its hub list in the member/invite editors.** Second, smaller
+  effect: the displayed seat cap now reads the stored `maxUsers` (as
+  `canAddUser` always did) instead of hard-coding `team_25 ? 25 : 10`. Both
+  stated in the commit message. *Verified at the predicate level* (pinned
+  test: trialing fixture → `['jobs','insights','people_access']`); not
+  render-verified in a browser — the Settings JSX consumes the same booleans
+  it did before, only their source changed.
 
 Only after both land does the model change — in one module instead of four
 files, which is what makes the rest of A.4 verifiable rather than hopeful.

@@ -15,6 +15,7 @@ import { enablePush, pushSupported } from '../utils/push.js';
 import { app, db, storage } from '../firebase.js';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { resizeImageForUpload } from '../utils/imageResize.js';
+import * as entitlement from '../lib/entitlement.js';
 
 // Manage Spaces form — kept as one constant so every reset site stays in sync.
 const EMPTY_ROOM_FORM = { name:'', capacity:'', location:'', description:'', amenities:'', photoUrl:'', approverUids:[], blackoutDates:[], blockedWindows:[], color:'', defaultSetupMinutes:'', defaultTeardownMinutes:'', bookingPolicy:'request' };
@@ -171,12 +172,11 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   }
 
   const HUB_LABELS = { maintenance: 'Maintenance Hub', insights: 'Insights Hub', coordination: 'Coordination Hub', accountability: 'Accountability Hub', people_access: 'People Access Hub', tasks: 'Tasks Hub', jobs: 'Job Hub' };
-  const churchHubs = subscription?.grandfathered || subscription?.plan === 'pro' || subscription?.plan === 'all_in'
-    ? Object.keys(HUB_LABELS)
-    : (subscription?.hubs || []);
-  const maxUsers = subscription?.grandfathered || subscription?.plan === 'pro' || subscription?.plan === 'team_unlimited' || subscription?.plan === 'all_in'
-    ? null
-    : subscription?.plan === 'team_25' ? 25 : 10;
+  // COH-012 A.4.0b: derived from src/lib/entitlement.js like everywhere else.
+  // Before this, Settings read `plan`/`hubs[]` directly and ignored trials, so
+  // a trialing church saw none of the hub panels it was entitled to.
+  const churchHubs = Object.keys(HUB_LABELS).filter(h => entitlement.hasHub(subscription, h));
+  const maxUsers = entitlement.maxUsers(subscription);
 
   function openEditAccess(u) {
     setEditAccessUser(u);
@@ -383,10 +383,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const isAdmin = userProfile?.role === "admin";
   const isManager = userProfile?.role === "manager";
   const managedMinistries = userProfile?.managedMinistries || [];
-  const allHubsUnlocked = subscription?.plan === 'pro' || subscription?.plan === 'all_in' || subscription?.grandfathered;
-  const hasJobsHub = (subscription?.hubs || []).includes('jobs') || allHubsUnlocked;
-  const hasInsightsHub = (subscription?.hubs || []).includes('insights') || allHubsUnlocked;
-  const hasPeopleHub = (subscription?.hubs || []).includes('people_access') || allHubsUnlocked;
+  const hasJobsHub = entitlement.hasHub(subscription, 'jobs');
+  const hasInsightsHub = entitlement.hasHub(subscription, 'insights');
+  const hasPeopleHub = entitlement.hasHub(subscription, 'people_access');
   const userHasJobsAccess = hasJobsHub && (!userProfile?.allowedHubs || userProfile.allowedHubs.includes('jobs'));
   const adminManagerUsers = (users || []).filter(u => ['admin', 'manager'].includes(u.role) && u.id !== userProfile?.uid && u.active !== false);
 
@@ -492,9 +491,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
     );
   };
 
-  const isTrialing = subscription?.freeHubsSelected === null && subscription?.trialEndsAt && new Date(subscription.trialEndsAt) > new Date();
-  const trialDaysLeft = isTrialing ? Math.max(0, Math.ceil((new Date(subscription.trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24))) : 0;
-  const planLabel = !subscription ? 'Free' : isTrialing ? '90-Day Trial' : subscription.plan === 'free' ? 'Free' : subscription.plan === 'pro' ? 'ChurchOpsHub' : subscription.plan === 'all_in' ? 'All-In' : subscription.plan === 'team_unlimited' ? 'Team Unlimited' : subscription.plan;
+  const isTrialing = entitlement.inTrialWindow(subscription);
+  const trialDaysLeft = entitlement.trialDaysRemaining(subscription);
+  const planLabel = entitlement.planLabel(subscription);
   const activeHubs = subscription?.grandfathered ? ['All hubs (grandfathered)'] : isTrialing ? (subscription.trialHubs || []) : (subscription?.hubs || []);
   const hasStripeCustomer = !!subscription?.stripeCustomerId;
 

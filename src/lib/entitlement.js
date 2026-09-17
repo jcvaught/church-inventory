@@ -20,6 +20,9 @@
 
 export const FREE_PLAN_MAX_USERS = 10;
 
+/** The seven paid hubs, in display order. Inventory + Reservations are free. */
+export const PAID_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'people_access', 'tasks', 'jobs'];
+
 /** Does the subscription document grant hub `name` right now? */
 export function hasHub(sub, name, now = new Date()) {
   if (!sub) return false;
@@ -49,6 +52,34 @@ export function isTrialing(sub, hubName, now = new Date()) {
   if (sub.freeHubsSelected !== null) return false;
   if (!sub.trialEndsAt || new Date(sub.trialEndsAt) <= now) return false;
   return (sub.trialHubs || []).includes(hubName);
+}
+
+/** Is the church inside its trial window at all (any hub)? SettingsPage's `isTrialing`. */
+export function inTrialWindow(sub, now = new Date()) {
+  return !!(sub && sub.freeHubsSelected === null && sub.trialEndsAt && new Date(sub.trialEndsAt) > now);
+}
+
+/**
+ * Seat cap to DISPLAY: null = unlimited. Agrees with canAddUser — A.4.0b
+ * replaced SettingsPage's own derivation, which ignored the stored `maxUsers`
+ * and hard-coded `team_25 ? 25 : 10`.
+ */
+export function maxUsers(sub) {
+  if (!sub) return FREE_PLAN_MAX_USERS;
+  if (sub.grandfathered) return null;
+  if (sub.plan === 'pro' || sub.plan === 'team_unlimited' || sub.plan === 'all_in') return null;
+  return sub.maxUsers || FREE_PLAN_MAX_USERS;
+}
+
+/** Human plan name for the Settings billing card (moved verbatim from SettingsPage in A.4.0b). */
+export function planLabel(sub, now = new Date()) {
+  if (!sub) return 'Free';
+  if (inTrialWindow(sub, now)) return '90-Day Trial';
+  if (sub.plan === 'free') return 'Free';
+  if (sub.plan === 'pro') return 'ChurchOpsHub';
+  if (sub.plan === 'all_in') return 'All-In';
+  if (sub.plan === 'team_unlimited') return 'Team Unlimited';
+  return sub.plan;
 }
 
 /** Whole days left in the trial window; 0 once expired or processed. */

@@ -7,6 +7,7 @@
 // drift fails the test. (Same pattern as attention.js / occurrences.js.)
 
 const FREE_PLAN_MAX_USERS = 10;
+const PAID_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'people_access', 'tasks', 'jobs'];
 
 function hasHub(sub, name, now = new Date()) {
   if (!sub) return false;
@@ -33,10 +34,31 @@ function isTrialing(sub, hubName, now = new Date()) {
   return (sub.trialHubs || []).includes(hubName);
 }
 
+function inTrialWindow(sub, now = new Date()) {
+  return !!(sub && sub.freeHubsSelected === null && sub.trialEndsAt && new Date(sub.trialEndsAt) > now);
+}
+
+function maxUsers(sub) {
+  if (!sub) return FREE_PLAN_MAX_USERS;
+  if (sub.grandfathered) return null;
+  if (sub.plan === 'pro' || sub.plan === 'team_unlimited' || sub.plan === 'all_in') return null;
+  return sub.maxUsers || FREE_PLAN_MAX_USERS;
+}
+
+function planLabel(sub, now = new Date()) {
+  if (!sub) return 'Free';
+  if (inTrialWindow(sub, now)) return '90-Day Trial';
+  if (sub.plan === 'free') return 'Free';
+  if (sub.plan === 'pro') return 'ChurchOpsHub';
+  if (sub.plan === 'all_in') return 'All-In';
+  if (sub.plan === 'team_unlimited') return 'Team Unlimited';
+  return sub.plan;
+}
+
 function trialDaysRemaining(sub, now = new Date()) {
   if (!sub?.trialEndsAt || sub.freeHubsSelected !== null) return 0;
   const ms = new Date(sub.trialEndsAt) - now;
   return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
 }
 
-module.exports = { FREE_PLAN_MAX_USERS, hasHub, canAddUser, isTrialing, trialDaysRemaining };
+module.exports = { FREE_PLAN_MAX_USERS, PAID_HUBS, hasHub, canAddUser, isTrialing, inTrialWindow, maxUsers, planLabel, trialDaysRemaining };
