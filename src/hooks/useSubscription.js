@@ -6,7 +6,6 @@ import * as entitlement from '../lib/entitlement.js';
 // COH-012 A.4.0a: the predicates live in src/lib/entitlement.js (one copy,
 // shared with the server twin and pinned by functions/test/entitlement.test.mjs).
 // This hook only subscribes to the document and binds it.
-export const FREE_PLAN_MAX_USERS = entitlement.FREE_PLAN_MAX_USERS;
 
 export function useSubscription(churchId) {
   const [subscription, setSubscription] = useState(null);
@@ -20,8 +19,9 @@ export function useSubscription(churchId) {
         if (snap.exists()) {
           setSubscription(snap.data());
         } else {
-          // Default free plan
-          setSubscription({ plan: 'free', hubs: [], maxUsers: FREE_PLAN_MAX_USERS, status: 'active', grandfathered: false });
+          // No document: reads as lapsed (every real church has one — useAuth
+          // writes it at signup). Nothing is granted by default.
+          setSubscription({ plan: 'free', status: 'active', grandfathered: false });
         }
         setLoading(false);
       },
@@ -32,8 +32,10 @@ export function useSubscription(churchId) {
 
   const hasHub = (name) => entitlement.hasHub(subscription, name);
   const canAddUser = (currentUserCount) => entitlement.canAddUser(subscription, currentUserCount);
-  const isTrialing = (hubName) => entitlement.isTrialing(subscription, hubName);
+  const canCreate = () => entitlement.canCreate(subscription);
+  const isTrialing = () => entitlement.isTrialing(subscription);
+  const isLapsed = () => entitlement.isLapsed(subscription);
   const trialDaysRemaining = () => entitlement.trialDaysRemaining(subscription);
 
-  return { subscription, loading, hasHub, canAddUser, isTrialing, trialDaysRemaining };
+  return { subscription, loading, hasHub, canAddUser, canCreate, isTrialing, isLapsed, trialDaysRemaining };
 }

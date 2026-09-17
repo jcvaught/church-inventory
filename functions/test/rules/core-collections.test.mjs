@@ -8,6 +8,7 @@
 //
 // Run against the Firestore emulator:  npm run test:rules
 import { test, before, after, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -331,28 +332,34 @@ test('jobListings signups: a member reads only their OWN signup; roster writes a
 });
 
 // ── COH-012 pin — jobsHubActive() across the entitlement fixture matrix ─────
-// A.4.0a: the SAME fixtures as functions/test/entitlement.test.mjs, so the
-// rules' Jobs gate is pinned beside the client/server predicate. Two rows
-// DIVERGE from the client today and are asserted as they ARE, not as they
-// should be — A.4 flips both deliberately:
-//   pro             → rules DENY  (Finding 3: no `plan == 'pro'` branch)
-//   expiredWithNull → rules ALLOW (B14: A.3 stopped writing freeHubsSelected,
-//                     and the null+trialHubs branch has no time check)
+// A.4: the SAME fixtures as functions/test/entitlement.test.mjs, so the rules'
+// Jobs gate is pinned beside the client/server predicate. ONE row is allowed
+// to differ from the client, and it is named:
+//   trialingPastEnd → rules ALLOW (no time check; the 02:00 cron flips status
+//                     within a day — accepted in the plan, A.4 §4)
+// Everything legacy (pro / all_in / per-hub / trialHubs / freeHubsSelected)
+// is DENIED: those fields are no longer read. A.4.0a pinned the old answers;
+// this is the deliberate flip.
 import { FIXTURES as ENTITLEMENT_FIXTURES } from '../entitlement.test.mjs';
 const RULES_HAS_JOBS = {
   // missing: no doc → `s != null` is false; covered by the separate test below
-  defaultFree: false,
   grandfathered: true,
-  pro: true,               // NOT via plan — via freeHubsSelected: ALL (webhook writes it today)
-  allIn: true,
-  trialingInWindow: true,
-  trialingJobsOnly: true,
-  expiredWithArray: true,
-  expiredWithNull: true,   // ← B14 divergence: client says false
-  perHubOnly: false,
-  team25: false,
-  teamUnlimited: false,
-  canceled: false,
+  trialing: true,
+  trialingPastEnd: true,     // ← the one named divergence (client: lapsed)
+  lapsedExpired: false,
+  paidActive: true,
+  paidPastDue: true,
+  paidUnpaid: false,
+  paidCanceled: false,
+  flatButTrialingFlag: true, // status 'trialing' — same lag as trialingPastEnd
+  defaultFree: false,
+  legacyPro: false,          // Finding 3 resolved the other way: 'pro' is not read at all
+  legacyAllIn: false,
+  legacyTrialOldShape: true, // status 'trialing' carries it, not trialHubs
+  legacyExpiredArray: false, // St Olaf
+  legacyExpiredNull: false,  // B14 closed: the null+trialHubs branch is gone
+  legacyPerHub: false,
+  legacyTeam25: false,
 };
 for (const [name, expected] of Object.entries(RULES_HAS_JOBS)) {
   test(`COH-012 pin — jobsHubActive(${name}) is ${expected}`, async () => {
@@ -362,14 +369,34 @@ for (const [name, expected] of Object.entries(RULES_HAS_JOBS)) {
     if (expected) await assertSucceeds(attempt); else await assertFails(attempt);
   });
 }
+test('COH-012 pin — every entitlement fixture has a rules expectation', () => {
+  const pinned = new Set([...Object.keys(RULES_HAS_JOBS), 'missing']);
+  for (const name of Object.keys(ENTITLEMENT_FIXTURES)) assert.ok(pinned.has(name), `unpinned fixture: ${name}`);
+});
 test('COH-012 pin — jobsHubActive is false with no subscription doc', async () => {
   await seedMembers();
   await assertFails(setDoc(doc(ctx('adminA'), P('jobListings/j1')), { title: 'Mow', spotsTotal: 3, signupCount: 0 }));
 });
-test('COH-012 pin — pro WITHOUT freeHubsSelected is denied (Finding 3, flips in A.4)', async () => {
+test('COH-012 pin — day-91: a lapsed church finishes what it started (read, edit, delete) but creates nothing', async () => {
   await seedMembers();
-  await seed(P('config/subscription'), { plan: 'pro', hubs: [], maxUsers: 9999, status: 'active', grandfathered: false });
-  await assertFails(setDoc(doc(ctx('adminA'), P('jobListings/j1')), { title: 'Mow', spotsTotal: 3, signupCount: 0 }));
+  await seed(P('config/subscription'), ENTITLEMENT_FIXTURES.lapsedExpired);
+  await seed(P('jobListings/j1'), { title: 'Mow', spotsTotal: 3, signupCount: 0, createdBy: 'adminA' });
+  await seed(P('jobAnnouncements/a1'), { title: 'Hi', createdBy: 'adminA' });
+  await assertSucceeds(getDoc(doc(ctx('memberA'), P('jobListings/j1'))));
+  await assertSucceeds(getDoc(doc(ctx('memberA'), P('jobAnnouncements/a1'))));
+  await assertSucceeds(updateDoc(doc(ctx('adminA'), P('jobListings/j1')), { title: 'Mow (moved)' }));
+  await assertSucceeds(updateDoc(doc(ctx('adminA'), P('jobAnnouncements/a1')), { title: 'Hi again' }));
+  await assertSucceeds(setDoc(doc(ctx('memberA'), P('jobSwapRequests/s1')), { jobDocId: 'j1', uid: 'memberA', name: 'Member A', note: '', createdAt: serverTimestamp() }));
+  await assertFails(setDoc(doc(ctx('adminA'), P('jobListings/j2')), { title: 'New', spotsTotal: 1, signupCount: 0 }));
+  await assertFails(setDoc(doc(ctx('adminA'), P('jobAnnouncements/a2')), { title: 'New', createdBy: 'adminA' }));
+  await assertSucceeds(deleteDoc(doc(ctx('adminA'), P('jobListings/j1'))));
+});
+test('COH-012 pin — entitlement never overrides per-user allowedHubs', async () => {
+  await seedMembers();
+  await seed('users/noJobs', { churchId: CHURCH, role: 'user', name: 'No Jobs', active: true, allowedHubs: ['tasks'] });
+  await seed(P('config/subscription'), ENTITLEMENT_FIXTURES.paidActive);
+  await seed(P('jobListings/j1'), { title: 'Mow', spotsTotal: 3, signupCount: 0 });
+  await assertFails(getDoc(doc(ctx('noJobs'), P('jobListings/j1'))));
 });
 
 // ── Users — no self-escalation; cross-tenant transplant blocked ──────────────

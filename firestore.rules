@@ -203,21 +203,28 @@ service cloud.firestore {
     // of these addresses can never satisfy the admin gate.
     function isShepherdAdmin() { return request.auth != null && request.auth.token.email_verified == true && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org']; }
 
-    // ── Jobs Hub access (audit H3 + M1, 2026-05-22) ──────────────────────────
-    // jobsHubActive: the church's Jobs Hub subscription is active. Mirrors the
-    //   server-side subHasHub() minus the trial-expiry time check (rules cannot
-    //   compare a stored ISO date string to now — processTrialExpirations writes
-    //   freeHubsSelected on expiry so the post-trial state is reflected here).
+    // ── Jobs Hub access (audit H3 + M1, 2026-05-22; COH-012 A.4, 2026-09-17) ─
+    // jobsHubActive: the church is entitled — grandfathered, trialing, or paid
+    //   on the flat plan. Mirrors src/lib/entitlement.js isEntitled() minus the
+    //   trial-expiry time check (rules cannot compare a stored ISO string to
+    //   now): `status == 'trialing'` is what processTrialExpirations flips at
+    //   02:00 Central, so a trial stays open here for at most one day past
+    //   trialEndsAt. Pinned to the client's fixture matrix by
+    //   functions/test/rules/core-collections.test.mjs ("COH-012 pin").
+    //   Legacy fields (hubs, trialHubs, freeHubsSelected, plan 'pro'/'all_in')
+    //   are deliberately NOT read — A.3 had broken the old null+trialHubs branch.
+    // Day-91 rule (owner decision #3, "they can't add more"): a lapsed church
+    //   finishes what it started and starts nothing new. So jobsHubActive gates
+    //   CREATE only. Reads, updates (edit, mark attendance), deletes (cleanup)
+    //   and swap requests on existing listings authorize on membership + role.
     // userHasJobsHub: this user is permitted the Jobs Hub (admins always are;
     //   a missing allowedHubs array means legacy-full-access).
     function jobsHubActive(churchId) {
       let s = get(/databases/$(database)/documents/churches/$(churchId)/config/subscription).data;
       return s != null && (
         s.grandfathered == true
-        || s.plan == 'all_in'
-        || (s.freeHubsSelected is list && s.freeHubsSelected.hasAny(['jobs']))
-        || (s.freeHubsSelected == null && s.trialHubs is list && s.trialHubs.hasAny(['jobs']))
-        || (s.hubs is list && s.hubs.hasAny(['jobs']))
+        || s.status == 'trialing'
+        || (s.plan == 'flat' && (s.status == 'active' || s.status == 'past_due'))
       );
     }
     function userHasJobsHub() {
@@ -226,7 +233,7 @@ service cloud.firestore {
         || (userData().allowedHubs is list && userData().allowedHubs.hasAny(['jobs']));
     }
     function canUseJobsHub(churchId) {
-      return isMember(churchId) && jobsHubActive(churchId) && userHasJobsHub();
+      return isMember(churchId) && userHasJobsHub();
     }
 
     // ── Jobs Hub roster visibility (audit H1 follow-up, 2026-05-22) ───────────
@@ -490,12 +497,12 @@ service cloud.firestore {
     //    reads are still served by the `getPublicJobs` callable.
     match /churches/{churchId}/jobListings/{docId} {
       allow get, list:      if canUseJobsHub(churchId);
-      allow create, delete: if isChurchAdminOrManager(churchId) && jobsHubActive(churchId);
+      allow create:         if isChurchAdminOrManager(churchId) && jobsHubActive(churchId);
+      allow delete:         if isChurchAdminOrManager(churchId);
       // Admin/manager general edit only — cannot touch identity, recurrence,
       // server-managed dedupe stamps, the (now-removed) roster arrays, or the
       // server-maintained counters.
       allow update:         if isChurchAdminOrManager(churchId)
-        && jobsHubActive(churchId)
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
              'signups', 'waitlist', 'signupCount', 'waitlistCount',
              'createdBy', 'createdByName', 'createdAt', 'jobNumber',
@@ -552,9 +559,9 @@ service cloud.firestore {
     //    hardened jobListings update rule).
     match /churches/{churchId}/jobAnnouncements/{docId} {
       allow read:           if canUseJobsHub(churchId);
-      allow create, delete: if isChurchAdminOrManager(churchId) && jobsHubActive(churchId);
+      allow create:         if isChurchAdminOrManager(churchId) && jobsHubActive(churchId);
+      allow delete:         if isChurchAdminOrManager(churchId);
       allow update:         if isChurchAdminOrManager(churchId)
-        && jobsHubActive(churchId)
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
              'createdBy', 'createdByName', 'createdAt'
            ]);

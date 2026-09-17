@@ -22,8 +22,13 @@ tracks agent ownership, handoffs, and review status for selected tasks.
   `churchId` tenant boundary.
 - Firestore rules and Cloud Functions are security boundaries. UI hiding and
   client-side filtering are not authorization.
-- Inventory and supplies are permanently included in the free product. The
-  current paid offering is one ChurchOpsHub plan: $15/month or $150/year.
+- There is one plan and no free tier (DEC-2026-021): every church gets 90 days
+  of every hub, then ChurchOpsHub is $5/month or $50/year for everything, with
+  no seat cap. A church that does not pay is *lapsed*: it finishes what it
+  started and starts nothing new. Entitlement is not a security boundary — it
+  is enforced in the client and callables, and in rules only where a gate
+  already existed (Jobs create). `src/lib/entitlement.js` is the one
+  implementation; `functions/lib/entitlement.js` is its generated twin.
 - `workItems` is the canonical Tasks + Maintenance collection. Jobs remains in
   `jobListings`.
 - Per-user `allowedHubs` controls user access independently from church billing.

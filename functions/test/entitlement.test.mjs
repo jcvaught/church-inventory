@@ -1,13 +1,14 @@
-// COH-012 A.4.0a — entitlement parity + pinned semantics.
+// COH-012 A.4 — entitlement parity + pinned semantics for the FLAT model.
 //
-// Two jobs:
 //   1. PARITY — functions/lib/entitlement.js (CJS twin) ≡ src/lib/entitlement.js
-//      across the full fixture matrix, for every exported predicate.
-//   2. PINNED — the CURRENT-shape semantics, written down as a table so that
-//      A.4 (flat $5 model) changes them on purpose, in this file, not by
-//      accident somewhere else. Every row here is today's behavior, including
-//      the two divergences the rules gate has from the client (see
-//      functions/test/rules/core-collections.test.mjs, "COH-012 pin").
+//      across the fixture matrix, for every export.
+//   2. PINNED — the flat-model semantics written down as a table. The rules'
+//      Jobs gate is pinned to the SAME fixtures in
+//      functions/test/rules/core-collections.test.mjs ("COH-012 pin"); the one
+//      row where rules and client are allowed to differ is named there.
+//
+// History: A.4.0a pinned the OLD shape (trialHubs / freeHubsSelected / plan
+// 'pro') so A.4 could change it on purpose. This file is that change.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,153 +19,138 @@ import server from '../lib/entitlement.js'; // CJS twin (default import = module
 const NOW = new Date('2026-09-17T12:00:00Z');
 const FUTURE = '2026-12-01T00:00:00Z';
 const PAST = '2026-08-12T00:00:00Z';
-const ALL = ['maintenance', 'insights', 'coordination', 'accountability', 'people_access', 'tasks', 'jobs'];
+const HUBS = client.ALL_HUBS;
 
-// The current-shape matrix. Names are the states A.4.0 step 2 lists, plus the
-// edge shapes the webhook and the missing-doc default can produce.
+// The matrix. New-shape states first, then every legacy / edge shape a real
+// document can still have — all of which must read as LAPSED (or grandfathered).
 export const FIXTURES = {
-  missing:            null,
-  defaultFree:        { plan: 'free', hubs: [], maxUsers: 10, status: 'active', grandfathered: false },
-  grandfathered:      { plan: 'all_in', grandfathered: true, status: 'active' },
-  pro:                { plan: 'pro', hubs: ALL, freeHubsSelected: ALL, maxUsers: 9999, status: 'active', grandfathered: false },
-  allIn:              { plan: 'all_in', hubs: ALL, maxUsers: 9999, status: 'active', grandfathered: false },
-  trialingInWindow:   { plan: 'free', hubs: [], trialHubs: ALL, freeHubsSelected: null, trialEndsAt: FUTURE, status: 'trialing', grandfathered: false },
-  trialingJobsOnly:   { plan: 'free', hubs: [], trialHubs: ['jobs'], freeHubsSelected: null, trialEndsAt: FUTURE, status: 'trialing', grandfathered: false },
-  expiredWithArray:   { plan: 'free', hubs: [], trialHubs: ALL, freeHubsSelected: ['tasks', 'jobs'], trialEndsAt: PAST, status: 'active', grandfathered: false }, // pre-A.3 lapsed
-  expiredWithNull:    { plan: 'free', hubs: [], trialHubs: ALL, freeHubsSelected: null, trialEndsAt: PAST, trialExpiredAt: '2026-09-17T07:00:00Z', status: 'active', grandfathered: false }, // post-A.3 lapsed
-  perHubOnly:         { plan: 'free', hubs: ['insights'], maxUsers: 10, status: 'active', grandfathered: false },
-  team25:             { plan: 'team_25', hubs: [], maxUsers: 25, status: 'active', grandfathered: false },
-  teamUnlimited:      { plan: 'team_unlimited', hubs: [], maxUsers: 9999, status: 'active', grandfathered: false },
-  canceled:           { plan: 'free', hubs: [], freeHubsSelected: [], maxUsers: 10, status: 'canceled', grandfathered: false },
+  // ── flat model ──
+  missing:              null,
+  grandfathered:        { plan: 'all_in', grandfathered: true, status: 'active' },                       // FXCC, TrueNorth, e2e
+  trialing:             { plan: 'free', status: 'trialing', trialEndsAt: FUTURE, grandfathered: false },  // useAuth at signup
+  trialingPastEnd:      { plan: 'free', status: 'trialing', trialEndsAt: PAST, grandfathered: false },    // between trialEndsAt and the 02:00 cron
+  lapsedExpired:        { plan: 'free', status: 'active', trialEndsAt: PAST, trialExpiredAt: '2026-08-13T07:00:00Z', grandfathered: false }, // cron output
+  paidActive:           { plan: 'flat', status: 'active', grandfathered: false },
+  paidPastDue:          { plan: 'flat', status: 'past_due', grandfathered: false },
+  paidUnpaid:           { plan: 'flat', status: 'unpaid', grandfathered: false },
+  paidCanceled:         { plan: 'free', status: 'canceled', grandfathered: false },                       // webhook cancellation output
+  flatButTrialingFlag:  { plan: 'flat', status: 'trialing', trialEndsAt: PAST, grandfathered: false },    // Stripe 'trialing' status on a flat plan, window over
+  // ── legacy shapes still on disk or in old fixtures ──
+  defaultFree:          { plan: 'free', hubs: [], maxUsers: 10, status: 'active', grandfathered: false },
+  legacyPro:            { plan: 'pro', hubs: client.PAID_HUBS, freeHubsSelected: client.PAID_HUBS, status: 'active', grandfathered: false },
+  legacyAllIn:          { plan: 'all_in', hubs: client.PAID_HUBS, status: 'active', grandfathered: false },
+  legacyTrialOldShape:  { plan: 'free', hubs: [], trialHubs: client.PAID_HUBS, freeHubsSelected: null, trialEndsAt: FUTURE, status: 'trialing', grandfathered: false },
+  legacyExpiredArray:   { plan: 'free', hubs: [], trialHubs: client.PAID_HUBS, freeHubsSelected: ['tasks', 'jobs'], trialEndsAt: PAST, status: 'active', grandfathered: false }, // St Olaf today
+  legacyExpiredNull:    { plan: 'free', hubs: [], trialHubs: client.PAID_HUBS, freeHubsSelected: null, trialEndsAt: PAST, trialExpiredAt: '2026-09-17T07:00:00Z', status: 'active', grandfathered: false },
+  legacyPerHub:         { plan: 'free', hubs: ['insights'], maxUsers: 10, status: 'active', grandfathered: false },
+  legacyTeam25:         { plan: 'team_25', hubs: [], maxUsers: 25, status: 'active', grandfathered: false },
 };
 
 // ── 1. PARITY ────────────────────────────────────────────────────────────────
 
 test('PARITY — constants agree', () => {
-  assert.equal(server.FREE_PLAN_MAX_USERS, client.FREE_PLAN_MAX_USERS);
-  assert.deepEqual(server.PAID_HUBS, client.PAID_HUBS);
+  for (const k of ['PLAN_FLAT', 'PAID_STATUSES', 'TRIAL_DAYS', 'PRICE', 'ALL_HUBS', 'PAID_HUBS']) {
+    assert.deepEqual(server[k], client[k], k);
+  }
 });
 
-test('PARITY — hasHub / isTrialing / trialDaysRemaining / canAddUser agree across the matrix', () => {
+test('PARITY — every predicate agrees across the matrix', () => {
   const nows = [NOW, new Date('2026-08-11T00:00:00Z'), new Date('2027-01-01T00:00:00Z')];
-  const counts = [0, 9, 10, 11, 25, 26, 500];
   let checked = 0;
   for (const [name, sub] of Object.entries(FIXTURES)) {
     for (const now of nows) {
-      for (const hub of [...ALL, 'inventory', 'nope']) {
-        assert.equal(server.hasHub(sub, hub, now), client.hasHub(sub, hub, now), `hasHub ${name}/${hub}@${now.toISOString()}`);
-        assert.equal(server.isTrialing(sub, hub, now), client.isTrialing(sub, hub, now), `isTrialing ${name}/${hub}`);
-        checked += 2;
+      for (const fn of ['isTrialing', 'isEntitled', 'isLapsed', 'entitlementState', 'canCreate', 'trialDaysRemaining', 'planLabel', 'inTrialWindow']) {
+        assert.equal(server[fn](sub, now), client[fn](sub, now), `${fn} ${name}@${now.toISOString()}`);
+        checked++;
       }
-      assert.equal(server.trialDaysRemaining(sub, now), client.trialDaysRemaining(sub, now), `trialDaysRemaining ${name}`);
-      assert.equal(server.inTrialWindow(sub, now), client.inTrialWindow(sub, now), `inTrialWindow ${name}`);
-      assert.equal(server.planLabel(sub, now), client.planLabel(sub, now), `planLabel ${name}`);
-      checked += 3;
+      for (const hub of [...HUBS, 'nope']) {
+        assert.equal(server.hasHub(sub, hub, now), client.hasHub(sub, hub, now), `hasHub ${name}/${hub}`);
+        checked++;
+      }
+      for (const c of [0, 9, 10, 11, 500]) {
+        assert.equal(server.canAddUser(sub, c, now), client.canAddUser(sub, c, now), `canAddUser ${name}/${c}`);
+        checked++;
+      }
     }
-    for (const c of counts) {
-      assert.equal(server.canAddUser(sub, c), client.canAddUser(sub, c), `canAddUser ${name}/${c}`);
-      checked++;
-    }
+    assert.equal(server.isPaid(sub), client.isPaid(sub), `isPaid ${name}`);
     assert.equal(server.maxUsers(sub), client.maxUsers(sub), `maxUsers ${name}`);
-    checked++;
+    checked += 2;
   }
-  assert.ok(checked > 800, `matrix exercised (${checked} comparisons)`);
+  assert.ok(checked > 1000, `matrix exercised (${checked} comparisons)`);
 });
 
-// ── 2. PINNED current-shape semantics ────────────────────────────────────────
-// hasHub('jobs') per fixture, at NOW. Change this table in A.4, deliberately.
+// ── 2. PINNED flat-model semantics ───────────────────────────────────────────
 
-const PINNED_HAS_JOBS = {
-  missing: false,
-  defaultFree: false,
-  grandfathered: true,
-  pro: true,
-  allIn: true,
-  trialingInWindow: true,
-  trialingJobsOnly: true,
-  expiredWithArray: true,    // 'jobs' was auto-selected — the pre-A.3 free tier
-  expiredWithNull: false,    // post-A.3: nothing granted at expiry (client + functions; NOT rules — B14)
-  perHubOnly: false,
-  team25: false,
-  teamUnlimited: false,
-  canceled: false,
+const PINNED_STATE = {
+  missing: 'none',
+  grandfathered: 'grandfathered',
+  trialing: 'trialing',
+  trialingPastEnd: 'lapsed',       // client/functions: window over. Rules still allow until the cron flips status (≤1 day, accepted)
+  lapsedExpired: 'lapsed',
+  paidActive: 'paid',
+  paidPastDue: 'paid',             // dunning window keeps access
+  paidUnpaid: 'lapsed',
+  paidCanceled: 'lapsed',
+  flatButTrialingFlag: 'lapsed',   // 'trialing' status + expired window is not paid, whatever the plan says
+  defaultFree: 'lapsed',
+  legacyPro: 'lapsed',             // legacy plan values are no longer read; nobody is on them (0 Stripe customers)
+  legacyAllIn: 'lapsed',
+  legacyTrialOldShape: 'trialing', // status+trialEndsAt carry the trial; trialHubs/freeHubsSelected are ignored
+  legacyExpiredArray: 'lapsed',    // St Olaf: the two auto-selected hubs are gone (owner #7, no grace)
+  legacyExpiredNull: 'lapsed',
+  legacyPerHub: 'lapsed',
+  legacyTeam25: 'lapsed',
 };
 
-test('PINNED — hasHub("jobs") across the current-shape matrix', () => {
-  for (const [name, expected] of Object.entries(PINNED_HAS_JOBS)) {
-    assert.equal(client.hasHub(FIXTURES[name], 'jobs', NOW), expected, name);
+test('PINNED — entitlementState across the matrix', () => {
+  for (const [name, expected] of Object.entries(PINNED_STATE)) {
+    assert.equal(client.entitlementState(FIXTURES[name], NOW), expected, name);
   }
-  assert.deepEqual(Object.keys(PINNED_HAS_JOBS).sort(), Object.keys(FIXTURES).sort(), 'every fixture is pinned');
+  assert.deepEqual(Object.keys(PINNED_STATE).sort(), Object.keys(FIXTURES).sort(), 'every fixture is pinned');
 });
 
-test('PINNED — trial-window edge is exclusive at trialEndsAt', () => {
-  const sub = FIXTURES.trialingInWindow;
+test('PINNED — hasHub is the same answer for every hub; canCreate and canAddUser follow it', () => {
+  for (const [name, sub] of Object.entries(FIXTURES)) {
+    const entitled = ['grandfathered', 'trialing', 'paid'].includes(PINNED_STATE[name]);
+    for (const hub of HUBS) assert.equal(client.hasHub(sub, hub, NOW), entitled, `${name}/${hub}`);
+    assert.equal(client.isEntitled(sub, NOW), entitled, `isEntitled ${name}`);
+    assert.equal(client.canCreate(sub, NOW), entitled, `canCreate ${name}`);
+    assert.equal(client.canAddUser(sub, 10, NOW), entitled, `canAddUser@10 ${name}`);
+    assert.equal(client.canAddUser(sub, 5000, NOW), entitled, `canAddUser@5000 ${name} (no seat cap)`);
+    assert.equal(client.maxUsers(sub), null, `maxUsers ${name} (unlimited)`);
+    assert.equal(client.isLapsed(sub, NOW), !!sub && !entitled, `isLapsed ${name}`);
+  }
+});
+
+test('PINNED — trial window edge is exclusive at trialEndsAt', () => {
+  const sub = FIXTURES.trialing;
   const at = new Date(FUTURE);
-  assert.equal(client.hasHub(sub, 'jobs', new Date(at.getTime() - 1)), true);
-  assert.equal(client.hasHub(sub, 'jobs', at), false);
-  assert.equal(client.isTrialing(sub, 'jobs', at), false);
+  assert.equal(client.isEntitled(sub, new Date(at.getTime() - 1)), true);
+  assert.equal(client.isEntitled(sub, at), false);
   assert.equal(client.trialDaysRemaining(sub, at), 0);
 });
 
-test('PINNED — canAddUser: 10-seat cap unless pro/team_unlimited/all_in/grandfathered', () => {
-  assert.equal(client.canAddUser(FIXTURES.defaultFree, 9), true);
-  assert.equal(client.canAddUser(FIXTURES.defaultFree, 10), false);
-  assert.equal(client.canAddUser(FIXTURES.missing, 10), false);
-  assert.equal(client.canAddUser(FIXTURES.team25, 24), true);
-  assert.equal(client.canAddUser(FIXTURES.team25, 25), false);
-  assert.equal(client.canAddUser(FIXTURES.trialingInWindow, 10), false); // trial does NOT lift the cap today
-  for (const n of ['pro', 'teamUnlimited', 'allIn', 'grandfathered']) {
-    assert.equal(client.canAddUser(FIXTURES[n], 5000), true, n);
+test('PINNED — trialDaysRemaining rounds up, and is 0 for every non-trialing state', () => {
+  assert.equal(client.trialDaysRemaining({ ...FIXTURES.trialing, trialEndsAt: '2026-09-20T00:00:00Z' }, NOW), 3);
+  for (const [name, sub] of Object.entries(FIXTURES)) {
+    if (PINNED_STATE[name] !== 'trialing') assert.equal(client.trialDaysRemaining(sub, NOW), 0, name);
   }
 });
 
-// A.4.0b — SettingsPage's derivations, now from the module. planLabel/maxUsers
-// were moved verbatim; the one deliberate change is that a trialing church's
-// hub panels now follow hasHub (they ignored trials before).
 test('PINNED — planLabel', () => {
   const expected = {
-    missing: 'Free', defaultFree: 'Free', grandfathered: 'All-In', pro: 'ChurchOpsHub', allIn: 'All-In',
-    trialingInWindow: '90-Day Trial', trialingJobsOnly: '90-Day Trial', expiredWithArray: 'Free',
-    expiredWithNull: 'Free', perHubOnly: 'Free', team25: 'team_25', teamUnlimited: 'Team Unlimited', canceled: 'Free',
+    missing: 'Trial ended', grandfathered: 'ChurchOpsHub (included)', trialing: '90-Day Trial',
+    trialingPastEnd: 'Trial ended', lapsedExpired: 'Trial ended', paidActive: 'ChurchOpsHub',
+    paidPastDue: 'ChurchOpsHub — payment past due', paidUnpaid: 'Trial ended', paidCanceled: 'Canceled',
+    flatButTrialingFlag: 'Trial ended', defaultFree: 'Trial ended', legacyPro: 'Trial ended',
+    legacyAllIn: 'Trial ended', legacyTrialOldShape: '90-Day Trial', legacyExpiredArray: 'Trial ended',
+    legacyExpiredNull: 'Trial ended', legacyPerHub: 'Trial ended', legacyTeam25: 'Trial ended',
   };
   for (const [name, label] of Object.entries(expected)) assert.equal(client.planLabel(FIXTURES[name], NOW), label, name);
   assert.deepEqual(Object.keys(expected).sort(), Object.keys(FIXTURES).sort());
 });
 
-test('PINNED — maxUsers agrees with canAddUser at the boundary for every fixture', () => {
-  for (const [name, sub] of Object.entries(FIXTURES)) {
-    const cap = client.maxUsers(sub);
-    if (cap === null) assert.equal(client.canAddUser(sub, 100000), true, `${name} unlimited`);
-    else {
-      assert.equal(client.canAddUser(sub, cap - 1), true, `${name} below cap`);
-      assert.equal(client.canAddUser(sub, cap), false, `${name} at cap`);
-    }
-  }
-});
-
-test('PINNED — inTrialWindow is hub-independent and matches isTrialing over the trial hubs', () => {
-  for (const [name, sub] of Object.entries(FIXTURES)) {
-    const anyHub = ALL.some(h => client.isTrialing(sub, h, NOW));
-    const inWin = client.inTrialWindow(sub, NOW);
-    if (anyHub) assert.equal(inWin, true, name);
-    if (!inWin) assert.equal(anyHub, false, name);
-  }
-  assert.equal(client.inTrialWindow(FIXTURES.trialingInWindow, NOW), true);
-  assert.equal(client.inTrialWindow(FIXTURES.expiredWithNull, NOW), false);
-  assert.equal(client.inTrialWindow(FIXTURES.expiredWithArray, NOW), false);
-});
-
-test('PINNED — A.4.0b fix: a trialing church has every trial hub, including in the Settings panels', () => {
-  const settingsPanels = (sub) => ['jobs', 'insights', 'people_access'].filter(h => client.hasHub(sub, h, NOW));
-  assert.deepEqual(settingsPanels(FIXTURES.trialingInWindow), ['jobs', 'insights', 'people_access']);
-  assert.deepEqual(settingsPanels(FIXTURES.trialingJobsOnly), ['jobs']);
-  assert.deepEqual(settingsPanels(FIXTURES.expiredWithNull), []);
-  assert.deepEqual(settingsPanels(FIXTURES.expiredWithArray), ['jobs']);
-});
-
-test('PINNED — trialDaysRemaining rounds up and is 0 once freeHubsSelected is written', () => {
-  const sub = { ...FIXTURES.trialingInWindow, trialEndsAt: '2026-09-20T00:00:00Z' };
-  assert.equal(client.trialDaysRemaining(sub, NOW), 3); // 2.5 days → 3
-  assert.equal(client.trialDaysRemaining(FIXTURES.expiredWithArray, NOW), 0);
-  assert.equal(client.trialDaysRemaining(FIXTURES.expiredWithNull, NOW), 0);
+test('PINNED — grandfathered wins over everything, including a canceled status', () => {
+  assert.equal(client.isEntitled({ grandfathered: true, plan: 'free', status: 'canceled' }, NOW), true);
+  assert.equal(client.isEntitled({ grandfathered: 'true', plan: 'free', status: 'active' }, NOW), false, 'strict boolean, as in the rules');
 });
