@@ -4,13 +4,15 @@
 - Owner: Product owner (John)
 - Implementation: Claude (DEC-2026-011)
 - Reviewer: Codex (plan review before implementation)
-- Status: **rev 6 — A.3 SHIPPED, A.4/A.5 blocked on nothing but execution.**
-  Owner decisions taken 2026-09-16 (see "Owner decisions" below); DEC-2026-021 +
-  DEC-2026-022 recorded in `docs/DECISIONS.md` (`397f090`). Four Codex rounds,
-  all REWORK, all findings verified and closed — see "Review history". The
-  review loop was stopped deliberately at rev 5: the remaining blockers had
-  become owner decisions, and those are now answered.
-- Base commit: `f429b86` (2026-09-10), working tree clean
+- Status: **rev 7 (2026-09-17) — A.3 SHIPPED; round 5 closed; A.4.0 next.**
+  Owner decisions taken 2026-09-16 + 2026-09-17 (see "Owner decisions" below);
+  DEC-2026-021 + DEC-2026-022 recorded in `docs/DECISIONS.md` (`397f090`). Five
+  Codex rounds, all REWORK, all findings verified and closed — see "Review
+  history". Round 5 (post-A.3) found one real regression A.3 introduced in
+  `firestore.rules`, an unspecified document shape, a contradiction in A.4.0's
+  "behavior-preserving" claim, and a **fourth** inventory miss — the last of
+  which retires the in-doc table for a checked-in script (A.4.0 step 1).
+- Base commit: `f429b86` (2026-09-10); rev 7 against `ebc9a2b` (2026-09-17)
 - Related: Codex application review 2026-08-28; DEC-2026-019; DEC-2026-020;
   `docs/backlog.md` "Priority order"
 
@@ -63,6 +65,8 @@ reasoning, not their status.
 | 5 | Does $5 include unlimited members? | **Yes.** No seat cap in any state |
 | 6 | $50/year? | **Yes** |
 | 7 | Grace window for the two lapsed churches? | **No grace.** New model applies immediately (modified for TrueNorth by #4) |
+| 8 | Notice for the Terms change (2026-09-17)? | **Email on the day A.5 ships.** The Terms edit carries an effective date 14 days after that email (`TermsBody.jsx:59` requires 14 days' notice). See A.5 |
+| 9 | Grandfather TrueNorth (2026-09-17)? | **Yes** — explicit approval given for the one production write. Executed at A.4 ship time, not before |
 
 **Two interpretations applied, both flagged to the owner and neither corrected:**
 
@@ -77,12 +81,13 @@ reasoning, not their status.
    (#7), and TrueNorth separately grandfathered (#4), making grace moot for it.
    St Olaf gets the new model immediately.
 
-**Still needs one explicit approval:** grandfathering TrueNorth is a production
-data write on `churches/Nxy6GTxK0bhuDy97lWFCwECmWg43-church/config/subscription`
-(`grandfathered: true`). The owner declined production writes generally at #7
-and asked for this one specifically at #4, so it is held pending a plain yes.
-Supporting data: TrueNorth is the only non-FXCC tenant with real content — **15
-supplies**, 101 activity rows, last active **2026-08-24**.
+**The one production write is approved (#9, 2026-09-17).** Grandfathering
+TrueNorth = `grandfathered: true` on
+`churches/Nxy6GTxK0bhuDy97lWFCwECmWg43-church/config/subscription`. It is the
+only migration write in Part A, it runs with the A.4 deploy (so the new
+predicate never sees TrueNorth as lapsed), and the A.2 tenant-census re-run
+verifies it. Supporting data: TrueNorth is the only non-FXCC tenant with real
+content — **15 supplies**, 101 activity rows, last active **2026-08-24**.
 
 ---
 
@@ -286,7 +291,13 @@ outcome available.
 - **Highland, New Life, Compassion** — keep their existing `trialEndsAt`
   unchanged. They were promised 90 days of everything and still receive exactly
   that. Only what happens *after* changes, and they are told before it does.
-- **St Olaf, TrueNorth** — currently hold two free hubs by auto-selection.
+- **St Olaf, TrueNorth** — **superseded by owner decisions #7 and #9:** no
+  grace window for anyone; TrueNorth is grandfathered outright; St Olaf gets
+  the new model the day A.4 ships. The grace-via-`trialing` design below is
+  kept only for its reasoning (and the `trialWarningEmailSentAt` constraint,
+  which still applies to any future grace write). Nothing in it is executed.
+
+  *Original text:* currently hold two free hubs by auto-selection.
   Rev 1 promised them a grace window to 2026-10-31 without saying what state
   represented it. There is none: `processTrialExpirations` writes
   `status: 'active'` at expiry (`functions/index.js:1700`), so a lapsed church
@@ -328,6 +339,22 @@ longer written at expiry, both emails model-neutral. `status` stays `'active'`
 rather than a new `'lapsed'` value, because `SettingsPage.jsx:925-926` renders
 `subscription.status` verbatim and colours anything else red — the lapsed state
 is modelled in A.4 with the client that presents it.
+
+**Correction (round 5, B14): A.3 did change one thing it claimed not to.**
+The commit comment at `functions/index.js:1681-1685` says "today's semantics
+are unchanged" — true for the client and for `subHasHub`, both of which
+time-check `trialEndsAt`, and **false for `firestore.rules`**. `jobsHubActive()`
+(`firestore.rules:216-220`) has no time check; it relied on expiry *writing*
+`freeHubsSelected` to take the `freeHubsSelected == null && trialHubs` branch
+out of play. A.3 stopped that write, so any trial that expires from now on keeps
+**rules-level** Jobs write access for as long as `trialHubs` contains `jobs` —
+which is every church, since `useAuth.js:235` seeds all seven hubs. The UI hides
+it; rules do not. **Affected today: nobody** — St Olaf and TrueNorth expired
+under the old code and carry `freeHubsSelected` arrays. **First affected:
+Highland, 2026-09-30 02:00 Central.** A.4 §7 closes it, and A.4 therefore has a
+date: rules must deploy before 09-30 or Highland's expiry leaks. Entitlement is
+not a security boundary (AGENTS.md), so this is a correctness defect in a gate,
+not an exposure — but a claim of "unchanged" was made and it was wrong.
 
 **First tests for this function** (`functions/test/handlers/trialExpirations.test.mjs`,
 7 tests). It had none while it emailed strangers and mutated their subscription
@@ -411,8 +438,28 @@ data); no stranger receives a false claim.
    stays free, a lapsed church keeps a working product and the paywall premise
    weakens further. Recommended: delete the flag, since a free wedge that has
    never converted anyone (see A.0) is exactly what this plan is retiring.
-4. **Subscription shape.** `hasHub` becomes `grandfathered || trialing || paid`
-   in **all four** implementations. Rev 1 listed three and missed the fourth:
+4. **Subscription shape — the fields, not just the predicate (round 5, B16).**
+   Four revisions said `grandfathered || trialing || paid` and never said what
+   `paid` or `lapsed` *are* on the document. They are:
+
+   | State | Test | Written by |
+   |---|---|---|
+   | grandfathered | `grandfathered == true` | owner write (FXCC, TrueNorth, e2e) |
+   | trialing | `status == 'trialing' && trialEndsAt > now` (client/functions); rules use `status == 'trialing'` alone — the 02:00 cron flips it, ≤1 day lag accepted | `useAuth.js:267-277` at church creation |
+   | paid | `plan == 'flat' && status in ['active','past_due']` — `past_due` keeps access through Stripe's dunning window; `unpaid`/`canceled` do not | webhook: new `$5` prices **and every normalized legacy paid event** (§1) |
+   | lapsed | none of the above — **derived, never stored.** Today's A.3 output (`plan: 'free'`, `status: 'active'`, `trialExpiredAt` set) and the cancellation output (`plan: 'free'`, `status: 'canceled'`) both fall here | expiry cron (unchanged from A.3); webhook cancellation → `plan: 'free', status: 'canceled'` |
+
+   `customer.subscription.updated` (`functions/index.js:946-953`) writes
+   Stripe's `status` verbatim, which is why `paid` enumerates statuses instead
+   of testing `!= 'canceled'`. `plan: 'flat'` is a new value; `pro`/`all_in`/
+   `team_*` stop being *read* (legacy events are normalized to `flat` on
+   arrival, §1) but existing documents are not rewritten — FXCC keeps
+   `plan: 'all_in'` and is covered by `grandfathered`. Seats: none (owner #5) —
+   `canAddUser` returns true in every state except lapsed, where "can't add
+   more" (#3) makes it false.
+
+   `hasHub` becomes that predicate in **all four** implementations. Rev 1 listed
+   three and missed the fourth:
    - `src/hooks/useSubscription.js:29-40`
    - `functions/index.js:1212-1223`
    - `firestore.rules:214-221` (Jobs only — see A.1(i), it stays)
@@ -435,10 +482,15 @@ data); no stranger receives a false claim.
    born carrying fields the model no longer has.
 6. **Trial banner.** `src/App.jsx:839` renders trial state from these fields;
    update with the rest.
-7. **Rules.** Under A.1(i), `firestore.rules` is left alone apart from whatever
-   `jobsHubActive()` needs to keep working against the new document shape —
-   including adding the missing `plan == 'pro'` branch (Finding 3) rather than
-   deleting the function. Rev 1 proposed dissolving it; A.1(i) keeps it.
+7. **Rules — with a date.** Under A.1(i), `firestore.rules` is left alone
+   apart from `jobsHubActive()`, which is rewritten to the §4 shape:
+   `grandfathered == true || status == 'trialing' || (plan == 'flat' && status
+   in ['active','past_due'])`. The `freeHubsSelected == null && trialHubs`
+   branch — the one A.3 broke (see A.3 correction) — is deleted, not patched.
+   Rules test: an expired trial (`status: 'active'`, `trialHubs: ['jobs']`,
+   `freeHubsSelected: null`) is **denied** — the case that passes today and
+   should not. **Must deploy before 2026-09-30 02:00 Central** (Highland's
+   expiry). Rev 1 proposed dissolving the function; A.1(i) keeps it.
 8. **Client copy.** Delete `UPGRADE_PRICES`, the seven `price:` fields, and the
    dangling `hubPrice` prop (`HubsPage.jsx:57-147,295`). Update the hardcoded
    figure in `UpgradeGate.jsx:63`.
@@ -452,8 +504,25 @@ four. Round 2 found four more sites inside that same fourth file.** The plan's
 method was the defect: hand-enumerating consumers in prose and hoping the list
 was complete. Rev 3 stops doing that.
 
-**Step 1 — take the inventory mechanically, not from memory.** Generated
-2026-09-16, file-level counts:
+**Step 1 — take the inventory mechanically, not from memory.** ~~Generated
+2026-09-16, file-level counts:~~ **Rev 7: the table below missed a fourth time**
+(round 5, B15 — `functions/test/handlers/trialExpirations.test.mjs`,
+`stripeWebhook.test.mjs:160,170`, the archived rules fixture
+`functions/test/rules/fixtures/transitional-archive-2026-09-07.rules:187-199`,
+and the new `trialExpiredAt` field). A table frozen in a document is the wrong
+tool: it goes stale the moment the tree moves, and it has now been wrong in
+every revision that carried it. **The inventory is a checked-in script,
+`scripts/entitlement-inventory.sh`, committed in A.4.0 and run at every A.4
+commit.** It greps the symbol list below (plus `trialExpiredAt`, plus the
+load-bearing `hubs` writers) over `src/ functions/ firestore.rules scripts/ e2e/
+docs/BUSINESS_MODEL.md`, *including* `functions/test/`, and prints file-level
+counts. The A.4 grep gate is "the script's output names only files this plan
+has dispositioned" — and the table below is retained as the 2026-09-16 baseline
+only, superseded by the script's output from A.4.0 onward. The archived rules
+fixture is a frozen snapshot by design and is **excluded** from the gate with a
+comment in the script saying why.
+
+Baseline table (2026-09-16, known-incomplete):
 
 | Symbol | Files |
 |---|---|
@@ -469,14 +538,35 @@ was complete. Rev 3 stops doing that.
 Fourteen files, plus three scripts and an e2e spec. That is the real surface,
 and no prose list was ever going to hold it.
 
-**Step 2 — collapse four implementations into one before changing any
-behavior.** Extract a pure `src/lib/entitlement.js` — `hasHub`, `isTrialing`,
-`canAddUser`, `planLabel` — with a CJS twin at `functions/lib/entitlement.js`
-and a **parity test**, exactly as `attention.js`, `occurrences.js` and
-`people.js` already do (DEC-2026-019 §3: a behavior-preserving commit placed
-*before* the feature commit). Repoint `useSubscription.js`, `SettingsPage.jsx`,
-and `functions/index.js:subHasHub` at it. `firestore.rules` necessarily keeps
-its own copy; the parity test pins it.
+**Step 2 — collapse the implementations into one before changing any
+behavior — and be honest about which repoint is a no-op (round 5, B17).**
+Rev 3 said "four implementations, behavior-preserving". Round 5 checked:
+`SettingsPage.jsx:174-179,386-389` is **not** an implementation of `hasHub` —
+it derives `churchHubs` / `hasJobsHub` / `hasInsightsHub` / `hasPeopleHub` from
+`plan`, `grandfathered` and `hubs[]` only, and **ignores trials entirely**. A
+trialing church today sees none of the Jobs/Insights/People settings panels it
+is entitled to. And `firestore.rules` implements Jobs only. So "repoint
+SettingsPage, preserving behavior" was a contradiction. A.4.0 is therefore two
+commits:
+
+- **A.4.0a — the no-op.** Extract a pure `src/lib/entitlement.js` — `hasHub`,
+  `isTrialing`, `canAddUser`, `maxUsers`, `planLabel` — copied verbatim from
+  `useSubscription.js:29-47`, with a CJS twin at `functions/lib/entitlement.js`
+  and a **twin parity test**, exactly as `attention.js`, `occurrences.js` and
+  `people.js` already do (DEC-2026-019 §3). Repoint `useSubscription.js` and
+  `functions/index.js:subHasHub` at it. The parity matrix is the **current**
+  shape: `{grandfathered, pro, all_in, trialing-in-window, expired-with-array
+  (pre-A.3 lapsed), expired-with-null (post-A.3 lapsed), per-hub hubs[]}`. Rules
+  are pinned for **Jobs only** via `npm run test:rules` fixtures against the
+  same matrix — that is the only hub the rules gate.
+- **A.4.0b — the named behavior change, its own commit.** Repoint
+  `SettingsPage.jsx`'s five derivations at the module. **Effect: a trialing
+  church starts seeing the Jobs, Insights and People Access settings panels.**
+  That is a fix, and it is stated as one in the commit message rather than
+  smuggled in under "consolidation".
+
+Only after both land does the model change — in one module instead of four
+files, which is what makes the rest of A.4 verifiable rather than hopeful.
 
 Only after that lands does the model change — in one module instead of four
 files, which is what makes the rest of A.4 verifiable rather than hopeful.
@@ -536,9 +626,24 @@ tier` · `permanently free` · `stay free` · `no time limit` · `$15` · `$150`
 **`TermsBody.jsx` is not copy — it is the agreement the user accepted**, shared
 by the auth-screen modal and `/terms` so the two cannot drift. Shipping a model
 its own Terms contradict is a different class of problem from stale marketing.
-Treat it as a **precondition alongside `AGENTS.md` and `BUSINESS_MODEL.md`**, and
-consider whether existing churches need notice of a Terms change at all — a
-question this plan raises but does not answer.
+Treat it as a **precondition alongside `AGENTS.md` and `BUSINESS_MODEL.md`**.
+
+**Notice (owner #8, round 5 B18).** The Terms themselves set the rule:
+`TermsBody.jsx:59` — *"We will notify active users of material changes via
+email at least 14 days before the new terms take effect."* So A.5 is:
+
+1. Edit `TermsBody.jsx:20,29` to the flat model; change "Last updated" (`:14`)
+   to the ship date and add an **"Effective: <ship date + 14 days>"** line
+   beside it.
+2. **Send the notice email the day A.5 ships** — one plain email to the admin of
+   each non-FXCC church (5 churches; FXCC is grandfathered and unaffected):
+   what changes, when it takes effect, the $5/$50 price, and that they can
+   cancel before the effective date. Draft the copy in A.5; it is model-facing
+   copy like everything else in this section. FXCC is copied for the record.
+3. For the 14 days between, the product already behaves the new way while the
+   old Terms are the agreement on paper. **Accepted:** that gap has existed
+   since A.3 shipped, no church has ever paid, and the only church that can
+   lapse inside the window is Highland (09-30), which has zero data.
 
 Blog posts are indexed and ranking; edit the pricing sentences in place rather
 than restructuring posts. Add a What's New entry.
@@ -565,9 +670,15 @@ this plan: it is a *proven* defect against *FXCC's* data.
    counts both. A test that seeds only one lane passes today and proves nothing.
 3. Audit every remaining server-side inequality filter on a timestamp-typed
    field for the same defect. Known sites: `functions/index.js:1662` (deleted by
-   Part A), `:2308` (this fix), `:3993` (`completedAt` — COH-007 archiver;
-   verify which type it writes), `src/pages/hubs/JobsPage.jsx:870`
-   (`createdAt`).
+   Part A), `:2308` (this fix), `:3978` (`completedAt` — COH-007 archiver),
+   `src/pages/hubs/JobsPage.jsx:870` (`createdAt`). **Audited 2026-09-17
+   (round 5, G13):** `completedAt` is written as `new Date().toISOString()` at
+   `WorkBoard.jsx:1149,1329` and the archiver compares it to `archiveCutoffISO()`
+   — string vs string. `createdAt` on job listings is a string everywhere
+   (`JobsPage.jsx:500,727,737` call `.slice`/`.localeCompare` on it) and `:870`
+   compares string to string. **Neither has a second lane.** The activity log is
+   the only collection with a mixed-type history, because it is the only one
+   whose writer changed SDKs (`serverTimestamp` era → ISO era).
 4. Decide whether to backfill the 40 Timestamp-era FXCC rows to strings, convert
    the 967 string rows to Timestamps, or run dual-lane indefinitely.
    **Recommendation: dual-lane, no backfill** — the client already does it, a
@@ -672,12 +783,14 @@ rules-gated hub. Deleting the divergence beats testing it.
 | Item | How it is verified |
 |---|---|
 | A.3 emails | Render both templates against a fixture church; assert no "most-used" string survives anywhere in `functions/` |
-| A.4 entitlement | Parity test asserting **all four** `hasHub` implementations agree across the matrix of `{grandfathered, trialing, paid, lapsed}` — including `SettingsPage`'s inline copy. This is the test Finding 3 would have caught and the test that would have caught rev 1's own omission |
-| A.4 completeness | The grep gate in A.4: `freeHubsSelected`, `trialHubs`, `UPGRADE_PRICES`, `pro_monthly`, `subscription?.hubs` return only named sites |
+| A.4.0a parity | Twin parity test (`src/lib/entitlement.js` ≡ `functions/lib/entitlement.js`) across the **current-shape** matrix in A.4.0 step 2; rules pinned for Jobs only via `test:rules` fixtures on the same matrix. Behavior-preserving: `npm test` + `test:rules` green with no fixture changes |
+| A.4.0b | One assertion: a trialing fixture church renders the Jobs/Insights/People settings panels (it does not today) |
+| A.4 entitlement | The same parity test re-pointed at the **new-shape** matrix `{grandfathered, trialing, paid-active, paid-past_due, lapsed-expired, lapsed-canceled}`; `SettingsPage` now consumes the module so it is covered by construction, not by a fourth copy |
+| A.4 completeness | `scripts/entitlement-inventory.sh` output names only files this plan has dispositioned; run at every A.4 commit, not once |
 | A.4 checkout | End-to-end: a checkout session created after cutover resolves to the **$5** price, not `pro_monthly` |
-| A.4 rules | `npm run test:rules` — asserting the Jobs gate still passes for `plan: 'pro'`, which it does not today (Finding 3) |
+| A.4 rules | `npm run test:rules` — the Jobs gate passes for `plan: 'flat'` + `status: 'active'`/`'past_due'`, passes for `status: 'trialing'`, **denies** an expired trial with `trialHubs: ['jobs']` and `freeHubsSelected: null` (the A.3 regression, B14), denies `status: 'canceled'`. Deployed before 2026-09-30 |
 | A.4 Stripe | Webhook test for a legacy `pro_monthly` event arriving after cutover, and a new `$5` event |
-| A.2 grace | After the owner-approved write, St Olaf and TrueNorth read `status: 'trialing'`, `trialEndsAt: 2026-10-31`, and `hasHub` returns true for them in all four implementations |
+| A.2 TrueNorth | After the owner-approved write (#9), TrueNorth reads `grandfathered: true` and `hasHub` returns true in every implementation; St Olaf reads lapsed. The A.2 grace-write row from rev 5 is **withdrawn** (owner #7: no grace) |
 | B | Parity test between the `src/lib` helper and its `functions/lib` twin; digest test seeding **both** timestamp types in-window; re-run the two REST counts and confirm the digest counts 213, not 173 |
 | C | For each of the **three** restructured call sites: assert primary + audit document both exist, and that a rejected batch/transaction leaves **neither**. A test that only forces `logActivity` to throw proves nothing — see C.2 |
 | C — contention | **Round 3's fixture, adopted verbatim:** two concurrent `useSupply` calls against `quantity: 1`; assert final quantity is 0 **and two audit rows exist**. This is the test that fails if the transaction is ever downgraded to a batch |
@@ -809,7 +922,32 @@ iterating with Codex and hand to the owner. The remaining blockers are
 all four are decisions, not findings, and no further review round can close
 them.
 
-**Not yet reviewed:** rev 5.
+### Round 5 — Codex, 2026-09-17 (`gpt-5.6-luna`, post-A.3), verdict **REWORK**
+
+Run against the live tree with A.3 at `1521053`, focused on A.4.0 readiness.
+Five blockers, two gaps. Every one verified against the code before
+disposition; all five blockers were real, though two were narrower than stated.
+
+| # | Finding | Verified as | Disposition in rev 7 |
+|---|---|---|---|
+| B14 | A.3 left `freeHubsSelected == null` on expiry, so `jobsHubActive()` keeps granting Jobs via `trialHubs` (`firestore.rules:216-220`) | **Real, latent.** No church is affected yet (both lapsed tenants expired pre-A.3); Highland on 09-30 is first | A.3 correction paragraph; A.4 §7 rewritten with the denial test and a **deploy-before-09-30** date |
+| B15 | Inventory omits `trialExpirations.test.mjs`, `stripeWebhook.test.mjs:160,170`, the archived rules fixture, and `trialExpiredAt` | **Real — fourth miss of the same class** | A.4.0 step 1: table retired, `scripts/entitlement-inventory.sh` checked in and run per commit; archive fixture excluded with a stated reason |
+| B16 | `paid`/`lapsed` never defined as fields; A.3 writes lapsed as `status: 'active'`; `subscription.updated` writes Stripe status verbatim | **Real** | A.4 §4 state table: `plan: 'flat'` + status enumeration for paid; lapsed derived, never stored |
+| B17 | "Four implementations" — `SettingsPage` has no `hasHub`; its derivations ignore trials; rules cover Jobs only | **Real** — and it made "behavior-preserving" a contradiction | A.4.0 split into 0a (no-op extraction, current-shape matrix, rules pinned for Jobs) and 0b (Settings repoint, named as the fix it is) |
+| B18 | A.5 leaves Terms notice/acceptance unresolved | **Real, and an owner call** — `TermsBody.jsx:59` requires 14 days' emailed notice | Owner #8: email on ship day, effective +14; A.5 steps 1–3 |
+| G13 | Part B never states `completedAt`/`createdAt` types | Audited: both ISO strings on write and on query; no second lane | Part B step 3 |
+| G14 | No fixture for the St Olaf/TrueNorth grace write | Moot — owner #7 withdrew the grace; #9 approved TrueNorth's grandfather instead | A.2 bullet superseded; verification row replaced |
+
+**Where round 5 landed.** The loop was stopped at rev 5 because the blockers
+had become owner decisions. Round 5 was run *after* those decisions and after
+A.3 landed, and it found something the earlier rounds could not have: a
+regression the shipped commit *introduced* while claiming not to (B14). That is
+the argument for one post-ship round per phase — not for reopening the loop.
+B15 is the fourth inventory miss and closes the question of whether a table in
+a document can ever be the gate: it cannot, so it is no longer asked to be.
+
+**Not yet reviewed:** rev 7. Next review point: after A.4.0a+b land, against
+the tree, not the doc.
 
 ---
 

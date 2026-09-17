@@ -23,20 +23,25 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-012 — Flat pricing, entitlement collapse, review disposition
 
-- Status: **A.3 SHIPPED + DEPLOYED 2026-09-16 (`1521053`). A.4/A.5 NOT STARTED.**
-- Plan: `docs/COH-012-PRICING-AND-REVIEW-DISPOSITION-PLAN-2026-09-16.md` (rev 6)
-- Decisions: DEC-2026-021 (flat $5 model), DEC-2026-022 (review disposition)
-- Plan review: Codex ×4, all REWORK, all findings verified and closed. Loop
-  stopped at rev 5 once remaining blockers were owner decisions; those are
-  answered in the plan's "Owner decisions" table.
-- **Next action:** A.4.0 — extract `src/lib/entitlement.js` + `functions/lib`
-  CJS twin + parity test as a **behavior-preserving commit**, before any model
-  change. Do not hand-enumerate consumers; the plan carries a generated
-  inventory (14 files, 3 scripts, 1 e2e spec). Three prior revisions each
-  shipped an incomplete hand-written list.
-- **Blocked on owner:** one production write — grandfather TrueNorth
-  (`Nxy6GTxK0bhuDy97lWFCwECmWg43-church`). Asked for at Q4, but production
-  writes were declined generally at Q7; held for an explicit yes.
+- Status: **A.3 SHIPPED + DEPLOYED 2026-09-16 (`1521053`). Plan at rev 7
+  (2026-09-17). A.4.0a IN PROGRESS.**
+- Plan: `docs/COH-012-PRICING-AND-REVIEW-DISPOSITION-PLAN-2026-09-16.md` (rev 7)
+- Decisions: DEC-2026-021 (flat $5 model), DEC-2026-022 (review disposition);
+  owner #8 (Terms notice: email on A.5 ship day, effective +14d) and #9
+  (grandfather TrueNorth — **approved 2026-09-17**) recorded in the plan.
+- Plan review: Codex ×5, all REWORK, all findings verified and closed. Round 5
+  (post-A.3, against the live tree) found a rules regression A.3 introduced
+  (B14 — expired trials keep rules-level Jobs access; first affected Highland
+  **2026-09-30**), a fourth inventory miss (B15 — table retired for
+  `scripts/entitlement-inventory.sh`), and that "repoint SettingsPage,
+  behavior-preserving" was a contradiction (B17 — A.4.0 split into 0a/0b).
+- **Next action:** A.4.0a — `scripts/entitlement-inventory.sh` +
+  `src/lib/entitlement.js` + `functions/lib/entitlement.js` twin + parity test
+  on the current shape; repoint `useSubscription.js` and `subHasHub`. Then
+  A.4.0b (Settings repoint, a named fix). Then A.4 with rules deployed
+  **before 09-30**.
+- **Owner write, approved:** grandfather TrueNorth
+  (`Nxy6GTxK0bhuDy97lWFCwECmWg43-church`) — executes with the A.4 deploy.
 - **Independent of all of the above:** Part B — `sendWeeklyInsightsDigest`
   (`functions/index.js:2308`) filters a Timestamp field with a string and is
   computing over 173 of FXCC's 213 in-window activity rows. FXCC-facing,
