@@ -330,6 +330,48 @@ test('jobListings signups: a member reads only their OWN signup; roster writes a
   await assertFails(setDoc(doc(ctx('adminA'), P('jobListings/j1/signups/memberB')), { uid: 'memberB' })); // CF-only
 });
 
+// ── COH-012 pin — jobsHubActive() across the entitlement fixture matrix ─────
+// A.4.0a: the SAME fixtures as functions/test/entitlement.test.mjs, so the
+// rules' Jobs gate is pinned beside the client/server predicate. Two rows
+// DIVERGE from the client today and are asserted as they ARE, not as they
+// should be — A.4 flips both deliberately:
+//   pro             → rules DENY  (Finding 3: no `plan == 'pro'` branch)
+//   expiredWithNull → rules ALLOW (B14: A.3 stopped writing freeHubsSelected,
+//                     and the null+trialHubs branch has no time check)
+import { FIXTURES as ENTITLEMENT_FIXTURES } from '../entitlement.test.mjs';
+const RULES_HAS_JOBS = {
+  // missing: no doc → `s != null` is false; covered by the separate test below
+  defaultFree: false,
+  grandfathered: true,
+  pro: true,               // NOT via plan — via freeHubsSelected: ALL (webhook writes it today)
+  allIn: true,
+  trialingInWindow: true,
+  trialingJobsOnly: true,
+  expiredWithArray: true,
+  expiredWithNull: true,   // ← B14 divergence: client says false
+  perHubOnly: false,
+  team25: false,
+  teamUnlimited: false,
+  canceled: false,
+};
+for (const [name, expected] of Object.entries(RULES_HAS_JOBS)) {
+  test(`COH-012 pin — jobsHubActive(${name}) is ${expected}`, async () => {
+    await seedMembers();
+    await seed(P('config/subscription'), ENTITLEMENT_FIXTURES[name]);
+    const attempt = setDoc(doc(ctx('adminA'), P('jobListings/j1')), { title: 'Mow', spotsTotal: 3, signupCount: 0 });
+    if (expected) await assertSucceeds(attempt); else await assertFails(attempt);
+  });
+}
+test('COH-012 pin — jobsHubActive is false with no subscription doc', async () => {
+  await seedMembers();
+  await assertFails(setDoc(doc(ctx('adminA'), P('jobListings/j1')), { title: 'Mow', spotsTotal: 3, signupCount: 0 }));
+});
+test('COH-012 pin — pro WITHOUT freeHubsSelected is denied (Finding 3, flips in A.4)', async () => {
+  await seedMembers();
+  await seed(P('config/subscription'), { plan: 'pro', hubs: [], maxUsers: 9999, status: 'active', grandfathered: false });
+  await assertFails(setDoc(doc(ctx('adminA'), P('jobListings/j1')), { title: 'Mow', spotsTotal: 3, signupCount: 0 }));
+});
+
 // ── Users — no self-escalation; cross-tenant transplant blocked ──────────────
 test('users: a member cannot escalate their own role', async () => {
   await seedMembers();

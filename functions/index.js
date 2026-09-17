@@ -12,6 +12,7 @@ const { buildDigestSignals, digestVisibleTasks, isDigestCacheUsable, DIGEST_POLI
 const { syncShepherdPeople, setPcoElderAssignment, buildElderDigest } = require('./lib/shepherd');
 const { resolveRoster, isElderEmail, buildNormalizer } = require('./lib/roster');
 const { archiveCutoffISO, evaluateArchiveCandidate } = require('./lib/archiveEligibility');
+const entitlement = require('./lib/entitlement');
 
 // COH-006 gate 1 — server twin of uidsOf() in src/utils/taskVisibility.js.
 // Rules cannot search inside the `[{uid, name}]` arrays the UI stores, so every
@@ -1208,18 +1209,11 @@ exports.icsCalendarFeed = onRequest({ cors: true, invoker: 'public' }, async (re
 });
 
 // Shared hub-access check used by all hub-gating Cloud Functions.
-// Mirrors the client-side hasHub() logic in useSubscription.js.
+// COH-012 A.4.0a: the predicate is functions/lib/entitlement.js, the server
+// twin of src/lib/entitlement.js — one copy, pinned by
+// functions/test/entitlement.test.mjs. This wrapper keeps the call sites stable.
 function subHasHub(sub, hubName) {
-  if (!sub) return false;
-  if (sub.grandfathered) return true;
-  if (sub.plan === 'all_in' || sub.plan === 'pro') return true;
-  // Active trial: freeHubsSelected is null while trial is running
-  if (sub.freeHubsSelected === null && sub.trialEndsAt && new Date(sub.trialEndsAt) > new Date()) {
-    return (sub.trialHubs || []).includes(hubName);
-  }
-  // Post-trial auto-selected free hubs
-  if (Array.isArray(sub.freeHubsSelected) && sub.freeHubsSelected.includes(hubName)) return true;
-  return (sub.hubs || []).includes(hubName);
+  return entitlement.hasHub(sub, hubName);
 }
 
 // F-21: unified per-user hub access check.

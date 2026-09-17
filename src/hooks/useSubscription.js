@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase.js';
+import * as entitlement from '../lib/entitlement.js';
 
-export const FREE_PLAN_MAX_USERS = 10;
+// COH-012 A.4.0a: the predicates live in src/lib/entitlement.js (one copy,
+// shared with the server twin and pinned by functions/test/entitlement.test.mjs).
+// This hook only subscribes to the document and binds it.
+export const FREE_PLAN_MAX_USERS = entitlement.FREE_PLAN_MAX_USERS;
 
 export function useSubscription(churchId) {
   const [subscription, setSubscription] = useState(null);
@@ -26,39 +30,10 @@ export function useSubscription(churchId) {
     return () => unsub();
   }, [churchId]);
 
-  function hasHub(name) {
-    if (!subscription) return false;
-    if (subscription.grandfathered) return true;
-    // Flat "ChurchOpsHub" plan ($15/mo or $150/yr) unlocks every paid hub.
-    if (subscription.plan === 'pro' || subscription.plan === 'all_in') return true;
-    // Active 90-day trial — freeHubsSelected is null while trial is running
-    if (subscription.freeHubsSelected === null && subscription.trialEndsAt && new Date(subscription.trialEndsAt) > new Date()) {
-      return (subscription.trialHubs || []).includes(name);
-    }
-    // Post-trial: auto-selected free hubs
-    if (Array.isArray(subscription.freeHubsSelected) && subscription.freeHubsSelected.includes(name)) return true;
-    return (subscription.hubs || []).includes(name);
-  }
-
-  function canAddUser(currentUserCount) {
-    if (!subscription) return currentUserCount < FREE_PLAN_MAX_USERS;
-    if (subscription.grandfathered) return true;
-    if (subscription.plan === 'pro' || subscription.plan === 'team_unlimited' || subscription.plan === 'all_in') return true;
-    return currentUserCount < (subscription.maxUsers || FREE_PLAN_MAX_USERS);
-  }
-
-  function isTrialing(hubName) {
-    if (!subscription) return false;
-    if (subscription.freeHubsSelected !== null) return false;
-    if (!subscription.trialEndsAt || new Date(subscription.trialEndsAt) <= new Date()) return false;
-    return (subscription.trialHubs || []).includes(hubName);
-  }
-
-  function trialDaysRemaining() {
-    if (!subscription?.trialEndsAt || subscription.freeHubsSelected !== null) return 0;
-    const ms = new Date(subscription.trialEndsAt) - new Date();
-    return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
-  }
+  const hasHub = (name) => entitlement.hasHub(subscription, name);
+  const canAddUser = (currentUserCount) => entitlement.canAddUser(subscription, currentUserCount);
+  const isTrialing = (hubName) => entitlement.isTrialing(subscription, hubName);
+  const trialDaysRemaining = () => entitlement.trialDaysRemaining(subscription);
 
   return { subscription, loading, hasHub, canAddUser, isTrialing, trialDaysRemaining };
 }

@@ -549,16 +549,27 @@ is entitled to. And `firestore.rules` implements Jobs only. So "repoint
 SettingsPage, preserving behavior" was a contradiction. A.4.0 is therefore two
 commits:
 
-- **A.4.0a — the no-op.** Extract a pure `src/lib/entitlement.js` — `hasHub`,
-  `isTrialing`, `canAddUser`, `maxUsers`, `planLabel` — copied verbatim from
-  `useSubscription.js:29-47`, with a CJS twin at `functions/lib/entitlement.js`
+- **A.4.0a — the no-op. ✅ SHIPPED 2026-09-17.** Extract a pure
+  `src/lib/entitlement.js` — `hasHub`, `isTrialing`, `canAddUser`,
+  `trialDaysRemaining` — copied verbatim from `useSubscription.js:29-62`
+  (`maxUsers`/`planLabel` are Settings-only derivations and move in 0b), with
+  a CJS twin at `functions/lib/entitlement.js`
   and a **twin parity test**, exactly as `attention.js`, `occurrences.js` and
   `people.js` already do (DEC-2026-019 §3). Repoint `useSubscription.js` and
   `functions/index.js:subHasHub` at it. The parity matrix is the **current**
   shape: `{grandfathered, pro, all_in, trialing-in-window, expired-with-array
   (pre-A.3 lapsed), expired-with-null (post-A.3 lapsed), per-hub hubs[]}`. Rules
   are pinned for **Jobs only** via `npm run test:rules` fixtures against the
-  same matrix — that is the only hub the rules gate.
+  same matrix — that is the only hub the rules gate. *Shipped as:*
+  `scripts/entitlement-inventory.sh` (which immediately surfaced five more
+  files no table had — `createCheckoutSession.test.mjs`, `jobRoster.test.mjs`,
+  `scheduledSends.test.mjs`, `coh006-gate3-smoke.spec.js`,
+  `export-tenant-to-emulator.cjs`), the module + twin,
+  `functions/test/entitlement.test.mjs` (832-comparison parity + pinned
+  current-shape table), and 14 rules-pin tests in `core-collections.test.mjs`
+  that **empirically confirm both divergences** — `pro` without
+  `freeHubsSelected` denied (Finding 3) and `expiredWithNull` allowed (B14).
+  Unit 172 / handlers 94 / rules 151, all green, no existing fixture changed.
 - **A.4.0b — the named behavior change, its own commit.** Repoint
   `SettingsPage.jsx`'s five derivations at the module. **Effect: a trialing
   church starts seeing the Jobs, Insights and People Access settings panels.**
