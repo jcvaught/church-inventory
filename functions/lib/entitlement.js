@@ -2,7 +2,7 @@
 // Cloud Functions are CommonJS and the deploy package only contains functions/,
 // so this cannot import the ESM module at runtime — it carries the same code.
 //
-// ⚠️ GENERATED from src/lib/entitlement.js by the snippet in the A.4.1 commit
+// ⚠️ GENERATED from src/lib/entitlement.js by scripts/entitlement-twin.py
 // (export keywords stripped, module.exports appended). KEEP IN SYNC:
 // functions/test/entitlement.test.mjs imports BOTH and asserts identical output
 // across the fixture matrix. Any drift fails the test.
@@ -47,14 +47,16 @@ function entitlementState(sub, now = new Date()) {
 }
 
 /**
- * Does the church have hub `name`? Under the flat model every hub is included,
- * so this is isEntitled — `name` is accepted for call-site stability and so a
- * lapsed church's hubs still OPEN (finishing what it started) while canCreate
- * is what says no to anything new. Call sites that used hasHub to hide a whole
- * hub should keep doing so only for hubs that are not the church's to finish.
+ * Does the church HAVE hub `name`? Under the flat model every hub is included
+ * and a lapsed church keeps every hub — it finishes what it started (owner
+ * decision #3). So this is true whenever a subscription document exists; it
+ * is NOT the billing state. Billing is isEntitled(); "may it start something
+ * new" is canCreate(). `name` is accepted for call-site stability. The one
+ * server consumer that CREATES records (generateRecurringTemplateTasks) uses
+ * canCreate, not this.
  */
-function hasHub(sub, name, now = new Date()) {
-  return isEntitled(sub, now);
+function hasHub(sub, _name, _now = new Date()) {
+  return !!sub;
 }
 
 /** Day-91 rule: may the church start something new (item, task, reservation, member…)? */
@@ -88,8 +90,8 @@ function planLabel(sub, now = new Date()) {
     case 'grandfathered': return 'ChurchOpsHub (included)';
     case 'trialing': return '90-Day Trial';
     case 'paid': return sub.status === 'past_due' ? 'ChurchOpsHub — payment past due' : 'ChurchOpsHub';
-    case 'lapsed': return sub.status === 'canceled' ? 'Canceled' : 'Trial ended';
-    default: return 'Trial ended';
+    case 'lapsed': return 'None';
+    default: return 'None';
   }
 }
 

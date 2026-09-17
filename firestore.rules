@@ -278,7 +278,13 @@ service cloud.firestore {
     //    all subsequent writes are done by webhooks via Admin SDK (bypasses rules). ──
     match /churches/{churchId}/config/subscription {
       allow read:   if isMember(churchId);
-      allow create: if request.auth != null && request.auth.uid + '-church' == churchId;
+      // Signup may create the document, but only in the trial shape
+      // (COH-012 A.4): a self-created doc cannot be born grandfathered, paid,
+      // or anything but 'trialing'. Every later change is webhook/Admin-SDK.
+      allow create: if request.auth != null && request.auth.uid + '-church' == churchId
+        && request.resource.data.grandfathered == false
+        && request.resource.data.plan == 'free'
+        && request.resource.data.status == 'trialing';
       allow update, delete: if false;
     }
 

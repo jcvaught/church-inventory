@@ -399,6 +399,17 @@ test('COH-012 pin — entitlement never overrides per-user allowedHubs', async (
   await assertFails(getDoc(doc(ctx('noJobs'), P('jobListings/j1'))));
 });
 
+test('COH-012 pin — signup can create its subscription doc only in the trial shape', async () => {
+  const me = 'newchurch';
+  const path = `churches/${me}-church/config/subscription`;
+  const trial = { plan: 'free', status: 'trialing', trialEndsAt: '2026-12-16T00:00:00Z', grandfathered: false };
+  await assertFails(setDoc(doc(ctx(me), path), { ...trial, grandfathered: true }));
+  await assertFails(setDoc(doc(ctx(me), path), { ...trial, plan: 'flat', status: 'active' }));
+  await assertFails(setDoc(doc(ctx(me), path), { ...trial, status: 'active' }));
+  await assertFails(setDoc(doc(ctx('someoneElse'), path), trial));
+  await assertSucceeds(setDoc(doc(ctx(me), path), trial));
+});
+
 // ── Users — no self-escalation; cross-tenant transplant blocked ──────────────
 test('users: a member cannot escalate their own role', async () => {
   await seedMembers();

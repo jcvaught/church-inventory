@@ -65,7 +65,7 @@ async function main() {
     jobsRosterVisibility: 'signups',
   });
   await db.doc(`churches/${churchId}/config/subscription`).set({
-    plan: 'all_in', grandfathered: true, status: 'active', hubs: [], freeHubsSelected: null,
+    plan: 'all_in', grandfathered: true, status: 'active',
   });
 
   const me = [{ uid, name: 'Test Admin' }];

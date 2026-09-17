@@ -107,26 +107,20 @@ async function main() {
   }, { merge: true });
   console.log('  ✓ config/settings');
 
-  // Grandfathered + all_in unlocks every hub in useSubscription.hasHub()
-  // without involving Stripe. The flag is read first, before any plan or
-  // trialEndsAt check, so an expired/null trial date is harmless here.
+  // `grandfathered: true` is entitled in every state (src/lib/entitlement.js)
+  // without involving Stripe — read first, before plan or trialEndsAt.
   await db.doc(`churches/${CHURCH_ID}/config/subscription`).set({
     plan: 'all_in',
-    hubs: [],
-    maxUsers: 999,
     status: 'active',
     grandfathered: true,
-    grandfatheredUntil: null,
     trialStartedAt: null,
     trialEndsAt: null,
-    trialHubs: [],
-    freeHubsSelected: null,
     stripeCustomerId: null,
     stripeSubscriptionId: null,
     currentPeriodEnd: null,
     createdAt: now,
   }, { merge: true });
-  console.log('  ✓ config/subscription (grandfathered all_in — every hub unlocked)');
+  console.log('  ✓ config/subscription (grandfathered — entitled, every hub included)');
 
   // Jobs Hub notifications-gate specs flip this on/off; default to enabled.
   await db.doc(`churches/${CHURCH_ID}/config/notifications`).set({ enabled: true }, { merge: true });

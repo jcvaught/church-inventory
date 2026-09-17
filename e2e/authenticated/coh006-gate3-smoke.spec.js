@@ -11,9 +11,9 @@
 // session with no banner is end-to-end evidence that all five listeners
 // established and the store reached `complete`.
 //
-// Scope limit, stated rather than papered over: the e2e-test-church subscription
-// has no hubs enabled (`hubs: []`), so the Tasks board itself does not render in
-// this tenant and is not exercised here. The listeners run for any signed-in
+// Scope limit, stated rather than papered over: this spec does not open the
+// Tasks board, so board rendering is not exercised here (the tenant is
+// grandfathered and every hub is included — COH-012 — so it could be). The listeners run for any signed-in
 // member regardless of hub access, and the banner is rendered app-wide in
 // App.jsx, so listener health IS covered. Board rendering against real task data
 // is covered by the production probe and the SDK regression instead.

@@ -109,10 +109,10 @@ test('PINNED — entitlementState across the matrix', () => {
   assert.deepEqual(Object.keys(PINNED_STATE).sort(), Object.keys(FIXTURES).sort(), 'every fixture is pinned');
 });
 
-test('PINNED — hasHub is the same answer for every hub; canCreate and canAddUser follow it', () => {
+test('PINNED — hasHub is "has a document" (a lapsed church keeps every hub); canCreate and canAddUser follow isEntitled', () => {
   for (const [name, sub] of Object.entries(FIXTURES)) {
     const entitled = ['grandfathered', 'trialing', 'paid'].includes(PINNED_STATE[name]);
-    for (const hub of HUBS) assert.equal(client.hasHub(sub, hub, NOW), entitled, `${name}/${hub}`);
+    for (const hub of HUBS) assert.equal(client.hasHub(sub, hub, NOW), !!sub, `${name}/${hub}`);
     assert.equal(client.isEntitled(sub, NOW), entitled, `isEntitled ${name}`);
     assert.equal(client.canCreate(sub, NOW), entitled, `canCreate ${name}`);
     assert.equal(client.canAddUser(sub, 10, NOW), entitled, `canAddUser@10 ${name}`);
@@ -139,12 +139,12 @@ test('PINNED — trialDaysRemaining rounds up, and is 0 for every non-trialing s
 
 test('PINNED — planLabel', () => {
   const expected = {
-    missing: 'Trial ended', grandfathered: 'ChurchOpsHub (included)', trialing: '90-Day Trial',
-    trialingPastEnd: 'Trial ended', lapsedExpired: 'Trial ended', paidActive: 'ChurchOpsHub',
-    paidPastDue: 'ChurchOpsHub — payment past due', paidUnpaid: 'Trial ended', paidCanceled: 'Canceled',
-    flatButTrialingFlag: 'Trial ended', defaultFree: 'Trial ended', legacyPro: 'Trial ended',
-    legacyAllIn: 'Trial ended', legacyTrialOldShape: '90-Day Trial', legacyExpiredArray: 'Trial ended',
-    legacyExpiredNull: 'Trial ended', legacyPerHub: 'Trial ended', legacyTeam25: 'Trial ended',
+    missing: 'None', grandfathered: 'ChurchOpsHub (included)', trialing: '90-Day Trial',
+    trialingPastEnd: 'None', lapsedExpired: 'None', paidActive: 'ChurchOpsHub',
+    paidPastDue: 'ChurchOpsHub — payment past due', paidUnpaid: 'None', paidCanceled: 'None',
+    flatButTrialingFlag: 'None', defaultFree: 'None', legacyPro: 'None',
+    legacyAllIn: 'None', legacyTrialOldShape: '90-Day Trial', legacyExpiredArray: 'None',
+    legacyExpiredNull: 'None', legacyPerHub: 'None', legacyTeam25: 'None',
   };
   for (const [name, label] of Object.entries(expected)) assert.equal(client.planLabel(FIXTURES[name], NOW), label, name);
   assert.deepEqual(Object.keys(expected).sort(), Object.keys(FIXTURES).sort());

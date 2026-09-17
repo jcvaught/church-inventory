@@ -494,7 +494,8 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   const isTrialing = entitlement.inTrialWindow(subscription);
   const trialDaysLeft = entitlement.trialDaysRemaining(subscription);
   const planLabel = entitlement.planLabel(subscription);
-  const activeHubs = subscription?.grandfathered ? ['All hubs (grandfathered)'] : isTrialing ? (subscription.trialHubs || []) : (subscription?.hubs || []);
+  const entitlementState = entitlement.entitlementState(subscription);
+  const isEntitled = entitlement.isEntitled(subscription);
   const hasStripeCustomer = !!subscription?.stripeCustomerId;
 
   async function handleCheckout(item) {
@@ -906,9 +907,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
                   {billingLoading ? "..." : "Manage Billing"}
                 </button>
               )}
-              {!subscription?.grandfathered && subscription?.plan !== 'pro' && subscription?.plan !== 'all_in' && (
+              {entitlementState !== 'grandfathered' && entitlementState !== 'paid' && (
                 <button onClick={() => setShowUpgradeModal(true)} style={{ ...btnP, padding:"6px 14px", fontSize:12 }}>
-                  Upgrade
+                  Subscribe
                 </button>
               )}
             </div>
@@ -921,37 +922,32 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           </div>
           <div>
             <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Status</div>
-            <div style={{ fontSize:15, fontWeight:600, color: isTrialing || subscription?.status === 'active' ? B.teal : B.red }}>
-              {isTrialing ? `Trial — ${trialDaysLeft} day${trialDaysLeft !== 1 ? 's' : ''} left` : (subscription?.status || 'active')}
+            <div style={{ fontSize:15, fontWeight:600, color: isEntitled ? B.teal : B.red }}>
+              {isTrialing
+                ? `Trial — ${trialDaysLeft} day${trialDaysLeft !== 1 ? 's' : ''} left`
+                : entitlementState === 'grandfathered' ? 'Included'
+                : entitlementState === 'paid' ? (subscription?.status === 'past_due' ? 'Payment past due' : 'Active')
+                : subscription?.status === 'canceled' ? 'Canceled' : 'Trial ended'}
             </div>
           </div>
-          {activeHubs.length > 0 && (
-            <div>
-              <div style={{ fontSize:12, color:B.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:.8, fontFamily:f1, marginBottom:3 }}>Active Hubs</div>
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                {activeHubs.map(h => (
-                  <span key={h} style={{ padding:"2px 10px", borderRadius:20, background:B.tealPale, color:B.teal, fontSize:12, fontWeight:600, fontFamily:f1 }}>{h}</span>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
         {billingError && <p style={{ color:B.red, fontSize:13, marginTop:10, marginBottom:0 }}>{billingError}</p>}
         {isTrialing && (
           <div style={{ background: trialDaysLeft <= 7 ? '#FFF1F2' : '#F0FDF4', border:`1px solid ${trialDaysLeft <= 7 ? '#FECACA' : '#BBF7D0'}`, borderRadius:8, padding:"10px 14px", marginTop:12 }}>
             <p style={{ margin:0, fontSize:13, color: trialDaysLeft <= 7 ? '#B91C1C' : '#166534' }}>
-              All hubs are free until your trial ends.{' '}
-              {trialDaysLeft <= 7 && isAdmin && <strong>Upgrade before your trial expires to keep all hubs. </strong>}
-              After the trial, your two most-used hubs stay free.{' '}
-              {isAdmin && <button onClick={() => setShowUpgradeModal(true)} style={{ background:"none", border:"none", padding:0, color: trialDaysLeft <= 7 ? '#B91C1C' : B.teal, fontWeight:600, fontSize:13, cursor:"pointer" }}>View upgrade options →</button>}
+              Everything is included for your first {entitlement.TRIAL_DAYS} days.{' '}
+              After that, ChurchOpsHub is ${entitlement.PRICE.monthly}/month or ${entitlement.PRICE.annual}/year for everything — until you subscribe you can finish what you started, but not add anything new.{' '}
+              {isAdmin && <button onClick={() => setShowUpgradeModal(true)} style={{ background:"none", border:"none", padding:0, color: trialDaysLeft <= 7 ? '#B91C1C' : B.teal, fontWeight:600, fontSize:13, cursor:"pointer" }}>Subscribe now →</button>}
             </p>
           </div>
         )}
-        {!isTrialing && planLabel === 'Free' && (
-          <p style={{ color:B.textLight, fontSize:13, marginTop:12, marginBottom:0 }}>
-            Add hubs like <strong>Maintenance</strong> to unlock advanced features.{' '}
-            {isAdmin && <button onClick={() => setShowUpgradeModal(true)} style={{ background:"none", border:"none", padding:0, color:B.teal, fontWeight:600, fontSize:13, cursor:"pointer" }}>View plans →</button>}
-          </p>
+        {entitlementState === 'lapsed' && (
+          <div style={{ background:B.goldLight, border:`1px solid ${B.gold}`, borderRadius:8, padding:"10px 14px", marginTop:12 }}>
+            <p style={{ margin:0, fontSize:13, color:'#7A5800' }}>
+              Your 90 days are up. You can finish what you started — return items, complete tasks, close reservations — but not add anything new until you subscribe: ${entitlement.PRICE.monthly}/month or ${entitlement.PRICE.annual}/year for everything.{' '}
+              {isAdmin && <button onClick={() => setShowUpgradeModal(true)} style={{ background:"none", border:"none", padding:0, color:'#7A5800', fontWeight:700, fontSize:13, cursor:"pointer", textDecoration:'underline' }}>Subscribe →</button>}
+            </p>
+          </div>
         )}
       </div>
 
@@ -1059,10 +1055,10 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
         {isAdmin && !canAdd && (
           <div style={{ background:B.goldLight, border:"1px solid "+B.gold, borderRadius:10, padding:"12px 16px", marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
             <div>
-              <div style={{ fontFamily:f1, fontWeight:700, fontSize:14, color:"#7A5800" }}>Team member limit reached</div>
-              <div style={{ fontSize:13, color:"#96750E", marginTop:2 }}>Upgrade to Team Hub to add more members.</div>
+              <div style={{ fontFamily:f1, fontWeight:700, fontSize:14, color:"#7A5800" }}>Adding members is paused</div>
+              <div style={{ fontSize:13, color:"#96750E", marginTop:2 }}>Your 90 days are up — subscribe to keep adding people. There is no member limit on the plan.</div>
             </div>
-            <button onClick={() => setShowUpgradeModal(true)} style={{ ...btnP, padding:"7px 16px", fontSize:12, whiteSpace:"nowrap" }}>Upgrade</button>
+            <button onClick={() => setShowUpgradeModal(true)} style={{ ...btnP, padding:"7px 16px", fontSize:12, whiteSpace:"nowrap" }}>Subscribe</button>
           </div>
         )}
         {memberError && (

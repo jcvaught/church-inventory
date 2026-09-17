@@ -3804,12 +3804,16 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
   });
   if (!due.length) return;
 
+  // COH-012 day-91 rule: this job CREATES records, so a lapsed church is
+  // skipped — "they can't add more" applies to automation too (owner #3,
+  // interpretation 1). Every other scheduled job reads or completes and keeps
+  // running for a lapsed church.
   const subCache = {};
   async function churchHasTasksHub(churchId) {
     if (subCache[churchId] !== undefined) return subCache[churchId];
     try {
       const s = await db.doc(`churches/${churchId}/config/subscription`).get();
-      subCache[churchId] = subHasHub(s.data() || {}, 'tasks');
+      subCache[churchId] = entitlement.canCreate(s.data() || null);
     } catch { subCache[churchId] = false; }
     return subCache[churchId];
   }
@@ -3892,7 +3896,7 @@ exports.generateRecurringTemplateTasks = onSchedule({ schedule: '0 8 * * *', tim
       if (jobsSubCache[churchId] !== undefined) return jobsSubCache[churchId];
       try {
         const s = await db.doc(`churches/${churchId}/config/subscription`).get();
-        jobsSubCache[churchId] = subHasHub(s.data() || {}, 'jobs');
+        jobsSubCache[churchId] = entitlement.canCreate(s.data() || null); // advances repeatWeekly announcements = creates
       } catch { jobsSubCache[churchId] = false; }
       return jobsSubCache[churchId];
     }

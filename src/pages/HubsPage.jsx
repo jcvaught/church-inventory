@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState, Suspense } from 'react';
-import { B, f1, f2, btnP } from '../components/brand/tokens.js';
-import { UpgradeGate } from '../components/primitives/UpgradeGate.jsx';
+import { B, f1, f2 } from '../components/brand/tokens.js';
+import { LapsedBanner } from '../components/primitives/LapsedBanner.jsx';
 import { Spinner } from '../components/primitives/Spinner.jsx';
 import { MobileCtx } from '../hooks/useMobile.js';
 import { lazyWithRetry } from '../utils/lazyWithRetry.js';
@@ -33,14 +33,17 @@ const HubLoadingFallback = () => (
 );
 
 const HUB_DEFS = [
-  // ── Free / included hubs (no subscription, no UpgradeGate). Shown first. ──
+  // ── Core hubs (Inventory, Reservations). `core` = always visible to every
+  //    member regardless of per-user allowedHubs (a per-user permission, not
+  //    billing). COH-012 A.4: nothing is free any more — every hub is included
+  //    in the one plan, and a lapsed church keeps them all. ──
   {
     key: 'inventory',
     label: 'Inventory Hub',
     icon: '📦',
     color: '#2A7D6E',
     desc: "Track your church's items and supplies — check-in/out, locations, and low-stock alerts.",
-    free: true,
+    core: true,
   },
   {
     key: 'reservations',
@@ -48,13 +51,12 @@ const HUB_DEFS = [
     icon: '📅',
     color: '#0D9488',
     desc: 'Reserve equipment and rooms — request, approve, and avoid double-bookings.',
-    free: true,
+    core: true,
   },
   {
     key: 'insights',
     label: 'Insights Hub',
     icon: '📊',
-    price: '$7/mo',
     color: '#0D9488',
     desc: 'Utilization stats, ministry breakdowns, seasonal trends, and financial tracking.',
   },
@@ -75,7 +77,6 @@ const HUB_DEFS = [
     key: 'maintenance',
     label: 'Maintenance Hub',
     icon: '🔧',
-    price: '$7/mo',
     color: '#D97706',
     desc: 'Track repair tickets, manage vendors, and keep your equipment in top shape.',
   },
@@ -83,7 +84,6 @@ const HUB_DEFS = [
     key: 'coordination',
     label: 'Coordination Hub',
     icon: '🤝',
-    price: '$7/mo',
     color: '#7C3AED',
     desc: 'Checkout bundles and email notifications to keep your team in the loop.',
   },
@@ -91,7 +91,6 @@ const HUB_DEFS = [
     key: 'accountability',
     label: 'Accountability Hub',
     icon: '📋',
-    price: '$5/mo',
     color: '#2563EB',
     desc: 'Physical audits, chain of custody, and insurance-ready inventory exports.',
   },
@@ -99,7 +98,6 @@ const HUB_DEFS = [
     key: 'people_access',
     label: 'People Access Hub',
     icon: '🔑',
-    price: '$7/mo',
     color: '#DC2626',
     desc: 'Track background checks, key assignments, certifications, and custom compliance milestones.',
   },
@@ -107,7 +105,6 @@ const HUB_DEFS = [
     key: 'tasks',
     label: 'Tasks Hub',
     icon: '✅',
-    price: '$7/mo',
     color: '#059669',
     desc: 'Kanban task board for church admin — assign, track, and share tasks with your team.',
   },
@@ -115,7 +112,6 @@ const HUB_DEFS = [
     key: 'jobs',
     label: 'Job Hub',
     icon: '💼',
-    price: '$7/mo',
     color: '#E85D04',
     desc: 'Post paid jobs for teens to sign up for — moving walls, resetting chairs, and more.',
   },
@@ -132,30 +128,6 @@ const HUB_DEFS = [
     special: true,
   },
 ];
-
-const UPGRADE_DESCRIPTIONS = {
-  insights: 'Understand how your inventory is really being used — utilization stats, ministry breakdowns, seasonal trends, and financial tracking.',
-  maintenance: 'Track repair tickets, manage vendors, and keep your equipment in top shape.',
-  coordination: 'Checkout bundles and email notifications for your team.',
-  accountability: 'Physical audits, chain of custody reports, and insurance-ready inventory exports.',
-  people_access: 'Track who has background checks, key assignments, certifications, and custom compliance milestones — dates only, never results.',
-  tasks: 'A general-purpose Kanban task board — assign tasks, set priorities, track progress, and control who sees what.',
-  jobs: 'Post jobs for teens to sign up for, manage the signup list, and keep everyone in the loop with announcements.',
-};
-
-const UPGRADE_PRICES = {
-  insights: '$7', maintenance: '$7', coordination: '$7', accountability: '$5', people_access: '$7', tasks: '$7', jobs: '$7',
-};
-
-const UPGRADE_PREVIEWS = {
-  insights: '/upgrade-previews/insights.jpg',
-  maintenance: '/upgrade-previews/maintenance.jpg',
-  coordination: '/upgrade-previews/coordination.jpg',
-  accountability: '/upgrade-previews/accountability.jpg',
-  people_access: '/upgrade-previews/people-access.jpg',
-  tasks: '/upgrade-previews/tasks.jpg',
-  jobs: '/upgrade-previews/jobs.jpg',
-};
 
 function HubContent({ hubKey, store, userProfile, jobsInitialView, isElder, userCanSeeHub, initialItemId, scannedItemId, onScannedItemConsumed }) {
   let page = null;
@@ -180,7 +152,8 @@ function HubContent({ hubKey, store, userProfile, jobsInitialView, isElder, user
   );
 }
 
-export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscriptionLoading, userCanSeeHub, onGoToSettings, jobsInitialView, canSeeShepherd, isElder, initialItemId, scannedItemId, onScannedItemConsumed }) {
+export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, isLapsed, subscriptionLoading, userCanSeeHub, onGoToSettings, jobsInitialView, canSeeShepherd, isElder, initialItemId, scannedItemId, onScannedItemConsumed }) {
+  const isAdmin = userProfile?.role === 'admin';
   const isMobile = useContext(MobileCtx);
   const def = HUB_DEFS.find(h => h.key === hubKey);
   const volunteerMode = isVolunteerOnly(userProfile);
@@ -195,11 +168,11 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
   // that hub. Admins/managers and multi-hub users still see the picker.
   // Shepherd-only elders (allowedHubs: [], the Shepherd-scoping default set by
   // claimElderRole's first grant) get the same treatment (F3/LNCH-4) — straight
-  // into My Flock. Shepherd is `special:true` (no paid-hub UpgradeGate), so
-  // this branch skips the hasHub/userCanSeeHub checks the single-hub branch
-  // needs; canSeeShepherd (elder claim + FXCC, computed in App.jsx) is the
-  // real gate. The two conditions can't overlap (length 1 vs 0), so the
-  // single-hub branch keeps precedence for free.
+  // into My Flock. Shepherd is `special:true`, so this branch skips the
+  // hasHub/userCanSeeHub checks the single-hub branch needs; canSeeShepherd
+  // (elder claim + FXCC, computed in App.jsx) is the real gate. The two
+  // conditions can't overlap (length 1 vs 0), so the single-hub branch keeps
+  // precedence for free.
   const allowedHubs = userProfile?.allowedHubs;
   // Fire at most once per mount. Without this, clicking "← All Hubs" (which
   // nulls hubKey) would recompute a truthy target on the very next render and
@@ -226,9 +199,7 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
 
   // ── Active hub view ──
   if (hubKey && def) {
-    const hubLabel = def.label;
-    const hubHas = hasHub(hubKey);
-    // Shepherd is special-cased: no subscription / UpgradeGate. Render directly,
+    // Shepherd is special-cased: no subscription. Render directly,
     // gated on canSeeShepherd (elders + John; rules enforce the real boundary).
     if (def.special) {
       return (
@@ -245,9 +216,9 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
         </div>
       );
     }
-    // Free/core hubs (Inventory, Reservations): no subscription, no UpgradeGate.
-    // Open to any member who can reach the picker — render directly.
-    if (def.free) {
+    // Core hubs (Inventory, Reservations): open to any member who can reach
+    // the picker — not subject to per-user allowedHubs.
+    if (def.core) {
       return (
         <div>
           <div style={{ marginBottom: 20 }}>
@@ -256,14 +227,15 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
               ← All Hubs
             </button>
           </div>
+          {isLapsed?.() && <LapsedBanner isAdmin={isAdmin} onGoToSettings={onGoToSettings} source={'hub_' + hubKey} />}
           <HubContent hubKey={hubKey} store={store} userProfile={userProfile}
             initialItemId={initialItemId} scannedItemId={scannedItemId} onScannedItemConsumed={onScannedItemConsumed} />
         </div>
       );
     }
-    // Work area: no UpgradeGate (it gates on a real hub key; 'work' is a merged
-    // shell). Access is enforced inside WorkPage at category granularity — show
-    // it to anyone who can use at least one of Tasks/Maintenance.
+    // Work area ('work' is a merged shell, not a real hub key). Access is
+    // enforced inside WorkPage at category granularity — show it to anyone
+    // who can use at least one of Tasks/Maintenance.
     if (hubKey === 'work') {
       const canSeeWork = userCanSeeHub?.('tasks') || userCanSeeHub?.('maintenance');
       return (
@@ -274,6 +246,7 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
               ← All Hubs
             </button>
           </div>
+          {isLapsed?.() && canSeeWork && <LapsedBanner isAdmin={isAdmin} onGoToSettings={onGoToSettings} source="hub_work" />}
           {canSeeWork
             ? <HubContent hubKey="work" store={store} userProfile={userProfile} userCanSeeHub={userCanSeeHub} />
             : <div style={{ textAlign: 'center', padding: '60px 20px', color: B.textLight, fontFamily: f2 }}>You don't have access to this hub. Contact your admin.</div>}
@@ -289,24 +262,18 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
             ← All Hubs
           </button>
         </div>
-        <UpgradeGate
-          hubName={hubKey}
-          hubLabel={hubLabel}
-          hubPrice={UPGRADE_PRICES[hubKey]}
-          hubDescription={UPGRADE_DESCRIPTIONS[hubKey]}
-          hasHub={hubHas}
-          previewSrc={UPGRADE_PREVIEWS[hubKey]}
-          previewAlt={hubLabel + ' preview'}
-        >
-          {userCanSeeHub(hubKey)
-            ? <HubContent hubKey={hubKey} store={store} userProfile={userProfile} jobsInitialView={jobsInitialView} />
-            : (
-              <div style={{ textAlign: 'center', padding: '60px 20px', color: B.textLight, fontFamily: f2 }}>
-                You don't have access to this hub. Contact your admin.
-              </div>
-            )
-          }
-        </UpgradeGate>
+        {/* COH-012 A.4: no paywall on the hub itself — a lapsed church keeps
+            every hub and finishes what it started. The banner says what it
+            can't do; canCreate (store + callables) enforces it. */}
+        {isLapsed?.() && userCanSeeHub(hubKey) && <LapsedBanner isAdmin={isAdmin} onGoToSettings={onGoToSettings} source={'hub_' + hubKey} />}
+        {userCanSeeHub(hubKey)
+          ? <HubContent hubKey={hubKey} store={store} userProfile={userProfile} jobsInitialView={jobsInitialView} />
+          : (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: B.textLight, fontFamily: f2 }}>
+              You don't have access to this hub. Contact your admin.
+            </div>
+          )
+        }
       </div>
     );
   }
@@ -320,7 +287,7 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ margin: '0 0 4px', fontSize: isMobile ? 20 : 24, fontFamily: f1, color: B.navy }}>Hubs</h2>
         <p style={{ margin: 0, fontSize: 13, color: B.textLight, fontFamily: f2 }}>
-          Everything your church runs on — your included tools, plus add-ons for your specific needs.
+          Everything your church runs on — all of it included.
         </p>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, opacity: subscriptionLoading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
@@ -329,24 +296,20 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
           if (hub.key === 'shepherd') return canSeeShepherd;
           // Volunteers (jobs-only) see only their hub — no inventory/upgrade cards.
           if (volunteerMode) return hub.key === 'jobs';
-          // Free/core hubs (Inventory, Reservations) are always shown.
-          if (hub.free) return true;
+          // Core hubs (Inventory, Reservations) are always shown.
+          if (hub.core) return true;
           if (hub.key === 'people_access' && userProfile?.role === 'user') return false;
           // Work merge: show the synthetic "Work" card only when both categories
           // are usable, and hide the individual Tasks/Maintenance cards then.
           if (hub.key === 'work') return mergeWork;
           if ((hub.key === 'tasks' || hub.key === 'maintenance') && mergeWork) return false;
-          // Paid hubs: show only when the church has it AND the user may use it —
-          // locked/paywall cards are hidden from members who can't use them.
-          return hasHub(hub.key) && userCanSeeHub(hub.key);
+          // Every hub is included (COH-012 A.4); the only per-hub gate left is
+          // the per-user allowedHubs permission.
+          return userCanSeeHub(hub.key);
         }).map(hub => {
           const isSpecial = !!hub.special;
-          const isFree = !!hub.free;
-          // 'work' is a merged shell (no real subscription key): only shown when
-          // both underlying hubs are usable, so it's always active + visible.
-          // Free/core hubs are likewise always active + visible.
-          const active = isSpecial || isFree || hub.key === 'work' ? true : hasHub(hub.key);
-          const canSee = isSpecial || isFree || hub.key === 'work' ? true : (active && userCanSeeHub(hub.key));
+          const isCore = !!hub.core;
+          const canSee = isSpecial || isCore || hub.key === 'work' ? true : userCanSeeHub(hub.key);
           return (
             <div key={hub.key}
               onClick={() => onOpenHub(hub.key)}
@@ -359,10 +322,10 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
                 borderRadius: 16,
                 padding: 22,
                 cursor: 'pointer',
-                border: active ? `2px solid ${hub.color}` : `1px solid ${B.sand}`,
+                border: `2px solid ${hub.color}`,
                 position: 'relative',
                 transition: 'box-shadow 0.15s, transform 0.1s',
-                opacity: active && !canSee ? 0.6 : 1,
+                opacity: canSee ? 1 : 0.6,
               }}
               onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 6px 24px rgba(27,42,74,0.12)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
               onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
@@ -371,46 +334,24 @@ export function HubsPage({ store, userProfile, hubKey, onOpenHub, hasHub, subscr
             >
               {/* Status badge */}
               <div style={{ position: 'absolute', top: 14, right: 14 }}>
-                {isFree
-                  ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: hub.color + '18', color: hub.color }}>Included</span>
-                  : isSpecial
-                    ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: hub.color + '18', color: hub.color }}>Elders</span>
-                    : active
-                      ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: hub.color + '18', color: hub.color }}>Active</span>
-                      : <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: B.warmGray, color: B.textLight }}>🔒 Locked</span>
-                }
+                <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, fontFamily: f1, background: hub.color + '18', color: hub.color }}>{isSpecial ? 'Elders' : 'Included'}</span>
               </div>
 
               <EmojiIcon emoji={hub.icon} decorative style={{ fontSize: 32, marginBottom: 12, display: 'block' }} />
               <div style={{ fontWeight: 700, fontSize: 16, fontFamily: f1, color: B.navy, marginBottom: 8 }}>{hub.label}</div>
               <div style={{ fontSize: 13, color: B.textMid, fontFamily: f2, lineHeight: 1.5, marginBottom: 16 }}>{hub.desc}</div>
 
-              <div style={{ fontSize: 13, fontWeight: 600, fontFamily: f1, color: active ? hub.color : B.textLight }}>
-                {isSpecial ? 'Open →' : active ? (canSee ? 'Open →' : 'No access') : 'Unlock with ChurchOpsHub →'}
+              <div style={{ fontSize: 13, fontWeight: 600, fontFamily: f1, color: canSee ? hub.color : B.textLight }}>
+                {canSee ? 'Open →' : 'No access'}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Plan callout — admin/manager only (volunteers don't choose plans), and
-          only when something is still locked. A pro/all-in/grandfathered church
-          already has every paid hub active (hasHub → true for all), so there's
-          nothing to upsell — don't show "Unlock everything" to a full-plan church. */}
-      {!volunteerMode && HUB_DEFS.some(h => !h.special && !h.synthetic && !h.free && !hasHub(h.key)) && <div style={{ marginTop: 28, padding: 20, background: `linear-gradient(135deg, ${B.navy} 0%, ${B.navyLight} 100%)`, borderRadius: 16, color: B.white }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 16, fontFamily: f1, marginBottom: 4 }}>✨ Unlock everything — one plan</div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', fontFamily: f2 }}>
-              Every paid feature + unlimited team members for $15/mo (or $150/yr). Inventory stays free.
-            </div>
-          </div>
-          <button onClick={() => { onGoToSettings?.(); }}
-            style={{ ...btnP, background: B.gold, color: B.navy, padding: '9px 18px', fontSize: 13, cursor: 'pointer' }}>
-            View Plan
-          </button>
-        </div>
-      </div>}
+      {/* COH-012 A.4: the picker carries the lapsed banner instead of an upsell —
+          there is nothing to upsell to a church that already has every hub. */}
+      {!volunteerMode && isLapsed?.() && <div style={{ marginTop: 28 }}><LapsedBanner isAdmin={isAdmin} onGoToSettings={onGoToSettings} source="hub_picker" /></div>}
     </div>
   );
 }

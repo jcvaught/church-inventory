@@ -19,6 +19,7 @@ import {
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import * as Sentry from '@sentry/react';
 import { auth, googleProvider, db } from './firebase.js';
+import { TRIAL_DAYS } from './lib/entitlement.js';
 
 // Default hubs granted to a member who signs up with just the church code (no
 // hub-scoped invite). Previously this was "all hubs" (allowedHubs omitted),
@@ -231,8 +232,7 @@ export function useAuth() {
         // signups stranded with auth + some-but-not-all Firestore docs.
         const churchId = cred.user.uid + '-church';
         const now = new Date().toISOString();
-        const trialEndsAt = new Date(Date.parse(now) + 90 * 24 * 60 * 60 * 1000).toISOString();
-        const TRIAL_HUBS = ['maintenance', 'insights', 'coordination', 'accountability', 'people_access', 'tasks', 'jobs'];
+        const trialEndsAt = new Date(Date.parse(now) + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
         const profile = {
           name: userName,
           firstName,
@@ -264,20 +264,18 @@ export function useAuth() {
           ministries: DEFAULT_MINISTRIES,
           tags: DEFAULT_TAGS,
         });
+        // COH-012 A.4: the flat shape. `status: 'trialing'` + trialEndsAt IS the
+        // trial (src/lib/entitlement.js); no hubs / trialHubs / freeHubsSelected /
+        // maxUsers — a church born after cutover carries no field nothing reads.
         batch.set(doc(db, 'churches', churchId, 'config', 'subscription'), {
           plan: 'free',
-          hubs: [],
-          maxUsers: 10,
           status: 'trialing',
           trialStartedAt: now,
           trialEndsAt,
-          trialHubs: TRIAL_HUBS,
-          freeHubsSelected: null,
           stripeCustomerId: null,
           stripeSubscriptionId: null,
           currentPeriodEnd: null,
           grandfathered: false,
-          grandfatheredUntil: null,
           createdAt: now,
         });
         await batch.commit();

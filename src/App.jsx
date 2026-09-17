@@ -30,6 +30,8 @@ import { PrivacyBody } from './components/legal/PrivacyBody.jsx';
 import { RES_STATUS } from './utils/constants.js';
 import { useGlobalBanner } from './hooks/useGlobalBanner.js';
 import { GlobalBanner } from './components/GlobalBanner.jsx';
+import { LapsedBanner } from './components/primitives/LapsedBanner.jsx';
+import { PRICE } from './lib/entitlement.js';
 import { GlobalSearch } from './components/GlobalSearch.jsx';
 import { NotificationBell } from './components/NotificationBell.jsx';
 import { InstallPrompt } from './components/InstallPrompt.jsx';
@@ -517,7 +519,7 @@ function AppShell({ authHook }) {
   const [elderUnverifiedBannerDismissed, setElderUnverifiedBannerDismissed] = useState(false);
   const [elderVerifyResent, setElderVerifyResent] = useState(false);
   const store = useFirestore(userProfile.churchId, userProfile);
-  const { subscription, loading: subscriptionLoading, hasHub, canAddUser, trialDaysRemaining } = useSubscription(userProfile.churchId);
+  const { subscription, loading: subscriptionLoading, hasHub, canAddUser, isTrialing, isLapsed, trialDaysRemaining } = useSubscription(userProfile.churchId);
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false);
   // Volunteers (role:user, allowedHubs=['jobs']) get a jobs-first shell — see
   // isVolunteerOnly. Shepherd Hub is FXCC-only, gated by the elder custom
@@ -704,6 +706,8 @@ function AppShell({ authHook }) {
 
   // Per-user hub visibility: admins see all; others filtered by allowedHubs
   // people_access is manager+ only — regular users cannot see it regardless of allowedHubs
+  // COH-012 A.4: entitlement no longer hides hubs (a lapsed church keeps them
+  // all); hasHub only says a subscription document exists.
   function userCanSeeHub(hubName) {
     if (!hasHub(hubName)) return false;
     if (userProfile?.role === 'admin') return true;
@@ -835,8 +839,12 @@ function AppShell({ authHook }) {
       {/* Global app-wide banner (owner-controlled; maintenance / announcements) */}
       <GlobalBanner banner={globalBanner} />
 
+      {/* COH-012 A.4: the day-91 state — not dismissable; it is the product's
+          only paywall. Admins get the Subscribe button. */}
+      {isLapsed() && <LapsedBanner compact isAdmin={userProfile?.role === 'admin'} source="app_strip" />}
+
       {/* Trial banner */}
-      {subscription?.freeHubsSelected === null && subscription?.trialEndsAt && !trialBannerDismissed && (() => {
+      {isTrialing() && !trialBannerDismissed && (() => {
         const days = trialDaysRemaining();
         if (days <= 0) return null;
         const urgent = days <= 7;
@@ -844,13 +852,13 @@ function AppShell({ authHook }) {
           <div style={{ background: urgent ? '#FFF1F2' : '#F0FDF4', borderBottom: `1px solid ${urgent ? '#FECACA' : '#BBF7D0'}`, padding:'10px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
             <span style={{ fontSize:13, color: urgent ? '#B91C1C' : '#166534', fontFamily:f1 }}>
               {urgent
-                ? `Your free trial ends in ${days} day${days !== 1 ? 's' : ''} — upgrade to keep your hubs.`
-                : `Free trial active — all hubs unlocked for ${days} more day${days !== 1 ? 's' : ''}.`}
+                ? `Your 90 days end in ${days} day${days !== 1 ? 's' : ''} — subscribe ($${PRICE.monthly}/mo) to keep adding.`
+                : `${days} day${days !== 1 ? 's' : ''} left of your 90 days — everything included.`}
             </span>
             <div style={{ display:'flex', gap:10, alignItems:'center', flexShrink:0 }}>
               {urgent && (
                 <button onClick={() => setTab('settings')} style={{ background:'none', border:'none', color:'#B91C1C', fontWeight:700, cursor:'pointer', fontSize:13, fontFamily:f1, textDecoration:'underline' }}>
-                  Upgrade now
+                  Subscribe
                 </button>
               )}
               <button onClick={() => setTrialBannerDismissed(true)} aria-label="Dismiss trial banner" style={{ background:'none', border:'none', color: urgent ? '#96101A' : '#166534', cursor:'pointer', fontSize:18, lineHeight:1, fontFamily:f1 }}>×</button>
@@ -912,6 +920,7 @@ function AppShell({ authHook }) {
             hubKey={hubKey}
             onOpenHub={openHub}
             hasHub={hasHub}
+            isLapsed={isLapsed}
             subscriptionLoading={subscriptionLoading}
             userCanSeeHub={userCanSeeHub}
             onGoToSettings={() => setTab('settings')}
