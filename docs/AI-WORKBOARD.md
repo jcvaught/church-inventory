@@ -23,12 +23,13 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-012 — Flat pricing, entitlement collapse, review disposition
 
-- Status: **A.3 + A.4 (0a, 0b, 1–5) SHIPPED + DEPLOYED 2026-09-17** — web,
-  rules and functions all live; TrueNorth grandfathered; $5/$50 prices live in
-  Stripe. Plan at rev 8. **A.5 (public copy: landing, Help, blog, Terms +14d
-  notice email, What's New) and Part B (insights digest timestamp lanes)
-  NEXT.** `identifyItem` still on its old revision (known ANTHROPIC_API_KEY
-  collision, backlog item 9, unrelated).
+- Status: **Part A COMPLETE 2026-09-17** — A.3, A.4 (0a, 0b, 1–5), A.5 all
+  shipped + deployed; Terms effective 2026-10-01; notice email sent to the 3
+  reachable non-FXCC accounts (2 tenants are abandoned — no Auth user). Plan at
+  rev 9. **Part B (insights digest timestamp lanes) is the open item.**
+  `identifyItem` still on its old revision (known ANTHROPIC_API_KEY collision,
+  backlog item 9, unrelated). **Watch: Highland's expiry 2026-09-30 02:00 CT —
+  first production exercise of the lapsed path.**
 - Plan: `docs/COH-012-PRICING-AND-REVIEW-DISPOSITION-PLAN-2026-09-16.md` (rev 7)
 - Decisions: DEC-2026-021 (flat $5 model), DEC-2026-022 (review disposition);
   owner #8 (Terms notice: email on A.5 ship day, effective +14d) and #9
@@ -39,9 +40,9 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   **2026-09-30**), a fourth inventory miss (B15 — table retired for
   `scripts/entitlement-inventory.sh`), and that "repoint SettingsPage,
   behavior-preserving" was a contradiction (B17 — A.4.0 split into 0a/0b).
-- **Next action:** A.5 — generated copy inventory (44 sites / 9 files at
-  rev 5; regenerate), Terms edit with effective date = ship + 14d, notice
-  email drafted and sent on ship day (owner #8). Then Part B.
+- **Next action:** Part B — `sendWeeklyInsightsDigest` (`functions/index.js`)
+  dual-lane timestamp query + parity helper + both-lanes regression test.
+  FXCC-facing, independent of everything above.
 - **Owner write, DONE 2026-09-17:** TrueNorth grandfathered
   (`Nxy6GTxK0bhuDy97lWFCwECmWg43-church`, `trialWarningEmailSentAt` preserved).
 - **Independent of all of the above:** Part B — `sendWeeklyInsightsDigest`

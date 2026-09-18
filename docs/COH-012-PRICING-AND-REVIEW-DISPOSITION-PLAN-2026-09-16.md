@@ -4,8 +4,9 @@
 - Owner: Product owner (John)
 - Implementation: Claude (DEC-2026-011)
 - Reviewer: Codex (plan review before implementation)
-- Status: **rev 8 (2026-09-17) — A.3, A.4.0a/b, A.4.1–A.4.5 SHIPPED + DEPLOYED.
-  A.5 (public copy + Terms notice email) and Part B next.** See "A.4 as shipped"
+- Status: **rev 9 (2026-09-17) — Part A COMPLETE: A.3, A.4, A.5 all SHIPPED +
+  DEPLOYED; Terms notice SENT. Part B (insights digest lanes) is the only
+  open item, plus Parts C–E as previously dispositioned.** See "A.4 as shipped"
   below for the two calls made during implementation that the plan did not
   anticipate.
 - Prior: rev 7 (2026-09-17) — A.3 SHIPPED; round 5 closed; A.4.0 next.**
@@ -659,7 +660,33 @@ Whatever is chosen, add a fixture for adding an **11th member** in each of
 to appear in the same four-implementation consolidation as `hasHub` — `maxUsers`
 is derived in both `useSubscription` and `SettingsPage` today.
 
-### A.5 Phase 3 — public copy
+### A.5 as shipped — 2026-09-17 (`cb58b3c`), notice sent 2026-09-18 00:06 UTC
+
+Copy: landing page (single pricing card, JSON-LD offer $5), Help Center (FAQ
+JSON-LD + body), 16 blog sentences in place (competitor free tiers left alone),
+blog CTA, both prerender templates, What's New entry. `TermsBody.jsx` §2/§5
+rewritten; "Last updated: September 17, 2026" + "Effective: October 1, 2026"
+(14 days, §15); accounts created before then stay on the April 26 terms until
+then. Verified live at churchopshub.com/terms before the email went.
+
+**Notice email (owner #8)** — sent via Brevo from `noreply@churchopshub.com`,
+replyTo jcvaught@gmail.com, owner cc'd on each, message IDs in the Brevo log:
+
+| Church | State | Recipient | Why this address |
+|---|---|---|---|
+| Highland Presbyterian | trialing (ends 09-29) | the church's only user (role `user` — the creator was never made admin; pre-existing oddity) | only human on the tenant |
+| St Olaf Catholic | lapsed | creator/admin (email unverified, last sign-in 04-16) | only human |
+| TrueNorth | grandfathered | creator/admin | Terms change still applies; told "on the house" |
+| New Life Baptist | trialing | **nobody** — creator's Auth account deleted; zero users | abandoned tenant |
+| Compassion Church Ministries | trialing | **nobody** — same | abandoned tenant |
+| FXCC | grandfathered | not sent — owner is the admin | — |
+
+Two abandoned tenants (church docs with no Auth user behind them) are a
+**pre-existing** artifact of the Delete Account flow, which removes the user
+and leaves the church "unmanaged" (Settings → Danger Zone copy says so). They
+will lapse on schedule with nobody to notify; harmless, noted for Part E.
+
+### A.5 Phase 3 — public copy (as planned)
 
 Rev 1 said "eleven claim sites"; round 2 found more; round 4 found more again,
 including the **Terms of Service**. Three wrong counts is the same failure as the
