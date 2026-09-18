@@ -172,17 +172,17 @@ export function HelpPage({ onBack }) {
       { '@type': 'Question', name: 'Is my data isolated from other churches?',
         acceptedAnswer: { '@type': 'Answer', text: 'Yes. Every church\'s data is stored under a unique church ID in Firestore. Security rules prevent any cross-church access — even if someone knows your church code, they cannot read your data without being an authenticated member of your church.' } },
       { '@type': 'Question', name: 'What happens if I cancel?',
-        acceptedAnswer: { '@type': 'Answer', text: 'Your plan stays active until the end of your current billing period. After that, the paid hubs show a locked state and your data is preserved — it\'s just inaccessible until you resubscribe. Your free Inventory, supplies, and reservations are unaffected.' } },
+        acceptedAnswer: { '@type': 'Answer', text: 'Your plan stays active until the end of your current billing period. After that, your church keeps every hub and all of its data and can finish what it started — return equipment, complete tasks, close reservations — but cannot create anything new or add members until it subscribes again.' } },
       { '@type': 'Question', name: 'Can I use ChurchOpsHub on mobile?',
         acceptedAnswer: { '@type': 'Answer', text: 'Yes. The app is a progressive web app (PWA) optimized for both desktop and mobile. On mobile, navigation moves to a bottom bar and modals slide up from the bottom. You can also install it to your home screen from your browser\'s share menu.' } },
       { '@type': 'Question', name: 'How do QR codes work?',
         acceptedAnswer: { '@type': 'Answer', text: 'QR codes are generated locally (no external service) from each item\'s Item ID. They link directly to your app with a ?item=ITEM_ID URL parameter. Anyone with a login can scan and jump straight to that item\'s detail view using the Scan button in the top nav.' } },
       { '@type': 'Question', name: 'How many items can I add?',
-        acceptedAnswer: { '@type': 'Answer', text: 'There is no limit on items or supplies on any plan. Limits only apply to team member count: 10 on the free plan, 25 or unlimited on Team Hub plans.' } },
+        acceptedAnswer: { '@type': 'Answer', text: 'There is no limit on items, supplies, or team members.' } },
       { '@type': 'Question', name: 'Can I export my data?',
         acceptedAnswer: { '@type': 'Answer', text: 'Yes. Inventory, supplies, reservations, and the activity log all have CSV export options. The Accountability Hub also offers an insurance-ready CSV with financial fields.' } },
       { '@type': 'Question', name: 'How much does ChurchOpsHub cost?',
-        acceptedAnswer: { '@type': 'Answer', text: 'Inventory, supplies, and reservations are free forever for up to 10 team members. Everything else — Maintenance, Insights, Coordination, Accountability, People Access, Tasks, and Jobs — is included in one flat ChurchOpsHub plan: $15/month or $150/year, with unlimited team members. There are no per-hub add-ons or seat tiers. New churches get a 90-day free trial of all paid features.' } },
+        acceptedAnswer: { '@type': 'Answer', text: 'Every new church gets 90 days of everything, free, with no credit card. After that, ChurchOpsHub is one plan — $5/month or $50/year — that includes every hub and unlimited team members. There are no per-hub add-ons and no seat tiers. A church that does not subscribe keeps its data and can finish work already in progress, but cannot add anything new.' } },
       { '@type': 'Question', name: 'How do I report a bug or request a feature?',
         acceptedAnswer: { '@type': 'Answer', text: 'Use the Suggest a Feature / Report a Bug button in Settings. Your feedback goes directly to us and is reviewed regularly.' } },
     ],
@@ -262,7 +262,7 @@ export function HelpPage({ onBack }) {
           {/* ──────────────────────────────────── */}
           <Section id="getting-started" icon="🚀" title="Getting Started">
             <Accordion title="Creating your church" defaultOpen>
-              <P>Go to <strong>churchopshub.com</strong> and click <em>Get Started Free</em>. You'll be asked for:</P>
+              <P>Go to <strong>churchopshub.com</strong> and click <em>Get Started</em>. You'll be asked for:</P>
               <UL items={[
                 'Church name — shown throughout the app',
                 'Church code — a short, unique identifier your team uses to join (e.g. GRACECC). Letters and numbers only, uppercase recommended.',
@@ -314,7 +314,7 @@ export function HelpPage({ onBack }) {
           {/* INVENTORY                            */}
           {/* ──────────────────────────────────── */}
           <Section id="inventory" icon="📦" title="Inventory" >
-            <P>The Inventory tab is the core of ChurchOpsHub — free forever. Track every piece of equipment your church owns.</P>
+            <P>The Inventory tab is the core of ChurchOpsHub. Track every piece of equipment your church owns.</P>
 
             <Accordion title="Adding items" defaultOpen>
               <P>Click <strong>+ Add Item</strong> (or press <kbd style={{ background: B.warmGray, borderRadius: 4, padding: '1px 6px', fontFamily: 'monospace', fontSize: 13 }}>N</kbd> on desktop). Each item has:</P>
@@ -1002,21 +1002,21 @@ export function HelpPage({ onBack }) {
           {/* TEAM HUB                             */}
           {/* ──────────────────────────────────── */}
           <Section id="team" icon="👤" title="Team & Access" badge="Included in plan">
-            <P>The free Inventory tier includes up to 10 team members. The <strong>ChurchOpsHub plan ($15/mo or $150/yr)</strong> raises that to <strong>unlimited members</strong> and unlocks every paid feature — with full control over exactly which hubs each person can access.</P>
+            <P>There is no member limit — during the trial or on the plan. Invite your whole team, with full control over exactly which hubs each person can access.</P>
 
             <Accordion title="Team members" defaultOpen>
               <UL items={[
-                'Free Inventory tier — up to 10 team members',
-                'ChurchOpsHub plan — unlimited team members',
+                'Unlimited team members, always',
+                'Three roles: Admin, Manager, User',
+                'A church whose 90 days have ended and hasn\'t subscribed can\'t add new members until it does',
               ]} />
-              <P>Per-user hub access controls are available on every plan.</P>
             </Accordion>
 
             <Accordion title="Per-user hub access">
               <P>In Settings → Team Members, click a user's <strong>Edit Access</strong> button to set:</P>
               <UL items={[
                 'Role (Admin / Manager / User)',
-                'Which hubs they can see (only hubs your church has subscribed to are shown)',
+                'Which hubs they can see',
                 'Managed ministries (for the Manager role)',
               ]} />
               <Note>Admins always see all hubs regardless of hub access settings.</Note>
@@ -1079,7 +1079,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="What happens if I cancel?">
-              <P>Your plan stays active until the end of your current billing period. After that, the paid hubs show a locked state (🔒) and your data is preserved — it's just inaccessible until you resubscribe. Your free Inventory, supplies, and reservations are unaffected.</P>
+              <P>Your plan stays active until the end of your current billing period. After that, your church keeps every hub and all of its data and can finish what it started — return equipment, complete tasks, close reservations — but can't create anything new or add members until it subscribes again.</P>
             </Accordion>
 
             <Accordion title="Can I use ChurchOpsHub on mobile?">
@@ -1091,7 +1091,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="How many items can I add?">
-              <P>There's no limit on items or supplies on any plan. Limits only apply to team member count (10 on free, 25 or unlimited on Team Hub plans).</P>
+              <P>There's no limit on items, supplies, or team members.</P>
             </Accordion>
 
             <Accordion title="Can I export my data?">
@@ -1099,7 +1099,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="How much does ChurchOpsHub cost?">
-              <P>Inventory, supplies, and reservations are <strong>free forever</strong> for up to 10 team members. Everything else — Maintenance, Insights, Coordination, Accountability, People Access, Tasks, and Jobs — is included in one flat <strong>ChurchOpsHub plan: $15/month or $150/year</strong>, with unlimited team members. No per-hub add-ons, no seat tiers. New churches get a 90-day free trial of all paid features.</P>
+              <P>Every new church gets <strong>90 days of everything</strong>, free, with no credit card. After that, ChurchOpsHub is one plan — <strong>$5/month or $50/year</strong> — that includes every hub and unlimited team members. No per-hub add-ons, no seat tiers. A church that doesn't subscribe keeps its data and can finish work already in progress, but can't add anything new.</P>
             </Accordion>
 
             <Accordion title="What if someone added something to the wrong list — items vs. supplies?">

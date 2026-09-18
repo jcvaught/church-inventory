@@ -42,7 +42,7 @@ const ROUTES = [
     componentName: 'LandingPage',
     output: 'index.html',
     title: 'ChurchOpsHub — Run Your Church on One Platform',
-    description: "Inventory, maintenance, scheduling, accountability, people access, tasks, and job posts — all integrated. Free inventory hub forever; paid hubs for the rest. 90-day free trial of all paid hubs.",
+    description: "Inventory, maintenance, scheduling, accountability, people access, tasks, and job posts — all integrated. One plan, everything included: 90 days free, then $5/month or $50/year.",
   },
   {
     url: '/help',

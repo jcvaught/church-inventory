@@ -184,7 +184,7 @@ export function BlogPost({ slug, onGetStarted }) {
             Start tracking your church's inventory today
           </h2>
           <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.65)', margin: '0 0 28px', lineHeight: 1.6 }}>
-            Free forever. No credit card required. Set up in under an hour.
+            90 days free, then $5/month for everything. No credit card to start. Set up in under an hour.
           </p>
           <button
             onClick={() => onGetStarted('register')}

@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { B, f1, f2, btnP, btnS } from '../components/brand/tokens.js';
 import { FullLogo } from '../components/brand/Logo.jsx';
 import { SEO } from '../components/SEO.jsx';
+import { PRICE, TRIAL_DAYS } from '../lib/entitlement.js';
 
-const FREE_FEATURES = [
+const CORE_FEATURES = [
   { icon: '📦', title: 'Equipment Inventory', desc: 'Track every item your church owns — status, location, ministry, photos, and printable QR code labels.' },
   { icon: '🧴', title: 'Supplies Tracking', desc: 'Monitor consumable quantities, log every adjustment, and get alerted before you run out.' },
   { icon: '📅', title: 'Reservations', desc: 'Let your team request and schedule items in advance. Approve or deny with a single click.' },
   { icon: '📋', title: 'Activity Log', desc: 'Every check-out, return, and edit is automatically recorded. Full audit trail, always.' },
-  { icon: '👥', title: 'Team Members', desc: 'Invite up to 10 team members with admin, manager, and user roles.' },
+  { icon: '👥', title: 'Team Members', desc: 'Invite your whole team — admin, manager, and user roles, no member limit.' },
 ];
 
 const HUBS = [
@@ -22,7 +23,7 @@ const HUBS = [
 ];
 
 const STEPS = [
-  { n: '1', title: 'Create your church', desc: 'Sign up free and give your church a name and unique code. Takes 60 seconds.' },
+  { n: '1', title: 'Create your church', desc: 'Sign up and give your church a name and unique code. Takes 60 seconds, no card.' },
   { n: '2', title: 'Add your inventory', desc: 'Start adding equipment and supplies with locations, ministries, and photos.' },
   { n: '3', title: 'Invite your team', desc: 'Share your church code with staff and volunteers. Everyone sees the same live data.' },
 ];
@@ -54,7 +55,7 @@ export function LandingPage({ onGetStarted }) {
       operatingSystem: 'Web',
       description: 'The operations platform built for churches. Track inventory, supplies, reservations, maintenance, and more.',
       url: 'https://churchopshub.com',
-      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      offers: { '@type': 'Offer', price: String(PRICE.monthly), priceCurrency: 'USD', description: `${TRIAL_DAYS}-day free trial, then $${PRICE.monthly}/month or $${PRICE.annual}/year for everything` },
       featureList: [
         'Equipment inventory tracking',
         'Consumable supplies management',
@@ -85,7 +86,7 @@ export function LandingPage({ onGetStarted }) {
   return (
     <div style={{ fontFamily: f2, color: B.textDark, background: B.cream }}>
       <SEO
-        title="Church Operations Platform — Free Inventory & More | ChurchOpsHub"
+        title="Church Operations Platform — Inventory, Tasks, Shifts & More | ChurchOpsHub"
         description="ChurchOpsHub is the operations platform built for churches. Track inventory, supplies, reservations, maintenance tickets, and team compliance — all in one place."
         canonical="/"
         jsonLd={jsonLd}
@@ -121,7 +122,7 @@ export function LandingPage({ onGetStarted }) {
               onClick={() => onGetStarted('register')}
               style={{ ...btnP, padding: '8px 16px', fontSize: 13 }}
             >
-              Get Started Free
+              Get Started
             </button>
           )}
         </div>
@@ -142,7 +143,7 @@ export function LandingPage({ onGetStarted }) {
             fontFamily: f1, marginBottom: 32, letterSpacing: 0.3,
           }}>
             <span style={{ background: '#0D9488', borderRadius: 100, padding: '2px 10px', fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: '#fff' }}>FREE TRIAL</span>
-            <span>90 days of all paid hubs — no credit card required</span>
+            <span>{TRIAL_DAYS} days of everything — no credit card required</span>
           </div>
           <h1 style={{
             fontFamily: f1, fontSize: mob ? 38 : 56, fontWeight: 800,
@@ -157,8 +158,8 @@ export function LandingPage({ onGetStarted }) {
             margin: '0 0 16px', lineHeight: 1.7,
             maxWidth: 540, marginLeft: 'auto', marginRight: 'auto',
           }}>
-            ChurchOpsHub is the operations platform built for churches — start with free inventory,
-            then add maintenance, insights, scheduling, and accountability when you're ready to grow.
+            ChurchOpsHub is the operations platform built for churches — inventory, supplies,
+            reservations, maintenance, tasks, volunteer shifts, and compliance, all in one place.
           </p>
           <p style={{
             fontSize: mob ? 13 : 15, color: 'rgba(255,255,255,0.4)',
@@ -173,7 +174,7 @@ export function LandingPage({ onGetStarted }) {
               onClick={() => onGetStarted('register')}
               style={{ ...btnP, padding: '15px 36px', fontSize: 16 }}
             >
-              Start Free — 90-Day Trial
+              Start Your {TRIAL_DAYS}-Day Trial
             </button>
             <button
               onClick={() => onGetStarted('login')}
@@ -183,7 +184,7 @@ export function LandingPage({ onGetStarted }) {
             </button>
           </div>
           <p style={{ marginTop: 28, fontSize: 13, color: 'rgba(255,255,255,0.35)', fontFamily: f1 }}>
-            No credit card · No setup fee · All hubs free for 90 days
+            No credit card · No setup fee · Everything included for 90 days
           </p>
         </div>
       </section>
@@ -193,10 +194,10 @@ export function LandingPage({ onGetStarted }) {
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 52 }}>
             <h2 style={{ fontFamily: f1, fontSize: mob ? 30 : 40, fontWeight: 700, color: B.navy, margin: '0 0 14px' }}>
-              Everything you need, forever free
+              Know what you have
             </h2>
             <p style={{ fontSize: 17, color: B.textMid, margin: 0, maxWidth: 480, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
-              The core inventory system is free with no time limit. No trial, no credit card, no catch.
+              The inventory core: every item, every supply, every reservation, every change — with the whole team in it.
             </p>
           </div>
           <div style={{
@@ -204,7 +205,7 @@ export function LandingPage({ onGetStarted }) {
             gridTemplateColumns: wide ? 'repeat(3,1fr)' : mid ? 'repeat(2,1fr)' : '1fr',
             gap: 20,
           }}>
-            {FREE_FEATURES.map(ft => (
+            {CORE_FEATURES.map(ft => (
               <div key={ft.title} style={{
                 background: B.white, borderRadius: 16, padding: '28px 24px',
                 border: `1px solid ${B.sand}`,
@@ -223,10 +224,10 @@ export function LandingPage({ onGetStarted }) {
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 52 }}>
             <h2 style={{ fontFamily: f1, fontSize: mob ? 30 : 40, fontWeight: 700, color: B.navy, margin: '0 0 14px' }}>
-              Unlock more when you're ready
+              Run the rest of the building
             </h2>
             <p style={{ fontSize: 17, color: B.textMid, margin: 0, maxWidth: 500, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
-              One plan includes every feature below — plus unlimited team members.
+              Every hub below is included — there is nothing to add on.
             </p>
           </div>
           <div style={{
@@ -261,74 +262,51 @@ export function LandingPage({ onGetStarted }) {
             Simple, honest pricing
           </h2>
           <p style={{ fontSize: 17, color: B.textMid, margin: '0 0 16px', lineHeight: 1.6 }}>
-            Inventory is free forever. Everything else is one simple plan — no per-hub math.
+            One plan. Everything included. No per-hub math, no seat tiers.
           </p>
           <div style={{ display: 'inline-block', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '10px 20px', marginBottom: 40 }}>
             <span style={{ fontSize: 14, color: '#166534', fontFamily: f1, fontWeight: 600 }}>
-              🎉 New churches get a <strong>90-day free trial</strong> of all paid hubs — no credit card required.
+              🎉 Every new church gets <strong>{TRIAL_DAYS} days of everything</strong> — no credit card required.
             </span>
           </div>
 
           <div style={{
-            display: mid ? 'grid' : 'flex', flexDirection: 'column',
-            gridTemplateColumns: mid ? '1fr 1fr' : undefined,
-            gap: 20, marginBottom: 24,
+            background: B.navy, borderRadius: 20, padding: mob ? '32px 24px' : '40px 40px',
+            textAlign: 'left', position: 'relative', overflow: 'hidden', marginBottom: 24,
+            maxWidth: 620, marginLeft: 'auto', marginRight: 'auto',
           }}>
-            {/* Free card */}
-            <div style={{
-              background: B.white, borderRadius: 20, padding: mob ? '32px 24px' : '40px 32px',
-              border: `1px solid ${B.sand}`, textAlign: 'left',
-            }}>
-              <div style={{ fontFamily: f1, fontWeight: 700, fontSize: 18, color: B.textMid, marginBottom: 8 }}>Inventory Hub</div>
-              <div style={{ fontFamily: f1, fontWeight: 800, fontSize: 48, color: B.navy, lineHeight: 1, marginBottom: 6 }}>Free</div>
-              <div style={{ fontSize: 13, color: B.textLight, marginBottom: 28, fontFamily: f1 }}>Forever · No credit card</div>
-              {['Full equipment inventory', 'Supplies tracking', 'Reservations', 'Activity log', '10 team members', '90-day trial of all hubs'].map(item => (
-                <div key={item} style={{ display: 'flex', alignItems: 'center', marginBottom: 10, fontSize: 14, color: B.textMid }}>
-                  {check(false)}{item}
+            <div style={{ fontFamily: f1, fontWeight: 700, fontSize: 18, color: 'rgba(255,255,255,0.6)', marginBottom: 14 }}>ChurchOpsHub</div>
+            <div style={{ display: mid ? 'grid' : 'flex', flexDirection: 'column', gridTemplateColumns: mid ? '1fr 1fr' : undefined, gap: 16, marginBottom: 28 }}>
+              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '16px 18px', border: '1px solid rgba(255,255,255,0.12)' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <span style={{ fontFamily: f1, fontWeight: 800, fontSize: 44, color: '#fff', lineHeight: 1 }}>${PRICE.monthly}</span>
+                  <span style={{ fontSize: 15, color: 'rgba(255,255,255,0.45)', fontFamily: f1 }}>/month</span>
                 </div>
-              ))}
-              <button
-                onClick={() => onGetStarted('register')}
-                style={{ ...btnS, width: '100%', marginTop: 28, textAlign: 'center' }}
-              >
-                Start Free — 90-Day Trial
-              </button>
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: '16px 18px', border: `1px solid ${B.gold}`, position: 'relative' }}>
+                <span style={{ position: 'absolute', top: -9, right: 14, background: B.gold, color: B.navy, fontFamily: f1, fontWeight: 800, fontSize: 10, padding: '3px 10px', borderRadius: 100, letterSpacing: 1 }}>2 MONTHS FREE</span>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <span style={{ fontFamily: f1, fontWeight: 800, fontSize: 44, color: '#fff', lineHeight: 1 }}>${PRICE.annual}</span>
+                  <span style={{ fontSize: 15, color: 'rgba(255,255,255,0.45)', fontFamily: f1 }}>/year</span>
+                </div>
+              </div>
             </div>
-
-            {/* ChurchOpsHub paid plan card */}
-            <div style={{
-              background: B.navy, borderRadius: 20, padding: mob ? '32px 24px' : '40px 32px',
-              textAlign: 'left', position: 'relative', overflow: 'hidden',
-            }}>
-              <div style={{
-                position: 'absolute', top: 20, right: 20,
-                background: B.gold, color: B.navy,
-                fontFamily: f1, fontWeight: 800, fontSize: 11,
-                padding: '4px 12px', borderRadius: 100, letterSpacing: 1,
-              }}>
-                BEST VALUE
-              </div>
-              <div style={{ fontFamily: f1, fontWeight: 700, fontSize: 18, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>ChurchOpsHub</div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 6 }}>
-                <span style={{ fontFamily: f1, fontWeight: 800, fontSize: 48, color: '#fff', lineHeight: 1 }}>$15</span>
-                <span style={{ fontSize: 16, color: 'rgba(255,255,255,0.45)', fontFamily: f1 }}>/mo</span>
-              </div>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 28, fontFamily: f1 }}>or $150/yr · Unlimited users · Cancel anytime</div>
-              {['Every paid feature included', 'Unlimited team members', 'Tasks & maintenance board', 'Contractor hours & timesheets', 'Jobs & volunteer shifts', 'People Access & compliance', 'Insights & analytics', 'Accountability & audits'].map(item => (
+            <div style={{ display: mid ? 'grid' : 'block', gridTemplateColumns: mid ? '1fr 1fr' : undefined, columnGap: 20 }}>
+              {['Equipment inventory & supplies', 'Reservations & spaces', 'Tasks & maintenance board', 'Contractor hours & timesheets', 'Jobs & volunteer shifts', 'People Access & compliance', 'Insights & weekly digests', 'Accountability & audits', 'Unlimited team members', 'Cancel anytime'].map(item => (
                 <div key={item} style={{ display: 'flex', alignItems: 'center', marginBottom: 10, fontSize: 14, color: 'rgba(255,255,255,0.75)' }}>
                   {check(true)}{item}
                 </div>
               ))}
-              <button
-                onClick={() => onGetStarted('register')}
-                style={{ ...btnP, width: '100%', marginTop: 28, textAlign: 'center', background: B.teal }}
-              >
-                Get Started
-              </button>
-              <p style={{ textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.3)', margin: '14px 0 0', fontFamily: f1 }}>
-                One flat price. No per-hub add-ons, no seat tiers.
-              </p>
             </div>
+            <button
+              onClick={() => onGetStarted('register')}
+              style={{ ...btnP, width: '100%', marginTop: 22, textAlign: 'center', background: B.teal }}
+            >
+              Start Your {TRIAL_DAYS}-Day Trial
+            </button>
+            <p style={{ textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.35)', margin: '14px 0 0', fontFamily: f1, lineHeight: 1.6 }}>
+              Nothing to pay for {TRIAL_DAYS} days. After that, a church that hasn't subscribed keeps its data and finishes what it started — it just can't add anything new.
+            </p>
           </div>
 
           <p style={{ fontSize: 13, color: B.textLight, margin: '4px 0 0', fontFamily: f1 }}>
@@ -398,13 +376,13 @@ export function LandingPage({ onGetStarted }) {
             Ready to get organized?
           </h2>
           <p style={{ fontSize: 17, color: 'rgba(255,255,255,0.75)', margin: '0 0 40px', lineHeight: 1.6 }}>
-            Start free today. No credit card, no commitment.
+            Start today. No credit card, no commitment.
           </p>
           <button
             onClick={() => onGetStarted('register')}
             style={{ ...btnP, padding: '16px 44px', fontSize: 17, background: B.white, color: B.teal }}
           >
-            Get Started Free
+            Get Started
           </button>
         </div>
       </section>
@@ -447,7 +425,7 @@ export function LandingPage({ onGetStarted }) {
               onClick={() => onGetStarted('register')}
               style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'rgba(255,255,255,0.45)', fontSize: 14, fontFamily: f1 }}
             >
-              Get Started Free
+              Get Started
             </button>
           </div>
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.25)', fontFamily: f1 }}>

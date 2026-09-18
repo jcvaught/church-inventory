@@ -11,13 +11,14 @@ function P({ children }) {
 export function TermsBody() {
   return (
     <>
-      <p style={{ fontFamily: f2, fontSize: 14, color: B.textLight, margin: '0 0 24px' }}>Last updated: April 26, 2026</p>
+      <p style={{ fontFamily: f2, fontSize: 14, color: B.textLight, margin: '0 0 6px' }}>Last updated: September 17, 2026</p>
+      <p style={{ fontFamily: f2, fontSize: 14, color: B.textLight, margin: '0 0 24px' }}>Effective: October 1, 2026. The changes in this version are to sections 2 and 5 (one plan, 90-day trial, what happens after). Accounts created before October 1, 2026 remain on the April 26, 2026 terms until then.</p>
 
       <H2>1. Acceptance of Terms</H2>
       <P>By creating an account or using ChurchOpsHub ("the Service," "we," "us," or "our"), you ("you" or "User") agree to be bound by these Terms of Service ("Terms"). If you are accepting on behalf of a church or organization, you represent that you have authority to bind that organization. If you do not agree, do not use the Service.</P>
 
       <H2>2. Description of Service</H2>
-      <P>ChurchOpsHub is a cloud-based inventory and operations management platform designed for churches and religious organizations. Features include equipment tracking, supply management, reservations, maintenance ticketing, team management, and reporting. The Service is provided on a subscription basis with a free tier and optional paid hubs.</P>
+      <P>ChurchOpsHub is a cloud-based inventory and operations management platform designed for churches and religious organizations. Features include equipment tracking, supply management, reservations, maintenance ticketing, task boards, volunteer job scheduling, people-access compliance tracking, team management, and reporting. The Service is provided on a subscription basis: one plan that includes every feature, preceded by a 90-day free trial.</P>
 
       <H2>3. Eligibility</H2>
       <P>You must be at least 18 years old and capable of entering a binding contract to use the Service. The Service is intended for use by churches, religious nonprofits, and their authorized staff. By registering, you confirm that you meet these requirements.</P>
@@ -26,7 +27,7 @@ export function TermsBody() {
       <P>You agree to provide accurate, current, and complete information during registration. Each church organization may create one account. You are responsible for maintaining the confidentiality of your login credentials and for all activity under your account. Notify us immediately at <a href="mailto:churchopshub@gmail.com" style={{ color: B.teal }}>churchopshub@gmail.com</a> if you suspect unauthorized access. We are not liable for losses resulting from unauthorized use of your account.</P>
 
       <H2>5. Subscriptions & Payment</H2>
-      <P>The Service offers a free base tier and optional paid hubs billed on a monthly subscription basis. Paid subscriptions are processed through Stripe. By subscribing, you authorize us to charge your payment method on a recurring basis. Subscriptions renew automatically unless cancelled before the renewal date. We reserve the right to change pricing with at least 30 days' notice to active subscribers. Refunds are not provided for partial billing periods, but we will work with you in good faith if exceptional circumstances arise. Contact us at <a href="mailto:churchopshub@gmail.com" style={{ color: B.teal }}>churchopshub@gmail.com</a> with billing questions.</P>
+      <P>Every new church receives 90 days of the full Service at no charge and with no payment method required. After that, the Service is one subscription — currently $5 per month or $50 per year, covering every feature and an unlimited number of team members. A church that does not subscribe when its 90 days end keeps access to its account and data and may complete work already in progress (for example, returning checked-out equipment, completing a task, or closing a reservation), but cannot create new records or add new members until it subscribes. Subscriptions are processed through Stripe. By subscribing, you authorize us to charge your payment method on a recurring basis. Subscriptions renew automatically unless cancelled before the renewal date. We reserve the right to change pricing with at least 30 days' notice to active subscribers. Refunds are not provided for partial billing periods, but we will work with you in good faith if exceptional circumstances arise. Contact us at <a href="mailto:churchopshub@gmail.com" style={{ color: B.teal }}>churchopshub@gmail.com</a> with billing questions.</P>
 
       <H2>6. Your Data & License</H2>
       <P>You retain full ownership of all data, content, and information you submit to the Service ("Your Data"). By using the Service, you grant us a limited, non-exclusive license to store, process, and display Your Data solely to provide the Service to you. We do not claim any other rights to Your Data. We do not sell, rent, or use Your Data for advertising or marketing purposes.</P>

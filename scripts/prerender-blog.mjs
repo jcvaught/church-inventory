@@ -254,7 +254,7 @@ ${navHTML()}
   <div class="divider"></div>
   <div class="cta-box">
     <h2>Run your church on one platform.</h2>
-    <p>Inventory Hub is free forever. Add paid hubs for maintenance, scheduling, accountability, and more. 90-day free trial.</p>
+    <p>Inventory, maintenance, scheduling, tasks, shifts, and accountability in one plan — 90 days free, then $5/month for everything.</p>
     <a class="btn" href="/?signup">Start Free Trial →</a>
   </div>
 ${relatedHTML}

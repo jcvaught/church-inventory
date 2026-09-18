@@ -4,6 +4,12 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-09-17',
+    tag: 'Improved',
+    title: 'One plan, everything included — $5/month',
+    body: "Pricing got simpler. Every church gets 90 days of every hub, then ChurchOpsHub is $5/month or $50/year for all of it — inventory, reservations, maintenance, tasks, shifts, people access, insights, accountability — with no member limit. There is no longer a free tier or a per-hub price. If your 90 days have ended and you haven't subscribed, nothing is taken away: you keep every hub and all your data and can finish what you started — you just can't add anything new until you subscribe. The Terms of Service are updated to match, effective October 1, 2026.",
+  },
+  {
     date: '2026-09-07',
     tag: 'New',
     title: 'Completed tasks tidy themselves away',

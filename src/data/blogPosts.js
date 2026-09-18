@@ -1268,7 +1268,7 @@ Most churches that switch report that the migration is complete in one to two we
 
 Most churches don't have an operations problem — they have a spreadsheet sprawl problem. Seven operational functions in seven spreadsheets is the natural state, and it carries hidden costs in coordination overhead, missed maintenance, expired compliance, untracked key access, and time spent reconciling across systems that don't talk to each other. Estimate: 150–300 hours per year of avoidable coordination work, plus unquantified compliance exposure, for a mid-size church. The fix isn't better spreadsheets — it's an integrated system that replaces the manual handoffs with structured workflows. The math favors the migration.
 
-If you want to see what that looks like in practice, that's exactly what ChurchOpsHub is built for. Inventory free forever, paid hubs for the rest, all integrated.
+If you want to see what that looks like in practice, that's exactly what ChurchOpsHub is built for. Inventory, reservations, maintenance, tasks, shifts, and compliance — one plan, all integrated.
 `.trim(),
   },
   {
@@ -1589,7 +1589,7 @@ If you build it well, the question stops being "is the schedule working?" and st
 
 ChurchOpsHub is the Run-Your-Church operations platform we build, with hubs for the operations a small-to-mid-sized church actually runs — Inventory, Tasks, Jobs, People Access, Coordination, and more. The Jobs Hub specifically handles volunteer scheduling: volunteers self-sign-up for open slots, accept assignments on their phones, request swaps without going through an admin, and get automated reminders by email and SMS. There's a waitlist with auto-promotion when someone cancels — the recovery problem solved structurally rather than depending on a coordinator at 9 PM on Saturday. If your volunteers are also handling church equipment, the [Equipment Accountability piece](/blog/church-volunteer-equipment-accountability) covers the related side of this.
 
-Inventory is free with no time limit. The Jobs Hub is included in the flat $15/month ChurchOpsHub plan ($150/year), along with every other paid feature. New churches get a 90-day free trial of all paid features.
+The Jobs Hub is included in the one ChurchOpsHub plan — $5/month or $50/year for every feature and unlimited team members. New churches get 90 days of everything free, no credit card.
 
 ## The Bottom Line
 
@@ -1646,7 +1646,7 @@ A reservation system lets every team member see what's available, request what t
 
 Most asset management software is built for businesses with dedicated IT departments, warehouses, and budgets for implementation consultants. Churches need something different: software that's simple enough for volunteers, flexible enough for the variety of assets churches actually own (from AVL equipment to kitchen supplies to vehicles), and affordable enough to make sense for a nonprofit.
 
-ChurchOpsHub was built specifically for this context. The core inventory system is free, with no time limit and no credit card required. You can be tracking your equipment within an hour of signing up — no training certification needed, no complex onboarding.
+ChurchOpsHub was built specifically for this context. Every new church gets 90 days of everything free, no credit card required, and after that it's $5/month for the whole platform. You can be tracking your equipment within an hour of signing up — no training certification needed, no complex onboarding.
 
 ## Getting Started Is Easier Than You Think
 
@@ -2226,7 +2226,7 @@ Maintaining a centralized record of who has access to what — keys issued, code
 
 Most facilities managers who are tracking all five of these categories informally are using five different tools: a spreadsheet for inventory, a whiteboard for maintenance, email for reservations, a closet shelf for supplies, and their memory for access records. The overhead of maintaining five separate systems — and the gaps that appear at the seams between them — is what makes the job harder than it needs to be.
 
-ChurchOpsHub brings all five into a single system designed for the way churches actually operate. The core inventory module is free with no time limit. The Maintenance Hub, Coordination Hub, and People Access Hub extend it with the features that make each category of tracking practical for a real facilities team rather than an administrative burden.
+ChurchOpsHub brings all five into a single system designed for the way churches actually operate. The inventory core, the Maintenance Hub, the Coordination Hub, and the People Access Hub are all in the one plan, with the features that make each category of tracking practical for a real facilities team rather than an administrative burden.
 
 Start with your inventory. Add your highest-value and most-borrowed items first. Once that habit is established, the other categories layer on naturally.
     `.trim(),
@@ -2442,7 +2442,7 @@ ChurchOpsHub is designed specifically for the physical operations side of church
 - A Coordination Hub for reservation requests with approval workflows
 - A People Access Hub for key assignments, background checks, and certification tracking
 
-The free tier covers your full equipment inventory, checkout/return, and supply tracking with no time limit. The paid hubs extend that foundation with the operational workflows that make tracking practical rather than just theoretical.
+The inventory core covers your full equipment inventory, checkout/return, and supply tracking. The hubs extend that foundation with the operational workflows that make tracking practical rather than just theoretical — and it's all one plan, $5/month after a 90-day trial.
 
 ## How to Think About the Combination
 
@@ -2453,7 +2453,7 @@ For most churches, the right setup is a church management system alongside a chu
 
 The two systems don't overlap. They serve different parts of your team — the administrative and pastoral staff who manage people relationships on one side, and the facilities, tech, and ministry teams who manage physical resources on the other.
 
-If you're evaluating software and asking "ChurchTrac or ChurchOpsHub?" the honest answer is that you probably need both — and that getting started with ChurchOpsHub's free inventory system costs nothing and takes less than an hour.
+If you're evaluating software and asking "ChurchTrac or ChurchOpsHub?" the honest answer is that you probably need both — and that getting started with ChurchOpsHub costs nothing for the first 90 days and takes less than an hour.
     `.trim(),
   },
 
@@ -2580,7 +2580,7 @@ The most well-known tool in this category built specifically for churches is **e
 
 The limitation for small churches: eSPACE starts at $60+/mo with required onboarding fees ($499–$1,299 to get started). For a church with one administrator juggling five other responsibilities, the price and complexity can be hard to justify.
 
-**ChurchOpsHub** was built to fill exactly this gap for smaller churches. The core inventory and supplies system is completely free — no time limit, no credit card required. You get equipment tracking with checkout/return, photo documentation, QR code labels, supply quantity tracking, reservations, and a full activity log at no cost.
+**ChurchOpsHub** was built to fill exactly this gap for smaller churches. The first 90 days are free with no credit card, and after that it's $5/month for everything. You get equipment tracking with checkout/return, photo documentation, QR code labels, supply quantity tracking, reservations, and a full activity log — plus maintenance, tasks, shifts, and compliance in the same plan.
 
 For churches that need more operational depth, one flat plan ($15/mo or $150/yr) adds every paid feature — no per-hub à la carte:
 
@@ -2624,7 +2624,7 @@ The best church management software for your small church is the one that actual
 
 If the problems are about physical resources — equipment accountability, supply management, maintenance, compliance, audits — those platforms won't solve them. That's not a criticism; it's a category mismatch.
 
-ChurchOpsHub's free tier is a zero-risk way to see whether organized operations software changes how your team works. Start with your most borrowed equipment, add your key supplies, and within a few days you'll have a real-time picture of your church's physical assets that no ChMS was ever going to give you.
+ChurchOpsHub's 90-day trial is a zero-risk way to see whether organized operations software changes how your team works. Start with your most borrowed equipment, add your key supplies, and within a few days you'll have a real-time picture of your church's physical assets that no ChMS was ever going to give you.
 
 Your congregation's tithes paid for your building and everything in it. Both sides — the people and the stuff — deserve to be managed well.
     `.trim(),
@@ -2847,9 +2847,9 @@ Not all facilities management software is built for churches. Commercial platfor
 
 **Role-based access.** Your lead pastor doesn't need access to maintenance ticketing. Your volunteer coordinator doesn't need to see financial data. Good software lets you give each role exactly the access they need without exposing everything to everyone.
 
-**Nonprofit pricing.** Enterprise facilities management software runs thousands of dollars per year. A system designed for churches should be priced for nonprofit budgets — ideally with a free tier for the core inventory features that every church needs regardless of size.
+**Nonprofit pricing.** Enterprise facilities management software runs thousands of dollars per year. A system designed for churches should be priced for nonprofit budgets — a few dollars a month, not a few thousand a year.
 
-ChurchOpsHub was built specifically for this context. Core inventory is free, with no time limit. Paid modules — Maintenance, Insights, Coordination, People Access, and others — add capabilities as your needs grow. There's no implementation consultant, no enterprise contract, and no training certification required to get started.
+ChurchOpsHub was built specifically for this context: one plan at $5/month (after 90 days free) that includes inventory, Maintenance, Insights, Coordination, People Access, and the rest. There's no implementation consultant, no enterprise contract, and no training certification required to get started.
 
 ## The Stewardship Argument
 
@@ -2938,7 +2938,7 @@ If any of those apply, it's time to move to dedicated inventory software. The da
 
 ## Start Today
 
-Whichever path you choose — spreadsheet template or dedicated software — the goal is the same: stop losing equipment, stop buying duplicates, stop wasting volunteer time. A simple template is enough to start. ChurchOpsHub's Inventory Hub is free for up to ten users with no time limit if you'd rather skip the spreadsheet phase entirely.
+Whichever path you choose — spreadsheet template or dedicated software — the goal is the same: stop losing equipment, stop buying duplicates, stop wasting volunteer time. A simple template is enough to start. ChurchOpsHub is free for 90 days (then $5/month for everything) if you'd rather skip the spreadsheet phase entirely.
 
 Your future self will thank you either way.
     `.trim(),
@@ -2961,9 +2961,9 @@ If Sortly didn't fit, here are five alternatives worth evaluating.
 
 ## 1. ChurchOpsHub
 
-ChurchOpsHub is built specifically for churches. The Inventory Hub is free for up to ten users with no time limit and no item cap, which removes the most common reason churches outgrow Sortly's free tier within weeks. Items can be tagged by ministry and location, photos are supported, and checkout flows are designed around volunteers rather than warehouse staff.
+ChurchOpsHub is built specifically for churches. There is no item cap and no user cap on any church — 90 days free, then $5/month for everything — which removes the most common reason churches outgrow Sortly's free tier within weeks. Items can be tagged by ministry and location, photos are supported, and checkout flows are designed around volunteers rather than warehouse staff.
 
-What sets it apart for church use: ministries are first-class objects, not just tags. You can scope items to specific ministries, restrict who can edit them, and run reservations across ministry calendars. Paid hubs add maintenance ticketing, room reservations, public request forms, audit tools, and a job board for teen volunteers — features Sortly does not offer at any price.
+What sets it apart for church use: ministries are first-class objects, not just tags. You can scope items to specific ministries, restrict who can edit them, and run reservations across ministry calendars. The same plan includes maintenance ticketing, room reservations, public request forms, audit tools, and a job board for teen volunteers — features Sortly does not offer at any price.
 
 Best for: churches that want a single tool for inventory plus the operational hubs around it.
 
@@ -3207,7 +3207,7 @@ The point of the debrief is not perfection. It is so that next year's team is no
 
 Items that get used during VBS and the rest of the year — speakers, microphones, folding tables, coolers, first-aid kits, projectors — should live in your church's main inventory system, not a VBS-only spreadsheet. Reserve them for VBS week through your normal reservation process so other ministries see the conflict early.
 
-ChurchOpsHub's Inventory Hub is free for up to ten users and handles this case directly: tag items with both Children's Ministry and the VBS event, reserve them in advance, and check them out the morning of setup. After VBS, returns happen the same day so the gear is available for Sunday.
+ChurchOpsHub handles this case directly: tag items with both Children's Ministry and the VBS event, reserve them in advance, and check them out the morning of setup. After VBS, returns happen the same day so the gear is available for Sunday.
 
 The thing every veteran VBS coordinator says: the week itself is fun. The planning is what makes the week fun rather than exhausting. Spend the time up front.
     `.trim(),
@@ -3409,7 +3409,7 @@ What it does:
 - **Tasks Hub** — general-purpose Kanban for staff work, with assignees, due dates, recurring templates, ICS export.
 - **Job Hub** — teen-friendly volunteer job board with compliance + waiver gating, signup roster, attendance tracking, swap requests.
 
-Pricing: free Inventory + one flat $15/month plan ($150/year) for every paid feature, with unlimited team members. New churches get a 90-day free trial of all paid features.
+Pricing: one plan, $5/month or $50/year, for every feature with unlimited team members. New churches get 90 days of everything free.
 
 **Where ChurchOpsHub shines:** any church that has more than ~$10K of physical equipment, runs a facilities operation, has a volunteer program with compliance requirements, or has gotten tired of running operations from a Google Drive folder.
 
@@ -3433,7 +3433,7 @@ Here's the practical version. None of these are mandatory — they're starting p
 
 **Giving + lightweight ChMS:** Tithely (free giving + Tithely ChMS $19–$49/month range depending on tier). Free tier of Tithely Giving handles online + text-to-give just fine for this size.
 
-**Operations:** ChurchOpsHub free Inventory Hub + 1–2 paid hubs ($0 to ~$15/month). Most small churches add Maintenance or Reservations as the first paid hub depending on which pain is loudest.
+**Operations:** ChurchOpsHub ($5/month for everything after 90 days free). Most small churches start with inventory and reservations and grow into Maintenance or Tasks as the pain shows up.
 
 **Total monthly software spend:** $20–$70 (plus giving transaction fees).
 
@@ -3490,7 +3490,7 @@ For everyone else — which is most churches — the right answer is two tools, 
 
 Pick the giving + ChMS layer that fits your size. Then add the operations layer separately. That's the stack that actually works — and it's almost always cheaper than the all-in-one alternative once you account for the spreadsheets you'd otherwise be paying staff to maintain.
 
-If you want to try the operations layer without committing, ChurchOpsHub's Inventory Hub is free forever for up to 10 users — set it up alongside whatever giving platform you already run, see if the workflow fits, and add paid hubs only as the pain shows up.
+If you want to try the operations layer without committing, ChurchOpsHub gives you 90 days of everything free — set it up alongside whatever giving platform you already run, see if the workflow fits, and decide at $5/month whether it earned its place.
     `.trim(),
   },
 ];
