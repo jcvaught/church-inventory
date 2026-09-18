@@ -13,6 +13,7 @@ import { excludeTestAccounts } from './utils/testAccounts.js';
 import { uidsOf } from './utils/taskVisibility.js';
 import { createWorkStore } from './utils/workMerge.js';
 import { taskQueryArms, mergeArchiveArms } from './utils/workQueries.js';
+import { activityLaneBounds, mergeActivityLanes } from './lib/activity-lanes.js';
 
 // ── Work model (unified Tasks + Maintenance) ─────────────────────────────────
 // Tasks and maintenance tickets live in one `workItems` collection (a single
@@ -1678,20 +1679,25 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
   // (e.g. trailing 12 months). Pages with startAfter so a busy church doesn't
   // pull one giant snapshot; a hard `maxEntries` ceiling backstops runaway
   // reads. Returns oldest→newest.
+  //
+  // Historical rows store ISO strings; COH-002 rows store Firestore
+  // Timestamps, and an inequality filter is type-scoped, so BOTH lanes are
+  // queried and merged (src/lib/activity-lanes.js — shared with the server
+  // digest, which had the same defect; COH-012 part B). Each lane is one `>=`
+  // of its own type and nothing else: the `< Timestamp(0)` upper bound the
+  // first version put on the string lane made it a mixed-type range, which
+  // matches NOTHING in production — measured 0 rows on FXCC 2026-09-18 — so
+  // Insights was silently computing over the Timestamp lane alone.
   const loadActivityLogSince = useCallback(async (sinceTimestamp, { batchSize = 500, maxEntries = 5000 } = {}) => {
     if (!churchId || !sinceTimestamp) return [];
     try {
-      // Historical rows store ISO strings; COH-002 rows store Firestore
-      // Timestamps. Query both type lanes during the compatibility period and
-      // merge them into the store's ISO-string shape.
-      async function fetchLane(startValue, upperExclusive = null) {
+      async function fetchLane(startValue) {
         const lane = [];
         let cursor = null;
         for (;;) {
           const clauses = [
             collection(db, 'churches', churchId, 'activityLog'),
             where('timestamp', '>=', startValue),
-            ...(upperExclusive ? [where('timestamp', '<', upperExclusive)] : []),
             orderBy('timestamp', 'asc'),
             limit(batchSize),
           ];
@@ -1705,15 +1711,9 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
         return lane;
       }
 
-      const [legacy, current] = await Promise.all([
-        // Firestore orders strings before Timestamps. The upper bound keeps the
-        // legacy lane from also returning every Timestamp regardless of date.
-        fetchLane(sinceTimestamp, Timestamp.fromMillis(0)),
-        fetchLane(Timestamp.fromDate(new Date(sinceTimestamp))),
-      ]);
-      return [...legacy, ...current]
-        .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''))
-        .slice(0, maxEntries);
+      const bounds = activityLaneBounds(sinceTimestamp, Timestamp);
+      const lanes = await Promise.all([fetchLane(bounds.legacy.gte), fetchLane(bounds.current.gte)]);
+      return mergeActivityLanes(lanes, { maxEntries });
     } catch (err) { handleErr(err); return []; }
   }, [churchId]);
 

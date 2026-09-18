@@ -23,14 +23,16 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-012 — Flat pricing, entitlement collapse, review disposition
 
-- Status: **Part A COMPLETE 2026-09-17** — A.3, A.4 (0a, 0b, 1–5), A.5 all
-  shipped + deployed; Terms effective 2026-10-01; notice email sent to the 3
-  reachable non-FXCC accounts (2 tenants are abandoned — no Auth user). Plan at
-  rev 9. **Part B (insights digest timestamp lanes) is the open item.**
+- Status: **Parts A + B COMPLETE 2026-09-18.** A.3, A.4 (0a, 0b, 1–5), A.5
+  shipped + deployed 09-17; Terms effective 2026-10-01; notice email sent to
+  the 3 reachable non-FXCC accounts (2 tenants are abandoned — no Auth user).
+  Part B (activityLog timestamp lanes) shipped 09-18 — **both** the weekly
+  digest AND the in-app Insights hub now read both lanes; the client's earlier
+  "fix" had a dead string lane (measured 0 rows in production). Plan at rev 10.
   `identifyItem` still on its old revision (known ANTHROPIC_API_KEY collision,
   backlog item 9, unrelated). **Watch: Highland's expiry 2026-09-30 02:00 CT —
   first production exercise of the lapsed path.**
-- Plan: `docs/COH-012-PRICING-AND-REVIEW-DISPOSITION-PLAN-2026-09-16.md` (rev 7)
+- Plan: `docs/COH-012-PRICING-AND-REVIEW-DISPOSITION-PLAN-2026-09-16.md` (rev 10)
 - Decisions: DEC-2026-021 (flat $5 model), DEC-2026-022 (review disposition);
   owner #8 (Terms notice: email on A.5 ship day, effective +14d) and #9
   (grandfather TrueNorth — **approved 2026-09-17**) recorded in the plan.

@@ -3,7 +3,7 @@ const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } = require('firebase-functions/v2/firestore');
 const { defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
-const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 const { getMessaging } = require('firebase-admin/messaging');
 const { shiftsToOccurrences, reservationsToOccurrences, maintenanceToOccurrences, buildCalendar } = require('./lib/occurrences');
@@ -13,6 +13,7 @@ const { syncShepherdPeople, setPcoElderAssignment, buildElderDigest } = require(
 const { resolveRoster, isElderEmail, buildNormalizer } = require('./lib/roster');
 const { archiveCutoffISO, evaluateArchiveCandidate } = require('./lib/archiveEligibility');
 const entitlement = require('./lib/entitlement');
+const { activityLaneBounds, mergeActivityLanes } = require('./lib/activity-lanes');
 
 // COH-006 gate 1 — server twin of uidsOf() in src/utils/taskVisibility.js.
 // Rules cannot search inside the `[{uid, name}]` arrays the UI stores, so every
@@ -1624,7 +1625,8 @@ exports.cleanupJobListingBacklinks = onDocumentDeleted(
 // string-vs-Timestamp query bug: the ranking filtered `timestamp >=
 // trialStartedAt` with an ISO STRING, and activityLog moved to
 // `serverTimestamp()` in 812f15e, so post-2026-08-29 rows were invisible to it.
-// The same defect still lives in sendWeeklyInsightsDigest — see COH-012 part B.
+// sendWeeklyInsightsDigest had the same defect until COH-012 part B
+// (readActivityLogSince — both type lanes).
 //
 // These emails are deliberately MODEL-NEUTRAL: they say the trial is ending and
 // that nothing was deleted. They do not name a price, because the flat plan's
@@ -2241,6 +2243,28 @@ exports.sendTaskDueReminders = onSchedule({ schedule: '0 * * * *', timeZone: 'Am
   }
 }));
 
+// ── readActivityLogSince ──────────────────────────────────────────────────
+// Every activityLog row at-or-after `sinceISO` (ISO instant or bare
+// YYYY-MM-DD), read across BOTH timestamp type lanes and merged into the ISO
+// string shape. `activityLog.timestamp` is a string on historical rows and a
+// Firestore Timestamp on rows since 812f15e; an inequality filter is
+// type-scoped, so a single filter sees only one lane. This is the server
+// counterpart of the client's loadActivityLogSince — the lane bounds and the
+// merge are the shared pure helper (functions/lib/activity-lanes.js, twin of
+// src/lib/activity-lanes.js); only the query execution is admin-SDK-specific.
+// COH-012 part B — measured on FXCC: the digest was reading 173 of 216 rows.
+// Any new server-side window over activityLog goes through here, never a bare
+// `.where('timestamp', '>=', …)`.
+async function readActivityLogSince(db, churchId, sinceISO) {
+  const bounds = activityLaneBounds(sinceISO, Timestamp);
+  const col = db.collection(`churches/${churchId}/activityLog`);
+  const [legacySnap, currentSnap] = await Promise.all([
+    col.where('timestamp', '>=', bounds.legacy.gte).get(),  // string rows only (type-scoped)
+    col.where('timestamp', '>=', bounds.current.gte).get(), // Timestamp rows only
+  ]);
+  return mergeActivityLanes([legacySnap.docs.map(d => d.data()), currentSnap.docs.map(d => d.data())]);
+}
+
 // ── sendWeeklyInsightsDigest ──────────────────────────────────────────────
 // Runs hourly; for each church it fires only at the church's LOCAL Monday 8am
 // (per-church timezone, same gate as sendTaskDueReminders). Emails admins a
@@ -2280,18 +2304,17 @@ exports.sendWeeklyInsightsDigest = onSchedule({ schedule: '0 * * * *', timeZone:
     const in90 = ymdAddDays(todayStr, 90);
     const since90 = ymdAddDays(todayStr, -90);
 
-    let itemsSnap, suppliesSnap, logSnap;
+    let itemsSnap, suppliesSnap, logs;
     try {
-      [itemsSnap, suppliesSnap, logSnap] = await Promise.all([
+      [itemsSnap, suppliesSnap, logs] = await Promise.all([
         db.collection(`churches/${churchId}/items`).get(),
         db.collection(`churches/${churchId}/supplies`).get(),
-        db.collection(`churches/${churchId}/activityLog`).where('timestamp', '>=', since90).get(),
+        readActivityLogSince(db, churchId, since90), // both timestamp lanes — COH-012 part B
       ]);
     } catch (err) { console.error('sendWeeklyInsightsDigest: data read failed', { churchId, err: err.message }); Sentry.captureException(err); continue; }
 
     const items = itemsSnap.docs.map(d => d.data());
     const supplies = suppliesSnap.docs.map(d => d.data());
-    const logs = logSnap.docs.map(d => d.data());
 
     // Warranty-expiring (incl. already-expired), not disposed — same as Insights.
     const warranty = items

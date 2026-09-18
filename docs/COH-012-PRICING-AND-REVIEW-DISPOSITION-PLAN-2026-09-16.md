@@ -4,11 +4,15 @@
 - Owner: Product owner (John)
 - Implementation: Claude (DEC-2026-011)
 - Reviewer: Codex (plan review before implementation)
-- Status: **rev 9 (2026-09-17) — Part A COMPLETE: A.3, A.4, A.5 all SHIPPED +
-  DEPLOYED; Terms notice SENT. Part B (insights digest lanes) is the only
-  open item, plus Parts C–E as previously dispositioned.** See "A.4 as shipped"
-  below for the two calls made during implementation that the plan did not
-  anticipate.
+- Status: **rev 10 (2026-09-18) — Parts A and B COMPLETE.** Part B shipped
+  with a correction to Finding 2: the client had NOT "already solved this" —
+  its string lane was dead in production (measured 0 rows), so the in-app
+  Insights hub was worse off (20%) than the digest (81%). Both now read both
+  lanes through one shared helper. See "Part B as shipped". Parts C–E as
+  previously dispositioned.
+- Prior: rev 9 (2026-09-17) — Part A COMPLETE: A.3, A.4, A.5 all SHIPPED +
+  DEPLOYED; Terms notice SENT. See "A.4 as shipped" for the two calls made
+  during implementation that the plan did not anticipate.
 - Prior: rev 7 (2026-09-17) — A.3 SHIPPED; round 5 closed; A.4.0 next.**
   Owner decisions taken 2026-09-16 + 2026-09-17 (see "Owner decisions" below);
   DEC-2026-021 + DEC-2026-022 recorded in `docs/DECISIONS.md` (`397f090`). Five
@@ -37,6 +41,8 @@ It requires amending a guardrail in DEC-2026-020, the invariants list in
 **Part B** fixes a live, FXCC-facing defect found while measuring Part A: a
 string-vs-Timestamp query type mismatch that is silently hiding 19% of FXCC's
 activity from the weekly insights digest, trending to 100% by late November.
+**Shipped 2026-09-18** — and the same measurement showed the in-app Insights
+hub was hiding 80% (Finding 2 correction).
 
 **Part C** narrows the review's audit-log-atomicity item to five action classes
 and wires the Sentry alert that makes its failures visible.
@@ -178,10 +184,23 @@ zero-coverage date is a **projection from current data, not a code-verifiable
 claim** (round 3 made this distinction and it is kept). The direction is
 certain; the date is an estimate.
 
-The client already solved this. `loadActivityLogSince`
+~~The client already solved this. `loadActivityLogSince`
 (`src/useFirestore.js:1648-1670`) queries **both type lanes** and merges them,
 with a comment naming the compatibility period. The server was never updated to
-match.
+match.~~ **Wrong — corrected 2026-09-18 while implementing Part B.** The client
+queried two lanes, but its string lane carried a `< Timestamp(0)` upper bound
+(to "keep the legacy lane from also returning every Timestamp"). A mixed-type
+range on one field matches **nothing**: measured on FXCC production 2026-09-18
+via REST `count()` — `>= "2026-06-20" AND < Timestamp(0)` → **0** rows. So
+the in-app Insights hub was computing over the Timestamp lane only — **43 of
+216, 20%** — worse than the digest. The upper bound was also unnecessary: an
+inequality filter is type-scoped (`>= "2026-06-20"` → 173, no Timestamp rows
+leak in; `>= Timestamp(2026-06-20)` → 43, no strings). The emulator agrees on
+all three counts. Rev 1–9 never tested the client claim; the digest's handler
+test (seeding both lanes) is what exposed it, and the client was then measured
+rather than assumed. Five Codex rounds accepted the claim too — a code-reading
+review cannot catch a query-semantics defect; only a count against the real
+database can.
 
 ### Finding 3 — entitlement logic has already drifted
 
@@ -737,6 +756,32 @@ than restructuring posts. Add a What's New entry.
 ---
 
 ## Part B — fix the timestamp type mismatch (FXCC-facing)
+
+### Part B as shipped — 2026-09-18, one commit
+
+- `src/lib/activity-lanes.js` (ESM) + generated CJS twin
+  `functions/lib/activity-lanes.js` (`scripts/activity-lanes-twin.py`) —
+  `activityLaneBounds(sinceISO, Timestamp)` returns one `>=` bound per lane and
+  **nothing else**; `mergeActivityLanes` normalises to ISO strings and sorts.
+  `functions/test/activity-lanes.test.mjs` pins twin ≡ client and the bounds.
+- Server: `readActivityLogSince(db, churchId, sinceISO)` in `functions/index.js`
+  runs both lanes; `sendWeeklyInsightsDigest` uses it. Any future server window
+  over `activityLog` goes through it.
+- Client: `loadActivityLogSince` refactored onto the same helper — this is the
+  fix for the dead string lane (Finding 2 correction above).
+- Test: `functions/test/handlers/insightsDigest.test.mjs` seeds a string row
+  and a Timestamp row in-window plus one of each out-of-window and asserts the
+  digest counts exactly 2. It failed against the first draft (which had copied
+  the client's upper bound) — that failure is what triggered the production
+  measurement.
+- Step 3 (audit other inequality sites) was already closed in round 5 (G13).
+  Step 4: dual-lane permanent, no backfill, as recommended.
+- Verification against FXCC after deploy: string lane 173 + Timestamp lane 43 =
+  216 of 1010 rows in the 90-day window (the 213 the plan quoted was
+  2026-09-16's count; the log has grown by 3).
+
+Original plan follows.
+
 
 Independent of Part A and, under the FXCC-first frame, the highest-value item in
 this plan: it is a *proven* defect against *FXCC's* data.
