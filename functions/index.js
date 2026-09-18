@@ -2707,6 +2707,12 @@ function isoWeekKey(ymd) {
 
 // Dependency-free Claude Messages call (Node 22 fetch, mirrors sendViaBrevo's
 // no-SDK style). Returns the assistant text. Throws if the key is unset.
+// The key comes from the ANTHROPIC_API_KEY Secret Manager binding, which the
+// runtime exposes as process.env — every caller of this MUST declare
+// `secrets: [ANTHROPIC_API_KEY]` in its options. It used to live in
+// functions/.env as well; that plain-env copy collided with identifyItem's
+// binding and blocked identifyItem's deploy for months (backlog item 9,
+// resolved 2026-09-18). Do not put it back in .env.
 async function callClaude({ system, user, maxTokens = 900 }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
@@ -2816,7 +2822,7 @@ async function buildAttentionDigest(db, churchId, churchName, todayStr, { force 
 
 // getAttentionDigest (onCall, admin-only) — powers the in-app "This Week"
 // panel. Returns the cached weekly digest, or regenerates when stale / forced.
-exports.getAttentionDigest = onCall({ cors: true }, wrapCall('getAttentionDigest', async (req) => {
+exports.getAttentionDigest = onCall({ cors: true, secrets: [ANTHROPIC_API_KEY] }, wrapCall('getAttentionDigest', async (req) => {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
   await assertActiveCaller(req); // COH-011
   const db = getFirestore();
@@ -2837,7 +2843,7 @@ exports.getAttentionDigest = onCall({ cors: true }, wrapCall('getAttentionDigest
 // sendWeeklyAttentionDigest (onSchedule, hourly; fires church-local Monday 8am).
 // Opt-in via config/settings.attentionDigestEnabled. Emails admins the same
 // digest the in-app panel shows (reuses the weekly cache). Skips empty weeks.
-exports.sendWeeklyAttentionDigest = onSchedule({ schedule: '0 * * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('sendWeeklyAttentionDigest', async () => {
+exports.sendWeeklyAttentionDigest = onSchedule({ schedule: '0 * * * *', timeZone: 'America/Chicago', secrets: [ANTHROPIC_API_KEY] }, async () => withScheduledRun('sendWeeklyAttentionDigest', async () => {
   if (!emailConfigured()) { console.warn('sendWeeklyAttentionDigest: Brevo not configured, skipping.'); return; }
   if (!process.env.ANTHROPIC_API_KEY) { console.warn('sendWeeklyAttentionDigest: ANTHROPIC_API_KEY not set, skipping.'); return; }
   const db = getFirestore();

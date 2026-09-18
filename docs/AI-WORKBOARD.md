@@ -29,8 +29,8 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   Part B (activityLog timestamp lanes) shipped 09-18 — **both** the weekly
   digest AND the in-app Insights hub now read both lanes; the client's earlier
   "fix" had a dead string lane (measured 0 rows in production). Plan at rev 10.
-  `identifyItem` still on its old revision (known ANTHROPIC_API_KEY collision,
-  backlog item 9, unrelated). **Watch: Highland's expiry 2026-09-30 02:00 CT —
+  `identifyItem` redeployed 2026-09-18 — backlog item 9 closed (key consolidated
+  on Secret Manager). **Watch: Highland's expiry 2026-09-30 02:00 CT —
   first production exercise of the lapsed path.**
 - Plan: `docs/COH-012-PRICING-AND-REVIEW-DISPOSITION-PLAN-2026-09-16.md` (rev 10)
 - Decisions: DEC-2026-021 (flat $5 model), DEC-2026-022 (review disposition);
@@ -320,7 +320,7 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 ### COH-011 — Deactivation that actually revokes
 
 - Status: **COMPLETE — ALL FOUR STAGES DEPLOYED AND VERIFIED IN PRODUCTION
-  2026-09-10.** One known gap remains (`identifyItem`, below), filed separately. Owner: Claude · Reviewer: Codex (plan reviewed before
+  2026-09-10.** The one known gap (`identifyItem`, below) closed 2026-09-18. Owner: Claude · Reviewer: Codex (plan reviewed before
   implementation, DEC-2026-011 — **changes requested**, all applied).
 - Priority: **#1** under DEC-2026-020.
 - **The bug, in one line:** the confirm dialog promised a deactivated member
@@ -356,7 +356,7 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   `test:unit` 166/166, lint 0 errors, build clean. All 23 redeployed callables
   probed for the gen-2 `allUsers` invoker strip — all returned JSON, none
   stripped.
-- **KNOWN GAP — `identifyItem` is the one callable without the guard.** Its
+- **~~KNOWN GAP~~ CLOSED 2026-09-18 (backlog item 9): key consolidated on the Secret Manager binding, `identifyItem` redeployed with the guard.** Original note: `identifyItem` was the one callable without the guard. Its
   deploy is blocked by a **pre-existing** defect unrelated to this task:
   `ANTHROPIC_API_KEY` is configured BOTH as a Secret Manager binding (declared
   on that function) and as a plain env var (`functions/.env`, which every
