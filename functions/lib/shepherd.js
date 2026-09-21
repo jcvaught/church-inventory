@@ -32,11 +32,21 @@ function makePcoClient(appId, secret) {
   const headers = { Authorization: auth, 'X-PCO-API-Version': PCO_API_VERSION };
   return async function get(url) {
     // PCO rate limit is generous (~100 req / 20s); still honor 429 backoff.
+    // Also retry transient gateway errors (502/503/504) with short backoff —
+    // PCO's edge (openresty) throws these occasionally and a single blip
+    // shouldn't fail the whole nightly sync (Sentry JAVASCRIPT-REACT-1D).
+    let lastErr = null;
     for (let attempt = 0; attempt < 4; attempt++) {
       const res = await fetch(url, { headers });
       if (res.status === 429) {
         const retryAfter = parseInt(res.headers.get('retry-after') || '2', 10);
         await new Promise(r => setTimeout(r, Math.max(1, retryAfter) * 1000));
+        continue;
+      }
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        const body = await res.text().catch(() => '');
+        lastErr = new Error(`PCO ${res.status} on ${url}: ${body.slice(0, 300)}`);
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
         continue;
       }
       if (!res.ok) {
@@ -45,7 +55,7 @@ function makePcoClient(appId, secret) {
       }
       return res.json();
     }
-    throw new Error(`PCO rate-limited (429) after retries on ${url}`);
+    throw lastErr || new Error(`PCO rate-limited (429) after retries on ${url}`);
   };
 }
 
