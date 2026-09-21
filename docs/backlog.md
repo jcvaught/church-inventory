@@ -43,9 +43,26 @@ review remainder):
 - **Re-filed under #11 (ask FXCC)** — request inbox, volunteer expiring links,
   navigation consolidation.
 
+**Added 2026-09-21 — COH-013, Jobs + Tasks hub audit** (Codex audit, every
+finding verified against code and measured against FXCC data; plan
+`docs/COH-013-JOBS-TASKS-AUDIT-DISPOSITION-PLAN-2026-09-21.md`, rev 3, two
+Codex rounds, SHIP WITH FIXES). Four parts, in exposure order, each its own
+gate: **A** job deletion never cascades to `signups`/`waitlist` (measured:
+474 + 1,176 orphans at FXCC, all E2E residue; trigger fix + owner-run
+cleanup) · **C** managers scoped out of Jobs can still mutate via three
+callables + rules (unmeasured — users tally still owed) · **B** recurring
+tasks: generated private tasks unreachable by anyone, successor drops
+`ministry`/hours/links (0 exposure — FXCC has no recurrence or templates) ·
+**D** past-shift signup + waitlist eligibility outside the transaction.
+**Re-filed by it:** drag-reorder last-write-wins → #11; swap-request
+validation → below (0 swaps); "my shifts shows waitlist" + "next shift CTA"
+→ #11; **a deactivated creator's private tasks become unreachable** → #3
+(offboarding, measure first).
+
 Still below 11, in order: general audit-log atomicity (narrowed — COH-012 part
 C) · photo cleanup on delete · accessibility and mobile interaction (narrowed —
-COH-012 part D). Demoted by DEC-2026-020: activation checklist, funnel
+COH-012 part D) · swap-request validation against job/signup + duplicate guard
+(`firestore.rules:548-560`; COH-013 Part E). Demoted by DEC-2026-020: activation checklist, funnel
 analytics, positioning, SaaS entitlement automation.
 
 ## Keystone migration (unblocks most else)
