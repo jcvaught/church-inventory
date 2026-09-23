@@ -4,6 +4,54 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-09-23 — One source of truth for churchName / churchCode (phase 1)
+
+These two fields live on the parent `churches/{id}` **and** on `config/main`,
+with reads split between them and nothing keeping them in step. The parent is
+authoritative: it is what `lookupChurchByCode` resolves joins against, and the
+only one of the two that cannot be removed. Every reader now uses it.
+
+**Client.** An 18th listener on the parent document, merged into the existing
+`config` object (`src/useFirestore.js`), so all 19 `config.churchName` /
+`config.churchCode` reads across 7 files resolve to the parent with no call-site
+changes. `totalSubs` bumped 17 → 18 — miss that and the app either hangs on the
+spinner or clears loading a listener early.
+
+Both states are reset to `null` when `churchId` changes. Merging two documents
+introduced a failure mode single-document reads cannot have: the snapshots
+arrive independently, so a transition could otherwise combine the new church's
+config with the **previous** church's name and code. An earlier draft of the
+plan claimed parity with existing staleness; that was wrong, and Codex caught it.
+
+**Server.** Four reads repointed off `config/main`: `sendJobCancelledEmails`
+(:1968), `sendJobPosterNotification` (:3376),
+`sendWaitlistPromotionNotifications` (:3528), `sendTaskMentionEmail` (:3813).
+Removed the `|| settings.churchName` fallback from the four weekly digests — a
+third candidate location, written by nothing and present in zero tenants.
+
+**Write path.** `updateConfig` now strips `churchName`/`churchCode`; use
+`updateChurchCode`, which writes both documents atomically. This is a
+convention, not enforcement, and cannot be otherwise yet: closing it in rules
+would break `updateChurchCode`, a client writer that needs exactly that
+permission while both documents are still written. A rules test records the
+current permissive behavior so the day it changes is deliberate.
+
+**Not in this phase:** deleting the `config/main` copies. Tabs already open keep
+listening there, so deletion blanks the church code mid-session for anyone who
+does not reload, and no deploy ordering avoids it. Once nothing reads the copy,
+removing it is cosmetic. Filed in `docs/backlog.md`.
+
+**Verified.** 124 handler tests and 164 rules tests green. The behavioural test
+(`churchNameSource.test.mjs`) seeds the two documents with *different* names, so
+a handler still reading `config/main` renders the wrong church rather than
+merely failing — confirmed to fail against the pre-fix code, as was the source
+guard covering all four sites. In the local sandbox, with the parent seeded
+"PARENT Church of Truth / PARENTC" and `config/main` seeded "STALE Copy Church /
+STALEC", a **non-admin member** saw the parent's values in Settings, and a
+switch to a second church showed only the second church's parent values with no
+leakage either way. Not directly observed: the interleaved-arrival race itself,
+which the reset mitigates but which is not reproducible by hand.
+
 ## 2026-09-23 — A first-time admin can no longer get stuck
 
 Two screens assumed somebody had already created the church. The "Account

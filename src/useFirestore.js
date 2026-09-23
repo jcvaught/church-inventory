@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   doc, setDoc, getDoc, deleteDoc, getDocs,
   collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction, writeBatch, startAfter,
@@ -89,7 +89,14 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
   const createGuardRef = useRef(createGuard);
   createGuardRef.current = createGuard;
   const [settings, setSettings] = useState(null);
-  const [config, setConfig] = useState(null);
+  // churchName and churchCode live on the PARENT church document as well as on
+  // config/main. The parent is authoritative: it is what lookupChurchByCode
+  // resolves joins against, and it is the only one of the two that cannot be
+  // removed. `configMain` and `church` are merged into `config` below so every
+  // existing config.churchName / config.churchCode read resolves to the parent
+  // without touching 19 call sites.
+  const [configMain, setConfigMain] = useState(null);
+  const [church, setChurch] = useState(null);
   const [items, setItems] = useState([]);
   const [supplies, setSupplies] = useState([]);
   const [activityLog, setActivityLog] = useState([]);
@@ -195,12 +202,28 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     // Tasks + maintenance come from one `workItems` subscription (split by type).
     // People Access and time-entry subscriptions are role-aware in the
     // dedicated effect below. They must not block the rest of app startup.
-    const totalSubs = 17;
+    const totalSubs = 18;
     const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
 
-    // Config
+    // The two documents behind `config` arrive independently, so a church
+    // transition could otherwise combine the new church's config/main with the
+    // PREVIOUS church's name and code — a mixed church, which no single-document
+    // read can produce. Clear both first: the transition renders empty, never
+    // mixed.
+    setConfigMain(null);
+    setChurch(null);
+
+    // Config (config/main)
     unsubs.push(onSnapshot(doc(db, 'churches', churchId, 'config', 'main'), (snap) => {
-      if (snap.exists()) setConfig(snap.data());
+      if (snap.exists()) setConfigMain(snap.data());
+      checkDone();
+    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+
+    // Church (the parent document — authoritative for churchName/churchCode).
+    // Rules allow `get` here for any ACTIVE member, not just admins
+    // (firestore.rules), which matters because every page reads the name.
+    unsubs.push(onSnapshot(doc(db, 'churches', churchId), (snap) => {
+      if (snap.exists()) setChurch(snap.data());
       checkDone();
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
@@ -489,9 +512,28 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
+  // The client's view of church configuration, drawn from two documents. The
+  // parent wins for churchName/churchCode; everything else comes from
+  // config/main. Kept on the `config` name so call sites need no change.
+  const config = useMemo(
+    () => (church
+      ? { ...configMain, churchName: church.churchName, churchCode: church.churchCode }
+      : configMain),
+    [configMain, church],
+  );
+
   const updateConfig = useCallback(async (updates) => {
     try {
-      await setDoc(doc(db, 'churches', churchId, 'config', 'main'), updates, { merge: true });
+      // churchName/churchCode are the parent's to own. Writing them here would
+      // recreate the split this merge exists to close, so they are stripped
+      // rather than silently honoured — use updateChurchCode, which writes both
+      // documents atomically. This is a convention, not enforcement: rules still
+      // permit an admin to write these fields to config/main, and cannot stop it
+      // while updateChurchCode itself needs that permission. Rules-level
+      // enforcement lands when the config/main copies are retired.
+      const { churchName: _n, churchCode: _c, ...safe } = updates;
+      if (Object.keys(safe).length === 0) return;
+      await setDoc(doc(db, 'churches', churchId, 'config', 'main'), safe, { merge: true });
     } catch (err) { handleErr(err); }
   }, [churchId]);
 

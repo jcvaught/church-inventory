@@ -533,3 +533,40 @@ test('COH-011 stage 4: a member still cannot flip their own active flag', async 
   await assertFails(updateDoc(doc(ctx('memberA'), 'users/memberA'), { active: false }));
   await assertFails(updateDoc(doc(ctx('inactiveA'), 'users/inactiveA'), { active: true }));
 });
+
+// ── churchName / churchCode authority ──────────────────────────────────────
+// These two fields live on the parent church document AND on config/main, and
+// the parent is authoritative: joining resolves against it, and as of
+// 2026-09-23 every reader — client and server — takes them from there.
+//
+// Rules do NOT enforce that yet, and these tests record why rather than
+// pretending otherwise. While both documents are still written for
+// compatibility, updateChurchCode is a CLIENT writer that needs exactly this
+// permission, so a field-level denial on config/main would break the very
+// helper that keeps the two in step. Enforcement becomes possible only when
+// the config/main copies are retired. If either assertion below starts
+// failing, that day has arrived deliberately — not by accident.
+test('config/main still ACCEPTS churchName/churchCode from an admin (known gap, closes with the copies)', async () => {
+  await seedMembers();
+  await assertSucceeds(setDoc(doc(ctx('adminA'), P('config/main')), { churchCode: 'NEWCODE' }, { merge: true }));
+  await assertSucceeds(setDoc(doc(ctx('adminA'), P('config/main')), { churchName: 'Renamed' }, { merge: true }));
+});
+
+test('the parent church doc accepts the same write from an admin, and refuses it from a member', async () => {
+  await seedMembers();
+  // The document must EXIST first: `create` on the parent is restricted to the
+  // self-creator convention ({uid}-church), so without this the admin's write
+  // is evaluated as a create and denied for the wrong reason.
+  await seed(`churches/${CHURCH}`, { churchName: 'Church A', churchCode: 'AAA' });
+  // updateChurchCode writes BOTH documents in one batch; this is the half that
+  // matters, since the parent is what lookupChurchByCode queries.
+  await assertSucceeds(setDoc(doc(ctx('adminA'), `churches/${CHURCH}`), { churchCode: 'NEWCODE' }, { merge: true }));
+  await assertFails(setDoc(doc(ctx('memberA'), `churches/${CHURCH}`), { churchCode: 'HIJACK' }, { merge: true }));
+});
+
+test('an active member can READ the parent church doc — every page now reads the name from it', async () => {
+  await seedMembers();
+  await seed(`churches/${CHURCH}`, { churchName: 'Church A', churchCode: 'AAA' });
+  await assertSucceeds(getDoc(doc(ctx('memberA'), `churches/${CHURCH}`)));
+  await assertFails(getDoc(doc(ctx('inactiveA'), `churches/${CHURCH}`)));
+});

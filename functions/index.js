@@ -1965,7 +1965,7 @@ exports.sendJobCancelledEmails = onCall({ cors: true }, async (req) => {
 
   const [jobSnap, churchSnap, subSnap] = await Promise.all([
     db.doc(`churches/${churchId}/jobListings/${jobDocId}`).get(),
-    db.doc(`churches/${churchId}/config/main`).get(),
+    db.doc(`churches/${churchId}`).get(),
     db.doc(`churches/${churchId}/config/subscription`).get(),
   ]);
   if (!jobSnap.exists) return { sent: 0 };
@@ -2375,7 +2375,7 @@ exports.sendWeeklyInsightsDigest = onSchedule({ schedule: '0 * * * *', timeZone:
       .filter(a => a.role === 'admin' && a.active !== false && a.email);
     if (admins.length === 0) continue;
 
-    const churchName = churchDoc.data()?.churchName || settings.churchName || 'your church';
+    const churchName = churchDoc.data()?.churchName || 'your church';
     const sections = [];
     if (warranty.length) {
       sections.push(`<h3 style="font-size:14px;color:#1B2A4A;margin:18px 0 6px">⚠️ Warranty alerts (${warranty.length})</h3>
@@ -2480,7 +2480,7 @@ exports.sendWeeklyComplianceDigest = onSchedule({ schedule: '0 * * * *', timeZon
       .filter(a => a.role === 'admin' && a.active !== false && a.email);
     if (admins.length === 0) continue;
 
-    const churchName = churchDoc.data()?.churchName || settings.churchName || 'your church';
+    const churchName = churchDoc.data()?.churchName || 'your church';
     let expiredTotal = 0, expiringTotal = 0;
     const personBlocks = [];
     for (const { name, records } of byPerson.values()) {
@@ -2678,7 +2678,7 @@ exports.sendEmptyJobMorningAlert = onSchedule({ schedule: '0 * * * *', timeZone:
       .filter(a => a.role === 'admin' && a.active !== false && a.email);
     if (admins.length === 0) continue;
 
-    const churchName = churchDoc.data()?.churchName || settings.churchName || 'your church';
+    const churchName = churchDoc.data()?.churchName || 'your church';
     const emptyCount = shortJobs.filter(j => (j.signupCount || 0) === 0).length;
     const rows = shortJobs.map(j => {
       const when = j.scheduledTime ? formatTimeRange(j.scheduledTime, j.scheduledEndTime) : 'time TBD';
@@ -2884,7 +2884,7 @@ exports.sendWeeklyAttentionDigest = onSchedule({ schedule: '0 * * * *', timeZone
     const parts = localPartsFor(await getChurchTimeZone(db, churchId, tzCache));
     if (!(parts.weekday === 1 && parts.hour === 8)) continue; // church-local Monday 8am
 
-    const churchName = churchDoc.data()?.churchName || settings.churchName || 'your church';
+    const churchName = churchDoc.data()?.churchName || 'your church';
     let payload;
     try { payload = await buildAttentionDigest(db, churchId, churchName, parts.ymd, { force: false }); }
     catch (err) { console.error('sendWeeklyAttentionDigest: build failed', { churchId, err: err.message }); Sentry.captureException(err); continue; }
@@ -3372,7 +3372,7 @@ exports.sendJobPosterNotification = onCall({ cors: true }, async (req) => {
     }
   }
 
-  const churchSnap = await db.doc(`churches/${churchId}/config/main`).get();
+  const churchSnap = await db.doc(`churches/${churchId}`).get();
   const churchName = churchSnap.data()?.churchName || 'Your Church';
   const safeChurch = escapeHtml(churchName);
   const safeJobTitle = escapeHtml(job.title || 'Job');
@@ -3519,7 +3519,7 @@ async function promoteWaitlistForJob(db, churchId, jobDocId) {
 // matters — but it's gated by the same consent + A2P plumbing as the reminders.
 async function sendWaitlistPromotionNotifications(db, churchId, jobData, promotedUid) {
   const [churchSnap, userSnap] = await Promise.all([
-    db.doc(`churches/${churchId}/config/main`).get(),
+    db.doc(`churches/${churchId}`).get(),
     db.doc(`users/${promotedUid}`).get(),
   ]);
   const user = userSnap.data();
@@ -3804,7 +3804,7 @@ exports.sendTaskMentionEmail = onCall({ cors: true }, async (req) => {
   const [notifSnap, subSnap, churchSnap] = await Promise.all([
     db.doc(`churches/${churchId}/config/notifications`).get(),
     db.doc(`churches/${churchId}/config/subscription`).get(),
-    db.doc(`churches/${churchId}/config/main`).get(),
+    db.doc(`churches/${churchId}`).get(),
   ]);
   // F-14: default-on. Treat missing doc as enabled; only explicit false disables.
   if (notifSnap.exists && notifSnap.data()?.enabled === false) return { sent: 0 };
