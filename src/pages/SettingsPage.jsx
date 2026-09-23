@@ -44,7 +44,7 @@ const NOTIF_EVENTS = [
 ];
 
 export function SettingsPage({ store, userProfile, subscription, user, canAdd, deleteAccount }) {
-  const { settings, config, users, accessPeople, accessRecords, rooms, items, updateSettings, updateConfig, updateUser, removeUser, submitSuggestion, loadSuggestions, addRoom, updateRoom, deleteRoom } = store;
+  const { settings, config, users, accessPeople, accessRecords, rooms, items, updateSettings, updateConfig, updateChurchCode, updateUser, removeUser, submitSuggestion, loadSuggestions, addRoom, updateRoom, deleteRoom } = store;
   const isMobile = useContext(MobileCtx);
   const [editList, setEditList] = useState(null); // { key, title, items }
   const [newItem, setNewItem] = useState("");
@@ -290,7 +290,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
       alert('Could not verify the code uniqueness. Please try again.');
       return;
     }
-    updateConfig({ churchCode: code });
+    await updateChurchCode(code);
     setEditCodeMode(false);
     setNewCode("");
   }

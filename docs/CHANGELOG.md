@@ -4,6 +4,49 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-09-23 — Church code change wrote only half of it
+
+Settings → Church Info → Change wrote the new code to
+`churches/{id}/config/main` only (`updateConfig`). Joining resolves the code
+against the **parent** `churches/{id}` document (`lookupChurchByCode`,
+functions/index.js). Nothing synced the two.
+
+So an admin who changed their code got: the new code shown in Settings and
+baked into invite links, the new code silently failing to join, and the old
+code still working — with no error anywhere. The confirm dialog's promise that
+"anyone using the old code to join will no longer be able to" was false.
+
+Fixed with `updateChurchCode` (src/useFirestore.js), which writes both
+documents in one `writeBatch`. Rules already allowed the parent write for an
+admin (`firestore.rules:274`); verified against deployed rules with a real
+admin ID token over the Firestore REST API.
+
+No backfill needed: all 8 tenants were checked and none had drifted, because
+nobody had used the Change button yet.
+
+## 2026-09-23 — Restored an orphaned signup (Hopeful Trails)
+
+Both signup flows create the Auth account first, then write Firestore, and on
+failure try to delete the orphan. That cleanup is best effort, and one network
+fault can break the signup and the cleanup together — leaving a user who can't
+go forward (the "Account incomplete" screen only accepts an EXISTING church
+code) and can't start over ("This email is already registered").
+
+First real case: Hopeful Trails, 2026-09-22. Auth account created 9:03 PM ET,
+no profile, no church; `lookupChurchByCode` was never invoked at signup time,
+so the failure was client-side before the callable.
+
+`scripts/restore-orphaned-signup.cjs` writes exactly what `createChurch`
+would have (guarded by preflights, `--dry-run` supported), and
+`scripts/verify-restored-signup.cjs` proves it — shape diffed against
+`createChurch`, entitlement, code lookup, the app's boot reads replayed under
+deployed rules with the user's own ID token, and welcome-email delivery polled
+rather than assumed.
+
+Still open: neither the "Account incomplete" screen nor the Register screen
+offers a path for the FIRST person from a church, which is what turned this
+into a support email.
+
 ## 2026-09-10 — COH-011: deactivation now actually revokes access
 
 Deactivating a team member told the admin they "will lose access to the app

@@ -495,6 +495,20 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     } catch (err) { handleErr(err); }
   }, [churchId]);
 
+  // The church code lives in TWO documents: config/main, which Settings and the
+  // invite links read, and the parent church doc, which lookupChurchByCode
+  // queries when someone joins (functions/index.js). Changing it through
+  // updateConfig only wrote config/main, so the new code silently failed to
+  // join while the old one kept working. Always write both, atomically.
+  const updateChurchCode = useCallback(async (code) => {
+    try {
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'churches', churchId), { churchCode: code }, { merge: true });
+      batch.set(doc(db, 'churches', churchId, 'config', 'main'), { churchCode: code }, { merge: true });
+      await batch.commit();
+    } catch (err) { handleErr(err); }
+  }, [churchId]);
+
   // ── Items ──
   const addItem = useCallback(async (item, userId, _userName) => {
     if (createBlocked('item')) return;
@@ -1730,7 +1744,7 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     tasks,
     loading, error, workItemsError,
     loadOlderActivityLog, loadActivityLogSince,
-    updateSettings, updateConfig,
+    updateSettings, updateConfig, updateChurchCode,
     addItem, updateItem, checkOutItem, returnItem, retireItem, markRepair, markRepaired, deleteItem,
     addSupply, updateSupply, useSupply, restockSupply, deleteSupply,
     logActivity,
