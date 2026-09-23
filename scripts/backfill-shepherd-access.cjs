@@ -13,11 +13,13 @@
  *       exit 1 unless the access list equals what the roster grants. Run it
  *       AFTER the rules deploy: until then an old client bundle can still write
  *       the roster directly, without the access list following (COH-014 review).
+ *   node scripts/backfill-shepherd-access.cjs --repair # rewrite the access list from
+ *       the roster if (and only if) they have drifted, then re-check. Also the
+ *       recovery for a deleted or corrupted access doc.
  *
  * Refuses to act if the roster doc is missing or fails validateRoster (no
  * DEFAULT_ROSTER fallback — the access path fails closed), or if an access doc
- * already exists (the callable owns it from then on). Rollback = delete the
- * access doc, which denies every elder until it is rewritten.
+ * already exists (the callable owns it from then on; use --repair to fix one).
  */
 const admin = require('firebase-admin');
 const key = require('./serviceAccountKey.json');
@@ -25,12 +27,13 @@ const { validateRoster, accessEmails } = require('../functions/lib/roster');
 
 const FXCC = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
 const APPLY = process.argv.includes('--apply');
-const CHECK = process.argv.includes('--check');
+const REPAIR = process.argv.includes('--repair');
+const CHECK = REPAIR || process.argv.includes('--check');
 admin.initializeApp({ credential: admin.credential.cert(key) });
 const db = admin.firestore();
 
 (async () => {
-  console.log(`project ${key.project_id} · ${CHECK ? 'check' : APPLY ? 'APPLY' : 'dry run'}`);
+  console.log(`project ${key.project_id} · ${REPAIR ? 'repair' : CHECK ? 'check' : APPLY ? 'APPLY' : 'dry run'}`);
   const rosterSnap = await db.doc(`churches/${FXCC}/config/shepherdRoster`).get();
   if (!rosterSnap.exists) throw new Error('config/shepherdRoster does not exist — refusing (no default fallback).');
   const roster = rosterSnap.data();
@@ -45,8 +48,14 @@ const db = admin.firestore();
     const ok = Array.isArray(have) && JSON.stringify(have) === JSON.stringify(want);
     console.log(`roster grants: ${JSON.stringify(want)}`);
     console.log(`access list:   ${JSON.stringify(have)}`);
-    console.log(ok ? 'IN SYNC' : 'DRIFT — re-save the roster from the roster manager (saveShepherdRoster rewrites both).');
-    process.exit(ok ? 0 : 1);
+    if (ok) { console.log('IN SYNC'); process.exit(0); }
+    if (!REPAIR) { console.log('DRIFT — run with --repair (or re-save the roster from the roster manager).'); process.exit(1); }
+    const prevVersion = existing.exists ? (existing.get('version') || 0) : 0;
+    await accessRef.set({ emails: want, version: prevVersion + 1, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedBy: 'backfill-shepherd-access --repair' });
+    const after = (await accessRef.get()).get('emails');
+    const fixed = JSON.stringify(after) === JSON.stringify(want);
+    console.log(fixed ? `REPAIRED — access list rewritten from the roster (version ${prevVersion + 1}); IN SYNC` : 'REPAIR FAILED — read-back does not match');
+    process.exit(fixed ? 0 : 1);
   }
   if (existing.exists) throw new Error(`config/shepherdAccess already exists (${JSON.stringify(existing.data().emails)}) — refusing to overwrite.`);
 

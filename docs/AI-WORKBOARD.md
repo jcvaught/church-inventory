@@ -55,8 +55,11 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-014 — Shepherd access: own church only, revoked on roster save (backlog #3)
 
-- Status: **Built 2026-09-23 on `coh-014-shepherd-scoping`, awaiting Codex
-  implementation review, then staged deploy.** Owner decisions 2026-09-23: whole
+- Status: **Built 2026-09-23 on `coh-014-shepherd-scoping`; Codex
+  implementation review 2 rounds (R1 REWORK → fixed: map-keys `in`, email-less
+  token, rollout order; R2 → drift repair + rollback procedure added; the
+  remaining items were procedural and are in the runbook below). Next: owner go
+  for step 1, then the staged deploy.** Owner decisions 2026-09-23: whole
   directory of the elder's own church, nothing cross-church; John's admin access
   limited to FXCC. DEC-2026-024.
 - Owner: Claude (implementation) · Reviewer: Codex (plan: 2 rounds, closed;
@@ -77,17 +80,27 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
      `exportMyShepherdNotes`, `refreshShepherdPeople`,
      `purgeElderShepherdNotes`; curl-probe each onCall for 401 JSON (IAM strip).
   3. merge + push the client (roster editor → callable).
-  4. `firebase deploy --only firestore:rules`.
-  5. `node scripts/backfill-shepherd-access.cjs --check` — must print IN SYNC.
-  6. Production probe with a throwaway user in `e2e-test-church`: listed →
+  4. **Gate:** `node scripts/backfill-shepherd-access.cjs --check` must print
+     IN SYNC. On DRIFT: `--repair`, then `--check` again. Owner: don't edit the
+     roster between step 1 and step 5.
+  5. `firebase deploy --only firestore:rules`.
+  6. `--check` again (catches a stale-tab roster write between 4 and 5). On
+     DRIFT: `--repair` + `--check`; the deploy is not complete until IN SYNC.
+     After the rules deploy the roster is server-written only, so drift cannot
+     recur.
+  7. Production probe with a throwaway user in `e2e-test-church`: listed →
      allowed (`count()` over REST); FXCC → denied; removed → denied at once
      while the old token still carries `elder:true`. Clean up in `finally`.
 - **Claim scope (Codex):** "revoked at commit" holds for every request that
   STARTS after the commit. A callable already past its authorization check —
   e.g. `setElderAssignment` mid-PCO-write — finishes. Accepted: the window is
   one request long, and the same is true of any authorization check.
-- Rollback: rules first (`git show <prev>:firestore.rules` + deploy); the
-  access doc is inert under the old rules.
+- Rollback: rules first (`git show <prev>:firestore.rules` + deploy). The
+  functions and client stay on the new contract — they only need the access doc
+  to exist and be correct, which the old rules never touch. A deleted or
+  corrupted access doc is recovered with `backfill-shepherd-access.cjs --repair`
+  (derives it from the roster); until then every elder is denied (fail-closed).
+  Full revert = revert both commits and redeploy functions, client, rules.
 
 ### COH-006 — Enforce private and shared task visibility
 
