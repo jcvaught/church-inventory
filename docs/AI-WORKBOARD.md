@@ -66,16 +66,26 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   roster; Reed + Cesone signed in, both verified, FXCC, active, claimed; they
   are the only claim holders; both of John's accounts have FXCC profiles; the
   live roster passes `validateRoster`.
-- **Deploy order (staged — pushing to main IS the web deploy):**
-  1. functions: `saveShepherdRoster`, `claimElderRole`, `setElderAssignment`,
+- **Deploy order (staged — pushing to main IS the web deploy).** Revised twice.
+  The access doc is inert under today's code (nothing reads it), so it goes
+  FIRST — otherwise the new `claimElderRole` finds no list and strips Reed's or
+  Cesone's claim on their next sign-in. And until the rules deploy an OLD bundle
+  can still write the roster directly without the list following, so a drift
+  check runs after the rules.
+  1. **Owner go:** `node scripts/backfill-shepherd-access.cjs --apply`.
+  2. functions: `saveShepherdRoster`, `claimElderRole`, `setElderAssignment`,
      `exportMyShepherdNotes`, `refreshShepherdPeople`,
      `purgeElderShepherdNotes`; curl-probe each onCall for 401 JSON (IAM strip).
-  2. **Owner go:** `node scripts/backfill-shepherd-access.cjs --apply`.
   3. merge + push the client (roster editor → callable).
   4. `firebase deploy --only firestore:rules`.
-  5. Production probe with a throwaway user in `e2e-test-church`: listed →
+  5. `node scripts/backfill-shepherd-access.cjs --check` — must print IN SYNC.
+  6. Production probe with a throwaway user in `e2e-test-church`: listed →
      allowed (`count()` over REST); FXCC → denied; removed → denied at once
      while the old token still carries `elder:true`. Clean up in `finally`.
+- **Claim scope (Codex):** "revoked at commit" holds for every request that
+  STARTS after the commit. A callable already past its authorization check —
+  e.g. `setElderAssignment` mid-PCO-write — finishes. Accepted: the window is
+  one request long, and the same is true of any authorization check.
 - Rollback: rules first (`git show <prev>:firestore.rules` + deploy); the
   access doc is inert under the old rules.
 

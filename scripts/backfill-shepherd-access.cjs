@@ -9,6 +9,10 @@
  *
  *   node scripts/backfill-shepherd-access.cjs          # dry run: print what it would write
  *   node scripts/backfill-shepherd-access.cjs --apply  # write it
+ *   node scripts/backfill-shepherd-access.cjs --check  # read-only drift check:
+ *       exit 1 unless the access list equals what the roster grants. Run it
+ *       AFTER the rules deploy: until then an old client bundle can still write
+ *       the roster directly, without the access list following (COH-014 review).
  *
  * Refuses to act if the roster doc is missing or fails validateRoster (no
  * DEFAULT_ROSTER fallback — the access path fails closed), or if an access doc
@@ -21,11 +25,12 @@ const { validateRoster, accessEmails } = require('../functions/lib/roster');
 
 const FXCC = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
 const APPLY = process.argv.includes('--apply');
+const CHECK = process.argv.includes('--check');
 admin.initializeApp({ credential: admin.credential.cert(key) });
 const db = admin.firestore();
 
 (async () => {
-  console.log(`project ${key.project_id} · ${APPLY ? 'APPLY' : 'dry run'}`);
+  console.log(`project ${key.project_id} · ${CHECK ? 'check' : APPLY ? 'APPLY' : 'dry run'}`);
   const rosterSnap = await db.doc(`churches/${FXCC}/config/shepherdRoster`).get();
   if (!rosterSnap.exists) throw new Error('config/shepherdRoster does not exist — refusing (no default fallback).');
   const roster = rosterSnap.data();
@@ -34,6 +39,15 @@ const db = admin.firestore();
 
   const accessRef = db.doc(`churches/${FXCC}/config/shepherdAccess`);
   const existing = await accessRef.get();
+  if (CHECK) {
+    const want = accessEmails(roster);
+    const have = existing.exists ? existing.get('emails') : null;
+    const ok = Array.isArray(have) && JSON.stringify(have) === JSON.stringify(want);
+    console.log(`roster grants: ${JSON.stringify(want)}`);
+    console.log(`access list:   ${JSON.stringify(have)}`);
+    console.log(ok ? 'IN SYNC' : 'DRIFT — re-save the roster from the roster manager (saveShepherdRoster rewrites both).');
+    process.exit(ok ? 0 : 1);
+  }
   if (existing.exists) throw new Error(`config/shepherdAccess already exists (${JSON.stringify(existing.data().emails)}) — refusing to overwrite.`);
 
   const emails = accessEmails(roster);

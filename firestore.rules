@@ -200,13 +200,20 @@ service cloud.firestore {
     //     get() fail, which denies.
     // The claim stays as the first conjunct so a non-elder short-circuits
     // before the get().
+    // `emails is list` is load-bearing: rules `in` also tests MAP KEYS, so a
+    // malformed {email: true} map would otherwise grant access. The `is string`
+    // guard makes a token with no email (phone/anonymous auth) deny cleanly.
     function isElderOf(churchId) {
       return request.auth != null
         && request.auth.token.elder == true
         && request.auth.token.email_verified == true
+        && request.auth.token.email is string
         && isMember(churchId)
-        && request.auth.token.email.lower() in
-             get(/databases/$(database)/documents/churches/$(churchId)/config/shepherdAccess).data.emails;
+        && shepherdAccessEmails(churchId) is list
+        && request.auth.token.email.lower() in shepherdAccessEmails(churchId);
+    }
+    function shepherdAccessEmails(churchId) {
+      return get(/databases/$(database)/documents/churches/$(churchId)/config/shepherdAccess).data.emails;
     }
     // Shepherd Hub admin access is restricted to John specifically (NOT any
     // church admin) — pastoral data is need-to-know. Mirrors OWNER_EMAILS in

@@ -276,3 +276,15 @@ test('#3: the access list is invisible and unwritable to clients', async () => {
     await assertFails(setDoc(doc(fs, P('config/shepherdAccess')), { emails: ['m@fxcc.org'] }));
   }
 });
+
+test('#3: a MAP-shaped access list grants nothing (rules `in` tests map keys)', async () => {
+  await seed(P('config/shepherdAccess'), { emails: { 'a@fxcc.org': true } });
+  await seed(P('shepherdPeople/p1'), { name: 'Jane' });
+  await assertFails(getDoc(doc(elderA(), P('shepherdPeople/p1'))));
+});
+
+test('#3: an elder token with NO email is denied', async () => {
+  await seed(P('shepherdPeople/p1'), { name: 'Jane' });
+  const fs = env.authenticatedContext('elderA', { elder: true, email_verified: true }).firestore();
+  await assertFails(getDoc(doc(fs, P('shepherdPeople/p1'))));
+});

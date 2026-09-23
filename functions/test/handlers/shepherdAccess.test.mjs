@@ -165,3 +165,15 @@ test('setElderAssignment denies a removed elder and an out-of-church owner befor
     funcs.setElderAssignment.run(ownerReq({ personId: 'p1', elderKeys: ['golf'] }, 'sa-owner-away')),
     /Not authorized/);
 });
+
+test('a malformed (map-shaped) access doc admits nobody to the callables', async () => {
+  await db().doc(P('config/shepherdAccess')).set({ emails: { 'hotel@fxcc.org': true } });
+  await seedProfile('sa-hotel', FXCC);
+  await assert.rejects(funcs.exportMyShepherdNotes.run(elderReq('sa-hotel', 'hotel@fxcc.org')), /Elders only/);
+});
+
+test('refreshShepherdPeople and purgeElderShepherdNotes refuse the owner email on another church', async () => {
+  await seedProfile('sa-owner-far', 'some-other-church', { role: 'admin' });
+  await assert.rejects(funcs.refreshShepherdPeople.run(ownerReq({}, 'sa-owner-far')), /Not authorized/);
+  await assert.rejects(funcs.purgeElderShepherdNotes.run(ownerReq({ emails: ['x@fxcc.org'] }, 'sa-owner-far')), /Not authorized/);
+});

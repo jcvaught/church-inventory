@@ -50,7 +50,19 @@ church, client roster/access writes) — 8 fail against the old rules, the other
 4 are controls. 10 handler tests (`shepherdAccess.test.mjs`) — all fail against
 the old code (most because `saveShepherdRoster` did not exist; the
 no-default-fallback `claimElderRole` case fails on the behaviour itself).
-Suites: rules 176/176, handlers 134/134, unit 183/183.
+Suites: rules 178/178, handlers 136/136, unit 183/183.
+
+**Codex implementation review (round 1, REWORK) — closed:** `isElderOf` now
+requires `emails is list` (rules `in` also tests MAP KEYS, so a map-shaped list
+granted access — the new test fails against the first version) and
+`token.email is string`; tests added for both, for a malformed access doc in the
+callables, and for the owner-on-another-church path in `refreshShepherdPeople`
+and `purgeElderShepherdNotes`. Deploy order revised: backfill FIRST (the doc is
+inert under the old code, and without it the new `claimElderRole` strips a
+current elder's claim), and a `--check` drift test after the rules (an old
+bundle can write the roster directly until then). Accepted as scoped, not
+fixed: revocation holds for requests that START after the commit; a callable
+already past its check finishes.
 
 ---
 
