@@ -43,6 +43,37 @@ review remainder):
 - **Re-filed under #11 (ask FXCC)** — request inbox, volunteer expiring links,
   navigation consolidation.
 
+**Added 2026-09-23 — `churchCode` / `churchName` live in two documents.**
+The client and the server read the same fact from *different* places:
+everything server-side reads the parent `churches/{id}` (`lookupChurchByCode`
+resolves joins there, and every email that names the church reads it there),
+while the client reads `config/main` through the store's listener
+(`config.churchCode`, `config.churchName`). Nothing keeps them in step.
+
+The one writer that could desync them — Settings → Change code — was fixed
+2026-09-23 (`updateChurchCode` writes both in a batch), and all 8 tenants were
+checked clean, so **nothing is broken today**. What is still open is the
+structural hazard: any future writer that touches one document and not the
+other silently breaks joining, invite links, or the church name on outbound
+email, with no error anywhere. `churchName` has the identical split and is
+currently display-only (`SettingsPage.jsx:960`) — the day it becomes editable
+is the day this recurs.
+
+Two steps, in order:
+1. **Document the invariant** — a CLAUDE.md Known Pitfall naming the split and
+   the rule (any writer of these fields writes both documents). Cheap, and the
+   minimum regardless of whether step 2 happens.
+2. **Collapse to one source of truth** — the parent document, since the server
+   already treats it as authoritative and joining queries it. Point the client
+   at the parent (rules already permit a member `get`, `firestore.rules:269`)
+   and stop treating `config/main`'s copies as meaningful. No backfill needed;
+   the values are currently identical everywhere. `config/main` still holds
+   `onboardingComplete` and friends, so the document stays.
+
+Not proposed: a mirroring trigger, or a scheduled drift check. Both add
+machinery to defend a single-writer field; revisit only if a second writer
+appears.
+
 **Added 2026-09-21 — COH-013, Jobs + Tasks hub audit** (Codex audit, every
 finding verified against code and measured against FXCC data; plan
 `docs/COH-013-JOBS-TASKS-AUDIT-DISPOSITION-PLAN-2026-09-21.md`, rev 3, two
