@@ -4,6 +4,56 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-09-23 — COH-014: Shepherd access bound to the elder's own church, revoked on roster save (DEC-2026-024)
+
+Backlog #3. Owner decision: every elder sees the whole directory of their own
+church and nothing of any other church; John's Shepherd admin access is limited
+to FXCC too.
+
+**The gap.** `isElder()` trusted the `elder` claim and an active profile, with
+no church check — the claim read `shepherdPeople` (incl. `medicalNotes`) under
+any `{churchId}`. Removing someone from the roster changed nothing until their
+next sign-in.
+
+**Access list, written with the roster.** New `config/shepherdAccess`
+(`{ emails, version, updatedAt, updatedBy }`) — active elders' emails,
+lowercased, de-duplicated, sabbatical included. The new owner-only callable
+`saveShepherdRoster` validates the roster server-side (`validateRoster` in
+`functions/lib/roster.js` — rejects an empty roster, duplicate keys, bad
+emails and any match pattern that normalizes to `''`, which would match every
+person), then writes the roster and the access list in ONE transaction. Rules
+now deny client writes to both. After commit it strips the claim and revokes
+refresh tokens for each email that lost access, and purges private notes for
+elders removed entirely (inactive elders keep theirs) — best-effort, returned
+as `cleanupFailures`. The roster editor (`ShepherdHubPage.jsx`) calls it
+instead of `setDoc` + a client purge loop.
+
+**Rules.** `isElder()` → `isElderOf(churchId)`: claim + verified email +
+`isMember(churchId)` + email on that church's access list (a `get()`; missing
+doc denies). `isShepherdAdmin()` → `isShepherdAdminOf(churchId)`: adds
+`isMember(churchId)`. Applied at every Shepherd rule site.
+
+**Callables.** New helpers `isCurrentElder` / `assertCurrentElder` /
+`isShepherdOwner` / `assertShepherdOwner` read the profile and access list
+fresh. `claimElderRole` grants only an active FXCC member on the access list
+(no `DEFAULT_ROSTER` fallback — the old code granted from the baked-in default
+when the roster doc was missing). `setElderAssignment` and
+`exportMyShepherdNotes` no longer trust the claim. `refreshShepherdPeople` and
+`purgeElderShepherdNotes` are owner-at-FXCC only. `scripts/set-elder-claims.cjs`
+reads the access list; `scripts/backfill-shepherd-access.cjs` derives it once
+from the production roster.
+
+**Tests.** 12 rules tests (every operation at every elder rule site for a
+removed-but-claimed elder, cross-church both directions, missing access doc,
+unverified email, case, sabbatical, John at FXCC only, owner email on another
+church, client roster/access writes) — 8 fail against the old rules, the other
+4 are controls. 10 handler tests (`shepherdAccess.test.mjs`) — all fail against
+the old code (most because `saveShepherdRoster` did not exist; the
+no-default-fallback `claimElderRole` case fails on the behaviour itself).
+Suites: rules 176/176, handlers 134/134, unit 183/183.
+
+---
+
 ## 2026-09-23 — One source of truth for churchName / churchCode (phase 1)
 
 These two fields live on the parent `churches/{id}` **and** on `config/main`,

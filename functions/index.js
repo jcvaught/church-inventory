@@ -10,7 +10,7 @@ const { shiftsToOccurrences, reservationsToOccurrences, maintenanceToOccurrences
 const { calculateNextDue } = require('./lib/recurrence');
 const { buildDigestSignals, digestVisibleTasks, isDigestCacheUsable, DIGEST_POLICY_VERSION } = require('./lib/attention');
 const { syncShepherdPeople, setPcoElderAssignment, buildElderDigest } = require('./lib/shepherd');
-const { resolveRoster, isElderEmail, buildNormalizer } = require('./lib/roster');
+const { resolveRoster, buildNormalizer, validateRoster, accessEmails } = require('./lib/roster');
 const { archiveCutoffISO, evaluateArchiveCandidate } = require('./lib/archiveEligibility');
 const entitlement = require('./lib/entitlement');
 const { activityLaneBounds, mergeActivityLanes } = require('./lib/activity-lanes');
@@ -36,6 +36,83 @@ async function getShepherdRoster(db) {
     Sentry.captureException(e, { tags: { area: 'shepherd', fn: 'getShepherdRoster' } });
     return resolveRoster(null);
   }
+}
+
+// ── Shepherd access (backlog #3, DEC-2026-024) ─────────────────────────────
+// Who may use the Shepherd Hub is decided by config/shepherdAccess — a flat,
+// server-written list of active elders' emails, derived from the roster in the
+// same transaction that saves it (saveShepherdRoster). Firestore rules read the
+// same doc, so the rules and these callables agree, and removing an elder
+// revokes both at the moment the save commits.
+//
+// The `elder` custom claim is NOT trusted on its own anywhere below: a claim
+// lives in an already-issued ID token until it expires, and the person being
+// cut off is exactly the one who will not refresh it. Everything here is read
+// fresh per call and fails CLOSED — no roster fallback, no profile = no access.
+const shepherdAccessRef = (db) => db.doc(`churches/${SHEPHERD_CHURCH_ID}/config/shepherdAccess`);
+
+async function getShepherdAccessEmails(db) {
+  const snap = await shepherdAccessRef(db).get();
+  const emails = snap.exists ? snap.get('emails') : null;
+  return Array.isArray(emails) ? emails : [];
+}
+
+// Is this caller a current elder of the Shepherd church? Requires an active
+// FXCC profile, a verified email, and that email on the access list. `email`
+// and `emailVerified` come from the verified ID token or the Auth record.
+async function isCurrentElder(db, uid, email, emailVerified) {
+  if (!uid || emailVerified !== true || !email) return false;
+  const profile = await db.doc(`users/${uid}`).get();
+  if (!profile.exists) return false;
+  const p = profile.data();
+  if (p.churchId !== SHEPHERD_CHURCH_ID || p.active === false) return false;
+  const allowed = await getShepherdAccessEmails(db);
+  return allowed.includes(String(email).trim().toLowerCase());
+}
+
+async function assertCurrentElder(req, db) {
+  const t = req.auth?.token || {};
+  if (!(await isCurrentElder(db, req.auth?.uid, t.email, t.email_verified))) {
+    throw new HttpsError('permission-denied', 'Elders only.');
+  }
+}
+
+// The Shepherd Hub admin (John) — limited to the Shepherd church (owner
+// decision 2026-09-23): an owner email, verified, on an active profile whose
+// churchId IS the Shepherd church. Mirrors isShepherdAdminOf() in the rules.
+async function isShepherdOwner(req, db) {
+  const t = req.auth?.token || {};
+  if (!OWNER_EMAILS.includes(t.email) || t.email_verified !== true) return false;
+  const profile = await db.doc(`users/${req.auth.uid}`).get();
+  return profile.exists && profile.get('churchId') === SHEPHERD_CHURCH_ID && profile.get('active') !== false;
+}
+
+async function assertShepherdOwner(req, db) {
+  if (!(await isShepherdOwner(req, db))) throw new HttpsError('permission-denied', 'Not authorized.');
+}
+
+// Permanently delete the private notes of the elder(s) owning these emails,
+// across every person in the Shepherd church. Shared care-thread entries are
+// deliberately KEPT (pastoral history, D1). A missing account = nothing to purge.
+async function purgeElderNotes(db, emails) {
+  const uids = new Set();
+  for (const em of emails) {
+    try { const u = await getAuth().getUserByEmail(String(em).toLowerCase()); uids.add(u.uid); }
+    catch (e) { if (e.code !== 'auth/user-not-found') throw e; }
+  }
+  let purged = 0;
+  if (uids.size) {
+    const prefix = `churches/${SHEPHERD_CHURCH_ID}/`;
+    const snap = await db.collectionGroup('privateNotes').get();
+    const targets = snap.docs.filter(d => uids.has(d.id) && d.ref.path.startsWith(prefix));
+    if (targets.length) {
+      const writer = db.bulkWriter();
+      targets.forEach(d => writer.delete(d.ref));
+      await writer.close();
+      purged = targets.length;
+    }
+  }
+  return { purged, accounts: uids.size };
 }
 const Sentry = require('@sentry/node');
 
@@ -4157,12 +4234,9 @@ exports.refreshShepherdPeople = onCall(
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
     await assertActiveCaller(req); // COH-011
     const db = getFirestore();
-    const userRecord = await getAuth().getUser(req.auth.uid);
-    // John-only (OWNER_EMAILS) — drives the roster manager's "Save & re-sync".
-    // SEC-2: require a verified email (defense-in-depth alongside claimElderRole).
-    if (!OWNER_EMAILS.includes(userRecord.email) || userRecord.emailVerified !== true) {
-      throw new HttpsError('permission-denied', 'Not authorized.');
-    }
+    // John-only, and only as a member of the Shepherd church (backlog #3) —
+    // drives the roster manager's "Save & re-sync". SEC-2: verified email.
+    await assertShepherdOwner(req, db);
     const roster = await getShepherdRoster(db);
     return await syncShepherdPeople(db, FieldValue, {
       churchId: SHEPHERD_CHURCH_ID,
@@ -4188,7 +4262,6 @@ exports.claimElderRole = onCall(
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
     const db = getFirestore();
     const userRecord = await getAuth().getUser(req.auth.uid);
-    const roster = await getShepherdRoster(db);
     // SEC-1 (2026-06-11): require a VERIFIED email before granting the elder
     // claim. Firebase email/password signup accepts any address without proving
     // ownership, so without this an attacker could register an unclaimed rostered
@@ -4197,16 +4270,19 @@ exports.claimElderRole = onCall(
     // real inbox. Google sign-ins are always verified, so real elders are
     // unaffected; an email/password elder just verifies once. (D6: minimal — no
     // provider/churchId gate.)
-    const rostered = isElderEmail(roster, userRecord.email);
-    // COH-011: a DEACTIVATED caller computes to shouldBeElder=false rather than
-    // being rejected. That distinction is load-bearing — this function's whole
-    // purpose is to be self-correcting, so throwing for an inactive caller would
-    // leave a lingering `elder:true` claim in place forever. Computing false
-    // means the existing revoke branch below strips it on their next sign-in.
-    // Deliberately NOT wrapped in assertActiveCaller for the same reason.
-    const callerProfile = await db.doc(`users/${req.auth.uid}`).get();
-    const callerActive = !callerProfile.exists || callerProfile.data().active !== false;
-    const shouldBeElder = rostered && userRecord.emailVerified === true && callerActive;
+    // Backlog #3 (DEC-2026-024): the allow-list is config/shepherdAccess, with
+    // NO default-roster fallback, and the caller must be an active member of the
+    // Shepherd church — the same test the rules apply (isCurrentElder). A
+    // rostered email on another church's profile no longer earns the claim.
+    // COH-011: a DEACTIVATED (or out-of-church) caller computes to
+    // shouldBeElder=false rather than being rejected. That distinction is
+    // load-bearing — this function's whole purpose is to be self-correcting, so
+    // throwing would leave a lingering `elder:true` claim in place forever.
+    // Computing false means the revoke branch below strips it. Deliberately NOT
+    // wrapped in assertActiveCaller for the same reason.
+    const accessList = await getShepherdAccessEmails(db);
+    const rostered = accessList.includes(String(userRecord.email || '').trim().toLowerCase());
+    const shouldBeElder = await isCurrentElder(db, req.auth.uid, userRecord.email, userRecord.emailVerified);
     const isElder = userRecord.customClaims?.elder === true;
     if (shouldBeElder === isElder) {
       // Tell a rostered-but-unverified caller why they didn't get in, so the
@@ -4250,20 +4326,15 @@ exports.setElderAssignment = onCall(
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
     await assertActiveCaller(req); // COH-011
     const db = getFirestore();
-    // Read the elder claim off the token (the canonical place — propagates from
-    // setCustomUserClaims on refresh; getUser().customClaims would miss it).
-    const isElder = req.auth.token?.elder === true;
     const email = req.auth.token?.email || '';
     const callerSnap = await db.doc(`users/${req.auth.uid}`).get();
     const c = callerSnap.exists ? callerSnap.data() : {};
-    // Shepherd Hub admin access is John-only (OWNER_EMAILS); elders authorize via
-    // their claim. Other church admins cannot reassign. SEC-2: the OWNER path
-    // also requires a verified email (the elder claim is already verified-gated
-    // by claimElderRole).
-    const emailVerified = req.auth.token?.email_verified === true;
-    if (!isElder && !(OWNER_EMAILS.includes(email) && emailVerified)) {
-      throw new HttpsError('permission-denied', 'Not authorized.');
-    }
+    // Backlog #3: a CURRENT elder (on config/shepherdAccess, active FXCC profile,
+    // verified email — read fresh, never the claim alone) or the Shepherd owner,
+    // who is limited to the Shepherd church. Other church admins cannot reassign.
+    const allowed = (await isCurrentElder(db, req.auth.uid, email, req.auth.token?.email_verified))
+      || (await isShepherdOwner(req, db));
+    if (!allowed) throw new HttpsError('permission-denied', 'Not authorized.');
 
     const { personId, elderKeys } = req.data || {};
     if (!personId || typeof personId !== 'string') throw new HttpsError('invalid-argument', 'personId required.');
@@ -4331,8 +4402,11 @@ exports.exportMyShepherdNotes = onCall(
   wrapCall('exportMyShepherdNotes', async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
     await assertActiveCaller(req); // COH-011
-    if (req.auth.token?.elder !== true) throw new HttpsError('permission-denied', 'Elders only.');
     const db = getFirestore();
+    // Backlog #3: current elders only. An elder removed from the roster can no
+    // longer export — the removal-confirm modal tells the admin to have them
+    // export first.
+    await assertCurrentElder(req, db);
     const uid = req.auth.uid;
     const prefix = `churches/${SHEPHERD_CHURCH_ID}/`;
     const snap = await db.collectionGroup('privateNotes').get();
@@ -4351,55 +4425,114 @@ exports.exportMyShepherdNotes = onCall(
 );
 
 // ── purgeElderShepherdNotes (Shepherd Hub P6 / D1) ────────────────────────
-// When the admin removes an elder from the roster, permanently delete THAT
-// elder's private notes across every person. Admin-only (OWNER_EMAILS + verified
-// email). The caller passes the departing elder's roster email(s); we resolve
-// their uid(s) and delete `privateNotes/{uid}` everywhere. Shared care-thread
-// entries are deliberately KEPT (pastoral history, D1). The admin UI shows a
-// confirm modal first so the elder has a chance to export their own notes.
+// Permanently delete a removed elder's private notes across every person.
+// Since backlog #3 the roster save (saveShepherdRoster, below) does this itself
+// for every elder it removes; this callable stays for a stale client bundle and
+// for manual use. Shepherd owner only. Shared care-thread entries are KEPT (D1).
 exports.purgeElderShepherdNotes = onCall(
   { cors: true },
   wrapCall('purgeElderShepherdNotes', async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
     await assertActiveCaller(req); // COH-011
-    const email = req.auth.token?.email || '';
-    const emailVerified = req.auth.token?.email_verified === true;
-    if (!(OWNER_EMAILS.includes(email) && emailVerified)) {
-      throw new HttpsError('permission-denied', 'Not authorized.');
-    }
+    const db = getFirestore();
+    await assertShepherdOwner(req, db); // backlog #3: limited to the Shepherd church
     const { emails, elderName } = req.data || {};
     if (!Array.isArray(emails) || emails.length === 0) {
       throw new HttpsError('invalid-argument', 'emails required.');
     }
-    const db = getFirestore();
-    // Resolve the departing elder's uid(s) from their roster email(s). A missing
-    // account just means no notes to purge.
-    const uids = new Set();
-    for (const em of emails) {
-      try { const u = await getAuth().getUserByEmail(String(em).toLowerCase()); uids.add(u.uid); }
-      catch (e) { if (e.code !== 'auth/user-not-found') throw e; }
-    }
-    let purged = 0;
-    if (uids.size) {
-      const prefix = `churches/${SHEPHERD_CHURCH_ID}/`;
-      const snap = await db.collectionGroup('privateNotes').get();
-      const targets = snap.docs.filter(d => uids.has(d.id) && d.ref.path.startsWith(prefix));
-      if (targets.length) {
-        const writer = db.bulkWriter();
-        targets.forEach(d => writer.delete(d.ref));
-        await writer.close();
-        purged = targets.length;
-      }
-    }
+    const { purged, accounts } = await purgeElderNotes(db, emails);
     // Audit (admin-readable).
     await db.collection(`churches/${SHEPHERD_CHURCH_ID}/shepherdAudit`).add({
       action: 'purge_elder_notes',
       actorUid: req.auth.uid,
-      actorEmail: email || null,
+      actorEmail: req.auth.token?.email || null,
       at: FieldValue.serverTimestamp(),
-      detail: { elderName: elderName || null, emails, purged, accounts: uids.size },
+      detail: { elderName: elderName || null, emails, purged, accounts },
     });
-    return { purged, accounts: uids.size };
+    return { purged, accounts };
+  })
+);
+
+// ── saveShepherdRoster (backlog #3, DEC-2026-024) ─────────────────────────
+// The ONLY writer of config/shepherdRoster (rules deny client writes). Saves the
+// roster and its derived access list (config/shepherdAccess) in ONE transaction,
+// so an elder removed or set inactive loses Shepherd access at the moment this
+// commits — rules and callables both read the access list fresh per request.
+//
+// After the commit, best-effort cleanup for each email that LOST access: strip
+// the `elder` claim and revoke refresh tokens (hygiene — the access list is the
+// boundary), and purge private notes for elders removed from the roster
+// entirely (same rule the client used: all of an elder's emails gone; setting
+// an elder inactive keeps their notes). A cleanup failure is reported in
+// `cleanupFailures`, never thrown — access is already gone, and an error would
+// tell the admin the save failed when it did not.
+exports.saveShepherdRoster = onCall(
+  { cors: true },
+  wrapCall('saveShepherdRoster', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    await assertActiveCaller(req); // COH-011
+    const db = getFirestore();
+    await assertShepherdOwner(req, db);
+    const input = req.data?.roster;
+    const invalid = validateRoster(input);
+    if (invalid) throw new HttpsError('invalid-argument', invalid);
+    const roster = { elders: input.elders, former: Array.isArray(input.former) ? input.former : [] };
+    const newAccess = accessEmails(roster);
+
+    const rosterRef = db.doc(`churches/${SHEPHERD_CHURCH_ID}/config/shepherdRoster`);
+    const { oldAccess, oldRosterEmails } = await db.runTransaction(async (tx) => {
+      const [oldRosterSnap, oldAccessSnap] = await Promise.all([tx.get(rosterRef), tx.get(shepherdAccessRef(db))]);
+      const oldRoster = oldRosterSnap.exists ? oldRosterSnap.data() : null;
+      const oldEmails = oldAccessSnap.exists && Array.isArray(oldAccessSnap.get('emails'))
+        ? oldAccessSnap.get('emails')
+        // Pre-backfill there is no access doc: diff against what the old roster
+        // granted (never DEFAULT_ROSTER — that is not what anyone was granted).
+        : (oldRoster && Array.isArray(oldRoster.elders) ? accessEmails({ elders: oldRoster.elders }) : []);
+      const allOld = new Set((oldRoster?.elders || []).flatMap(e => (Array.isArray(e?.emails) ? e.emails : []).map(x => String(x).trim().toLowerCase())));
+      tx.set(rosterRef, { ...roster, updatedAt: FieldValue.serverTimestamp() });
+      tx.set(shepherdAccessRef(db), {
+        emails: newAccess,
+        version: (oldAccessSnap.exists ? (oldAccessSnap.get('version') || 0) : 0) + 1,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: req.auth.uid,
+      });
+      return { oldAccess: oldEmails, oldRosterEmails: [...allOld] };
+    });
+
+    const lostAccess = oldAccess.filter(e => !newAccess.includes(e));
+    const allNew = new Set(roster.elders.flatMap(e => (e.emails || []).map(x => String(x).trim().toLowerCase())));
+    const removedFromRoster = oldRosterEmails.filter(e => !allNew.has(e));
+    const cleanupFailures = [];
+    const revoked = [];
+    for (const em of lostAccess) {
+      try {
+        const u = await getAuth().getUserByEmail(em);
+        const claims = { ...(u.customClaims || {}) };
+        if (claims.elder !== undefined) { delete claims.elder; await getAuth().setCustomUserClaims(u.uid, claims); }
+        await getAuth().revokeRefreshTokens(u.uid);
+        revoked.push(em);
+      } catch (e) {
+        if (e.code === 'auth/user-not-found') continue; // never signed in — nothing to revoke
+        cleanupFailures.push({ step: 'revoke', email: em, message: e.message });
+        Sentry.captureException(e, { tags: { area: 'shepherd', fn: 'saveShepherdRoster', step: 'revoke' } });
+      }
+    }
+    let purge = { purged: 0, accounts: 0 };
+    if (removedFromRoster.length) {
+      try { purge = await purgeElderNotes(db, removedFromRoster); }
+      catch (e) {
+        cleanupFailures.push({ step: 'purge', message: e.message });
+        Sentry.captureException(e, { tags: { area: 'shepherd', fn: 'saveShepherdRoster', step: 'purge' } });
+      }
+    }
+    await db.collection(`churches/${SHEPHERD_CHURCH_ID}/shepherdAudit`).add({
+      action: 'save_roster',
+      actorUid: req.auth.uid,
+      actorEmail: req.auth.token?.email || null,
+      at: FieldValue.serverTimestamp(),
+      detail: { accessCount: newAccess.length, lostAccess, removedFromRoster, purged: purge.purged, cleanupFailures: cleanupFailures.length },
+    }).catch(e => Sentry.captureException(e, { tags: { area: 'shepherd', fn: 'saveShepherdRoster', step: 'audit' } }));
+    return { ok: true, accessCount: newAccess.length, revoked, purged: purge.purged, cleanupFailures };
   })
 );
 

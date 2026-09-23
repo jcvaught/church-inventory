@@ -1210,3 +1210,44 @@ nothing (`src/useFirestore.js:311`).
   deliberate. Rollback: revert the commit; no data changed.
 - Follow-up: phase 2 when no old bundle plausibly survives — stop writing the
   copies, delete them with a guarded script, then close the rules gap.
+
+### DEC-2026-024 — Shepherd access: own church only, revoked the moment the roster changes
+
+- Date: 2026-09-23
+- Status: Accepted
+- Deciders: Owner (the two scope calls); Claude implemented; Codex reviewed the plan (two rounds, REWORK → all findings closed)
+- Related tasks/docs: COH-014 in `docs/AI-WORKBOARD.md`; backlog item #3; `docs/CHANGELOG.md` 2026-09-23
+- Context: `isElder()` trusted the `elder` claim plus an active profile. It
+  never checked the church, so the claim read `shepherdPeople` — including
+  `medicalNotes` — under ANY `{churchId}`. Removing someone from
+  `config/shepherdRoster` revoked nothing until `claimElderRole` ran at their
+  next sign-in. John's admin arm was likewise unscoped.
+- Decision (owner, 2026-09-23): **every elder sees the whole directory of their
+  own church, including medical notes, and nothing of any other church.
+  John's Shepherd admin access is limited to FXCC the same way — no
+  cross-church exception.** Mechanism:
+  - `config/shepherdAccess` — a flat list of active elders' emails (sabbatical
+    included), written ONLY by the new `saveShepherdRoster` callable in the same
+    transaction as the roster. Rules deny client writes to both documents.
+  - Rules `isElderOf(churchId)` = claim + verified email + `isMember(churchId)`
+    + email on that church's access list (a rules `get()`); a missing access doc
+    denies. `isShepherdAdminOf(churchId)` = owner email + verified +
+    `isMember(churchId)`.
+  - Callables (`claimElderRole`, `setElderAssignment`, `exportMyShepherdNotes`,
+    `refreshShepherdPeople`, `purgeElderShepherdNotes`) apply the same test, read
+    fresh. No `DEFAULT_ROSTER` fallback anywhere in the access path.
+- Alternatives considered: (a) keep trusting the claim and revoke it on roster
+  change — rejected: a claim lives in an issued token for up to an hour and the
+  person cut off will not refresh it; (b) a Firestore trigger deriving the
+  access list from roster writes — rejected on Codex review: it leaves a lag
+  window after removal, and trigger events can arrive out of order and
+  overwrite a newer list; (c) keep John cross-church as a recorded exception —
+  offered, declined by the owner; (d) Level-2 note encryption — not a scoping
+  fix (see backlog #3).
+- Consequences: removal (or setting an elder inactive) takes effect at commit;
+  claims and refresh tokens are cleaned up afterwards, best-effort, reported in
+  `cleanupFailures` and never as a failed save. A removed elder can no longer
+  export their notes, so "export first" is now a hard requirement (the removal
+  modal says so). Every elder-gated request costs one extra document read.
+  Rollback: revert the rules deploy (the access doc is harmless to the old
+  rules); the callable-side checks can revert with the functions.

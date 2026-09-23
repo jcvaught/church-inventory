@@ -53,6 +53,32 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   unshipped, no dependency on the pricing work.
 
 
+### COH-014 — Shepherd access: own church only, revoked on roster save (backlog #3)
+
+- Status: **Built 2026-09-23 on `coh-014-shepherd-scoping`, awaiting Codex
+  implementation review, then staged deploy.** Owner decisions 2026-09-23: whole
+  directory of the elder's own church, nothing cross-church; John's admin access
+  limited to FXCC. DEC-2026-024.
+- Owner: Claude (implementation) · Reviewer: Codex (plan: 2 rounds, closed;
+  implementation: pending)
+- Plan: `~/.claude/plans/most-of-those-mcp-velvet-book.md` (session plan file)
+- Measured before build (2026-09-23, read-only): 8 elders / 11 emails on the
+  roster; Reed + Cesone signed in, both verified, FXCC, active, claimed; they
+  are the only claim holders; both of John's accounts have FXCC profiles; the
+  live roster passes `validateRoster`.
+- **Deploy order (staged — pushing to main IS the web deploy):**
+  1. functions: `saveShepherdRoster`, `claimElderRole`, `setElderAssignment`,
+     `exportMyShepherdNotes`, `refreshShepherdPeople`,
+     `purgeElderShepherdNotes`; curl-probe each onCall for 401 JSON (IAM strip).
+  2. **Owner go:** `node scripts/backfill-shepherd-access.cjs --apply`.
+  3. merge + push the client (roster editor → callable).
+  4. `firebase deploy --only firestore:rules`.
+  5. Production probe with a throwaway user in `e2e-test-church`: listed →
+     allowed (`count()` over REST); FXCC → denied; removed → denied at once
+     while the old token still carries `elder:true`. Clean up in `finally`.
+- Rollback: rules first (`git show <prev>:firestore.rules` + deploy); the
+  access doc is inert under the old rules.
+
 ### COH-006 — Enforce private and shared task visibility
 
 - Status: **COMPLETE — all four gates deployed and verified in production

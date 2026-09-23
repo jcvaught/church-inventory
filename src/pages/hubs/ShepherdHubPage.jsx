@@ -210,8 +210,15 @@ export function ShepherdHubPage({ userProfile, isElder }) {
       setPeople(allSnap.docs.map(d => ({ _id: d.id, ...d.data(), lastCareAt: careMap[d.id] || null })));
       setFullyLoaded(true);
     } catch (e) {
-      setErr(e?.message || 'Failed to load Shepherd Hub.');
-      Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'load' } });
+      // Backlog #3: an elder removed from the roster is denied at once, while
+      // their session still says elder:true — say so plainly rather than
+      // surfacing Firestore's "Missing or insufficient permissions".
+      if (e?.code === 'permission-denied') {
+        setErr('You no longer have access to the Shepherd Hub. If this is a mistake, ask your church administrator.');
+      } else {
+        setErr(e?.message || 'Failed to load Shepherd Hub.');
+        Sentry.captureException(e, { tags: { area: 'shepherd-hub', fn: 'load' } });
+      }
     } finally {
       setLoading(false);
     }
@@ -622,17 +629,27 @@ function RosterManager({ roster, onClose, onSaved, onResynced }) {
     if (v) { setErr(v); return; }
     const removed = removedElders(built);
     if (removed.length) { setErr(null); setConfirmRemoval({ built, resync, removed }); return; }
-    doSave(built, resync, []);
+    doSave(built, resync);
   }
 
-  async function doSave(built, resync, removed) {
+  // `removed` only drives the confirm modal: the server decides who lost access
+  // and whose notes to purge, from the roster it actually replaced.
+  async function doSave(built, resync) {
     setSaving(true); setErr(null);
     try {
-      await setDoc(doc(db, `churches/${SHEPHERD_CHURCH_ID}/config/shepherdRoster`), { ...built, updatedAt: serverTimestamp() });
+      // Backlog #3: the roster is server-written. saveShepherdRoster saves it
+      // with the derived access list in one transaction (so removal revokes
+      // access immediately), then strips claims and purges removed elders'
+      // private notes (shared care-thread entries stay).
+      const res = await httpsCallable(getFunctions(), 'saveShepherdRoster')({ roster: built });
       onSaved(built);
-      // Purge each removed elder's private notes (shared care-thread entries stay).
-      for (const r of removed) {
-        await httpsCallable(getFunctions(), 'purgeElderShepherdNotes')({ emails: r.emails, elderName: r.name });
+      const failures = res.data?.cleanupFailures || [];
+      if (failures.length) {
+        // The roster IS saved and access already follows it; only the cleanup
+        // lagged. Keep the modal open so the admin sees it.
+        Sentry.captureMessage('saveShepherdRoster: cleanup failures', { level: 'warning', extra: { failures } });
+        setErr(`Roster saved and access updated, but ${failures.length} cleanup step(s) failed (claim or note purge). They have been reported to the error log.`);
+        return;
       }
       if (resync) {
         await httpsCallable(getFunctions(), 'refreshShepherdPeople')();
@@ -700,12 +717,12 @@ function RosterManager({ roster, onClose, onSaved, onResynced }) {
             </ul>
           )}
           <p style={{ fontSize: 13, color: B.textMid, lineHeight: 1.5 }}>
-            Make sure they've saved anything they want to keep first — each elder can do that from <strong>⬇ Export my notes</strong> in the hub header. <strong>This cannot be undone.</strong>
+            Their Shepherd access ends the moment you save, and they cannot export afterwards — make sure they've saved anything they want to keep first, from <strong>⬇ Export my notes</strong> in the hub header. <strong>This cannot be undone.</strong>
           </p>
           {err && <div style={{ color: B.red, fontSize: 13, marginTop: 8 }}>{err}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
             <button onClick={() => setConfirmRemoval(null)} disabled={saving} style={btnS}>Cancel</button>
-            <button onClick={() => doSave(confirmRemoval.built, confirmRemoval.resync, confirmRemoval.removed)} disabled={saving} style={{ ...btnD, opacity: saving ? 0.5 : 1 }}>
+            <button onClick={() => doSave(confirmRemoval.built, confirmRemoval.resync)} disabled={saving} style={{ ...btnD, opacity: saving ? 0.5 : 1 }}>
               {saving ? 'Removing…' : 'Remove & delete notes'}
             </button>
           </div>

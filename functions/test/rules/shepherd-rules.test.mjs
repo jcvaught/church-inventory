@@ -38,6 +38,12 @@ beforeEach(async () => {
   await seed('users/elderA', { churchId: CHURCH, role: 'user', name: 'Elder A', active: true });
   await seed('users/elderB', { churchId: CHURCH, role: 'user', name: 'Elder B', active: true });
   await seed('users/member', { churchId: CHURCH, role: 'user', name: 'Member', active: true });
+  // Backlog #3: isElderOf() also requires the caller's email on the church's
+  // server-written access list, and isShepherdAdminOf() requires membership of
+  // the church — so both elders are listed and the owner has an FXCC profile.
+  await seed(P('config/shepherdAccess'), { emails: ['a@fxcc.org', 'b@fxcc.org', 'gone@fxcc.org', 'sab@fxcc.org'] });
+  await seed('users/owner', { churchId: CHURCH, role: 'admin', name: 'John', active: true });
+  await seed('users/owner2', { churchId: CHURCH, role: 'admin', name: 'John (unverified)', active: true });
 });
 
 // Auth contexts (the `elder` custom claim + email/email_verified standard claims).
@@ -138,4 +144,135 @@ test('COH-011: a deactivated elder cannot read a private note they previously wr
   await seedInactiveElder();
   await seed(P('shepherdPeople/p1/privateNotes/elderGone'), { text: 'written while active' });
   await assertFails(getDoc(doc(inactiveElder(), P('shepherdPeople/p1/privateNotes/elderGone'))));
+});
+
+// ══ Backlog #3 (DEC-2026-024) — own church only; roster removal revokes now ════
+// Owner decision 2026-09-23: every elder sees the whole directory of their OWN
+// church and nothing of any other church; John's admin access likewise. And
+// removing an elder from the roster (which rewrites config/shepherdAccess in
+// the same transaction) must deny them at once, while their token still says
+// elder:true — so every context below carries the claim.
+const OTHER = 'other-church';
+const O = (sub) => `churches/${OTHER}/${sub}`;
+const ctx = (uid, email, extra = {}) =>
+  env.authenticatedContext(uid, { elder: true, email, email_verified: true, ...extra }).firestore();
+const removedElder = () => ctx('elderRemoved', 'removed@fxcc.org');
+const otherElder = () => ctx('elderOther', 'o@other.org');
+
+// Every elder-gated operation, at every rule site, for one context. Returns
+// [label, promise-factory] pairs so each can be asserted either way.
+function elderOps(fs, base, uid) {
+  return [
+    ['read shepherdSync',      () => getDoc(doc(fs, `${base}/config/shepherdSync`))],
+    ['read shepherdRoster',    () => getDoc(doc(fs, `${base}/config/shepherdRoster`))],
+    ['read shepherdPeople',    () => getDoc(doc(fs, `${base}/shepherdPeople/p1`))],
+    ['read own private note',  () => getDoc(doc(fs, `${base}/shepherdPeople/p1/privateNotes/${uid}`))],
+    ['write own private note', () => setDoc(doc(fs, `${base}/shepherdPeople/p1/privateNotes/${uid}`), { text: 'x' })],
+    ['read care thread',       () => getDoc(doc(fs, `${base}/shepherdPeople/p1/careThread/mine`))],
+    ['create care entry',      () => setDoc(doc(fs, `${base}/shepherdPeople/p1/careThread/new1`), { text: 'x', authorUid: uid })],
+    ['update own care entry',  () => updateDoc(doc(fs, `${base}/shepherdPeople/p1/careThread/mine`), { text: 'edited' })],
+    ['delete own care entry',  () => deleteDoc(doc(fs, `${base}/shepherdPeople/p1/careThread/mine2`))],
+    ['read shepherdCare',      () => getDoc(doc(fs, `${base}/shepherdCare/p1`))],
+    ['write shepherdCare',     () => setDoc(doc(fs, `${base}/shepherdCare/p1`), { lastCareAt: serverTimestamp() })],
+    ['append audit row',       () => setDoc(doc(fs, `${base}/shepherdAudit/a-${uid}`), { actorUid: uid, action: 'view' })],
+  ];
+}
+async function seedShepherd(base, uid) {
+  await seed(`${base}/config/shepherdSync`, { lastRun: 1 });
+  await seed(`${base}/config/shepherdRoster`, { elders: [] });
+  await seed(`${base}/shepherdPeople/p1`, { name: 'Jane', medicalNotes: 'sensitive' });
+  await seed(`${base}/shepherdPeople/p1/privateNotes/${uid}`, { text: 'mine' });
+  await seed(`${base}/shepherdPeople/p1/careThread/mine`, { text: 'c', authorUid: uid });
+  await seed(`${base}/shepherdPeople/p1/careThread/mine2`, { text: 'c', authorUid: uid });
+  await seed(`${base}/shepherdCare/p1`, { lastCareAt: 1 });
+}
+
+test('#3 control: a listed, active FXCC elder passes every elder-gated operation', async () => {
+  await seedShepherd(`churches/${CHURCH}`, 'elderA');
+  for (const [label, op] of elderOps(elderA(), `churches/${CHURCH}`, 'elderA')) {
+    await assertSucceeds(op(), label);
+  }
+});
+
+test('#3: an elder REMOVED from the roster is denied every operation while still holding elder:true', async () => {
+  await seed('users/elderRemoved', { churchId: CHURCH, role: 'user', name: 'Removed', active: true });
+  await seedShepherd(`churches/${CHURCH}`, 'elderRemoved');
+  for (const [label, op] of elderOps(removedElder(), `churches/${CHURCH}`, 'elderRemoved')) {
+    await assertFails(op(), label);
+  }
+});
+
+test('#3: an FXCC elder cannot reach another church — even one whose access list names them', async () => {
+  await seedShepherd(`churches/${OTHER}`, 'elderA');
+  await seed(O('config/shepherdAccess'), { emails: ['a@fxcc.org'] });
+  for (const [label, op] of elderOps(elderA(), `churches/${OTHER}`, 'elderA')) {
+    await assertFails(op(), label);
+  }
+});
+
+test('#3: another church\'s elder cannot reach FXCC, but can reach their own church', async () => {
+  await seed('users/elderOther', { churchId: OTHER, role: 'user', name: 'Other Elder', active: true });
+  await seed(O('config/shepherdAccess'), { emails: ['o@other.org'] });
+  await seedShepherd(`churches/${CHURCH}`, 'elderOther');
+  await seedShepherd(`churches/${OTHER}`, 'elderOther');
+  // Listed on FXCC's list too, so the ONLY thing denying them is church binding.
+  await seed(P('config/shepherdAccess'), { emails: ['a@fxcc.org', 'o@other.org'] });
+  for (const [label, op] of elderOps(otherElder(), `churches/${CHURCH}`, 'elderOther')) {
+    await assertFails(op(), `FXCC: ${label}`);
+  }
+  for (const [label, op] of elderOps(otherElder(), `churches/${OTHER}`, 'elderOther')) {
+    await assertSucceeds(op(), `own church: ${label}`);
+  }
+});
+
+test('#3: no access doc = no elder access (fail closed)', async () => {
+  await env.withSecurityRulesDisabled(async (c) => { await deleteDoc(doc(c.firestore(), P('config/shepherdAccess'))); });
+  await seed(P('shepherdPeople/p1'), { name: 'Jane' });
+  await assertFails(getDoc(doc(elderA(), P('shepherdPeople/p1'))));
+});
+
+test('#3: a listed elder with an UNVERIFIED email is denied', async () => {
+  await seed(P('shepherdPeople/p1'), { name: 'Jane' });
+  await assertFails(getDoc(doc(ctx('elderA', 'a@fxcc.org', { email_verified: false }), P('shepherdPeople/p1'))));
+});
+
+test('#3: the email match is case-insensitive (the list is lowercased)', async () => {
+  await seed(P('shepherdPeople/p1'), { name: 'Jane' });
+  await assertSucceeds(getDoc(doc(ctx('elderA', 'A@FXCC.org'), P('shepherdPeople/p1'))));
+});
+
+test('#3: a sabbatical elder (on the access list) keeps access', async () => {
+  await seed('users/elderSab', { churchId: CHURCH, role: 'user', name: 'Sabbatical', active: true });
+  await seed(P('shepherdPeople/p1'), { name: 'Jane' });
+  await assertSucceeds(getDoc(doc(ctx('elderSab', 'sab@fxcc.org'), P('shepherdPeople/p1'))));
+});
+
+test('#3: John\'s admin access works at FXCC and nowhere else', async () => {
+  await seed(P('shepherdPeople/p1'), { name: 'Jane' });
+  await seed(O('shepherdPeople/p1'), { name: 'Elsewhere' });
+  await seed(O('shepherdAudit/a1'), { actorUid: 'x', action: 'y' });
+  await seed(O('config/shepherdRoster'), { elders: [] });
+  await assertSucceeds(getDoc(doc(owner(), P('shepherdPeople/p1'))));
+  await assertFails(getDoc(doc(owner(), O('shepherdPeople/p1'))));
+  await assertFails(getDoc(doc(owner(), O('shepherdAudit/a1'))));
+  await assertFails(getDoc(doc(owner(), O('config/shepherdRoster'))));
+});
+
+test('#3: an owner email whose profile is in ANOTHER church is not a Shepherd admin at FXCC', async () => {
+  await seed('users/ownerElsewhere', { churchId: OTHER, role: 'admin', name: 'John elsewhere', active: true });
+  await seed(P('shepherdPeople/p1'), { name: 'Jane' });
+  const fs = env.authenticatedContext('ownerElsewhere', { email: 'jcvaught@gmail.com', email_verified: true }).firestore();
+  await assertFails(getDoc(doc(fs, P('shepherdPeople/p1'))));
+});
+
+test('#3: nobody writes the roster from a client — saveShepherdRoster is the only writer', async () => {
+  await assertFails(setDoc(doc(owner(), P('config/shepherdRoster')), { elders: [] }));
+  await assertFails(setDoc(doc(elderA(), P('config/shepherdRoster')), { elders: [] }));
+});
+
+test('#3: the access list is invisible and unwritable to clients', async () => {
+  for (const fs of [owner(), elderA(), member()]) {
+    await assertFails(getDoc(doc(fs, P('config/shepherdAccess'))));
+    await assertFails(setDoc(doc(fs, P('config/shepherdAccess')), { emails: ['m@fxcc.org'] }));
+  }
 });

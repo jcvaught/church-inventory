@@ -113,4 +113,53 @@ function buildNormalizer(roster) {
   return { normalize, mapSegment, activeKeys: [...activeKeys] };
 }
 
-module.exports = { DEFAULT_ROSTER, resolveRoster, rosterElderEmails, isElderEmail, buildNormalizer };
+// ── Shepherd access (backlog #3, DEC-2026-024) ─────────────────────────────
+// The roster is written ONLY by the saveShepherdRoster callable, which derives
+// config/shepherdAccess from it in the same transaction. Firestore rules check
+// the caller's email against that flat list on every request, so removing an
+// elder revokes access the moment the save commits — no token refresh needed.
+//
+// Unlike resolveRoster(), NOTHING here falls back to DEFAULT_ROSTER: the access
+// path fails closed. A roster that does not validate is rejected, never repaired.
+
+// Normalize a match pattern exactly as buildNormalizer's segMatches normalizes
+// the PCO value it is compared against. A pattern that normalizes to '' would
+// substring-match EVERY person, so validation rejects it.
+const normPattern = (m) => String(m).toLowerCase().replace(/[^a-z]/g, '');
+const isNonEmptyString = (v) => typeof v === 'string' && v.trim() !== '';
+const looksLikeEmail = (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+
+// Returns an error message, or null when the roster is safe to save.
+function validateRoster(r) {
+  if (!r || typeof r !== 'object') return 'Roster must be an object.';
+  if (!Array.isArray(r.elders) || r.elders.length === 0) return 'Add at least one elder.';
+  const keys = new Set();
+  for (const e of r.elders) {
+    if (!e || typeof e !== 'object') return 'Every elder must be an object.';
+    if (!isNonEmptyString(e.name) || !isNonEmptyString(e.surname)) return 'Every elder needs a name and surname.';
+    if (!isNonEmptyString(e.key) || !/^[a-z]+$/.test(e.key)) return `Elder "${e.name}" has an invalid key.`;
+    if (keys.has(e.key)) return `Two elders resolve to the same key ("${e.key}").`;
+    keys.add(e.key);
+    if (!Array.isArray(e.match) || e.match.length === 0) return `Elder "${e.name}" needs at least one match pattern.`;
+    if (e.match.some(m => !normPattern(m))) return `Elder "${e.name}" has an empty match pattern (it would match everyone).`;
+    if (e.emails !== undefined && !Array.isArray(e.emails)) return `Elder "${e.name}" emails must be a list.`;
+    if ((e.emails || []).some(em => !looksLikeEmail(em))) return `Elder "${e.name}" has an invalid email.`;
+    if (e.active !== undefined && typeof e.active !== 'boolean') return `Elder "${e.name}" active must be true or false.`;
+    if (e.sabbatical !== undefined && typeof e.sabbatical !== 'boolean') return `Elder "${e.name}" sabbatical must be true or false.`;
+  }
+  if (r.former !== undefined && !Array.isArray(r.former)) return 'Former elders must be a list.';
+  for (const f of r.former || []) {
+    if (!f || typeof f !== 'object' || !Array.isArray(f.match) || f.match.length === 0) return 'Every former elder needs a match pattern.';
+    if (f.match.some(m => !normPattern(m))) return 'A former elder has an empty match pattern (it would match everyone).';
+  }
+  return null;
+}
+
+// The emails that may use the Shepherd Hub: every email of every ACTIVE elder
+// (sabbatical included — still an elder), lowercased, de-duplicated, sorted so
+// the same roster always yields the same list. Caller must validate first.
+function accessEmails(roster) {
+  return [...new Set(rosterElderEmails(roster).filter(Boolean))].sort();
+}
+
+module.exports = { DEFAULT_ROSTER, resolveRoster, rosterElderEmails, isElderEmail, buildNormalizer, validateRoster, accessEmails };

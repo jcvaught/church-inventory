@@ -3,7 +3,7 @@
  *
  * `claimElderRole` (functions/index.js) already grants/revokes the `elder: true`
  * custom claim on each elder's sign-in. This script is the out-of-band twin:
- * it reconciles claims against the allow-list (functions/lib/elders.js) RIGHT
+ * it reconciles claims against the allow-list (config/shepherdAccess) RIGHT
  * NOW without waiting for a sign-in — use it for an immediate roll-off
  * (revoke) or to confirm the current state.
  *
@@ -19,7 +19,6 @@
  */
 const admin = require('firebase-admin');
 const key = require('./serviceAccountKey.json');
-const { resolveRoster, rosterElderEmails } = require('../functions/lib/roster');
 
 const SHEPHERD_CHURCH_ID = '6cksNI9Uv8h0jXptdTESnXTXFgF3-church';
 const APPLY = process.argv.includes('--apply');
@@ -28,11 +27,16 @@ const auth = admin.auth();
 const db = admin.firestore();
 
 (async () => {
-  // Read the live roster (config/shepherdRoster) so the script matches what the
-  // claimElderRole callable uses; fall back to DEFAULT_ROSTER if the doc is absent.
-  const snap = await db.doc(`churches/${SHEPHERD_CHURCH_ID}/config/shepherdRoster`).get();
-  const roster = resolveRoster(snap.exists ? snap.data() : null);
-  const allow = new Set(rosterElderEmails(roster));
+  // Backlog #3: the allow-list is config/shepherdAccess (written by
+  // saveShepherdRoster with the roster) — the same list the rules check. No
+  // default-roster fallback: a missing access doc means nobody is an elder.
+  const snap = await db.doc(`churches/${SHEPHERD_CHURCH_ID}/config/shepherdAccess`).get();
+  const emails = snap.exists ? snap.get('emails') : null;
+  if (!Array.isArray(emails)) {
+    console.error('config/shepherdAccess is missing or malformed — run scripts/backfill-shepherd-access.cjs first. Refusing to act.');
+    process.exit(1);
+  }
+  const allow = new Set(emails);
 
   console.log(`Elder allow-list (${allow.size}): ${[...allow].join(', ')}`);
   console.log(APPLY ? '\nMODE: APPLY (claims will be changed)\n' : '\nMODE: dry-run (no changes; pass --apply to write)\n');

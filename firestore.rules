@@ -181,27 +181,42 @@ service cloud.firestore {
     }
 
     // Shepherd Hub (P2): elder status is a server-set custom auth claim
-    // (`elder: true`), granted by claimElderRole against the email allow-list —
-    // NOT a Firestore-doc role (those are raceable/readable). Baked into the
-    // signed token; this reads it directly with no get().
+    // (`elder: true`), granted by claimElderRole — NOT a Firestore-doc role.
     // COH-011: the claim alone is not enough. Rules cannot retract an
     // already-issued ID token, so a deactivated elder keeps `elder:true` for up
-    // to an hour after revokeRefreshTokens — long enough to read every
-    // shepherdPeople doc incl. medicalNotes, write private notes and care
-    // threads, and drive setElderAssignment (which writes to Planning Center).
-    // The profile check is evaluated fresh on every request, so it closes that
-    // window immediately. NB this is deliberately fail-CLOSED: an elder with no
-    // users/{uid} doc is denied, which is the right default for pastoral data.
-    // Church binding is deliberately NOT folded in here — that is the separately
-    // ranked Shepherd-scoping item and needs its own decision.
-    function isElder() { return request.auth != null && request.auth.token.elder == true && actorActive(); }
+    // to an hour after revokeRefreshTokens. isMember() is evaluated fresh on
+    // every request and requires an ACTIVE profile, which closes that window.
+    // Deliberately fail-CLOSED: no users/{uid} doc = denied.
+    //
+    // Backlog #3 (DEC-2026-024, 2026-09-23): an elder sees the whole directory
+    // of THEIR OWN church and nothing of any other church. So isElderOf() also
+    // requires:
+    //   • isMember(churchId) — the path's church is the caller's church;
+    //   • the caller's verified email on that church's config/shepherdAccess
+    //     list. That list is written ONLY by saveShepherdRoster, in the same
+    //     transaction as the roster, so removing an elder (or setting them
+    //     inactive) revokes access the moment the save commits — even while
+    //     their old token still says elder:true. A missing access doc makes the
+    //     get() fail, which denies.
+    // The claim stays as the first conjunct so a non-elder short-circuits
+    // before the get().
+    function isElderOf(churchId) {
+      return request.auth != null
+        && request.auth.token.elder == true
+        && request.auth.token.email_verified == true
+        && isMember(churchId)
+        && request.auth.token.email.lower() in
+             get(/databases/$(database)/documents/churches/$(churchId)/config/shepherdAccess).data.emails;
+    }
     // Shepherd Hub admin access is restricted to John specifically (NOT any
     // church admin) — pastoral data is need-to-know. Mirrors OWNER_EMAILS in
-    // functions/index.js. Elders get in via isElder(); this is the only
+    // functions/index.js. Elders get in via isElderOf(); this is the only
     // non-elder who can read the hub.
     // SEC-2 (2026-06-11): require a verified email so an unverified squat on one
     // of these addresses can never satisfy the admin gate.
-    function isShepherdAdmin() { return request.auth != null && request.auth.token.email_verified == true && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org']; }
+    // Backlog #3 (owner decision 2026-09-23): limited to John's own church —
+    // isMember(churchId) — like every elder. No cross-church exception.
+    function isShepherdAdminOf(churchId) { return request.auth != null && request.auth.token.email_verified == true && request.auth.token.email in ['jcvaught@gmail.com', 'jvaught@fxcc.org'] && isMember(churchId); }
 
     // ── Jobs Hub access (audit H3 + M1, 2026-05-22; COH-012 A.4, 2026-09-17) ─
     // jobsHubActive: the church is entitled — grandfathered, trialing, or paid
@@ -333,17 +348,25 @@ service cloud.firestore {
     // ── Config/shepherdSync — Shepherd Hub sync status (last run, counts,
     //    per-elder load). Read = elder or admin; CF-only write (Admin SDK). ────
     match /churches/{churchId}/config/shepherdSync {
-      allow read:  if isElder() || isShepherdAdmin();
+      allow read:  if isElderOf(churchId) || isShepherdAdminOf(churchId);
       allow write: if false;
     }
 
     // ── Config/shepherdRoster — editable elder roster (names, sign-in emails,
     //    PCO match surnames, active/sabbatical). Drives the claim grant + the
-    //    sync's name-matching. Read = elder or admin; write = admin only (the
-    //    roster-management UI). ────────────────────────────────────────────────
+    //    sync's name-matching. Read = elder or admin; write = server only, via
+    //    the saveShepherdRoster callable the roster-management UI calls. ────────
     match /churches/{churchId}/config/shepherdRoster {
-      allow read:  if isElder() || isShepherdAdmin();
-      allow write: if isShepherdAdmin();
+      allow read:  if isElderOf(churchId) || isShepherdAdminOf(churchId);
+      allow write: if false; // backlog #3: saveShepherdRoster only (writes the access list with it)
+    }
+
+    // ── Config/shepherdAccess — the flat list of emails that may use the
+    //    Shepherd Hub (backlog #3). Derived from the roster by saveShepherdRoster
+    //    in the same transaction; read by isElderOf() via get(), which is not
+    //    subject to this read rule. No client read or write. ─────────────────
+    match /churches/{churchId}/config/shepherdAccess {
+      allow read, write: if false;
     }
 
     // ── Items — members read + update (checkout/return); admins+mgrs create/delete ──
@@ -623,7 +646,7 @@ service cloud.firestore {
     //    PCO-sourced data). NO client write (Admin SDK / sync CF only). Holds
     //    sensitive pastoral data incl. medical_notes.
     match /churches/{churchId}/shepherdPeople/{docId} {
-      allow read:  if isElder() || isShepherdAdmin();
+      allow read:  if isElderOf(churchId) || isShepherdAdminOf(churchId);
       allow write: if false;
     }
 
@@ -632,16 +655,16 @@ service cloud.firestore {
     //    other elders and from admins (Level 1: enforced by rules; Level 2
     //    client-side encryption is the fast-follow). ─────────────────────────
     match /churches/{churchId}/shepherdPeople/{personId}/privateNotes/{ownerUid} {
-      allow read, write: if isElder() && request.auth.uid == ownerUid;
+      allow read, write: if isElderOf(churchId) && request.auth.uid == ownerUid;
     }
 
     // ── Shared care thread — any elder reads/appends; entries are author-owned
     //    (only the authoring elder may edit/delete their own entry — no admin
     //    edit/delete path). Admins do not read by default (elders-only space). ──
     match /churches/{churchId}/shepherdPeople/{personId}/careThread/{entryId} {
-      allow read:   if isElder();
-      allow create: if isElder() && request.resource.data.authorUid == request.auth.uid;
-      allow update, delete: if isElder() && resource.data.authorUid == request.auth.uid;
+      allow read:   if isElderOf(churchId);
+      allow create: if isElderOf(churchId) && request.resource.data.authorUid == request.auth.uid;
+      allow update, delete: if isElderOf(churchId) && resource.data.authorUid == request.auth.uid;
     }
 
     // ── Last-contact stamp (UX-2): a tiny per-person doc holding `lastCareAt`,
@@ -650,8 +673,8 @@ service cloud.firestore {
     //    nightly full-overwrite sync never clobbers it. Non-sensitive (a
     //    timestamp), so any elder may write it. ─────────────────────────────────
     match /churches/{churchId}/shepherdCare/{personId} {
-      allow read:  if isElder() || isShepherdAdmin();
-      allow write: if isElder();
+      allow read:  if isElderOf(churchId) || isShepherdAdminOf(churchId);
+      allow write: if isElderOf(churchId);
     }
 
     // ── Shepherd audit log — every note view/edit + reassignment. Append-only;
@@ -660,8 +683,8 @@ service cloud.firestore {
     //    (personId+personName+actor), metadata about a note promised "only you".
     //    Elders never needed to browse it — it's an accountability record. ──────
     match /churches/{churchId}/shepherdAudit/{entryId} {
-      allow read:   if isShepherdAdmin();
-      allow create: if (isElder() || isShepherdAdmin()) && request.resource.data.actorUid == request.auth.uid;
+      allow read:   if isShepherdAdminOf(churchId);
+      allow create: if (isElderOf(churchId) || isShepherdAdminOf(churchId)) && request.resource.data.actorUid == request.auth.uid;
       allow update, delete: if false;
     }
 
