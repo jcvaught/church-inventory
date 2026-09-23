@@ -24,6 +24,30 @@ mid-deploy during COH-011.
 | 10 | **Budget + Sentry alerts** | Console-only. **A budget alert notifies; it is not a spending ceiling.** `SENTRY-ALERTS.md` still references SendGrid post-Brevo |
 | 11 | **Ask FXCC** before Sunday-readiness, templates, or deep-linking | All three are *hypotheses*. Deep-linking is verified thin (6 of 7 search result types open only the containing hub) but its cost to FXCC is unmeasured |
 
+**Re-ranked 2026-09-23 (owner + Claude + Codex).** Working order from here:
+0. Highland's lapse, 2026-09-30 02:00 CT — first production run of the lapsed path (a check, not a build).
+1. ~~#3 Shepherd scoping~~ → COH-014, built; deploy in the workboard.
+2. COH-013 Part C — measure the users tally, then fix if anyone is exposed.
+3. #4 Complete the Shepherd rollout (owner, no code).
+4. #7 Pin comment attribution.
+5. #6 AC-07 maintenance field authority.
+6. #2 D-8 — **corrected:** the approver picker is not the gap. `firestore.rules`
+   lets ANY member create or update a reservation, including `status` and the
+   approval fields; only the UI stops them. FXCC has 0 reservations, so it stays
+   below the proven-exposure items. Fix = rules pin of status/approval fields to
+   `canApproveReservation`-equivalent roles, plus an adversarial rules test.
+7. **NEW — signup orphan prevention.** Recovery exists as of 2026-09-23
+   (`c976818`: the "Account incomplete" screen can create a church;
+   `scripts/restore-orphaned-signup.cjs` for the Hopeful Trails case). Open is
+   prevention: Auth creation and the Firestore batch cannot be atomic, and
+   cleanup is best-effort (`src/useAuth.js`). Needs a design (server-side create
+   or self-healing) and failure-injection tests.
+8. COH-013 Part A cascade trigger.
+9. #5 Restore rehearsal + runbook.
+10. Owner console: #10 budget + Sentry alerts; revoke the retired Anthropic key (…2gAA).
+11. Small: #8 D-3 supplies; maintenance archive arm; churchCode phase 2.
+12. #11 Ask FXCC, and everything below it, unchanged.
+
 **Re-ranked 2026-09-16 by DEC-2026-022** (disposition of the 2026-08-28 Codex
 review remainder):
 
