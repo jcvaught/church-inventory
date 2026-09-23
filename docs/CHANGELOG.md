@@ -4,6 +4,62 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-09-23 — A first-time admin can no longer get stuck
+
+Two screens assumed somebody had already created the church. The "Account
+incomplete" recovery screen (`ProfileMissingScreen`) accepted only an EXISTING
+church code, and the Register screen offered only "Back to sign in". The sole
+"set up a new church" link lived on the login screen. So the first person from a
+church who landed anywhere else could not go forward — no church to join — and
+could not start over, because their email was already registered. That dead end
+produced the 2026-09-22 support email.
+
+`createChurchForCurrentUser` (src/useAuth.js) creates a church for the user who
+is ALREADY signed in — `createChurch` cannot, since it begins by creating an
+Auth account. Same five-document batch, same COH-012 trial shape. Three states
+are handled rather than two: a genuine duplicate is refused, a church with a
+missing profile is **repaired** by writing only the profile (reachable for any
+pre-S-7 signup, when signup was not yet atomic), and a clean slate gets the full
+batch.
+
+Two deliberate divergences from `registerWithGoogle`, which this is modeled on:
+
+- **No sign-out on failure.** Its S-11 cleanup signs the user out on a bad code.
+  That is how the 2026-09-22 user burned both attempts before emailing support.
+  A typo should not cost you your session.
+- **Names come from the form, not `displayName`.** `createChurch` sets
+  `displayName` after Auth creation, so precisely the orphans this rescues can
+  have none, which would write an admin profile with blank names.
+
+Also: the Register screen now carries the same "set up a new church" link the
+login screen has.
+
+## 2026-09-23 — Welcome email quoted a trial date it invented
+
+`sendWelcomeEmail` computed the trial end as `Date.now() + 90 days` instead of
+reading `config/subscription.trialEndsAt`, which signup writes in the same
+batch. For an ordinary signup the two agree, because both derive from the same
+instant. They disagree for a restored signup, a backdated trial, or any future
+extension — putting a date in writing to a new customer that the product would
+not honour.
+
+Now reads the stored value, falling back to `TRIAL_DAYS` when it is absent,
+`null` (a real value — `setup-e2e-tenant.mjs` writes it for a grandfathered
+tenant) or unparseable. The "90-day" copy derives from `TRIAL_DAYS` too, so the
+number and the date cannot drift apart.
+
+Covered by `functions/test/handlers/sendWelcomeEmail.test.mjs` — stored date,
+same-batch visibility, and all four fallback shapes, asserted as literal date
+strings under UTC (`toLocaleDateString` is zone-dependent near midnight). Both
+date tests were confirmed to FAIL against the old code. Not covered: the
+subscription read throwing — the trigger takes the Admin SDK instance directly
+and the harness exposes no seam, so the try/catch there is reasoned, not tested.
+
+`lookupChurchByCode` gained a test that a caller with NO profile can resolve a
+code. That works only because `assertActiveCaller` fails open on a missing user
+document (COH-011), which is now load-bearing for the escape hatch above —
+tightening it would silently strand first-time admins again.
+
 ## 2026-09-23 — Church code change wrote only half of it
 
 Settings → Church Info → Change wrote the new code to

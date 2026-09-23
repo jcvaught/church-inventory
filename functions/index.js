@@ -1263,8 +1263,29 @@ exports.sendWelcomeEmail = onDocumentCreated('churches/{churchId}', async (event
   const churchCode = escapeHtml(churchData.churchCode || '');
   const firstName = adminName ? escapeHtml(adminName.split(' ')[0]) : 'there';
 
-  // Calculate trial end date for display
-  const trialEnd = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+  // Quote the trial end date the system will actually ENFORCE, not one we
+  // invent here. This used to be Date.now() + 90 days, which happens to agree
+  // with the stored value for an ordinary signup (both derive from the same
+  // instant) and disagrees for anything else — a restored signup, a backdated
+  // trial, a future extension. Getting that wrong means putting a date in
+  // writing to a new customer that the product will not honour.
+  //
+  // trialEndsAt is an ISO string wherever it is written, and that invariant is
+  // already load-bearing in this file (the expiry-warning job slices it). It
+  // can legitimately be null — setup-e2e-tenant writes null for a
+  // grandfathered tenant — so fall back rather than render "Invalid Date".
+  let trialEnd = null;
+  try {
+    const subSnap = await db.doc(`churches/${event.params.churchId}/config/subscription`).get();
+    const stored = subSnap.exists ? subSnap.data().trialEndsAt : null;
+    if (typeof stored === 'string' && stored && !Number.isNaN(Date.parse(stored))) {
+      trialEnd = new Date(stored);
+    }
+  } catch (err) {
+    console.error('sendWelcomeEmail: could not read subscription, falling back', err?.message);
+    Sentry.captureException(err);
+  }
+  if (!trialEnd) trialEnd = new Date(Date.now() + entitlement.TRIAL_DAYS * 24 * 60 * 60 * 1000);
   const trialEndStr = trialEnd.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
   const subject = `Welcome to ChurchOpsHub, ${churchData.churchName || 'your church'}!`;
@@ -1272,7 +1293,7 @@ exports.sendWelcomeEmail = onDocumentCreated('churches/{churchId}', async (event
 <p>Welcome to <strong>ChurchOpsHub</strong>! Your church <strong>${churchName}</strong> is set up and ready to go.</p>
 
 <div style="background:#F0FDF4;border-left:4px solid #0D9488;padding:12px 16px;margin:16px 0;border-radius:4px">
-  <p style="font-weight:700;margin:0 0 6px;font-size:15px">Your 90-day free trial is active</p>
+  <p style="font-weight:700;margin:0 0 6px;font-size:15px">Your ${entitlement.TRIAL_DAYS}-day free trial is active</p>
   <p style="margin:0;font-size:14px;color:#166534">All paid hubs are unlocked through <strong>${trialEndStr}</strong>. No credit card needed.</p>
 </div>
 
@@ -1290,7 +1311,7 @@ exports.sendWelcomeEmail = onDocumentCreated('churches/{churchId}', async (event
 
 <p>— John Vaught<br><span style="font-size:13px;color:#666">ChurchOpsHub</span></p>`;
 
-  const text = `Hi ${firstName},\n\nWelcome to ChurchOpsHub! Your church "${churchData.churchName}" is set up and ready to go.\n\nYour 90-day free trial is active — all paid hubs are unlocked through ${trialEndStr}. No credit card needed.\n\nA few things to get started:\n- Add your first items in the Inventory tab\n- Invite your team with church code: ${churchData.churchCode || ''}\n- Explore the Hubs tab — Maintenance, Tasks, Job Hub, and more\n- Set up your locations and ministries in Settings\n\nHelp Center: https://churchopshub.com/?help\n\nFeel free to reply with any questions.\n\n— John Vaught\nChurchOpsHub`;
+  const text = `Hi ${firstName},\n\nWelcome to ChurchOpsHub! Your church "${churchData.churchName}" is set up and ready to go.\n\nYour ${entitlement.TRIAL_DAYS}-day free trial is active — all paid hubs are unlocked through ${trialEndStr}. No credit card needed.\n\nA few things to get started:\n- Add your first items in the Inventory tab\n- Invite your team with church code: ${churchData.churchCode || ''}\n- Explore the Hubs tab — Maintenance, Tasks, Job Hub, and more\n- Set up your locations and ministries in Settings\n\nHelp Center: https://churchopshub.com/?help\n\nFeel free to reply with any questions.\n\n— John Vaught\nChurchOpsHub`;
 
   // Set sentinel BEFORE send so a CF retry between send-success and update can't dual-send.
   try {

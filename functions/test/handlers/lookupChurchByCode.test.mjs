@@ -59,3 +59,28 @@ for (const [label, sub] of [
     );
   });
 }
+
+// ── The profile-less caller ────────────────────────────────────────────────
+// A user who is authenticated but has NO users/{uid} document reaches this
+// callable from the "Account incomplete" recovery screen, including via the
+// first-person-from-a-church escape hatch, which calls it to reject a duplicate
+// church code. It works only because assertActiveCaller returns early when the
+// user document is absent (COH-011's fail-open). That is deliberate, but it is
+// now load-bearing: tightening it to require a profile would silently strand
+// every first-time admin again — the exact dead end that produced a support
+// email on 2026-09-22. This test is here to make that change fail loudly.
+test('caller with NO users/ profile can still resolve a code', async () => {
+  const code = freshCode();
+  const churchId = await seedChurch(code, { plan: 'free', status: 'trialing', trialEndsAt: FUTURE, grandfathered: false });
+  const orphanUid = fresh(); // deliberately no users/{uid} document
+
+  const out = await funcs.lookupChurchByCode.run(mockCallable(orphanUid, { code }));
+
+  assert.deepEqual(out, { found: true, churchId });
+});
+
+test('caller with NO users/ profile still gets found:false for an unknown code', async () => {
+  const orphanUid = fresh();
+  const out = await funcs.lookupChurchByCode.run(mockCallable(orphanUid, { code: 'NOPE' + fresh() }));
+  assert.deepEqual(out, { found: false });
+});
