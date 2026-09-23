@@ -317,6 +317,135 @@ export function useAuth() {
     }
   }, []);
 
+  // Create a church for the user who is ALREADY signed in.
+  //
+  // createChurch() can't serve this case: it starts by creating an Auth
+  // account, and these users already have one. It is the escape hatch for
+  // anyone who reaches ProfileMissingScreen as the FIRST person from their
+  // church — before this, that screen only accepted an EXISTING church code, so
+  // a first-time admin could not go forward (no church to join) and could not
+  // start over (their email is already registered). That dead end produced a
+  // support email on 2026-09-22; see docs/CHANGELOG.md.
+  const createChurchForCurrentUser = useCallback(async ({ churchName, churchCode, firstName, lastName }) => {
+    setError(null);
+    try {
+      const current = auth.currentUser;
+      if (!current) throw new Error('You are not signed in. Please sign in and try again.');
+
+      const userName = (firstName + ' ' + lastName).trim();
+      const normalizedEmail = (current.email || '').trim().toLowerCase();
+      const churchId = current.uid + '-church';
+      const now = new Date().toISOString();
+
+      // Keep Auth's displayName in step, so the welcome email greets them by
+      // name (functions/index.js reads displayName, not the Firestore profile).
+      if (userName && current.displayName !== userName) {
+        await updateProfile(current, { displayName: userName });
+      }
+
+      // Three states are reachable here, and only one of them is an error.
+      // Signup became atomic with S-7; a pre-S-7 partial signup can leave a
+      // church document with no profile, and rejecting that (as the
+      // one-church-per-email check in createChurch does) would leave exactly
+      // the user this screen exists to rescue still stranded.
+      const ownChurchSnap = await getDoc(doc(db, 'churches', churchId));
+      const ownProfileSnap = await getDoc(doc(db, 'users', current.uid));
+
+      if (ownChurchSnap.exists() && ownProfileSnap.exists()) {
+        throw new Error('This account has already set up a church. Try signing in instead.');
+      }
+
+      if (ownChurchSnap.exists()) {
+        // Repair: the church survived, the profile didn't. Adopt the church as
+        // it stands — do NOT overwrite it with the values from this form.
+        const existing = ownChurchSnap.data();
+        const repaired = {
+          name: userName || normalizedEmail,
+          firstName,
+          lastName,
+          email: normalizedEmail,
+          role: 'admin',
+          churchId,
+          active: true,
+          createdAt: now,
+          lastLogin: now,
+        };
+        await setDoc(doc(db, 'users', current.uid), repaired);
+        setUserProfile({ id: current.uid, uid: current.uid, ...repaired });
+        setProfileMissing(false);
+        return { success: true, repaired: true, churchName: existing.churchName };
+      }
+
+      // findChurchByCode routes through the lookupChurchByCode callable, which
+      // tolerates a caller with no profile only because assertActiveCaller
+      // returns early when the user doc is absent (functions/index.js). That
+      // fail-open is deliberate (COH-011) but it is load-bearing HERE: tighten
+      // it and first-time admins are stranded again. Covered by a handler test.
+      const existingCode = await findChurchByCode(churchCode);
+      if (existingCode) {
+        throw new Error('This church code is already in use. Please choose another.');
+      }
+
+      const trialEndsAt = new Date(Date.parse(now) + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      const profile = {
+        name: userName || normalizedEmail,
+        firstName,
+        lastName,
+        email: normalizedEmail,
+        role: 'admin',
+        churchId,
+        active: true,
+        createdAt: now,
+        lastLogin: now,
+      };
+
+      // Same batch as createChurch (S-7): all five documents or none.
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'churches', churchId), {
+        churchName,
+        churchCode: churchCode.toUpperCase(),
+        createdBy: current.uid,
+        createdAt: now,
+      });
+      batch.set(doc(db, 'users', current.uid), profile);
+      batch.set(doc(db, 'churches', churchId, 'config', 'main'), {
+        churchName,
+        churchCode: churchCode.toUpperCase(),
+        createdBy: current.uid,
+        createdAt: now,
+      });
+      batch.set(doc(db, 'churches', churchId, 'config', 'settings'), {
+        locations: DEFAULT_LOCATIONS,
+        ministries: DEFAULT_MINISTRIES,
+        tags: DEFAULT_TAGS,
+      });
+      batch.set(doc(db, 'churches', churchId, 'config', 'subscription'), {
+        plan: 'free',
+        status: 'trialing',
+        trialStartedAt: now,
+        trialEndsAt,
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        currentPeriodEnd: null,
+        grandfathered: false,
+        createdAt: now,
+      });
+      await batch.commit();
+
+      // BOTH are required: App.jsx renders the auth screen while userProfile is
+      // null, so clearing profileMissing alone would drop them out of the app.
+      setUserProfile({ id: current.uid, uid: current.uid, ...profile });
+      setProfileMissing(false);
+      return { success: true };
+    } catch (err) {
+      // Deliberately NOT registerWithGoogle's S-11 sign-out-on-failure. Being
+      // ejected for a typo is how the 2026-09-22 user burned two attempts
+      // before giving up and emailing support. Keep the session; show the error.
+      setError(err.message);
+      return { success: false, error: err.message };
+    }
+  }, []);
+
   // Register with church code
   const register = useCallback(async ({ firstName, lastName, email, password, churchCode, allowedHubs }) => {
     const userName = (firstName + ' ' + lastName).trim();
@@ -582,6 +711,7 @@ export function useAuth() {
     error,
     setError,
     createChurch,
+    createChurchForCurrentUser,
     register,
     login,
     loginWithGoogle,

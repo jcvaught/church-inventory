@@ -299,6 +299,8 @@ function AuthScreen({ authHook, initialMode = 'login', onBack }) {
           </button>
           <div style={{ textAlign:"center", marginTop:16 }}>
             <button onClick={()=>{setMode("login");setError(null);}} style={{ background:"none", border:"none", color:B.teal, fontWeight:600, cursor:"pointer", fontSize:13, fontFamily:f1 }}>Back to sign in</button>
+            <span style={{ fontSize:13, color:B.textLight }}> or </span>
+            <button onClick={()=>{setMode("createChurch");setError(null);}} style={{ background:"none", border:"none", color:B.teal, fontWeight:600, cursor:"pointer", fontSize:13, fontFamily:f1 }}>set up a new church</button>
           </div>
         </div>
       )}
@@ -446,9 +448,19 @@ export default function App() {
 }
 
 function ProfileMissingScreen({ authHook }) {
-  const { user, logout, registerWithGoogle, error, setError } = authHook;
+  const { user, logout, registerWithGoogle, createChurchForCurrentUser, error, setError } = authHook;
   const [recoverCode, setRecoverCode] = useState('');
   const [recovering, setRecovering] = useState(false);
+  // 'join' is the common case and stays the default. 'create' is the escape
+  // hatch for the FIRST person from a church, who has no code to enter and,
+  // before this existed, no way out of this screen at all.
+  const [recoverMode, setRecoverMode] = useState('join');
+  const nameParts = (user?.displayName || '').trim();
+  const spaceIdx = nameParts.indexOf(' ');
+  const [newFirst, setNewFirst] = useState(spaceIdx >= 0 ? nameParts.slice(0, spaceIdx) : nameParts);
+  const [newLast, setNewLast] = useState(spaceIdx >= 0 ? nameParts.slice(spaceIdx + 1) : '');
+  const [newChurchName, setNewChurchName] = useState('');
+  const [newChurchCode, setNewChurchCode] = useState('');
   // Hubs from an invite captured earlier this tab session, if any (so a
   // recovered account keeps its intended hub access; null = inherit all).
   const savedHubs = (() => {
@@ -464,6 +476,18 @@ function ProfileMissingScreen({ authHook }) {
     // proceeds. On a bad code it signs the user out (existing S-11 behavior).
     const res = await registerWithGoogle({ churchCode: recoverCode, allowedHubs: savedHubs });
     if (res?.success) { try { sessionStorage.removeItem('coh_invite'); } catch { /* ignore */ } }
+    setRecovering(false);
+  };
+  const canCreate = newFirst.trim() && newLast.trim() && newChurchName.trim() && newChurchCode.trim();
+  const handleCreateChurch = async () => {
+    setError(null);
+    setRecovering(true);
+    await createChurchForCurrentUser({
+      churchName: newChurchName.trim(),
+      churchCode: newChurchCode.trim(),
+      firstName: newFirst.trim(),
+      lastName: newLast.trim(),
+    });
     setRecovering(false);
   };
   const supportSubject = encodeURIComponent('ChurchOpsHub: account incomplete after signup');
@@ -488,22 +512,62 @@ function ProfileMissingScreen({ authHook }) {
           <div style={{ fontWeight:600, color:B.navy, fontFamily:f1, marginBottom:4 }}>Signed in as</div>
           <div style={{ wordBreak:'break-all' }}>{user?.email || '(no email)'}</div>
         </div>
-        <p style={{ fontSize:13, color:B.textMid, lineHeight:1.6, marginBottom:12 }}>
-          Finish setting up your account — enter your church code below:
-        </p>
-        <FF label="Church Code">
-          <input
-            style={{ ...inp, fontFamily:'monospace', letterSpacing:2, textTransform:'uppercase' }}
-            value={recoverCode}
-            onChange={e=>{ setRecoverCode(e.target.value); setError(null); }}
-            onKeyDown={e=>e.key==='Enter'&&recoverCode&&!recovering&&handleComplete()}
-            placeholder="e.g. FXCC"
-          />
-        </FF>
-        {error && <p style={{ color:B.red, fontSize:13, fontWeight:600, margin:'0 0 12px' }}>{error}</p>}
-        <button onClick={handleComplete} disabled={recovering||!recoverCode} style={{ ...btnP, width:'100%', marginBottom:16, opacity:(recovering||!recoverCode)?.5:1 }}>
-          {recovering ? 'Completing…' : 'Complete registration'}
-        </button>
+        {recoverMode === 'join' ? (
+          <>
+            <p style={{ fontSize:13, color:B.textMid, lineHeight:1.6, marginBottom:12 }}>
+              Finish setting up your account — enter your church code below:
+            </p>
+            <FF label="Church Code">
+              <input
+                style={{ ...inp, fontFamily:'monospace', letterSpacing:2, textTransform:'uppercase' }}
+                value={recoverCode}
+                onChange={e=>{ setRecoverCode(e.target.value); setError(null); }}
+                onKeyDown={e=>e.key==='Enter'&&recoverCode&&!recovering&&handleComplete()}
+                placeholder="e.g. FXCC"
+              />
+            </FF>
+            {error && <p style={{ color:B.red, fontSize:13, fontWeight:600, margin:'0 0 12px' }}>{error}</p>}
+            <button onClick={handleComplete} disabled={recovering||!recoverCode} style={{ ...btnP, width:'100%', marginBottom:12, opacity:(recovering||!recoverCode)?.5:1 }}>
+              {recovering ? 'Completing…' : 'Complete registration'}
+            </button>
+            <p style={{ fontSize:13, color:B.textMid, lineHeight:1.6, marginBottom:20, textAlign:'center' }}>
+              Don't have a code?{' '}
+              <button onClick={()=>{ setRecoverMode('create'); setError(null); }} style={{ background:'none', border:'none', color:B.teal, fontWeight:600, cursor:'pointer', fontSize:13, fontFamily:f1, padding:0 }}>
+                I'm the first person from my church
+              </button>
+            </p>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize:13, color:B.textMid, lineHeight:1.6, marginBottom:12 }}>
+              Set up your church. You'll be the admin, and the code you choose is
+              what your team will use to join.
+            </p>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+              <FF label="First Name"><input style={inp} value={newFirst} onChange={e=>{ setNewFirst(e.target.value); setError(null); }} placeholder="John"/></FF>
+              <FF label="Last Name"><input style={inp} value={newLast} onChange={e=>{ setNewLast(e.target.value); setError(null); }} placeholder="Smith"/></FF>
+            </div>
+            <FF label="Church Name"><input style={inp} value={newChurchName} onChange={e=>{ setNewChurchName(e.target.value); setError(null); }} placeholder="e.g. Fairfax Church of Christ"/></FF>
+            <FF label="Church Code (your team will use this to join)">
+              <input
+                style={{ ...inp, fontFamily:'monospace', letterSpacing:2, textTransform:'uppercase' }}
+                value={newChurchCode}
+                onChange={e=>{ setNewChurchCode(e.target.value.toUpperCase()); setError(null); }}
+                onKeyDown={e=>e.key==='Enter'&&canCreate&&!recovering&&handleCreateChurch()}
+                placeholder="e.g. FXCC"
+              />
+            </FF>
+            {error && <p style={{ color:B.red, fontSize:13, fontWeight:600, margin:'0 0 12px' }}>{error}</p>}
+            <button onClick={handleCreateChurch} disabled={recovering||!canCreate} style={{ ...btnP, width:'100%', marginBottom:12, opacity:(recovering||!canCreate)?.5:1 }}>
+              {recovering ? 'Setting up…' : 'Create church'}
+            </button>
+            <p style={{ fontSize:13, color:B.textMid, lineHeight:1.6, marginBottom:20, textAlign:'center' }}>
+              <button onClick={()=>{ setRecoverMode('join'); setError(null); }} style={{ background:'none', border:'none', color:B.teal, fontWeight:600, cursor:'pointer', fontSize:13, fontFamily:f1, padding:0 }}>
+                I have a church code after all
+              </button>
+            </p>
+          </>
+        )}
         <p style={{ fontSize:13, color:B.textMid, lineHeight:1.6, marginBottom:20 }}>
           Still stuck? Email <a href={`mailto:churchopshub@gmail.com?subject=${supportSubject}&body=${supportBody}`} style={{ color:B.teal, fontWeight:600 }}>churchopshub@gmail.com</a> and we'll restore your account, usually within a few hours.
         </p>
