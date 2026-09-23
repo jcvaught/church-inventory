@@ -44,11 +44,16 @@ review remainder):
   navigation consolidation.
 
 **Added 2026-09-23 — `churchCode` / `churchName` live in two documents.**
-The client and the server read the same fact from *different* places:
-everything server-side reads the parent `churches/{id}` (`lookupChurchByCode`
-resolves joins there, and every email that names the church reads it there),
-while the client reads `config/main` through the store's listener
-(`config.churchCode`, `config.churchName`). Nothing keeps them in step.
+Reads are split across both documents with no rule about which wins. The
+client reads `config/main` through the store's listener (`config.churchCode`,
+`config.churchName`). Server-side it is mixed: `lookupChurchByCode` resolves
+joins against the **parent**, as do most emails that name the church — but
+three notification paths read **`config/main`** instead
+(`sendJobCancelledEmails` :3376, `sendWaitlistPromotionNotifications` :3528,
+the @mention email :3813). The four weekly digests read the parent and then
+fall back to `settings.churchName`, a third location that is never written and
+exists in no tenant — dead code to remove with this. Nothing keeps any of it
+in step.
 
 The one writer that could desync them — Settings → Change code — was fixed
 2026-09-23 (`updateChurchCode` writes both in a batch), and all 8 tenants were
@@ -57,7 +62,8 @@ structural hazard: any future writer that touches one document and not the
 other silently breaks joining, invite links, or the church name on outbound
 email, with no error anywhere. `churchName` has the identical split and is
 currently display-only (`SettingsPage.jsx:960`) — the day it becomes editable
-is the day this recurs.
+is the day this recurs, and it would recur in exactly the three notification
+paths above while looking correct everywhere else.
 
 Two steps, in order:
 1. **Document the invariant** — a CLAUDE.md Known Pitfall naming the split and
@@ -66,9 +72,12 @@ Two steps, in order:
 2. **Collapse to one source of truth** — the parent document, since the server
    already treats it as authoritative and joining queries it. Point the client
    at the parent (rules already permit a member `get`, `firestore.rules:269`)
-   and stop treating `config/main`'s copies as meaningful. No backfill needed;
-   the values are currently identical everywhere. `config/main` still holds
-   `onboardingComplete` and friends, so the document stays.
+   and stop treating `config/main`'s copies as meaningful. This **does** need a
+   backfill: once nothing writes them, the copies left in `config/main` are
+   stale bait for the next reader, so they should be deleted. Values are
+   identical in all 8 tenants today, so the deletion is safe to do at leisure.
+   `config/main` still holds `onboardingComplete` and friends, so the document
+   stays.
 
 Not proposed: a mirroring trigger, or a scheduled drift check. Both add
 machinery to defend a single-writer field; revisit only if a second writer
