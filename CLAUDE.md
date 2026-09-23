@@ -317,6 +317,30 @@ All phase work and dated fixes: `docs/CHANGELOG.md`.
 
 ## Known Pitfalls
 
+### 🟡 A field stored in two documents will drift — `churchName` / `churchCode`
+
+`churchName` and `churchCode` live on the parent `churches/{id}` **and** on
+`churches/{id}/config/main`. **The parent is authoritative** (DEC-2026-023): it
+is what `lookupChurchByCode` resolves joins against, and the only one of the two
+that cannot be removed. As of 2026-09-23 every reader — the client via the
+store's merged `config`, and every handler — takes these fields from the parent.
+
+Two rules when touching them:
+
+- **Write through `updateChurchCode`**, which writes both documents in one
+  batch. `updateConfig` strips these fields deliberately. Rules do *not* enforce
+  this yet and cannot while both documents are written, because
+  `updateChurchCode` is itself a client writer needing that permission —
+  `functions/test/rules/core-collections.test.mjs` records the gap.
+- **Never add a reader of `config/main.churchName` / `.churchCode`.**
+  `functions/test/handlers/churchNameSource.test.mjs` fails the build if you do.
+
+The original bug: Settings wrote only `config/main`, joining read the parent, so
+a changed code showed in the UI and in invite links, silently failed to let
+anyone join, and left the old code working — with no error anywhere. `config/main`
+still duplicates `churchName`/`churchCode` for compatibility with already-open
+tabs; retiring those copies is a backlog item, not a free cleanup.
+
 ### 🔴 Import name shadowing → TDZ crash in production
 Never re-declare an imported name as a local `const`/`let` inside a function body in the same file. esbuild's minifier assigns the same short name to both, creating a Temporal Dead Zone error ("Cannot access 'X' before initialization") that crashes the app in production but is invisible in development.
 

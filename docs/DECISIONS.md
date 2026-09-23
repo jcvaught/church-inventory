@@ -1172,3 +1172,41 @@ activity rows and trends to zero coverage. COH-012 part B.
 
 **New small item** — COH-007 gave tasks an archive arm and gave maintenance
 nothing (`src/useFirestore.js:311`).
+
+### DEC-2026-023 — The parent church document owns churchName and churchCode
+
+- Date: 2026-09-23
+- Status: Accepted
+- Deciders: Owner; Claude implemented, Codex reviewed (three rounds, SHIP WITH FIXES)
+- Related tasks/docs: `docs/CHANGELOG.md` 2026-09-23 entries; `docs/backlog.md`
+- Context: `churchName` and `churchCode` were stored on both
+  `churches/{id}` and `churches/{id}/config/main`, with reads split across the
+  two and nothing keeping them in step. Settings → Change code wrote only
+  `config/main` while joining resolved against the parent, so a changed code
+  displayed everywhere, went into invite links, and silently failed to let
+  anyone join — while the old code kept working, with no error anywhere.
+- Decision: the **parent `churches/{id}` is authoritative**. Every reader,
+  client and server, takes these two fields from it. `updateChurchCode` is the
+  only sanctioned writer and writes both documents atomically; `updateConfig`
+  strips the fields. Migration is phased: phase 1 (shipped) repoints all
+  readers and keeps writing both documents; phase 2 (deferred, backlog) stops
+  writing the copy and deletes it.
+- Alternatives considered: (a) `config/main` as the source — rejected, the
+  parent is what joining queries and the only one of the two that cannot be
+  removed; (b) a mirroring trigger between the documents — rejected as moving
+  parts, loops and races to defend a single-writer field; (c) a scheduled drift
+  check — rejected for the same reason; (d) deleting the copies immediately —
+  rejected, see Consequences.
+- Consequences: the hazard is gone, since no reader consults the copy. Costs: a
+  second listener per session, and `config` is now assembled from two documents
+  (both states reset on a `churchId` change, or a transition could show the new
+  church's config with the previous church's name). Deletion of the copies
+  cannot be bundled in: already-open tabs keep listening to `config/main`, so
+  removing the fields blanks the church code mid-session for anyone who does not
+  reload, and no deploy ordering avoids it. Rules-level enforcement is likewise
+  blocked until then — denying these fields on `config/main` would break
+  `updateChurchCode`, a client writer that needs exactly that permission. A
+  rules test records the current permissive behaviour so the day it changes is
+  deliberate. Rollback: revert the commit; no data changed.
+- Follow-up: phase 2 when no old bundle plausibly survives — stop writing the
+  copies, delete them with a guarded script, then close the rules gap.
