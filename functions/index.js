@@ -1475,9 +1475,18 @@ exports.notifyAdminsOfNewMember = onDocumentCreated('users/{uid}', async (event)
 
   try {
     await sendEmailSafe({ to: admins.map(a => a.email), from: FROM, replyTo: 'jcvaught@gmail.com', subject, html, text });
-    await userRef.update({ newMemberNotifiedAt: new Date().toISOString() });
   } catch (err) {
     console.error('notifyAdminsOfNewMember: send failed', err?.response?.body || err);
+    Sentry.captureException(err);
+    return;
+  }
+  // The member can be deleted before we get here (the COH-014 probe creates and
+  // deletes its user within seconds) — nothing left to stamp, not an error.
+  try {
+    await userRef.update({ newMemberNotifiedAt: new Date().toISOString() });
+  } catch (err) {
+    if (err?.code === 5) return; // NOT_FOUND
+    console.error('notifyAdminsOfNewMember: stamp failed', err);
     Sentry.captureException(err);
   }
 });
