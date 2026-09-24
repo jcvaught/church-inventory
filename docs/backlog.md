@@ -14,7 +14,7 @@ mid-deploy during COH-011.
 |---|---|---|
 | 1 | ~~**Offboarding is a false promise**~~ (COH-011) | ✅ **COMPLETE 2026-09-10, all four stages verified in production.** Seven rules bypasses closed, 22 callables guarded, `setMemberActive` live, `active` pinned callable-only. The `identifyItem` gap (item 9) closed 2026-09-18 — all 23 callables guarded |
 | 2 | **D-8 reservation approval** (COH-005) | Any member can approve their own booking. **Not blocked** — the approver picker only offers admins/managers, so there is no designated-approver conflict |
-| 3 | ~~**Shepherd scoping + roster roll-off**~~ (COH-014) | **Built 2026-09-23, DEC-2026-024; deploy status in `docs/AI-WORKBOARD.md` COH-014.** Owner decision: an elder sees the whole directory of their OWN church (medical notes included) and nothing of any other; John's admin access is limited to FXCC too. (a) closed by `isElderOf(churchId)`/`isShepherdAdminOf(churchId)`; (b) closed by `config/shepherdAccess`, written with the roster in one transaction by `saveShepherdRoster`, so removal denies at commit; (c) answered by the owner (whole directory). Level-2 note encryption stays shelved |
+| 3 | ~~**Shepherd scoping + roster roll-off**~~ (COH-014) | ✅ **DEPLOYED + VERIFIED 2026-09-24** (DEC-2026-024; receipts in `docs/AI-WORKBOARD.md` COH-014 — production probe 3/3). Owner decision: an elder sees the whole directory of their OWN church (medical notes included) and nothing of any other; John's admin access is limited to FXCC too. (a) closed by `isElderOf(churchId)`/`isShepherdAdminOf(churchId)`; (b) closed by `config/shepherdAccess`, written with the roster in one transaction by `saveShepherdRoster`, so removal denies at commit; (c) answered by the owner (whole directory). Level-2 note encryption stays shelved |
 | 4 | **Complete the Shepherd rollout** (D-2/D-3 in the launch plan) | No code. A purpose-built FXCC workflow has been live since 2026-08-04 with one of eight elders signed up and the digest still dark. Activating built work beats building more |
 | 5 | **Restore rehearsal + runbook scope** | Backups and PITR verified healthy, so the copy exists; what is unknown is recovery *time and procedure*. Scope honestly: a Firestore restore does not restore Auth, Storage photos, secrets, or PCO state |
 | 6 | **AC-07 — maintenance field authority** | `type == 'maintenance'` short-circuits the whole update guard (`firestore.rules:403`); any member rewrites cost, assignment, recurrence, status. Accepted under a multi-tenant frame; reconsider under this one, where the risk is accidental damage by real volunteers |
@@ -26,7 +26,7 @@ mid-deploy during COH-011.
 
 **Re-ranked 2026-09-23 (owner + Claude + Codex).** Working order from here:
 0. Highland's lapse, 2026-09-30 02:00 CT — first production run of the lapsed path (a check, not a build).
-1. ~~#3 Shepherd scoping~~ → COH-014, built; deploy in the workboard.
+1. ~~#3 Shepherd scoping~~ → COH-014, ✅ deployed + verified 2026-09-24.
 2. COH-013 Part C — measure the users tally, then fix if anyone is exposed.
 3. #4 Complete the Shepherd rollout (owner, no code).
 4. #7 Pin comment attribution.

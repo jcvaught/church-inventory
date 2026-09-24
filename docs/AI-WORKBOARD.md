@@ -55,13 +55,18 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ### COH-014 — Shepherd access: own church only, revoked on roster save (backlog #3)
 
-- Status: **Built 2026-09-23 on `coh-014-shepherd-scoping`; Codex
-  implementation review 2 rounds (R1 REWORK → fixed: map-keys `in`, email-less
-  token, rollout order; R2 → drift repair + rollback procedure added; the
-  remaining items were procedural and are in the runbook below). Next: owner go
-  for step 1, then the staged deploy.** Owner decisions 2026-09-23: whole
-  directory of the elder's own church, nothing cross-church; John's admin access
-  limited to FXCC. DEC-2026-024.
+- Status: **✅ DEPLOYED + VERIFIED 2026-09-24.** All 7 rollout steps done in
+  order: access list backfilled (11 emails / 8 elders, read-back matched) →
+  6 functions deployed, each onCall probed 401 JSON → client merged to main
+  (`ccd528e`) → `--check` IN SYNC → rules deployed → `--check` IN SYNC →
+  production probe `scripts/probe-coh014-shepherd-access.cjs` 3/3 PASS in
+  `e2e-test-church` (listed → 200; FXCC → 403; removed from the list with the
+  same `elder:true` token → 403; probe user + access doc cleaned up). Built
+  2026-09-23; Codex implementation review 2 rounds (R1 REWORK → fixed: map-keys
+  `in`, email-less token, rollout order; R2 → drift repair + rollback
+  procedure). Owner decisions 2026-09-23: whole directory of the elder's own
+  church, nothing cross-church; John's admin access limited to FXCC.
+  DEC-2026-024.
 - Owner: Claude (implementation) · Reviewer: Codex (plan: 2 rounds, closed;
   implementation: pending)
 - Plan: `~/.claude/plans/most-of-those-mcp-velvet-book.md` (session plan file)

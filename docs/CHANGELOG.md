@@ -4,6 +4,18 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-09-24 — COH-014 deployed to production and verified
+
+Staged rollout per the workboard, in order: `backfill-shepherd-access.cjs
+--apply` (11 emails / 8 elders) → the six Shepherd callables (each probed 401
+JSON — no IAM strip) → client to main (`ccd528e`) → drift check IN SYNC →
+`firestore:rules` → drift check IN SYNC → new
+`scripts/probe-coh014-shepherd-access.cjs` against `e2e-test-church`, 3/3 PASS:
+a listed elder reads their own church's `shepherdPeople` (200), is denied
+FXCC's (403), and is denied the moment their email leaves the access list
+while the same token still carries `elder:true` (403). The probe creates and
+deletes its own user and access doc; re-runnable.
+
 ## 2026-09-23 — COH-014: Shepherd access bound to the elder's own church, revoked on roster save (DEC-2026-024)
 
 Backlog #3. Owner decision: every elder sees the whole directory of their own
