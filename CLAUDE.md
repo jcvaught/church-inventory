@@ -335,6 +335,11 @@ profile **in that church**, and the email on that list. `isShepherdAdminOf` /
   name-matching (`getShepherdRoster`); a missing access doc must deny.
 - New elder-gated rule or callable → add it to `elderOps()` in
   `functions/test/rules/shepherd-rules.test.mjs` or `shepherdAccess.test.mjs`.
+- **Production check:** `node scripts/backfill-shepherd-access.cjs --check`
+  (roster ≡ access list; `--repair` rebuilds the list from the roster) and
+  `node scripts/probe-coh014-shepherd-access.cjs` (throwaway elder in
+  `e2e-test-church`: own church 200, FXCC 403, removed-with-live-token 403;
+  cleans up after itself). Both passed at the 2026-09-24 deploy.
 
 ### 🟡 A field stored in two documents will drift — `churchName` / `churchCode`
 
