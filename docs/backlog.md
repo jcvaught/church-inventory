@@ -27,7 +27,13 @@ mid-deploy during COH-011.
 **Re-ranked 2026-09-23 (owner + Claude + Codex).** Working order from here:
 0. Highland's lapse, 2026-09-30 02:00 CT — first production run of the lapsed path (a check, not a build).
 1. ~~#3 Shepherd scoping~~ → COH-014, ✅ deployed + verified 2026-09-24.
-2. COH-013 Part C — measure the users tally, then fix if anyone is exposed.
+2. ~~COH-013 Part C — measure the users tally, then fix if anyone is exposed.~~
+   **Measured 2026-09-24: 0 exposed → deferred.** All tenants: exactly one
+   manager in production (FXCC), and they have Jobs access; FXCC's 7 non-Jobs
+   members are all role `user`. Part C is now defence-in-depth, built when the
+   trigger fires: **the first manager anywhere scoped out of Jobs** (re-run the
+   role × allowedHubs tally before any hub-scoping change for a manager).
+   Plan unchanged in the COH-013 doc, Part C.
 3. #4 Complete the Shepherd rollout (owner, no code).
 4. #7 Pin comment attribution.
 5. #6 AC-07 maintenance field authority.
