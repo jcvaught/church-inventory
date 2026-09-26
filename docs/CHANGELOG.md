@@ -29,6 +29,15 @@ entries are fixed to the elder who wrote them and are elders-only.
   went live; `node scripts/probe-attribution.cjs` (throwaway users in
   e2e-test-church, REST as each user) → **16/16 PASS**, cleaned up. Prod
   pre-check: all 38 profiles have a string `name`.
+- **Post-ship Codex review (round 4, whole session):** probe users renamed to
+  the `e2e-` prefix (the new-member trigger emails church admins and
+  `sendEmailSafe` skips only `e2e…@churchopshub.com` — the probe's own admin
+  would have received a real email; Brevo confirmed none was sent, by timing
+  luck); probe cleanup steps made independent. `notifyAdminsOfNewMember`'s
+  comment corrected — it has no retry policy, so a failed send is lost, not
+  delivered later (pre-existing; behaviour unchanged). Real-UI check:
+  `work-unification-gaps.spec.js` "unified comments" (task + ticket comment
+  through the app) passes against the new rules.
 
 ## 2026-09-24 — COH-014 deployed to production and verified
 

@@ -87,7 +87,10 @@ async function read(token, path) {
 
   try {
     for (const [k, p] of Object.entries(people)) {
-      p.email = `attr-probe-${k}-${ts}@churchopshub.com`;
+      // The e2e prefix matters: creating these users fires notifyAdminsOfNewMember,
+      // and sendEmailSafe skips only /^e2e…@churchopshub.com/ — any other address
+      // (including this probe's own admin) would get a real email.
+      p.email = `e2e-attr-probe-${k}-${ts}@churchopshub.com`;
       ({ uid: p.uid } = await auth.createUser({ email: p.email, emailVerified: true }));
       if (p.elder) await auth.setCustomUserClaims(p.uid, { elder: true });
       await db.doc(`users/${p.uid}`).set({ churchId: E2E, role: p.role, active: true, email: p.email, name: p.name });
@@ -129,18 +132,26 @@ async function read(token, path) {
     expect('member reads the entry → denied', await read(a.token, e1), 403);
     expect('elder deletes own entry → allowed', await write(elder.token, e1, 'delete'), 200);
   } finally {
-    await db.recursiveDelete(db.doc(taskPath));
-    await db.recursiveDelete(db.doc(personPath));
-    if (accessCreated) await accessRef.delete();
-    for (const p of Object.values(people)) {
-      if (!p.uid) continue;
-      await db.doc(`users/${p.uid}`).delete();
-      await auth.deleteUser(p.uid);
+    // Every step runs even if an earlier one fails — a leftover access doc
+    // would keep granting Shepherd access to a probe address.
+    const steps = [
+      ['access doc', () => accessCreated && accessRef.delete()],
+      ['probe task', () => db.recursiveDelete(db.doc(taskPath))],
+      ['care entries', () => db.recursiveDelete(db.doc(personPath))],
+      ...Object.entries(people).filter(([, p]) => p.uid).flatMap(([k, p]) => [
+        [`users/${k}`, () => db.doc(`users/${p.uid}`).delete()],
+        [`auth/${k}`, () => auth.deleteUser(p.uid)],
+      ]),
+    ];
+    const failed = [];
+    for (const [label, fn] of steps) {
+      try { await fn(); } catch (e) { failed.push(`${label}: ${e.message}`); }
     }
-    console.log('cleanup: probe task, care entries, access doc and probe users deleted');
+    console.log(failed.length ? `CLEANUP INCOMPLETE — remove by hand:\n  ${failed.join('\n  ')}` : 'cleanup: complete');
+    if (failed.length) process.exitCode = 1;
   }
   for (const r of results) console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.label}  (HTTP ${r.got}, want ${r.want})`);
   const ok = results.length === 16 && results.every(r => r.ok);
   console.log(ok ? 'ALL PASS' : 'FAILURES ABOVE');
-  process.exit(ok ? 0 : 1);
+  process.exit(ok && process.exitCode !== 1 ? 0 : 1);
 })().catch(e => { console.error('Failed:', e.message); process.exit(1); });

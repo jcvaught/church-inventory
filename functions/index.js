@@ -1413,10 +1413,12 @@ exports.sendWelcomeEmail = onDocumentCreated('churches/{churchId}', async (event
 // the church's admins so they know someone joined and can review/adjust that
 // member's hub access (Settings → Team Members). Skips church creators (role
 // admin) so a brand-new church doesn't self-notify.
-// NOTE: the sentinel is only written on a *successful* send, so a join during
-// an email outage isn't permanently marked "notified" — it'll deliver once
-// email is restored (vs. sendWelcomeEmail's set-before-send dual-send guard;
-// a rare duplicate admin notice is harmless, a missed one isn't).
+// NOTE: the sentinel is only written on a *successful* send. This trigger has
+// no retry policy, so a send that fails (Brevo outage) is NOT re-attempted —
+// that notice is lost, and the Sentry capture below is the only record. The
+// ordering still avoids ever marking an undelivered notice as sent (vs.
+// sendWelcomeEmail's set-before-send dual-send guard; a rare duplicate admin
+// notice is harmless).
 const NEW_MEMBER_HUB_LABEL = {
   maintenance: 'Maintenance', insights: 'Insights', coordination: 'Coordination',
   accountability: 'Accountability', people_access: 'People Access', tasks: 'Tasks', jobs: 'Job',
