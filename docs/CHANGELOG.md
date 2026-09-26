@@ -25,6 +25,10 @@ entries are fixed to the elder who wrote them and are elders-only.
   confirmed to FAIL against the previous rules. Three Codex adversarial rounds;
   accepted residual (self-chosen name via self-delete + re-create) recorded in
   CLAUDE.md. Pre-existing task-delete batch bug filed in the backlog.
+- **Deployed + verified 2026-09-26:** rules deployed after web build `4f5f70b`
+  went live; `node scripts/probe-attribution.cjs` (throwaway users in
+  e2e-test-church, REST as each user) → **16/16 PASS**, cleaned up. Prod
+  pre-check: all 38 profiles have a string `name`.
 
 ## 2026-09-24 — COH-014 deployed to production and verified
 
