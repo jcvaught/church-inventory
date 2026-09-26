@@ -4,6 +4,12 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-09-26',
+    tag: 'Improved',
+    title: 'Comments always stay in their author\'s words',
+    body: "A comment on a task or maintenance ticket now always shows who really wrote it, and only that person can edit it. Admins and managers can still delete any comment, but they can no longer change what someone else said. In the Shepherd Hub, care-thread entries are locked to the elder who wrote them — they can't be edited, and only their author can remove them.",
+  },
+  {
     date: '2026-09-17',
     tag: 'Improved',
     title: 'One plan, everything included — $5/month',

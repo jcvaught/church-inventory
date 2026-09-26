@@ -78,8 +78,53 @@ test('private notes are owner-only — another elder cannot read or write them',
 });
 
 test('care thread is author-pinned on create', async () => {
-  await assertSucceeds(addDoc(collection(elderA(), P('shepherdPeople/p1/careThread')), { text: 'hi', authorUid: 'elderA', createdAt: serverTimestamp() }));
-  await assertFails(addDoc(collection(elderA(), P('shepherdPeople/p1/careThread')), { text: 'spoof', authorUid: 'elderB', createdAt: serverTimestamp() }));
+  await assertSucceeds(addDoc(collection(elderA(), P('shepherdPeople/p1/careThread')), { text: 'hi', authorUid: 'elderA', authorName: 'Elder A', createdAt: serverTimestamp() }));
+  await assertFails(addDoc(collection(elderA(), P('shepherdPeople/p1/careThread')), { text: 'spoof', authorUid: 'elderB', authorName: 'Elder A', createdAt: serverTimestamp() }));
+});
+
+// Owner decision 2026-09-26: an entry is fixed to the elder who wrote it.
+test('care thread: the displayed name must be the poster\'s own profile name', async () => {
+  const add = (data) => addDoc(collection(elderA(), P('shepherdPeople/p1/careThread')), { text: 'hi', authorUid: 'elderA', createdAt: serverTimestamp(), ...data });
+  await assertFails(add({ authorName: 'Elder B' }));   // someone else's name
+  await assertFails(add({ authorName: null }));        // blanking a name that exists
+  await assertFails(add({}));                          // omitted
+  await assertSucceeds(add({ authorName: 'Elder A' }));
+});
+
+test('care thread: a nameless profile may post with no name, and only that', async () => {
+  await seed('users/elderA', { churchId: CHURCH, role: 'user', active: true });
+  const add = (data) => addDoc(collection(elderA(), P('shepherdPeople/p1/careThread')), { text: 'hi', authorUid: 'elderA', createdAt: serverTimestamp(), ...data });
+  await assertSucceeds(add({ authorName: null }));
+  await assertFails(add({ authorName: 'Elder B' }));
+  await assertFails(add({}));   // the field is required even with no profile name
+});
+
+test('care thread: createdAt must be the server time, and no extra fields', async () => {
+  const add = (data) => addDoc(collection(elderA(), P('shepherdPeople/p1/careThread')), { text: 'hi', authorUid: 'elderA', authorName: 'Elder A', createdAt: serverTimestamp(), ...data });
+  await assertFails(add({ createdAt: new Date('2020-01-01') }));   // backdated
+  await assertFails(add({ authorUid2: 'elderB' }));                // unexpected field
+  await assertFails(add({ text: 42 }));
+});
+
+test('care thread: entries are never edited — not by the author, not by anyone', async () => {
+  await seed(P('shepherdPeople/p1/careThread/c1'), { text: 'orig', authorUid: 'elderA', authorName: 'Elder A', createdAt: 1 });
+  const ref = (fs) => doc(fs, P('shepherdPeople/p1/careThread/c1'));
+  await assertFails(updateDoc(ref(elderA()), { text: 'edited' }));
+  await assertFails(updateDoc(ref(elderA()), { authorUid: 'elderB', authorName: 'Elder B' }));  // reassigning your own entry
+  await assertFails(updateDoc(ref(elderB()), { text: 'edited' }));
+  await assertFails(updateDoc(ref(owner()), { text: 'edited' }));
+  await assertFails(setDoc(ref(elderB()), { text: 'mine now', authorUid: 'elderB', authorName: 'Elder B', createdAt: serverTimestamp() })); // overwrite = update
+  await assertFails(setDoc(ref(elderA()), { text: 'orig', authorUid: 'elderA', authorName: 'Elder A', createdAt: serverTimestamp() }));
+  await assertFails(deleteDoc(ref(elderB())));                     // another elder cannot delete it
+  await assertFails(deleteDoc(ref(owner())));                      // nor can the admin
+  await assertSucceeds(deleteDoc(ref(elderA())));                  // the author can
+});
+
+test('care thread: admins cannot read it; members cannot read it', async () => {
+  await seed(P('shepherdPeople/p1/careThread/c1'), { text: 'orig', authorUid: 'elderA', authorName: 'Elder A', createdAt: 1 });
+  await assertFails(getDoc(doc(owner(), P('shepherdPeople/p1/careThread/c1'))));
+  await assertFails(getDoc(doc(member(), P('shepherdPeople/p1/careThread/c1'))));
+  await assertSucceeds(getDoc(doc(elderB(), P('shepherdPeople/p1/careThread/c1'))));
 });
 
 test('audit log: elders write but cannot read; admin reads; rows are immutable', async () => {
@@ -161,6 +206,7 @@ const otherElder = () => ctx('elderOther', 'o@other.org');
 
 // Every elder-gated operation, at every rule site, for one context. Returns
 // [label, promise-factory] pairs so each can be asserted either way.
+const ELDER_NAMES = { elderA: 'Elder A', elderRemoved: 'Removed', elderOther: 'Other Elder' };
 function elderOps(fs, base, uid) {
   return [
     ['read shepherdSync',      () => getDoc(doc(fs, `${base}/config/shepherdSync`))],
@@ -169,8 +215,7 @@ function elderOps(fs, base, uid) {
     ['read own private note',  () => getDoc(doc(fs, `${base}/shepherdPeople/p1/privateNotes/${uid}`))],
     ['write own private note', () => setDoc(doc(fs, `${base}/shepherdPeople/p1/privateNotes/${uid}`), { text: 'x' })],
     ['read care thread',       () => getDoc(doc(fs, `${base}/shepherdPeople/p1/careThread/mine`))],
-    ['create care entry',      () => setDoc(doc(fs, `${base}/shepherdPeople/p1/careThread/new1`), { text: 'x', authorUid: uid })],
-    ['update own care entry',  () => updateDoc(doc(fs, `${base}/shepherdPeople/p1/careThread/mine`), { text: 'edited' })],
+    ['create care entry',      () => setDoc(doc(fs, `${base}/shepherdPeople/p1/careThread/new1`), { text: 'x', authorUid: uid, authorName: ELDER_NAMES[uid], createdAt: serverTimestamp() })],
     ['delete own care entry',  () => deleteDoc(doc(fs, `${base}/shepherdPeople/p1/careThread/mine2`))],
     ['read shepherdCare',      () => getDoc(doc(fs, `${base}/shepherdCare/p1`))],
     ['write shepherdCare',     () => setDoc(doc(fs, `${base}/shepherdCare/p1`), { lastCareAt: serverTimestamp() })],

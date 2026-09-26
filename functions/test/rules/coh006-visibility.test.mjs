@@ -242,10 +242,15 @@ test('update: maintenance keeps its any-member workflow and needs no projections
 
 const comment = (uid, itemId, id = 'c1') => getDoc(doc(as(uid), P(`workItems/${itemId}/comments/${id}`)));
 const listComments = (uid, itemId) => getDocs(collection(as(uid), P(`workItems/${itemId}/comments`)));
-const addComment = (uid, itemId, id = 'new') =>
-  setDoc(doc(as(uid), P(`workItems/${itemId}/comments/${id}`)), { text: 'hi', authorId: uid });
+// Profile names as seeded above — a create must carry the poster's own name
+// (attribution pinning, 2026-09-26), so denials below fail on visibility, not shape.
+const NAMES = { creator: 'Creator', recipient: 'Recipient', assignee: 'Assignee', teamMember: 'Member', third: 'Third', boss: 'Admin no access', inactive: 'Inactive', outsider: 'Outsider' };
+const addComment = (uid, itemId, id = 'new', extra = {}) =>
+  setDoc(doc(as(uid), P(`workItems/${itemId}/comments/${id}`)),
+    { text: 'hi', authorId: uid, authorName: NAMES[uid], createdAt: '2026-09-26T12:00:00.000Z', ...extra });
 async function seedComment(itemId, authorId, id = 'c1') {
-  await seed(P(`workItems/${itemId}/comments/${id}`), { text: 'existing', authorId });
+  await seed(P(`workItems/${itemId}/comments/${id}`),
+    { text: 'existing', authorId, authorName: NAMES[authorId] ?? null, createdAt: '2026-09-01T12:00:00.000Z' });
 }
 
 test('comments: readable and writable under maintenance and team tasks', async () => {
@@ -306,14 +311,102 @@ test('comments: authors edit their own; other authorized members cannot', async 
   await assertFails(deleteDoc(ref('third')));
 });
 
-test('comments: an admin moderates only where they can see the parent', async () => {
+test('comments: an admin deletes (never edits) others\' comments, only where they can see the parent', async () => {
   await put('task_team', task({ visibility: 'team' }));
   await put('task_p', task({ visibility: 'private' }));
   await seedComment('task_team', 'teamMember');
   await seedComment('task_p', 'creator');
-  await assertSucceeds(updateDoc(doc(as('boss'), P('workItems/task_team/comments/c1')), { text: 'moderated' }));
+  // Owner decision 2026-09-26: no admin can put words under a member's name.
+  await assertFails(updateDoc(doc(as('boss'), P('workItems/task_team/comments/c1')), { text: 'moderated' }));
+  await assertSucceeds(deleteDoc(doc(as('boss'), P('workItems/task_team/comments/c1'))));
   await assertFails(updateDoc(doc(as('boss'), P('workItems/task_p/comments/c1')), { text: 'moderated' }));
   await assertFails(deleteDoc(doc(as('boss'), P('workItems/task_p/comments/c1'))));
+});
+
+// ── Comments: attribution pinning (owner decision 2026-09-26) ───────────────
+
+test('comments: a create must carry the poster\'s own uid', async () => {
+  await put('task_team', task({ visibility: 'team' }));
+  await assertFails(setDoc(doc(as('teamMember'), P('workItems/task_team/comments/x')),
+    { text: 'hi', authorId: 'creator', authorName: 'Creator', createdAt: '2026-09-26T12:00:00.000Z' }));
+  await assertSucceeds(addComment('teamMember', 'task_team'));
+});
+
+test('comments: the displayed name must be the poster\'s own profile name', async () => {
+  await put('task_team', task({ visibility: 'team' }));
+  await assertFails(addComment('teamMember', 'task_team', 'a', { authorName: 'Creator' }));
+  await assertFails(addComment('teamMember', 'task_team', 'b', { authorName: '' }));   // blanking a real name
+  await assertSucceeds(addComment('teamMember', 'task_team', 'c'));
+});
+
+test('comments: a nameless profile may post an empty name, and only that', async () => {
+  await seed('users/teamMember', { churchId: CHURCH, role: 'user', active: true });
+  await put('task_team', task({ visibility: 'team' }));
+  await assertSucceeds(addComment('teamMember', 'task_team', 'a', { authorName: '' }));
+  await assertFails(addComment('teamMember', 'task_team', 'b', { authorName: 'Creator' }));  // The field itself is required, even when the profile has no name.
+  await assertFails(setDoc(doc(as('teamMember'), P('workItems/task_team/comments/c')),
+    { text: 'hi', authorId: 'teamMember', createdAt: '2026-09-26T12:00:00.000Z' }));
+});
+
+test('comments: unexpected fields are refused on create; mentions are allowed', async () => {
+  await put('task_team', task({ visibility: 'team' }));
+  await assertFails(addComment('teamMember', 'task_team', 'a', { pinned: true }));
+  await assertFails(addComment('teamMember', 'task_team', 'b', { text: 42 }));
+  await assertFails(addComment('teamMember', 'task_team', 'd', { mentions: 'creator' }));
+  await assertSucceeds(addComment('teamMember', 'task_team', 'c', { mentions: ['creator'] }));
+});
+
+test('comments: an author\'s edit may change only the text', async () => {
+  await put('task_team', task({ visibility: 'team' }));
+  await seedComment('task_team', 'teamMember');
+  const ref = doc(as('teamMember'), P('workItems/task_team/comments/c1'));
+  await assertFails(updateDoc(ref, { authorId: 'creator' }));
+  await assertFails(updateDoc(ref, { authorName: 'Creator' }));
+  await assertFails(updateDoc(ref, { createdAt: '2020-01-01T00:00:00.000Z' }));
+  await assertFails(updateDoc(ref, { text: 'edited', updatedAt: 12345 }));
+  await assertSucceeds(updateDoc(ref, { text: 'edited', updatedAt: '2026-09-26T13:00:00.000Z' }));
+});
+
+test('comments: a full-document overwrite of an existing comment is held to the edit rule', async () => {
+  await put('task_team', task({ visibility: 'team' }));
+  await seedComment('task_team', 'teamMember');
+  // setDoc on an existing id is evaluated as an UPDATE: another member cannot
+  // take it over by writing a fresh, self-attributed document over it...
+  await assertFails(setDoc(doc(as('third'), P('workItems/task_team/comments/c1')),
+    { text: 'mine now', authorId: 'third', authorName: 'Third', createdAt: '2026-09-26T12:00:00.000Z' }));
+  // ...and the author cannot use it to rewrite the attribution or drop fields.
+  const ref = doc(as('teamMember'), P('workItems/task_team/comments/c1'));
+  await assertFails(setDoc(ref, { text: 'x', authorId: 'teamMember', authorName: 'Creator', createdAt: '2026-09-01T12:00:00.000Z' }));
+  await assertFails(setDoc(ref, { text: 'x', authorId: 'teamMember' }));
+  await assertSucceeds(setDoc(ref, { text: 'x', authorId: 'teamMember', authorName: 'Member', createdAt: '2026-09-01T12:00:00.000Z' }));
+});
+
+test('comments: createdAt is required and must be a string', async () => {
+  await put('task_team', task({ visibility: 'team' }));
+  await assertFails(setDoc(doc(as('teamMember'), P('workItems/task_team/comments/a')),
+    { text: 'hi', authorId: 'teamMember', authorName: 'Member' }));
+  await assertFails(addComment('teamMember', 'task_team', 'b', { createdAt: 12345 }));
+});
+
+test('comments: the name pin cannot be sidestepped by renaming a profile', async () => {
+  // Nobody can rename a profile from the client — not themselves, not an admin.
+  await assertFails(updateDoc(doc(as('teamMember'), 'users/teamMember'), { name: 'Creator' }));
+  await assertFails(updateDoc(doc(as('boss'), 'users/boss'), { name: 'Creator' }));
+  await assertFails(updateDoc(doc(as('boss'), 'users/teamMember'), { name: 'Creator' }));
+  await assertSucceeds(updateDoc(doc(as('teamMember'), 'users/teamMember'), { taskSavedFilters: [] })); // other self-edits still work
+  // A non-string name (seeded out of band) cannot be posted as an author name.
+  await seed('users/teamMember', { churchId: CHURCH, role: 'user', name: { first: 'x' }, active: true });
+  await put('task_team', task({ visibility: 'team' }));
+  await assertFails(addComment('teamMember', 'task_team', 'a', { authorName: { first: 'x' } }));
+});
+
+test('comments: a manager, like an admin, deletes but cannot edit', async () => {
+  await seed('users/mgr', { churchId: CHURCH, role: 'manager', name: 'Mgr', active: true });
+  await put('task_team', task({ visibility: 'team' }));
+  await seedComment('task_team', 'teamMember');
+  const ref = doc(as('mgr'), P('workItems/task_team/comments/c1'));
+  await assertFails(updateDoc(ref, { text: 'moderated' }));
+  await assertSucceeds(deleteDoc(ref));
 });
 
 test('comments: losing parent access removes even your own old comment', async () => {

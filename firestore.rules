@@ -10,6 +10,16 @@ service cloud.firestore {
     function userChurchId()         { return userData().churchId; }
     function userIsAdmin()          { return userData().role == 'admin'; }
     function userIsAdminOrManager() { return userData().role == 'admin' || userData().role == 'manager'; }
+    // Attribution pinning (2026-09-26): the name a comment or care entry
+    // displays must be the poster's own profile name. A profile with no name
+    // may post an empty one ('' from WorkBoard, null from the Shepherd Hub).
+    // Only as strong as `users/{uid}.name`, so that field is client-immutable
+    // (users update rule, both arms) — no UI edits it; scripts can.
+    function isOwnDisplayName(n) {
+      let p = userData().get('name', null);
+      return (n == null || n is string)
+        && (n == p || ((p == null || p == '') && (n == null || n == '')));
+    }
     // D-1 / COH-002: an explicit active:false revokes Firestore membership.
     // Missing defaults to true for legacy/hand-created profiles; every normal
     // creation path has written active:true since user profiles were introduced.
@@ -505,10 +515,13 @@ service cloud.firestore {
     // alternative to the author/admin check — an admin who cannot see the task
     // cannot moderate its comments.
     //
-    // Not fixed here, and recorded rather than implied: `authorId`, `authorName`
-    // and the timestamps are still unpinned, so attribution remains spoofable by
-    // an authorized member. Changing that is an attribution policy decision the
-    // owner has not made.
+    // Attribution (owner decision 2026-09-26): a comment is fixed to the member
+    // who wrote it. Create must carry the poster's own uid and profile name;
+    // an edit may change only `text` (+ `updatedAt`), and only the AUTHOR may
+    // edit — an admin/manager can delete anyone's comment but never put words
+    // under someone else's name. `createdAt` stays a client ISO string (a
+    // server timestamp would mix two types in one field — the activityLog
+    // lesson) and is immutable once written.
     match /churches/{churchId}/workItems/{itemId}/comments/{commentId} {
       // COH-007: an archived task's discussion stays READABLE and becomes
       // read-only. There is no backlink carve-out in that freeze — DEC-2026-017
@@ -517,8 +530,21 @@ service cloud.firestore {
       // under the Admin SDK and are not bound by these rules.
       allow read:           if isMember(churchId) && canSeeWorkItemById(churchId, itemId);
       allow create:         if isMember(churchId) && canSeeWorkItemById(churchId, itemId)
-                            && workItemArchiveUsable(churchId, itemId);
-      allow update, delete: if isMember(churchId) && canSeeWorkItemById(churchId, itemId)
+                            && workItemArchiveUsable(churchId, itemId)
+                            && request.resource.data.keys().hasOnly(['text', 'authorId', 'authorName', 'createdAt', 'mentions'])
+                            && request.resource.data.keys().hasAll(['text', 'authorId', 'authorName', 'createdAt'])
+                            && request.resource.data.text is string
+                            && request.resource.data.createdAt is string
+                            && request.resource.data.authorId == request.auth.uid
+                            && isOwnDisplayName(request.resource.data.authorName)
+                            && (!('mentions' in request.resource.data) || request.resource.data.mentions is list);
+      allow update:         if isMember(churchId) && canSeeWorkItemById(churchId, itemId)
+                            && workItemArchiveUsable(churchId, itemId)
+                            && request.auth.uid == resource.data.authorId
+                            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'updatedAt'])
+                            && request.resource.data.text is string
+                            && (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is string);
+      allow delete:         if isMember(churchId) && canSeeWorkItemById(churchId, itemId)
                             && workItemArchiveUsable(churchId, itemId)
                             && (isChurchAdminOrManager(churchId) || request.auth.uid == resource.data.authorId);
     }
@@ -665,13 +691,22 @@ service cloud.firestore {
       allow read, write: if isElderOf(churchId) && request.auth.uid == ownerUid;
     }
 
-    // ── Shared care thread — any elder reads/appends; entries are author-owned
-    //    (only the authoring elder may edit/delete their own entry — no admin
-    //    edit/delete path). Admins do not read by default (elders-only space). ──
+    // ── Shared care thread — any elder reads/appends; admins do not read
+    //    (elders-only space). Owner decision 2026-09-26: an entry is fixed to
+    //    the elder who wrote it — create carries their own uid, their profile
+    //    name and the server time; entries are never edited (the app has no
+    //    edit path); only the authoring elder may delete their own. ──────────
     match /churches/{churchId}/shepherdPeople/{personId}/careThread/{entryId} {
       allow read:   if isElderOf(churchId);
-      allow create: if isElderOf(churchId) && request.resource.data.authorUid == request.auth.uid;
-      allow update, delete: if isElderOf(churchId) && resource.data.authorUid == request.auth.uid;
+      allow create: if isElderOf(churchId)
+                    && request.resource.data.keys().hasOnly(['text', 'authorUid', 'authorName', 'createdAt'])
+                    && request.resource.data.keys().hasAll(['text', 'authorUid', 'authorName', 'createdAt'])
+                    && request.resource.data.text is string
+                    && request.resource.data.authorUid == request.auth.uid
+                    && isOwnDisplayName(request.resource.data.authorName)
+                    && request.resource.data.createdAt == request.time;
+      allow update: if false;
+      allow delete: if isElderOf(churchId) && resource.data.authorUid == request.auth.uid;
     }
 
     // ── Last-contact stamp (UX-2): a tiny per-person doc holding `lastCareAt`,
@@ -748,7 +783,9 @@ service cloud.firestore {
           )
         );
 
-      // Self-updates are allowed but cannot change role, churchId, active, or allowedHubs.
+      // Self-updates are allowed but cannot change role, churchId, active, allowedHubs, or name.
+      // `name` is pinned in BOTH arms (2026-09-26): comments and care entries display it,
+      // so renaming yourself — or an admin renaming anyone — would re-attribute them.
       // Admins in the same church can update role, active, allowedHubs, etc. — but cannot
       // change another user's phone, smsRemindersEnabled, or smsNewJobsEnabled
       // (TCPA: every SMS opt-in must be the user's own).
@@ -761,6 +798,8 @@ service cloud.firestore {
           && request.resource.data.churchId == resource.data.churchId
           && request.resource.data.active == resource.data.active
           && request.resource.data.get('allowedHubs', null) == resource.data.get('allowedHubs', null)
+          // Comment/care attribution displays this name (isOwnDisplayName).
+          && request.resource.data.get('name', null) == resource.data.get('name', null)
         )
         || (
           // COH-011: `userIsAdmin()` reads the ACTOR's own profile, and
@@ -786,6 +825,7 @@ service cloud.firestore {
           && request.resource.data.get('phone', '') == resource.data.get('phone', '')
           && request.resource.data.get('smsRemindersEnabled', false) == resource.data.get('smsRemindersEnabled', false)
           && request.resource.data.get('smsNewJobsEnabled', false) == resource.data.get('smsNewJobsEnabled', false)
+          && request.resource.data.get('name', null) == resource.data.get('name', null)
         )
       );
 

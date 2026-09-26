@@ -4,6 +4,28 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-09-26 — Comment + care-thread attribution pinned (backlog #7)
+
+Owner decision: a comment is fixed to the member who wrote it; elder care
+entries are fixed to the elder who wrote them and are elders-only.
+
+- `firestore.rules` work-item comments: create pins `authorId` to the caller,
+  `authorName` to their profile name (`isOwnDisplayName`), requires a string
+  `createdAt`, limits keys (`mentions` must be a list). Update is **author-only**
+  and may touch only `text`/`updatedAt` (string). Delete unchanged
+  (author or admin/manager, parent-visible).
+- Shepherd care thread: create pins `authorUid`, profile name,
+  `createdAt == request.time`, exact key set; **update denied to everyone**;
+  author-only delete; read unchanged (elders of that church only).
+- `users/{uid}.name` pinned in both arms of the users update rule — the
+  display-name pin trusts it. No UI edited a name.
+- UI: the ✏️ edit button shows only on your own comments (`CommentThread.jsx`);
+  Help text + What's New updated.
+- Tests: 192/192 (`npm run test:rules`); the 11 original new tests were each
+  confirmed to FAIL against the previous rules. Three Codex adversarial rounds;
+  accepted residual (self-chosen name via self-delete + re-create) recorded in
+  CLAUDE.md. Pre-existing task-delete batch bug filed in the backlog.
+
 ## 2026-09-24 — COH-014 deployed to production and verified
 
 Staged rollout per the workboard, in order: `backfill-shepherd-access.cjs

@@ -113,6 +113,8 @@ export function CommentThread({ comments, loading, newComment, onChange, onPost,
             ? <div style={{ color: B.textLight, fontSize: 13 }}>No comments yet.</div>
             : comments.map(c => {
                 const isOwn = c.authorId === userId;
+                // Only the author edits; admins/managers may also delete (rules pin this).
+                const canEdit = !readOnly && isOwn;
                 const canModify = !readOnly && (isOwn || canOperate);
                 return (
                   <div key={c.id} style={{ background: isOwn ? B.tealPale : B.warmGray, borderRadius: 10, padding: '10px 14px', border: isOwn ? '1px solid ' + B.tealLight : '1px solid transparent' }}>
@@ -125,7 +127,7 @@ export function CommentThread({ comments, loading, newComment, onChange, onPost,
                         <span style={{ fontSize: 11, color: B.textLight }}>{formatCommentDate(c.createdAt)}{c.updatedAt ? ' · edited' : ''}</span>
                         {canModify && editingId !== c.id && (
                           <div style={{ display: 'flex', gap: 4 }}>
-                            <button onClick={() => startEdit(c)} aria-label="Edit comment" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, color: B.textLight, padding: '6px 8px', minWidth: 28, minHeight: 28 }}>✏️</button>
+                            {canEdit && <button onClick={() => startEdit(c)} aria-label="Edit comment" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, color: B.textLight, padding: '6px 8px', minWidth: 28, minHeight: 28 }}>✏️</button>}
                             <button onClick={() => onDelete(c.id)} aria-label="Delete comment" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, color: B.textLight, padding: '6px 8px', minWidth: 28, minHeight: 28 }}>🗑️</button>
                           </div>
                         )}

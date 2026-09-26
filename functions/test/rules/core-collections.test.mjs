@@ -414,7 +414,7 @@ test('COH-012 pin — signup can create its subscription doc only in the trial s
 test('users: a member cannot escalate their own role', async () => {
   await seedMembers();
   await assertFails(updateDoc(doc(ctx('memberA'), 'users/memberA'), { role: 'admin' }));
-  await assertSucceeds(updateDoc(doc(ctx('memberA'), 'users/memberA'), { name: 'Renamed' }));
+  await assertSucceeds(updateDoc(doc(ctx('memberA'), 'users/memberA'), { taskSavedFilters: [] }));
 });
 test('users: an admin can change a same-church member role, but not transplant churchId', async () => {
   await seedMembers();
@@ -461,12 +461,12 @@ test('COH-011: a deactivated admin cannot change an UNRELATED allowed field eith
   // self-reactivation, it could pass because of the (later) `active` field pin
   // rather than because the ACTOR is inactive. Renaming another member is
   // ordinarily allowed for an admin, so denying it here isolates the actor gate.
-  await assertFails(updateDoc(doc(ctx('inactiveAdmin'), 'users/memberA'), { name: 'Renamed by a deactivated admin' }));
+  await assertFails(updateDoc(doc(ctx('inactiveAdmin'), 'users/memberA'), { managedMinistries: ['Youth'] }));
 });
 
 test('COH-011: an ACTIVE admin keeps ordinary profile management (regression guard)', async () => {
   await seedMembers();
-  await assertSucceeds(updateDoc(doc(ctx('adminA'), 'users/memberA'), { name: 'Renamed by an active admin' }));
+  await assertSucceeds(updateDoc(doc(ctx('adminA'), 'users/memberA'), { managedMinistries: ['Youth'] }));
   await assertSucceeds(updateDoc(doc(ctx('adminA'), 'users/memberA'), { role: 'manager' }));
 });
 
@@ -525,7 +525,7 @@ test('COH-011 stage 4: even an ACTIVE admin cannot write `active` directly', asy
   await assertFails(updateDoc(doc(ctx('adminA'), 'users/inactiveA'), { active: true }));
   // ...while ordinary profile management on that same document still works,
   // so the pin is narrow rather than a blanket denial.
-  await assertSucceeds(updateDoc(doc(ctx('adminA'), 'users/memberA'), { name: 'Still editable' }));
+  await assertSucceeds(updateDoc(doc(ctx('adminA'), 'users/memberA'), { managedMinistries: ['Youth'] }));
 });
 
 test('COH-011 stage 4: a member still cannot flip their own active flag', async () => {

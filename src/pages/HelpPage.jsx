@@ -861,7 +861,7 @@ export function HelpPage({ onBack }) {
             </Accordion>
 
             <Accordion title="Comments and photos">
-              <P>Open a task to add comments (real-time thread) and photos. Comments support bullet and numbered lists. You can edit or delete your own comments; admins and managers can edit or delete any comment.</P>
+              <P>Open a task to add comments (real-time thread) and photos. Comments support bullet and numbered lists. You can edit or delete your own comments. Admins and managers can delete any comment, but only its author can edit it — a comment always stays in the words of the person who wrote it.</P>
             </Accordion>
           </Section>
 

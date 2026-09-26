@@ -18,7 +18,7 @@ mid-deploy during COH-011.
 | 4 | **Complete the Shepherd rollout** (D-2/D-3 in the launch plan) | No code. A purpose-built FXCC workflow has been live since 2026-08-04 with one of eight elders signed up and the digest still dark. Activating built work beats building more |
 | 5 | **Restore rehearsal + runbook scope** | Backups and PITR verified healthy, so the copy exists; what is unknown is recovery *time and procedure*. Scope honestly: a Firestore restore does not restore Auth, Storage photos, secrets, or PCO state |
 | 6 | **AC-07 — maintenance field authority** | `type == 'maintenance'` short-circuits the whole update guard (`firestore.rules:403`); any member rewrites cost, assignment, recurrence, status. Accepted under a multi-tenant frame; reconsider under this one, where the risk is accidental damage by real volunteers |
-| 7 | **Pin comment attribution + timestamps** | `authorId`/`authorName`/timestamps unpinned and forgeable; update/delete authorization *depends* on `authorId`. Fix before general audit-log atomicity |
+| 7 | ~~**Pin comment attribution + timestamps**~~ | ✅ **DONE 2026-09-26** — owner decision: fixed to the author; author-only edit, admin/manager delete-only; Shepherd care thread never editable. Also pins `users.name` (client-immutable). Three Codex rounds. See CLAUDE.md known limitations |
 | 8 | **D-3 supplies** (COH-005); D-7 UI parity follows | Small, already decided |
 | 9 | ~~**`ANTHROPIC_API_KEY` is configured twice**~~ | ✅ **CLOSED 2026-09-18.** Consolidated on the Secret Manager binding: `getAttentionDigest` + `sendWeeklyAttentionDigest` now declare `secrets: [ANTHROPIC_API_KEY]` alongside `identifyItem`; the `functions/.env` copy is retired (commented, for rollback). All three redeployed; `identifyItem` now carries COH-011's `assertActiveCaller` guard in production (first deploy since). Verified: each service's env sources the key from `secretKeyRef` v1, no plain var; onCall probes 401 JSON. One loose end for John: the retired `.env` key (suffix …2gAA) is still valid — revoke it in the Anthropic console when convenient |
 | 10 | **Budget + Sentry alerts** | Console-only. **A budget alert notifies; it is not a spending ceiling.** `SENTRY-ALERTS.md` still references SendGrid post-Brevo |
@@ -35,7 +35,14 @@ mid-deploy during COH-011.
    role × allowedHubs tally before any hub-scoping change for a manager).
    Plan unchanged in the COH-013 doc, Part C.
 3. #4 Complete the Shepherd rollout (owner, no code).
-4. #7 Pin comment attribution.
+4. ~~#7 Pin comment attribution.~~ ✅ 2026-09-26 (with the Shepherd care thread).
+   **Filed by its review — pre-existing bug:** a non-admin task creator cannot
+   delete their task once anyone else has commented on it. `deleteTask`
+   (`src/useFirestore.js` ~1020) batch-deletes every comment with the task, but
+   comment delete is author-or-admin/manager, so the whole batch is refused
+   (`handleErr` → Sentry). Unchanged by #7 (the delete condition is identical).
+   Fix shape: a server-side cascade like COH-008, or allow the task's creator to
+   delete comments only as part of deleting the parent.
 5. #6 AC-07 maintenance field authority.
 6. #2 D-8 — **corrected:** the approver picker is not the gap. `firestore.rules`
    lets ANY member create or update a reservation, including `status` and the
