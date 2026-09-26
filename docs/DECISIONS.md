@@ -1251,3 +1251,33 @@ nothing (`src/useFirestore.js:311`).
   modal says so). Every elder-gated request costs one extra document read.
   Rollback: revert the rules deploy (the access doc is harmless to the old
   rules); the callable-side checks can revert with the functions.
+
+### DEC-2026-025 — A comment is fixed to the person who wrote it
+
+- Date: 2026-09-26
+- Status: Accepted
+- Deciders: Owner (the policy); Claude implemented; Codex reviewed adversarially (3 rules rounds + 1 post-ship round)
+- Related tasks/docs: COH-015 in `docs/AI-WORKBOARD.md`; backlog item #7; `docs/CHANGELOG.md` 2026-09-26; CLAUDE.md known limitations
+- Context: work-item comments stored a client-supplied `authorId`/`authorName`/
+  timestamps that no rule checked, so any authorized member could post under
+  another's name, and admins/managers could edit anyone's text while it kept the
+  original author's name. The Shepherd care thread pinned `authorUid` on create
+  only — the displayed name was unchecked and an entry could be re-attributed by
+  update.
+- Decision (owner, 2026-09-26): **a comment stays in the words of the person who
+  wrote it.** Only the author edits (text only); admins/managers may delete any
+  comment they can see but never edit one. Shepherd care-thread entries are
+  elders-only, fixed to the elder who wrote them, never edited by anyone, and
+  deleted only by their author. Mechanism: rules pin the author's uid, their
+  profile `name` (`isOwnDisplayName`), timestamps and key sets; `users/{uid}.name`
+  is client-immutable because the name pin trusts it.
+- Alternatives considered: (a) keep admin edit as moderation — rejected: it lets
+  an admin put words under a member's name; delete covers moderation; (b) server
+  timestamps on work-item comments — rejected: mixes two types in one field (the
+  activityLog lesson), so `createdAt` stays a client string made immutable;
+  (c) closing self-rename by delete + re-create — not done: an account holder
+  choosing their own name is inherent to signup; the uid is the identity and a
+  re-created profile fires the new-member admin email.
+- Consequences: admins lose the ✏️ on others' comments; no UI edits a member's
+  name any more (fix by script). Rollback: revert the rules deploy — the client
+  shapes are valid under both rule sets.

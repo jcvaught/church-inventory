@@ -53,6 +53,23 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   unshipped, no dependency on the pricing work.
 
 
+### COH-015 — Comment + care-thread attribution (backlog #7)
+
+- Status: **✅ DEPLOYED + VERIFIED 2026-09-26.** Web build `4f5f70b` live →
+  rules deployed → `node scripts/probe-attribution.cjs` 16/16 PASS (throwaway
+  `e2e-` users in e2e-test-church; self-cleaning) → real-UI check
+  `work-unification-gaps.spec.js` "unified comments" PASS. Rules tests 192/192.
+  DEC-2026-025.
+- Owner: Claude · Reviewer: Codex (3 adversarial rules rounds + 1 post-ship
+  round; all findings closed or dispositioned — see CHANGELOG 2026-09-26)
+- Same session, related: `notifyAdminsOfNewMember` now claims before sending
+  (one notice per member under redelivery; 4 handler tests, 140/140; verified in
+  production). COH-013 Part C measured 0 exposed and deferred behind a trigger.
+- Open, owner's call: automatic retry for a failed new-member email (today it is
+  lost; Sentry records it).
+- Filed, not built: a non-admin task creator cannot delete their task once
+  anyone else has commented (pre-existing; backlog).
+
 ### COH-014 — Shepherd access: own church only, revoked on roster save (backlog #3)
 
 - Status: **✅ DEPLOYED + VERIFIED 2026-09-24.** All 7 rollout steps done in
