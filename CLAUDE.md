@@ -95,7 +95,7 @@ npm run test:handlers # Cloud Functions HANDLER integration tests — boots fire
                   # filter returns neither null-valued nor missing fields, so the
                   # skip guard is defensive, not load-bearing. Emulator evidence
                   # only — the first production dry run is the authority).
-                  # 134 tests, all green (incl. shepherdAccess.test.mjs —
+                  # 140 tests, all green (incl. notifyAdminsOfNewMember.test.mjs — one notice per member under redelivery; shepherdAccess.test.mjs —
                   # COH-014's roster save / access list / stale-claim denials).
 ```
 

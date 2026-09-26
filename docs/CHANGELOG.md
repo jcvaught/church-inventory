@@ -4,6 +4,16 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-09-26 — New-member notice can no longer send twice
+
+`notifyAdminsOfNewMember` now claims `newMemberNotifiedAt` in a transaction
+before sending (was: stamp after a successful send), so an at-least-once
+redelivery or a racing invocation finds the claim and stops. A failed send
+releases the claim; a member deleted before the claim is not notified (and the
+claim never resurrects the profile). `functions/test/handlers/notifyAdminsOfNewMember.test.mjs`
+— 4 tests; the redelivery, race and deleted-member cases each FAIL against the
+previous trigger. Still no retry policy (a failed send is lost — owner call).
+
 ## 2026-09-26 — Comment + care-thread attribution pinned (backlog #7)
 
 Owner decision: a comment is fixed to the member who wrote it; elder care

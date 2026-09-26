@@ -1413,12 +1413,10 @@ exports.sendWelcomeEmail = onDocumentCreated('churches/{churchId}', async (event
 // the church's admins so they know someone joined and can review/adjust that
 // member's hub access (Settings → Team Members). Skips church creators (role
 // admin) so a brand-new church doesn't self-notify.
-// NOTE: the sentinel is only written on a *successful* send. This trigger has
-// no retry policy, so a send that fails (Brevo outage) is NOT re-attempted —
-// that notice is lost, and the Sentry capture below is the only record. The
-// ordering still avoids ever marking an undelivered notice as sent (vs.
-// sendWelcomeEmail's set-before-send dual-send guard; a rare duplicate admin
-// notice is harmless).
+// NOTE: `newMemberNotifiedAt` is claimed in a transaction BEFORE sending, so a
+// redelivered event cannot send twice; a failed send releases the claim. This
+// trigger has no retry policy, so a failed send (Brevo outage) is NOT
+// re-attempted — that notice is lost, and the Sentry capture is the only record.
 const NEW_MEMBER_HUB_LABEL = {
   maintenance: 'Maintenance', insights: 'Insights', coordination: 'Coordination',
   accountability: 'Accountability', people_access: 'People Access', tasks: 'Tasks', jobs: 'Job',
@@ -1475,21 +1473,38 @@ exports.notifyAdminsOfNewMember = onDocumentCreated('users/{uid}', async (event)
 <p style="font-size:13px;color:#666">You're getting this because you're an admin of ${safeChurch}.</p>`;
   const text = `A new member joined ${churchName}:\n\nName: ${u.name || ''}\nEmail: ${u.email || ''}\nAccess: ${access}\n\nReview their access in Settings → Team Members: https://churchopshub.com/`;
 
+  // Claim before sending, in a transaction: a redelivered event (or a parallel
+  // invocation) finds the claim and stops, so admins get one notice. A member
+  // deleted before this point (the COH-014 probe creates and deletes within
+  // seconds) is not notified at all.
+  const claimedAt = new Date().toISOString();
+  let claimed = false;
+  try {
+    claimed = await db.runTransaction(async (tx) => {
+      const cur = await tx.get(userRef);
+      if (!cur.exists || cur.data().newMemberNotifiedAt) return false;
+      tx.update(userRef, { newMemberNotifiedAt: claimedAt });
+      return true;
+    });
+  } catch (err) {
+    console.error('notifyAdminsOfNewMember: claim failed', err);
+    Sentry.captureException(err);
+    return;
+  }
+  if (!claimed) return;
+
   try {
     await sendEmailSafe({ to: admins.map(a => a.email), from: FROM, replyTo: 'jcvaught@gmail.com', subject, html, text });
   } catch (err) {
     console.error('notifyAdminsOfNewMember: send failed', err?.response?.body || err);
     Sentry.captureException(err);
-    return;
-  }
-  // The member can be deleted before we get here (the COH-014 probe creates and
-  // deletes its user within seconds) — nothing left to stamp, not an error.
-  try {
-    await userRef.update({ newMemberNotifiedAt: new Date().toISOString() });
-  } catch (err) {
-    if (err?.code === 5) return; // NOT_FOUND
-    console.error('notifyAdminsOfNewMember: stamp failed', err);
-    Sentry.captureException(err);
+    // Release our claim so a later attempt isn't blocked by a notice that never went out.
+    try {
+      await db.runTransaction(async (tx) => {
+        const cur = await tx.get(userRef);
+        if (cur.exists && cur.data().newMemberNotifiedAt === claimedAt) tx.update(userRef, { newMemberNotifiedAt: FieldValue.delete() });
+      });
+    } catch { /* member gone or claim superseded — nothing to release */ }
   }
 });
 
