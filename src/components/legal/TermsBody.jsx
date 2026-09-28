@@ -11,8 +11,8 @@ function P({ children }) {
 export function TermsBody() {
   return (
     <>
-      <p style={{ fontFamily: f2, fontSize: 14, color: B.textLight, margin: '0 0 6px' }}>Last updated: September 17, 2026</p>
-      <p style={{ fontFamily: f2, fontSize: 14, color: B.textLight, margin: '0 0 24px' }}>Effective: October 1, 2026. The changes in this version are to sections 2 and 5 (one plan, 90-day trial, what happens after). Accounts created before October 1, 2026 remain on the April 26, 2026 terms until then.</p>
+      <p style={{ fontFamily: f2, fontSize: 14, color: B.textLight, margin: '0 0 6px' }}>Last updated: September 28, 2026</p>
+      <p style={{ fontFamily: f2, fontSize: 14, color: B.textLight, margin: '0 0 24px' }}>Effective: October 12, 2026. The changes in this version are to sections 2 and 5 (one plan, 90-day trial, what happens after). Accounts created before October 12, 2026 remain on the April 26, 2026 terms until then.</p>
 
       <H2>1. Acceptance of Terms</H2>
       <P>By creating an account or using ChurchOpsHub ("the Service," "we," "us," or "our"), you ("you" or "User") agree to be bound by these Terms of Service ("Terms"). If you are accepting on behalf of a church or organization, you represent that you have authority to bind that organization. If you do not agree, do not use the Service.</P>

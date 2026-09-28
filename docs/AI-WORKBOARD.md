@@ -24,8 +24,12 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 ### COH-012 — Flat pricing, entitlement collapse, review disposition
 
 - Status: **Parts A + B COMPLETE 2026-09-18.** A.3, A.4 (0a, 0b, 1–5), A.5
-  shipped + deployed 09-17; Terms effective 2026-10-01; notice email sent to
-  the 3 reachable non-FXCC accounts (2 tenants are abandoned — no Auth user).
+  shipped + deployed 09-17. **2026-09-28 correction (owner-approved):** the
+  09-17 notice was NEVER DELIVERED — Brevo rejected every churchopshub.com send
+  09-08→09-28 (DMARC lacked Brevo's `rua`; fixed 09-28). To keep the Terms'
+  own 14-day notice promise (§15), the effective date moved **10-01 → 10-12**,
+  Highland's trial was extended **09-29 → 10-12**, and the notice was re-sent
+  09-28 to the same 3 accounts (2 tenants are abandoned — no Auth user).
   Part B (activityLog timestamp lanes) shipped 09-18 — **both** the weekly
   digest AND the in-app Insights hub now read both lanes; the client's earlier
   "fix" had a dead string lane (measured 0 rows in production). Plan at rev 10.

@@ -681,6 +681,13 @@ is derived in both `useSubscription` and `SettingsPage` today.
 
 ### A.5 as shipped — 2026-09-17 (`cb58b3c`), notice sent 2026-09-18 00:06 UTC
 
+> **2026-09-28 correction:** that send was **rejected by Brevo** and never
+> delivered (churchopshub.com lost domain authentication ~09-07; its `_dmarc`
+> lacked Brevo's `rua`). Owner-approved remedy: effective date **10-01 → 10-12**
+> (today + 14, per §15), Highland's `trialEndsAt` extended to 10-12, notice
+> re-sent 09-28 to the same three recipients. The table below is the original
+> 09-17 record.
+
 Copy: landing page (single pricing card, JSON-LD offer $5), Help Center (FAQ
 JSON-LD + body), 16 blog sentences in place (competitor free tiers left alone),
 blog CTA, both prerender templates, What's New entry. `TermsBody.jsx` §2/§5
