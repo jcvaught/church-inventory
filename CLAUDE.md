@@ -553,14 +553,17 @@ Items 1–2 were dropped by the 2026-03-27 hardening commit (`a45da1f`), unnotic
 
 ## Vercel: Ignored Build Step (docs-only commits skip the build)
 
-`scripts/vercel-ignore-build.sh` is wired to this project's Vercel **Ignored Build Step**. A commit
-touching only `docs/` and `*.md` does NOT produce a new deployment. Vercel bills retained build
+`scripts/vercel-ignore-build.sh` is wired to this project's Vercel **Ignored Build Step**. A push
+whose changes SINCE THE LAST SUCCESSFUL DEPLOYMENT (`VERCEL_GIT_PREVIOUS_SHA`) touch only docs —
+`docs/`, top-level `*.md`, `README.md` files — does NOT produce a new deployment. Any other
+markdown counts as code. (Until 2026-09-30 it diffed only `HEAD^..HEAD`, so a push ending in a
+docs-only commit silently dropped the code commits beneath it — it happened on Echo Scripture.) Vercel bills retained build
 output as Deployment Storage, and docs-only commits were burning it (COH made 20 such deploys in
 two days).
 
 **Consequence — read this before assuming a push shipped:** "pushed to `main`" no longer implies
-"a new deployment exists". To force a deploy, touch something outside `docs/`/`*.md`, or redeploy
+"a new deployment exists". To force a deploy, change something outside `docs/`/top-level `*.md`, or redeploy
 from the Vercel dashboard.
 
-The script **fails open**: if the diff can't be determined (shallow clone, first commit, git
-error) it builds. A missed skip costs a few MB; a missed build ships nothing.
+The script **fails open**: if the diff can't be determined (no previous deployment, commit not
+fetchable, git error) it builds. A missed skip costs a few MB; a missed build ships nothing.
