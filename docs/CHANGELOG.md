@@ -4,6 +4,23 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-10-01 — A task's creator can delete it after others comment
+
+`deleteTask` batch-deletes every comment with the task, but comment delete was
+author-or-admin/manager, so a non-admin creator's batch was refused (Sentry via
+`handleErr`) once anyone else had commented. Filed by the COH-015 review.
+Rules-only fix: the comment delete rule gains a third arm,
+`!existsAfter(parent)` — true only when the same request removes the parent,
+whose own delete rule still decides who may. No client change. Rules tests
+200/200 (8 new, incl. update/re-create-the-parent, maintenance parent, orphan,
+archived, 40-comment batch). Codex adversarial review (terra): no bypass found;
+its test gaps were added. `scripts/probe-task-delete-cascade.cjs` FAILED 3/6
+against the old production rules and PASSED 6/6 after the deploy (REST
+`:commit` with the same batch shape `deleteTask` sends; includes a 30-comment
+batch for production access-call limits). Measured exposure: 2 work items in
+production carry comments, the largest 11 — far from the 500-write batch cap,
+which this change does not affect.
+
 ## 2026-09-26 — New-member notice can no longer send twice
 
 `notifyAdminsOfNewMember` now claims `newMemberNotifiedAt` in a transaction

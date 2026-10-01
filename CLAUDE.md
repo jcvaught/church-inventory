@@ -48,7 +48,7 @@ npm run test:unit # Pure-logic unit tests (node --test functions/test/*.test.mjs
 npm run test:rules # Firestore + Storage RULES tests via @firebase/rules-unit-testing — boots the
                   # Firestore + Storage emulators (needs Java; runs --test-concurrency=1 so the
                   # files don't race on the shared emulator via clearFirestore) and runs
-                  # functions/test/rules/*.test.mjs (176 tests). Covers: Shepherd Hub privacy
+                  # functions/test/rules/*.test.mjs (200 tests). Covers: Shepherd Hub privacy
                   # (shepherd-rules.test.mjs — contact-info write-lock, per-elder note privacy,
                   # audit admin-read-only + immutability, careThread author pinning, SEC-2
                   # email_verified gate); the CORE multi-tenant model (core-collections.test.mjs

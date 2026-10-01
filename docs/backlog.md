@@ -36,7 +36,8 @@ mid-deploy during COH-011.
    Plan unchanged in the COH-013 doc, Part C.
 3. #4 Complete the Shepherd rollout (owner, no code).
 4. ~~#7 Pin comment attribution.~~ ✅ 2026-09-26 (with the Shepherd care thread).
-   **Filed by its review — pre-existing bug:** a non-admin task creator cannot
+   ~~**Filed by its review — pre-existing bug:**~~ ✅ **FIXED 2026-10-01** (rules
+   `!existsAfter(parent)` arm; production probe 6/6 — see CHANGELOG). Was: a non-admin task creator cannot
    delete their task once anyone else has commented on it. `deleteTask`
    (`src/useFirestore.js` ~1020) batch-deletes every comment with the task, but
    comment delete is author-or-admin/manager, so the whole batch is refused

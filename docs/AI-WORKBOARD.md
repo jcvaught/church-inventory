@@ -71,8 +71,9 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   production). COH-013 Part C measured 0 exposed and deferred behind a trigger.
 - Open, owner's call: automatic retry for a failed new-member email (today it is
   lost; Sentry records it).
-- Filed, not built: a non-admin task creator cannot delete their task once
-  anyone else has commented (pre-existing; backlog).
+- ~~Filed, not built: a non-admin task creator cannot delete their task once
+  anyone else has commented~~ — ✅ fixed + deployed 2026-10-01 (rules-only;
+  `scripts/probe-task-delete-cascade.cjs` 6/6 in production).
 
 ### COH-014 — Shepherd access: own church only, revoked on roster save (backlog #3)
 

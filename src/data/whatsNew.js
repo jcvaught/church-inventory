@@ -4,6 +4,12 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-10-01',
+    tag: 'Fixed',
+    title: 'You can delete your own task after others comment on it',
+    body: "If you created a task and someone else had commented on it, deleting the task used to fail. Now the task and its whole discussion are deleted together. Who can delete a task hasn't changed: its creator, or an admin or manager.",
+  },
+  {
     date: '2026-09-26',
     tag: 'Improved',
     title: 'Comments always stay in their author\'s words',
