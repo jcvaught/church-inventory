@@ -544,9 +544,17 @@ service cloud.firestore {
                             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'updatedAt'])
                             && request.resource.data.text is string
                             && (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is string);
+      // The third arm: a comment goes with its task. `deleteTask` deletes every
+      // comment and the task in ONE batch; `!existsAfter(parent)` is true only
+      // when this same request removes the parent (canSeeWorkItemById already
+      // proved it exists beforehand), and that parent delete must pass its own
+      // rule or the whole batch fails. So whoever may delete the task may take
+      // its discussion with it — and no one gains a delete over another
+      // member's comment on a task that survives.
       allow delete:         if isMember(churchId) && canSeeWorkItemById(churchId, itemId)
                             && workItemArchiveUsable(churchId, itemId)
-                            && (isChurchAdminOrManager(churchId) || request.auth.uid == resource.data.authorId);
+                            && (isChurchAdminOrManager(churchId) || request.auth.uid == resource.data.authorId
+                                || !existsAfter(/databases/$(database)/documents/churches/$(churchId)/workItems/$(itemId)));
     }
 
     // ── Job Hub — job listings (audit H1/H2/H3/M1, 2026-05-22) ───────────────

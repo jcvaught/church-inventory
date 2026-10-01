@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField, collection, getDocs, query, where } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField, collection, getDocs, query, where, writeBatch } from 'firebase/firestore';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const RULES = readFileSync(join(here, '../../../firestore.rules'), 'utf8');
@@ -321,6 +321,83 @@ test('comments: an admin deletes (never edits) others\' comments, only where the
   await assertSucceeds(deleteDoc(doc(as('boss'), P('workItems/task_team/comments/c1'))));
   await assertFails(updateDoc(doc(as('boss'), P('workItems/task_p/comments/c1')), { text: 'moderated' }));
   await assertFails(deleteDoc(doc(as('boss'), P('workItems/task_p/comments/c1'))));
+});
+
+// ── Comments: deleted with their task (backlog, filed by COH-015) ───────────
+// `deleteTask` batch-deletes every comment together with the task. A non-admin
+// creator may delete the task but not someone else's comment, so the whole
+// batch was refused once anyone else had commented. A comment may now be
+// deleted by anyone whose same request removes the parent — the parent's own
+// delete rule decides who that is.
+
+const deleteWithComments = (uid, itemId, commentIds) => {
+  const db = as(uid);
+  const batch = writeBatch(db);
+  commentIds.forEach(id => batch.delete(doc(db, P(`workItems/${itemId}/comments/${id}`))));
+  batch.delete(doc(db, P(`workItems/${itemId}`)));
+  return batch.commit();
+};
+
+test('comments: a creator deletes their task with other members\' comments on it', async () => {
+  await put('task_team', task({ visibility: 'team' }));
+  await seedComment('task_team', 'teamMember', 'c1');
+  await seedComment('task_team', 'third', 'c2');
+  await seedComment('task_team', 'creator', 'c3');
+  await assertSucceeds(deleteWithComments('creator', 'task_team', ['c1', 'c2', 'c3']));
+});
+
+test('comments: the batch is held to the task delete rule — a non-creator still cannot', async () => {
+  await put('task_team', task({ visibility: 'team' }));
+  await seedComment('task_team', 'creator', 'c1');
+  await assertFails(deleteWithComments('teamMember', 'task_team', ['c1']));
+  await assertFails(deleteWithComments('third', 'task_team', ['c1']));
+});
+
+test('comments: a non-author cannot delete a comment while the task stays', async () => {
+  await put('task_team', task({ visibility: 'team' }));
+  await seedComment('task_team', 'teamMember', 'c1');
+  // The creator owns the task, but that alone is no licence over others' words.
+  await assertFails(deleteDoc(doc(as('creator'), P('workItems/task_team/comments/c1'))));
+});
+
+test('comments: an archived task cannot be deleted with its comments', async () => {
+  await put('task_arch', task({ visibility: 'team', status: 'Complete', archived: true, archivedAt: '2026-08-01T00:00:00.000Z', completedAt: '2026-06-01T00:00:00.000Z' }));
+  await seedComment('task_arch', 'teamMember', 'c1');
+  await assertFails(deleteWithComments('creator', 'task_arch', ['c1']));
+});
+
+test('comments: the parent must be gone afterwards — updating or re-creating it does not count', async () => {
+  await put('task_team', task({ visibility: 'team' }));
+  await seedComment('task_team', 'teamMember', 'c1');
+  const db = as('creator');
+  const cRef = doc(db, P('workItems/task_team/comments/c1'));
+  const tRef = doc(db, P('workItems/task_team'));
+  const upd = writeBatch(db);
+  upd.delete(cRef);
+  upd.update(tRef, { name: 'renamed' });
+  await assertFails(upd.commit());
+  const recreate = writeBatch(db);
+  recreate.delete(cRef);
+  recreate.set(tRef, task({ visibility: 'team' }));
+  await assertFails(recreate.commit());
+});
+
+test('comments: a member cannot take a maintenance item\'s discussion with it', async () => {
+  await put('mnt_1', { type: 'maintenance', title: 'Boiler' });
+  await seedComment('mnt_1', 'creator', 'c1');
+  await assertFails(deleteWithComments('teamMember', 'mnt_1', ['c1']));
+});
+
+test('comments: an orphaned comment stays undeletable by a non-author', async () => {
+  await seedComment('task_ghost', 'teamMember', 'c1');
+  await assertFails(deleteDoc(doc(as('creator'), P('workItems/task_ghost/comments/c1'))));
+});
+
+test('comments: a long discussion stays inside the rules access-call limit', async () => {
+  await put('task_team', task({ visibility: 'team' }));
+  const ids = Array.from({ length: 40 }, (_, i) => `c${i}`);
+  for (const id of ids) await seedComment('task_team', id.endsWith('0') ? 'creator' : 'teamMember', id);
+  await assertSucceeds(deleteWithComments('creator', 'task_team', ids));
 });
 
 // ── Comments: attribution pinning (owner decision 2026-09-26) ───────────────
