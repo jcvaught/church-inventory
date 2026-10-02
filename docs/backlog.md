@@ -25,7 +25,16 @@ mid-deploy during COH-011.
 | 11 | **Ask FXCC** before Sunday-readiness, templates, or deep-linking | All three are *hypotheses*. Deep-linking is verified thin (6 of 7 search result types open only the containing hub) but its cost to FXCC is unmeasured |
 
 **Re-ranked 2026-09-23 (owner + Claude + Codex).** Working order from here:
-0. Highland's lapse, 2026-09-30 02:00 CT — first production run of the lapsed path (a check, not a build).
+**▶ Next (2026-10-01):** #6 AC-07 + #2 D-8 as ONE rules gate (one deploy, adversarial
+tests, a production probe modeled on `scripts/probe-task-delete-cascade.cjs`).
+**Blocked on one owner answer:** which maintenance fields may a regular member
+change? Claude's proposed default: `status` only (comments already work);
+cost, assignment, recurrence, vendor and the rest admin/manager-only. D-8:
+status/approval fields pinned to admin/manager. Both gaps verified in the
+2026-10-01 code (`firestore.rules:416-420`, `:476`).
+
+0. Highland's lapse — **moved to 2026-10-12** (trial extended 2026-09-28, see
+   AI-WORKBOARD COH-012) — first production run of the lapsed path (a check, not a build).
 1. ~~#3 Shepherd scoping~~ → COH-014, ✅ deployed + verified 2026-09-24.
 2. ~~COH-013 Part C — measure the users tally, then fix if anyone is exposed.~~
    **Measured 2026-09-24: 0 exposed → deferred.** All tenants: exactly one
@@ -65,7 +74,8 @@ mid-deploy during COH-011.
 **Re-ranked 2026-09-16 by DEC-2026-022** (disposition of the 2026-08-28 Codex
 review remainder):
 
-- **NEW, above most of this list — FXCC-facing and proven.**
+- ~~**NEW, above most of this list — FXCC-facing and proven.**~~ ✅ **FIXED
+  2026-09-18 (COH-012 Part B, dual-lane `readActivityLogSince`).** Was:
   `sendWeeklyInsightsDigest` (`functions/index.js:2308`) filters a Timestamp
   field with a string, so it computes over **173 of FXCC's 213** in-window
   activity rows and trends to zero coverage. COH-012 part B.

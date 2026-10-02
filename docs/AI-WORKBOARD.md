@@ -34,8 +34,8 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
   digest AND the in-app Insights hub now read both lanes; the client's earlier
   "fix" had a dead string lane (measured 0 rows in production). Plan at rev 10.
   `identifyItem` redeployed 2026-09-18 — backlog item 9 closed (key consolidated
-  on Secret Manager). **Watch: Highland's expiry 2026-09-30 02:00 CT —
-  first production exercise of the lapsed path.**
+  on Secret Manager). **Watch: Highland's expiry — now 2026-10-12 (extended
+  09-28, see above) — first production exercise of the lapsed path.**
 - Plan: `docs/COH-012-PRICING-AND-REVIEW-DISPOSITION-PLAN-2026-09-16.md` (rev 10)
 - Decisions: DEC-2026-021 (flat $5 model), DEC-2026-022 (review disposition);
   owner #8 (Terms notice: email on A.5 ship day, effective +14d) and #9
