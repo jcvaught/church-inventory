@@ -1757,6 +1757,39 @@ exports.cleanupJobListingBacklinks = onDocumentDeleted(
 // Stripe prices do not exist yet (COH-012 phase A.4) and this phase deploys
 // functions only. Do not reintroduce a price here before checkout can charge it.
 
+// Who gets the trial emails. The creator first (unchanged behaviour); if the
+// creator is gone — no church doc, no createdBy, deleted from Auth, or no email —
+// every active admin of the church, by profile email (same selector as
+// notifyAdminsOfNewMember). Returns { recipients: [{ email, name }], source }
+// where source is 'creator' | 'admins' | 'none'. Any error other than
+// auth/user-not-found is rethrown so the caller reports it.
+async function resolveTrialEmailRecipients(db, churchId) {
+  const churchDoc = await db.doc(`churches/${churchId}`).get();
+  const creatorUid = churchDoc.exists ? churchDoc.data()?.createdBy : null;
+  if (creatorUid) {
+    try {
+      const u = await getAuth().getUser(creatorUid);
+      if (u?.email) {
+        return { recipients: [{ email: u.email, name: u.displayName || null }], source: 'creator' };
+      }
+    } catch (err) {
+      if (err?.code !== 'auth/user-not-found') throw err;
+    }
+  }
+  const snap = await db.collection('users').where('churchId', '==', churchId).get();
+  const seen = new Set();
+  const recipients = [];
+  for (const a of snap.docs.map(d => d.data())) {
+    if (a.role !== 'admin' || a.active === false || !a.email) continue;
+    const key = String(a.email).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    recipients.push({ email: a.email, name: a.name || null });
+  }
+  recipients.sort((x, y) => x.email.toLowerCase().localeCompare(y.email.toLowerCase()));
+  return recipients.length ? { recipients, source: 'admins' } : { recipients: [], source: 'none' };
+}
+
 exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 'America/Chicago' }, async () => withScheduledRun('processTrialExpirations', async () => {
   const db = getFirestore();
   const now = new Date();
@@ -1785,13 +1818,14 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
     // .updated arriving at trial expiry from a same-day paid upgrade) can't
     // race with this cron. If the webhook already flipped `status` between the
     // prefetch above and this point, the txn re-check aborts.
+    let flipped = false;
     try {
-      await db.runTransaction(async (t) => {
+      flipped = await db.runTransaction(async (t) => {
         const fresh = await t.get(subDoc.ref);
-        if (!fresh.exists) return;
+        if (!fresh.exists) return false;
         const freshData = fresh.data();
-        if (freshData.status !== 'trialing') return; // webhook already moved it on
-        if (!freshData.trialEndsAt || new Date(freshData.trialEndsAt) > now) return;
+        if (freshData.status !== 'trialing') return false; // webhook already moved it on
+        if (!freshData.trialEndsAt || new Date(freshData.trialEndsAt) > now) return false;
         // `status` is the idempotency key now that freeHubsSelected is no longer
         // written: the outer query selects on status=='trialing', and this
         // re-check inside the transaction is what stops a double-send if a
@@ -1808,47 +1842,51 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
         // trialExpiredAt is additive breadcrumb: freeHubsSelected used to be the
         // only record that a trial had been processed, and it is gone.
         t.update(subDoc.ref, { status: 'active', trialExpiredAt: nowStr });
+        return true;
       });
     } catch (err) {
       console.error('processTrialExpirations: update failed', { churchId, err: err.message });
       Sentry.captureException(err);
       continue;
     }
+    // The txn backed off (a webhook moved the church on first) — no trial-ended email.
+    if (!flipped) continue;
 
-    // Find admin user to email
+    // Find who to email (creator, else active admins)
     if (!emailConfigured()) continue;
-    let adminEmail, adminName;
+    let resolved;
     try {
-      const churchDoc = await db.doc(`churches/${churchId}`).get();
-      const creatorUid = churchDoc.data()?.createdBy;
-      if (creatorUid) {
-        const authUser = await getAuth().getUser(creatorUid);
-        adminEmail = authUser.email;
-        adminName = authUser.displayName || null;
-      }
+      resolved = await resolveTrialEmailRecipients(db, churchId);
     } catch (err) {
       console.error('processTrialExpirations: could not fetch admin', { churchId, err: err.message });
       Sentry.captureException(err);
+      continue;
     }
-    if (!adminEmail) continue;
+    if (resolved.source === 'none') {
+      console.warn('processTrialExpirations: no admin to email', { churchId, pass: 'expired' });
+      continue;
+    }
 
-    const firstName = adminName ? adminName.split(' ')[0] : 'there';
+    for (const { email: adminEmail, name: adminName } of resolved.recipients) {
+      const firstName = adminName ? adminName.split(' ')[0] : 'there';
 
-    const subject = 'Your ChurchOpsHub trial has ended';
-    const html = `<p>Hi ${escapeHtml(firstName)},</p>
+      const subject = 'Your ChurchOpsHub trial has ended';
+      const html = `<p>Hi ${escapeHtml(firstName)},</p>
 <p>Your 90-day free trial of ChurchOpsHub has ended.</p>
 <p><strong>All your data is still there — nothing was deleted.</strong></p>
 <p>I'm changing how ChurchOpsHub is priced, and I'd rather tell you the new terms once they're final than guess at them now. I'll email you with the details shortly.</p>
 <p>In the meantime, reply to this email if you need anything at all — including access to your own records.</p>
 <p>— John Vaught<br><span style="font-size:13px;color:#666">ChurchOpsHub</span></p>`;
-    const text = `Hi ${firstName},\n\nYour 90-day free trial of ChurchOpsHub has ended.\n\nAll your data is still there — nothing was deleted.\n\nI'm changing how ChurchOpsHub is priced, and I'd rather tell you the new terms once they're final than guess at them now. I'll email you with the details shortly.\n\nIn the meantime, reply to this email if you need anything at all — including access to your own records.\n\n— John Vaught\nChurchOpsHub`;
+      const text = `Hi ${firstName},\n\nYour 90-day free trial of ChurchOpsHub has ended.\n\nAll your data is still there — nothing was deleted.\n\nI'm changing how ChurchOpsHub is priced, and I'd rather tell you the new terms once they're final than guess at them now. I'll email you with the details shortly.\n\nIn the meantime, reply to this email if you need anything at all — including access to your own records.\n\n— John Vaught\nChurchOpsHub`;
 
-    try {
-      await sendEmailSafe({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject, html, text });
-    } catch (err) {
-      console.error('processTrialExpirations: trial-end email failed', { churchId, err: err?.response?.body || err });
-      Sentry.captureException(err);
+      try {
+        await sendEmailSafe({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject, html, text });
+      } catch (err) {
+        console.error('processTrialExpirations: trial-end email failed', { churchId, err: err?.response?.body || err });
+        Sentry.captureException(err);
+      }
     }
+    console.log('processTrialExpirations: trial-ended email', { churchId, pass: 'expired', source: resolved.source, count: resolved.recipients.length });
 
     // 7-day warning email (separate pass — send when 7 days remain)
     // Handled by the daily run: if trialEndsAt is exactly 7 days from now, send warning.
@@ -1875,37 +1913,50 @@ exports.processTrialExpirations = onSchedule({ schedule: '0 2 * * *', timeZone: 
     const churchId = subDoc.ref.parent.parent.id;
     if (!emailConfigured()) continue;
 
-    let adminEmail, adminName;
+    let resolved;
     try {
-      const churchDoc = await db.doc(`churches/${churchId}`).get();
-      const creatorUid = churchDoc.data()?.createdBy;
-      if (creatorUid) {
-        const authUser = await getAuth().getUser(creatorUid);
-        adminEmail = authUser.email;
-        adminName = authUser.displayName || null;
-      }
-    } catch { continue; }
-    if (!adminEmail) continue;
+      resolved = await resolveTrialEmailRecipients(db, churchId);
+    } catch (err) {
+      console.error('processTrialExpirations: could not fetch admin (warning)', { churchId, err: err.message });
+      Sentry.captureException(err);
+      continue;
+    }
+    if (resolved.source === 'none') {
+      console.warn('processTrialExpirations: no admin to email', { churchId, pass: 'warning' });
+      continue;
+    }
 
-    const firstName = adminName ? adminName.split(' ')[0] : 'there';
     const trialEndDisplay = new Date(sub.trialEndsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-    const warnSubject = 'Your ChurchOpsHub trial ends in 7 days';
-    const warnHtml = `<p>Hi ${escapeHtml(firstName)},</p>
+    let sentAny = false;
+    for (const { email: adminEmail, name: adminName } of resolved.recipients) {
+      const firstName = adminName ? adminName.split(' ')[0] : 'there';
+      const warnSubject = 'Your ChurchOpsHub trial ends in 7 days';
+      const warnHtml = `<p>Hi ${escapeHtml(firstName)},</p>
 <p>Your 90-day free trial of ChurchOpsHub ends on <strong>${escapeHtml(trialEndDisplay)}</strong> — just 7 days away.</p>
 <p>Nothing will be deleted when it does. Your records stay exactly where they are.</p>
 <p>I'm changing how ChurchOpsHub is priced and will email you the new terms before they take effect.</p>
 <p><a href="https://churchopshub.com" style="color:#0D9488;font-weight:600">Log in to ChurchOpsHub</a> any time, and reply to this email with any questions.</p>
 <p>— John Vaught<br><span style="font-size:13px;color:#666">ChurchOpsHub</span></p>`;
-    const warnText = `Hi ${firstName},\n\nYour 90-day free trial of ChurchOpsHub ends on ${trialEndDisplay} — just 7 days away.\n\nNothing will be deleted when it does. Your records stay exactly where they are.\n\nI'm changing how ChurchOpsHub is priced and will email you the new terms before they take effect.\n\nLog in at churchopshub.com any time, and reply to this email with any questions.\n\n— John Vaught\nChurchOpsHub`;
+      const warnText = `Hi ${firstName},\n\nYour 90-day free trial of ChurchOpsHub ends on ${trialEndDisplay} — just 7 days away.\n\nNothing will be deleted when it does. Your records stay exactly where they are.\n\nI'm changing how ChurchOpsHub is priced and will email you the new terms before they take effect.\n\nLog in at churchopshub.com any time, and reply to this email with any questions.\n\n— John Vaught\nChurchOpsHub`;
 
-    try {
-      await sendEmailSafe({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject: warnSubject, html: warnHtml, text: warnText });
-      await subDoc.ref.update({ trialWarningEmailSentAt: nowStr });
-    } catch (err) {
-      console.error('processTrialExpirations: warning email failed', { churchId, err: err?.response?.body || err });
-      Sentry.captureException(err);
+      try {
+        const res = await sendEmailSafe({ to: adminEmail, from: FROM, replyTo: 'jcvaught@gmail.com', subject: warnSubject, html: warnHtml, text: warnText });
+        if (res?.sent > 0) sentAny = true; // suppressed/test-skipped is not a send
+      } catch (err) {
+        console.error('processTrialExpirations: warning email failed', { churchId, err: err?.response?.body || err });
+        Sentry.captureException(err);
+      }
     }
+    if (sentAny) {
+      try {
+        await subDoc.ref.update({ trialWarningEmailSentAt: nowStr });
+      } catch (err) {
+        console.error('processTrialExpirations: warning stamp failed', { churchId, err: err.message });
+        Sentry.captureException(err);
+      }
+    }
+    console.log('processTrialExpirations: trial-warning email', { churchId, pass: 'warning', source: resolved.source, count: resolved.recipients.length });
   }
 }));
 

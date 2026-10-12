@@ -4,6 +4,20 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-10-12 — Trial emails survive a deleted creator account
+
+Sentry JAVASCRIPT-REACT-1H: `processTrialExpirations` threw `auth/user-not-found`
+for an abandoned signup whose creator had deleted their Auth account. Trial
+emails (ended + 7-day warning) now go to the church creator as before, falling
+back to every active admin (by profile email) when the creator is gone. A church
+with nobody to email is a `console.warn`, not a Sentry issue. The warning pass
+no longer swallows every error silently (`catch { continue; }`): real errors
+are logged and Sentry-captured; only `auth/user-not-found` triggers the
+fallback. Warning stamp is written once, only if at least one send succeeded.
+Handler tests extended (`trialExpirations.test.mjs`).
+
+---
+
 ## 2026-10-01 — A task's creator can delete it after others comment
 
 `deleteTask` batch-deletes every comment with the task, but comment delete was
