@@ -11,3 +11,80 @@ functions/
 ├── lib/firestoreRest.js + lib/mcp/ ← **COH-016** ChatGPT MCP server: `mcp` (onRequest, public invoker, Bearer-key auth BEFORE the transport; stateless Streamable HTTP), `createApiKey` / `listApiKeys` / `revokeApiKey` (onCall, `wrapCall` + `assertActiveCaller`, `API_KEY_ALLOWLIST` in lib/mcp/keys.js). **Act-as-user REST model: every task / comment / config/main / activityLog read and write goes through the Firestore REST API with an ID token minted for the key owner so firestore.rules apply — tasks must NEVER be touched with the Admin SDK in this feature** (Admin SDK only for apiKeys, apiKeyUsage, the custom token, and the users/{uid} + config/subscription pre-checks). index.js only wires Sentry/subHasHub/Admin handles into these modules by parameter. Tools can't set assignees/visibility (strict zod schemas). **Needs `roles/iam.serviceAccountTokenCreator` for the runtime account on itself** (granted 2026-10-15) — `createCustomToken` fails with a generic 500 without it. Firestore REST refuses `beginTransaction` for end-user ID tokens, so writes use one atomic commit with `updateTime` preconditions. Prod checks: `scripts/verify-coh016.cjs`, `scripts/verify-coh016-race.mjs`. Plan: docs/COH-016-CHATGPT-MCP-PLAN-2026-10-15.md
 └── package.json               ← Node 22, firebase-functions v7, @modelcontextprotocol/sdk + zod (COH-016; lazily required inside lib/mcp/server.js so they don't slow other functions' cold start), firebase-admin v13, stripe v14, @sentry/node (server-side error capture, same DSN as browser; defaults catch process uncaughtException + unhandledRejection); npm overrides force-bump 4 transitive vulns: `protobufjs: ^7.5.8`, `axios: ^1.16.0`, `fast-xml-parser: ^5.5.6`, `path-to-regexp: 0.1.13` (the path-to-regexp pin must stay in the 0.1.x line for express 4 compat — newer majors changed the route-pattern API)
 ```
+
+## Known Pitfalls (moved from root CLAUDE.md 2026-10-15, text unchanged)
+
+### 🟡 A2P/TCR Compliance API is create-only — FAILED campaigns can only be fixed via Console "Fix Campaign"
+
+`POST/GET https://messaging.twilio.com/v1/Services/{MS}/Compliance/Usa2p` is **create + read only**:
+- `DELETE` → **HTTP 405** *"resource does not support the attempted HTTP method DELETE"*
+- `POST` over an existing record → **HTTP 409 Conflict**
+- No `PUT`/update method
+
+Once a campaign reaches terminal `FAILED`, the Messaging Service is permanently bound to that compliance record via API. To fix and resubmit, use the **Twilio Console → Trust Hub → A2P Campaigns → [Campaign SID] → "Fix Campaign →"** button on the campaign detail page (only appears when status is terminally Rejected, not the rejected-but-IN_PROGRESS limbo). That wizard re-uses the same Campaign SID + Messaging Service + Brand at no fee.
+
+For TCR rejections **30921** (USE_CASE_DESCRIPTION / *"website requires authentication"*) and **30909** (MESSAGE_FLOW / CTA unverifiable), the structural fix is making the opt-in CTA reviewable **without login**:
+1. A public no-login page that shows a faithful visual reproduction of the in-app consent form + the verbatim disclosure (`PublicSMSProgramPage.jsx` has `OptInFormScreenshot` for this). Prose descriptions of the flow are not enough — reviewers need to *see* the CTA.
+2. Console fields to edit on resubmit: **Campaign description**, **"How do end-users consent to receive messages?"**, **Privacy Policy URL**, **Terms and Conditions URL**. The last two can silently sit empty after the initial registration — confirm they're populated.
+3. Strip "authenticated web application", "TEST CREDENTIALS FOR REVIEWERS", and "sign in" framing from message_flow — those phrases are 30921's trigger even when accompanied by a public disclosure page.
+
+Verify post-submit via API `GET` (description + message_flow update immediately; `errors[]` + `date_updated` lag until TCR re-reviews). **Don't verify the public page via curl** — `churchopshub.com` returns `x-vercel-mitigated: deny` (HTTP 403) to plain curl; use a real browser (Playwright) instead.
+
+### 🟡 Gen-2 deploy can strip `allUsers` invoker IAM (silent 403 on webhooks)
+
+Reproduced 2026-05-14 on `twilioInbound`. After `firebase deploy --only functions:<webhook-name>`, the Cloud Run service's `allUsers/roles/run.invoker` binding can be silently removed. Symptoms: Twilio/Brevo/Stripe webhook calls return 403 before reaching your function, no logs, the third-party's logs show "delivered to webhook" but no callback fired.
+
+**Always probe a redeployed webhook function before walking away:**
+```bash
+curl -X POST <function-url> -d "test=1"
+```
+
+A 403 with `content-type: text/html` and a 9-byte "Forbidden" body is **ambiguous** — the Google Frontend's IAM-strip response and the function's own signature-rejection (`twilioInbound` at `functions/index.js:2350`) look identical at the wire level (verified 2026-05-23). **Don't rely on the body alone.** The real disambiguator:
+- Check Cloud Logging for the function's `console.warn('twilioInbound: invalid signature', ...)` entry on your test request's trace ID. **No log entry → IAM stripped. Log entry present → IAM fine, function rejected.**
+- A 400/401 response = IAM fine (function returned a status code, so it reached the code path). Only 403 is ambiguous.
+
+**Re-grant (if needed):**
+```bash
+# Either form works — they target the same Cloud Run IAM binding:
+gcloud run services add-iam-policy-binding <service-name> \
+  --region=us-central1 --project=church-inventory-9615c \
+  --member=allUsers --role=roles/run.invoker
+# Or, the function-aware shorthand:
+gcloud functions add-invoker-policy-binding <FunctionName> \
+  --region=us-central1 --project=church-inventory-9615c --member=allUsers
+```
+
+Applies to `twilioInbound`, `emailEventWebhook`, `stripeWebhook`, and any other Gen-2 `onRequest` function called by an unauthenticated third party.
+
+**`onCall` callables are NOT immune — confirmed 2026-05-28.** A scoped redeploy of `createCheckoutSession` (onCall) stripped its `allUsers/run.invoker` (the two sibling onCalls in the same deploy kept theirs), so every browser caller — admins starting Stripe checkout — got **403 (`text/html` GFE rejection)** until a re-grant. onCall handlers need `allUsers` invoker too (auth happens *inside* via `req.auth`, not at the IAM layer). **The probe is cleaner for onCall than for a webhook:** `curl -X POST <url> -H 'Content-Type: application/json' -d '{"data":{}}'` returns **401 (JSON)** when the function is reached vs **403 (`text/html`)** when IAM is stripped — unambiguous, no log-trace check needed. So also probe `createCheckoutSession`, `createPortalSession`, `identifyItem`, `getChurchStats`, `getPublicJobs` after redeploying them.
+
+### 🟡 Server Sentry is disabled under test — a `production`-tagged event from a local/test machine is test noise
+
+The **server** `Sentry.init` in `functions/index.js` gates `enabled: !isTest` where `isTest = NODE_ENV==='test' || VITEST || FIRESTORE_EMULATOR_HOST`, and tags such runs `environment:'test'` (2026-06-17). Before this, handler tests that deliberately exercise an error path (e.g. the `stripeWebhook` bad-signature test) shipped to the live project tagged `environment=production`, because the env gate only checked `FUNCTIONS_EMULATOR` (unset under `node --test` / `emulators:exec`). `FIRESTORE_EMULATOR_HOST` is the load-bearing signal — it's set by `emulators:exec` and never present in real Cloud Functions. `setup.mjs` also sets `NODE_ENV='test'` before importing `index.js`. **Don't remove the gate or narrow `environment` back to a bare `FUNCTIONS_EMULATOR` check.** Diagnostic tell: a server Sentry event whose `server_name` is a laptop (`*.local`) rather than a GCP hostname is a local/test event, not real production traffic.
+
+### 🟡 User-facing scheduled sends run HOURLY and gate on each church's local hour — don't "fix" them back to a daily cron
+
+`sendJobReminders` (8am), `sendNewJobsDigest` (noon), `sendTaskDueReminders` (Mon 8am), `sendWeeklyInsightsDigest` (Mon 8am), `sendWeeklyComplianceDigest` (Mon 8am), and `sendWeeklyAttentionDigest` (Mon 8am) all use `schedule: '0 * * * *'` (hourly), NOT a once-a-day cron (2026-06-05; the three weekly digests added 2026-06-07 — they iterate `churches` and gate per-church, no collectionGroup). Each iterates the candidate docs, resolves the owning church's `config/settings.timeZone` (default `America/Chicago` via `getChurchTimeZone`), and **only acts on a church when `localPartsFor(tz).hour` (and weekday, for the weekly digest) matches the target** — so every church gets its send at its own local wall-clock time. "Today" / the week window / idempotency stamps are computed **per church** inside the loop, never once at the top. The hourly heartbeats are why those three are `cadence: 'hourly'` in `SCHEDULED_JOB_REGISTRY`. The collection-group queries widen to a ±1-day (reminders/digest) or [−91,+7]-day (task digest) **UTC** window via `utcYmdOffset()` so they cover "today" in every US zone; the exact church-local date match happens in the loop. If you see "the cron runs 24×/day," that's intended — the hour-gate makes it a no-op for all but the matching hour. `closePastJobs`, `processTrialExpirations`, and `generateRecurringTemplateTasks` are still plain daily Central crons (not timezone-sensitive). Timezone is set per church in Settings → Church Settings (admin only).
+
+### 🟡 A freshly deployed Firestore trigger does not fire immediately
+
+Measured 2026-09-06 deploying COH-008's `cleanupWorkItemBacklinks`. `Deploy
+complete!` and `firebase functions:list` showing the function ACTIVE are **not**
+evidence that its Eventarc subscription is delivering yet. The first
+verification delete ran shortly after the deploy and produced **no function log
+entry whatsoever** — not an error, not an invocation — while the same operation
+3 minutes later succeeded in 3 seconds, and twice more on re-check. The event was
+never delivered; the code was fine.
+
+The tell is the log, not the data: an invocation that ran and decided to do
+nothing still logs (this trigger logs its outcome map or its ignore reason). **No
+log line at all means the event never arrived.** Check `firebase functions:log
+--only <name>` before concluding a trigger is broken, and give a newly created
+trigger a few minutes — or a warm-up delete — before the real assertions. A
+post-deploy check that runs immediately will produce a false failure and send you
+hunting a bug that isn't there.
+
+Also, deploying any function with `retry: true` requires
+`firebase deploy --force` — the CLI refuses with *"Pass the --force option to
+deploy functions with a failure policy"*. Its warning is the authoritative figure
+for the retry window: **up to 7 days**, not 24 hours.

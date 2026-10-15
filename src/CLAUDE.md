@@ -85,3 +85,77 @@ src/
     ├── blogPosts.js           ← Blog post data: slug, title, description, date, keywords, content (markdown string)
     └── whatsNew.js            ← User-facing "What's New" log (newest-first {date,tag,title,body}). Surfaced via the account-menu "What's New" item (unseen dot) → WhatsNewModal. NOT the dev changelog (that's docs/CHANGELOG.md). **DOC RITUAL: when a user-VISIBLE change ships, add a plain-language, benefit-first entry here** — keep it fed or it goes stale.
 ```
+
+## Known Pitfalls (moved from root CLAUDE.md 2026-10-15, text unchanged)
+
+### 🔴 Import name shadowing → TDZ crash in production
+Never re-declare an imported name as a local `const`/`let` inside a function body in the same file. esbuild's minifier assigns the same short name to both, creating a Temporal Dead Zone error ("Cannot access 'X' before initialization") that crashes the app in production but is invisible in development.
+
+```js
+// ❌ WRONG — shadows the `ref` import from firebase/storage
+import { ref } from 'firebase/storage';
+function MyComponent() {
+  const ref = useRef(); // TDZ bug after minification
+}
+
+// ✅ CORRECT — use a distinct name
+function MyComponent() {
+  const inputRef = useRef();
+}
+
+// ✅ ALSO CORRECT — alias the import (see ItemsPage.jsx)
+import { ref as storageRef } from 'firebase/storage';
+```
+
+**Variant — too many variables in one component:** Even without an explicit name match in source code, a component with many imports AND many `useState` declarations can trigger the same crash. esbuild assigns short names sequentially without full scope analysis; once module-scope and function-scope names converge on the same two-character identifier (e.g. `Pn`, `on`, `Se`), the TDZ crash occurs. Consolidating `useState` calls just shifts which name collides — it doesn't fix the root cause.
+
+**The permanent fix (Phase 19): `vite.config.js` uses Terser with `mangle: false`.** This keeps all variable names as their original source names, making name collisions structurally impossible. Switching to Terser alone was not enough — code splitting alone was not enough either, because app-internal modules (e.g. `useFirestore`) also produce module-scope vars that collide with page component `useState` vars in the same chunk. `mangle: false` is the only reliable solution. `compress: true` still strips dead code and whitespace. Bundle gzip size increases modestly (~130 KB) but correctness outweighs size. **Do not re-enable `mangle: true` or switch back to esbuild.**
+
+**Second pitfall exposed by `mangle: false` — `useState` declared after `useEffect` that uses it:** Once variable names were readable, a genuine source-level TDZ appeared: `bulkModal`, `bulkMode`, and `isAdmin`/`isManager` were referenced in a `useEffect` dependency array that appeared *before* their `useState`/derived declarations in the component body. React evaluates dependency arrays immediately during render, so accessing a `const` before its declaration throws TDZ. **Rule: always declare all `useState` calls and derived values that appear in `useEffect` dependency arrays *before* any `useEffect` in the component body.**
+
+### 🟡 `setMonth()` rolls over on month-end dates
+`date.setMonth(n + 1)` silently overflows to the next month when the current day doesn't exist in the target month (e.g. Jan 31 + 1 month → Mar 3, not Feb 28). Always clamp after advancing:
+
+```js
+const day = date.getDate();
+date.setMonth(date.getMonth() + interval);
+const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+if (date.getDate() < day) date.setDate(lastDay); // clamp to month-end
+```
+
+This pattern lives in `advanceOnce()` in `src/utils/date.js` (the shared recurrence engine behind `calculateNextDue`/`generateRecurrenceDates`) and its parity-tested server twin `functions/lib/recurrence.js`. Pages (Tasks/Maintenance/Reservations/Jobs) call into the shared util — they no longer inline the month math. The canonical cadence list (`RECURRENCE_FREQS`) also lives in `date.js` next to the math. The only remaining raw `setMonth` calls are InsightsPage chart-axis buckets (range cutoffs, not date-string output — low risk).
+
+### 🟡 `toISOString()` returns UTC — wrong date in US timezones
+`date.toISOString().slice(0, 10)` converts to UTC before formatting. For users in US timezones (UTC−5 to UTC−8), a date like "April 15 at 11pm local" becomes "April 16" in UTC — off by one day. Always use local-time formatting for date strings that will be compared to stored `YYYY-MM-DD` date fields:
+
+```js
+// ❌ WRONG — UTC conversion causes off-by-one for US users
+const today = new Date().toISOString().slice(0, 10);
+
+// ✅ CORRECT — local time
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+const today = localDateStr(new Date());
+```
+
+`localDateStr` is defined in `src/utils/date.js`. Import it instead of using `toISOString()` anywhere a `YYYY-MM-DD` date string is needed.
+
+### 🟡 Bare `>` in JSX text content
+esbuild's strict JSX parser rejects bare `>` characters in JSX text (e.g. `<P>Settings > Team Members</P>`). Use `→` for navigation paths or `{'>'`} to escape. Running `npm run build` will surface these immediately.
+
+### 🟡 Pseudo-selector styles (`:focus`, `:hover`) require global CSS
+Inline styles cannot target pseudo-selectors. The workaround for focus states is a global CSS rule in `index.html` — not `onFocus`/`onBlur` handlers on every input. The existing rule in `index.html` covers all `input`, `select`, and `textarea` elements with a teal border + glow on focus. For hover states on interactive elements, use `onMouseEnter`/`onMouseLeave` handlers inline (see KanbanColumn, TicketCard).
+
+### 🟡 Stale-chunk errors after a deploy = stale chunk, not a bug (two message variants)
+Each build emits new hash-named chunks; the host removes the old ones. A browser still running the previous build requests an old chunk that no longer exists. This surfaces as **one of two** `TypeError`s depending on how Vercel responds to the missing file:
+- `TypeError: Failed to fetch dynamically imported module: .../X-<hash>.js` — the chunk 404s before the catch-all rewrite catches it.
+- `TypeError: 'text/html' is not a valid JavaScript MIME type.` — the `/(.*) → /app.html` catch-all returns 200 + HTML instead, and `X-Content-Type-Options: nosniff` makes the browser reject it. (Sentry `63a627a0`, fixed 2026-05-27.)
+
+Both have the same root cause and the same fix. **Never use a raw `lazy(() => import(...))` or a raw `import(...)` for app modules — always route through `src/utils/lazyWithRetry.js`:** `lazyWithRetry(factory, name)` for React components (e.g. hub routes in `HubsPage.jsx`), or the bare `importWithRetry(factory, name)` primitive for non-component dynamic imports. The generic `catch` covers **both** message variants: it retries once, then forces a one-time `window.location.reload()` (sessionStorage-guarded against reload loops) to pull the fresh manifest. **The entry-point imports in `main.jsx` (`App.jsx`, `firebasePublic.js`, `PublicJobsPage.jsx`) are wrapped with `importWithRetry`** — these run before any React tree mounts, so a stale chunk there is fatal with no error boundary to catch it (that was the `63a627a0` gap). Third-party background loads (posthog, qrcode, zxing) are intentionally left raw — they're post-mount and non-fatal. As terminal fallback for component chunks, `ChunkErrorBoundary` (in `components/primitives/`, wrapping the hub `<Suspense>` with `key={hubKey}`) shows a *"New version available — Reload"* card instead of a hung spinner and reports to Sentry with `boundary:hub`/`chunkError` tags. **Residual gap (accepted):** none of this runs in a tab still on an *older* build during a deploy — only host-side asset retention (Vercel Skew Protection) closes that, and it's not enabled. If Sentry shows this error it's a returning user on an old tab — not actionable beyond confirming the self-heal fired.
+
+### 🟡 Sentry "Service worker registration failed" is best-effort noise, not a server bug
+The SW is an optional PWA layer (network-first, no stale data) with **zero user-facing impact** — registration failing only loses the install prompt + offline shell. The `index.html` `.catch` logs at `console.warn` (not `console.error`) **on purpose** so Sentry's `captureConsole({levels:['error']})` doesn't file it. Do **not** re-promote it to `console.error`. If you see this in Sentry, it's a stale pre-`7446b6e` event or a warn-level breadcrumb. The vercel.json catch-all does **not** swallow `/sw.js` / `/manifest.json` / icons — Vercel static-file precedence serves them before rewrites (verified by prod probes 2026-05-18: all `200` with correct MIME). Don't re-investigate a rewrite fix for this — it was already disproven.
+
+### 🟡 Sentry "Connection to Indexed Database server lost" is benign Firebase Auth noise
+`UnknownError: Connection to Indexed Database server lost. Refresh the page to try again` comes from **Firebase Auth's** IndexedDB token-store persistence when the browser drops the IDB connection (Safari/iOS eviction, backgrounded/killed tab, cleared site data, private mode). It is transient, environmental, and self-heals on the refresh the SDK's own message prompts. Firestore offline persistence is **not** enabled (no `initializeFirestore`/`persistentLocalCache`/`enableIndexedDbPersistence` in `src/`), so it is never a data-cache corruption. Dropped in `src/main.jsx` `beforeSend` (`msg.includes('Connection to Indexed Database server lost') → null`, added 2026-05-19, sibling to the `@firebase/firestore` snapshot-listener filter). If you see it in Sentry it's a stale pre-fix event — **do not** "fix the IndexedDB connection" (impossible from app code) or remove the `beforeSend` rule.

@@ -219,153 +219,6 @@ anyone join, and left the old code working — with no error anywhere. `config/m
 still duplicates `churchName`/`churchCode` for compatibility with already-open
 tabs; retiring those copies is a backlog item, not a free cleanup.
 
-### 🔴 Import name shadowing → TDZ crash in production
-Never re-declare an imported name as a local `const`/`let` inside a function body in the same file. esbuild's minifier assigns the same short name to both, creating a Temporal Dead Zone error ("Cannot access 'X' before initialization") that crashes the app in production but is invisible in development.
-
-```js
-// ❌ WRONG — shadows the `ref` import from firebase/storage
-import { ref } from 'firebase/storage';
-function MyComponent() {
-  const ref = useRef(); // TDZ bug after minification
-}
-
-// ✅ CORRECT — use a distinct name
-function MyComponent() {
-  const inputRef = useRef();
-}
-
-// ✅ ALSO CORRECT — alias the import (see ItemsPage.jsx)
-import { ref as storageRef } from 'firebase/storage';
-```
-
-**Variant — too many variables in one component:** Even without an explicit name match in source code, a component with many imports AND many `useState` declarations can trigger the same crash. esbuild assigns short names sequentially without full scope analysis; once module-scope and function-scope names converge on the same two-character identifier (e.g. `Pn`, `on`, `Se`), the TDZ crash occurs. Consolidating `useState` calls just shifts which name collides — it doesn't fix the root cause.
-
-**The permanent fix (Phase 19): `vite.config.js` uses Terser with `mangle: false`.** This keeps all variable names as their original source names, making name collisions structurally impossible. Switching to Terser alone was not enough — code splitting alone was not enough either, because app-internal modules (e.g. `useFirestore`) also produce module-scope vars that collide with page component `useState` vars in the same chunk. `mangle: false` is the only reliable solution. `compress: true` still strips dead code and whitespace. Bundle gzip size increases modestly (~130 KB) but correctness outweighs size. **Do not re-enable `mangle: true` or switch back to esbuild.**
-
-**Second pitfall exposed by `mangle: false` — `useState` declared after `useEffect` that uses it:** Once variable names were readable, a genuine source-level TDZ appeared: `bulkModal`, `bulkMode`, and `isAdmin`/`isManager` were referenced in a `useEffect` dependency array that appeared *before* their `useState`/derived declarations in the component body. React evaluates dependency arrays immediately during render, so accessing a `const` before its declaration throws TDZ. **Rule: always declare all `useState` calls and derived values that appear in `useEffect` dependency arrays *before* any `useEffect` in the component body.**
-
-### 🟡 `setMonth()` rolls over on month-end dates
-`date.setMonth(n + 1)` silently overflows to the next month when the current day doesn't exist in the target month (e.g. Jan 31 + 1 month → Mar 3, not Feb 28). Always clamp after advancing:
-
-```js
-const day = date.getDate();
-date.setMonth(date.getMonth() + interval);
-const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-if (date.getDate() < day) date.setDate(lastDay); // clamp to month-end
-```
-
-This pattern lives in `advanceOnce()` in `src/utils/date.js` (the shared recurrence engine behind `calculateNextDue`/`generateRecurrenceDates`) and its parity-tested server twin `functions/lib/recurrence.js`. Pages (Tasks/Maintenance/Reservations/Jobs) call into the shared util — they no longer inline the month math. The canonical cadence list (`RECURRENCE_FREQS`) also lives in `date.js` next to the math. The only remaining raw `setMonth` calls are InsightsPage chart-axis buckets (range cutoffs, not date-string output — low risk).
-
-### 🟡 `toISOString()` returns UTC — wrong date in US timezones
-`date.toISOString().slice(0, 10)` converts to UTC before formatting. For users in US timezones (UTC−5 to UTC−8), a date like "April 15 at 11pm local" becomes "April 16" in UTC — off by one day. Always use local-time formatting for date strings that will be compared to stored `YYYY-MM-DD` date fields:
-
-```js
-// ❌ WRONG — UTC conversion causes off-by-one for US users
-const today = new Date().toISOString().slice(0, 10);
-
-// ✅ CORRECT — local time
-function localDateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-const today = localDateStr(new Date());
-```
-
-`localDateStr` is defined in `src/utils/date.js`. Import it instead of using `toISOString()` anywhere a `YYYY-MM-DD` date string is needed.
-
-### 🟡 Bare `>` in JSX text content
-esbuild's strict JSX parser rejects bare `>` characters in JSX text (e.g. `<P>Settings > Team Members</P>`). Use `→` for navigation paths or `{'>'`} to escape. Running `npm run build` will surface these immediately.
-
-### 🟡 A2P/TCR Compliance API is create-only — FAILED campaigns can only be fixed via Console "Fix Campaign"
-
-`POST/GET https://messaging.twilio.com/v1/Services/{MS}/Compliance/Usa2p` is **create + read only**:
-- `DELETE` → **HTTP 405** *"resource does not support the attempted HTTP method DELETE"*
-- `POST` over an existing record → **HTTP 409 Conflict**
-- No `PUT`/update method
-
-Once a campaign reaches terminal `FAILED`, the Messaging Service is permanently bound to that compliance record via API. To fix and resubmit, use the **Twilio Console → Trust Hub → A2P Campaigns → [Campaign SID] → "Fix Campaign →"** button on the campaign detail page (only appears when status is terminally Rejected, not the rejected-but-IN_PROGRESS limbo). That wizard re-uses the same Campaign SID + Messaging Service + Brand at no fee.
-
-For TCR rejections **30921** (USE_CASE_DESCRIPTION / *"website requires authentication"*) and **30909** (MESSAGE_FLOW / CTA unverifiable), the structural fix is making the opt-in CTA reviewable **without login**:
-1. A public no-login page that shows a faithful visual reproduction of the in-app consent form + the verbatim disclosure (`PublicSMSProgramPage.jsx` has `OptInFormScreenshot` for this). Prose descriptions of the flow are not enough — reviewers need to *see* the CTA.
-2. Console fields to edit on resubmit: **Campaign description**, **"How do end-users consent to receive messages?"**, **Privacy Policy URL**, **Terms and Conditions URL**. The last two can silently sit empty after the initial registration — confirm they're populated.
-3. Strip "authenticated web application", "TEST CREDENTIALS FOR REVIEWERS", and "sign in" framing from message_flow — those phrases are 30921's trigger even when accompanied by a public disclosure page.
-
-Verify post-submit via API `GET` (description + message_flow update immediately; `errors[]` + `date_updated` lag until TCR re-reviews). **Don't verify the public page via curl** — `churchopshub.com` returns `x-vercel-mitigated: deny` (HTTP 403) to plain curl; use a real browser (Playwright) instead.
-
-### 🟡 Gen-2 deploy can strip `allUsers` invoker IAM (silent 403 on webhooks)
-
-Reproduced 2026-05-14 on `twilioInbound`. After `firebase deploy --only functions:<webhook-name>`, the Cloud Run service's `allUsers/roles/run.invoker` binding can be silently removed. Symptoms: Twilio/Brevo/Stripe webhook calls return 403 before reaching your function, no logs, the third-party's logs show "delivered to webhook" but no callback fired.
-
-**Always probe a redeployed webhook function before walking away:**
-```bash
-curl -X POST <function-url> -d "test=1"
-```
-
-A 403 with `content-type: text/html` and a 9-byte "Forbidden" body is **ambiguous** — the Google Frontend's IAM-strip response and the function's own signature-rejection (`twilioInbound` at `functions/index.js:2350`) look identical at the wire level (verified 2026-05-23). **Don't rely on the body alone.** The real disambiguator:
-- Check Cloud Logging for the function's `console.warn('twilioInbound: invalid signature', ...)` entry on your test request's trace ID. **No log entry → IAM stripped. Log entry present → IAM fine, function rejected.**
-- A 400/401 response = IAM fine (function returned a status code, so it reached the code path). Only 403 is ambiguous.
-
-**Re-grant (if needed):**
-```bash
-# Either form works — they target the same Cloud Run IAM binding:
-gcloud run services add-iam-policy-binding <service-name> \
-  --region=us-central1 --project=church-inventory-9615c \
-  --member=allUsers --role=roles/run.invoker
-# Or, the function-aware shorthand:
-gcloud functions add-invoker-policy-binding <FunctionName> \
-  --region=us-central1 --project=church-inventory-9615c --member=allUsers
-```
-
-Applies to `twilioInbound`, `emailEventWebhook`, `stripeWebhook`, and any other Gen-2 `onRequest` function called by an unauthenticated third party.
-
-**`onCall` callables are NOT immune — confirmed 2026-05-28.** A scoped redeploy of `createCheckoutSession` (onCall) stripped its `allUsers/run.invoker` (the two sibling onCalls in the same deploy kept theirs), so every browser caller — admins starting Stripe checkout — got **403 (`text/html` GFE rejection)** until a re-grant. onCall handlers need `allUsers` invoker too (auth happens *inside* via `req.auth`, not at the IAM layer). **The probe is cleaner for onCall than for a webhook:** `curl -X POST <url> -H 'Content-Type: application/json' -d '{"data":{}}'` returns **401 (JSON)** when the function is reached vs **403 (`text/html`)** when IAM is stripped — unambiguous, no log-trace check needed. So also probe `createCheckoutSession`, `createPortalSession`, `identifyItem`, `getChurchStats`, `getPublicJobs` after redeploying them.
-
-### 🟡 Pseudo-selector styles (`:focus`, `:hover`) require global CSS
-Inline styles cannot target pseudo-selectors. The workaround for focus states is a global CSS rule in `index.html` — not `onFocus`/`onBlur` handlers on every input. The existing rule in `index.html` covers all `input`, `select`, and `textarea` elements with a teal border + glow on focus. For hover states on interactive elements, use `onMouseEnter`/`onMouseLeave` handlers inline (see KanbanColumn, TicketCard).
-
-### 🟡 Stale-chunk errors after a deploy = stale chunk, not a bug (two message variants)
-Each build emits new hash-named chunks; the host removes the old ones. A browser still running the previous build requests an old chunk that no longer exists. This surfaces as **one of two** `TypeError`s depending on how Vercel responds to the missing file:
-- `TypeError: Failed to fetch dynamically imported module: .../X-<hash>.js` — the chunk 404s before the catch-all rewrite catches it.
-- `TypeError: 'text/html' is not a valid JavaScript MIME type.` — the `/(.*) → /app.html` catch-all returns 200 + HTML instead, and `X-Content-Type-Options: nosniff` makes the browser reject it. (Sentry `63a627a0`, fixed 2026-05-27.)
-
-Both have the same root cause and the same fix. **Never use a raw `lazy(() => import(...))` or a raw `import(...)` for app modules — always route through `src/utils/lazyWithRetry.js`:** `lazyWithRetry(factory, name)` for React components (e.g. hub routes in `HubsPage.jsx`), or the bare `importWithRetry(factory, name)` primitive for non-component dynamic imports. The generic `catch` covers **both** message variants: it retries once, then forces a one-time `window.location.reload()` (sessionStorage-guarded against reload loops) to pull the fresh manifest. **The entry-point imports in `main.jsx` (`App.jsx`, `firebasePublic.js`, `PublicJobsPage.jsx`) are wrapped with `importWithRetry`** — these run before any React tree mounts, so a stale chunk there is fatal with no error boundary to catch it (that was the `63a627a0` gap). Third-party background loads (posthog, qrcode, zxing) are intentionally left raw — they're post-mount and non-fatal. As terminal fallback for component chunks, `ChunkErrorBoundary` (in `components/primitives/`, wrapping the hub `<Suspense>` with `key={hubKey}`) shows a *"New version available — Reload"* card instead of a hung spinner and reports to Sentry with `boundary:hub`/`chunkError` tags. **Residual gap (accepted):** none of this runs in a tab still on an *older* build during a deploy — only host-side asset retention (Vercel Skew Protection) closes that, and it's not enabled. If Sentry shows this error it's a returning user on an old tab — not actionable beyond confirming the self-heal fired.
-
-### 🟡 Sentry "Service worker registration failed" is best-effort noise, not a server bug
-The SW is an optional PWA layer (network-first, no stale data) with **zero user-facing impact** — registration failing only loses the install prompt + offline shell. The `index.html` `.catch` logs at `console.warn` (not `console.error`) **on purpose** so Sentry's `captureConsole({levels:['error']})` doesn't file it. Do **not** re-promote it to `console.error`. If you see this in Sentry, it's a stale pre-`7446b6e` event or a warn-level breadcrumb. The vercel.json catch-all does **not** swallow `/sw.js` / `/manifest.json` / icons — Vercel static-file precedence serves them before rewrites (verified by prod probes 2026-05-18: all `200` with correct MIME). Don't re-investigate a rewrite fix for this — it was already disproven.
-
-### 🟡 Sentry "Connection to Indexed Database server lost" is benign Firebase Auth noise
-`UnknownError: Connection to Indexed Database server lost. Refresh the page to try again` comes from **Firebase Auth's** IndexedDB token-store persistence when the browser drops the IDB connection (Safari/iOS eviction, backgrounded/killed tab, cleared site data, private mode). It is transient, environmental, and self-heals on the refresh the SDK's own message prompts. Firestore offline persistence is **not** enabled (no `initializeFirestore`/`persistentLocalCache`/`enableIndexedDbPersistence` in `src/`), so it is never a data-cache corruption. Dropped in `src/main.jsx` `beforeSend` (`msg.includes('Connection to Indexed Database server lost') → null`, added 2026-05-19, sibling to the `@firebase/firestore` snapshot-listener filter). If you see it in Sentry it's a stale pre-fix event — **do not** "fix the IndexedDB connection" (impossible from app code) or remove the `beforeSend` rule.
-
-### 🟡 Server Sentry is disabled under test — a `production`-tagged event from a local/test machine is test noise
-
-The **server** `Sentry.init` in `functions/index.js` gates `enabled: !isTest` where `isTest = NODE_ENV==='test' || VITEST || FIRESTORE_EMULATOR_HOST`, and tags such runs `environment:'test'` (2026-06-17). Before this, handler tests that deliberately exercise an error path (e.g. the `stripeWebhook` bad-signature test) shipped to the live project tagged `environment=production`, because the env gate only checked `FUNCTIONS_EMULATOR` (unset under `node --test` / `emulators:exec`). `FIRESTORE_EMULATOR_HOST` is the load-bearing signal — it's set by `emulators:exec` and never present in real Cloud Functions. `setup.mjs` also sets `NODE_ENV='test'` before importing `index.js`. **Don't remove the gate or narrow `environment` back to a bare `FUNCTIONS_EMULATOR` check.** Diagnostic tell: a server Sentry event whose `server_name` is a laptop (`*.local`) rather than a GCP hostname is a local/test event, not real production traffic.
-
-### 🟡 User-facing scheduled sends run HOURLY and gate on each church's local hour — don't "fix" them back to a daily cron
-
-`sendJobReminders` (8am), `sendNewJobsDigest` (noon), `sendTaskDueReminders` (Mon 8am), `sendWeeklyInsightsDigest` (Mon 8am), `sendWeeklyComplianceDigest` (Mon 8am), and `sendWeeklyAttentionDigest` (Mon 8am) all use `schedule: '0 * * * *'` (hourly), NOT a once-a-day cron (2026-06-05; the three weekly digests added 2026-06-07 — they iterate `churches` and gate per-church, no collectionGroup). Each iterates the candidate docs, resolves the owning church's `config/settings.timeZone` (default `America/Chicago` via `getChurchTimeZone`), and **only acts on a church when `localPartsFor(tz).hour` (and weekday, for the weekly digest) matches the target** — so every church gets its send at its own local wall-clock time. "Today" / the week window / idempotency stamps are computed **per church** inside the loop, never once at the top. The hourly heartbeats are why those three are `cadence: 'hourly'` in `SCHEDULED_JOB_REGISTRY`. The collection-group queries widen to a ±1-day (reminders/digest) or [−91,+7]-day (task digest) **UTC** window via `utcYmdOffset()` so they cover "today" in every US zone; the exact church-local date match happens in the loop. If you see "the cron runs 24×/day," that's intended — the hour-gate makes it a no-op for all but the matching hour. `closePastJobs`, `processTrialExpirations`, and `generateRecurringTemplateTasks` are still plain daily Central crons (not timezone-sensitive). Timezone is set per church in Settings → Church Settings (admin only).
-
-### 🟡 A freshly deployed Firestore trigger does not fire immediately
-
-Measured 2026-09-06 deploying COH-008's `cleanupWorkItemBacklinks`. `Deploy
-complete!` and `firebase functions:list` showing the function ACTIVE are **not**
-evidence that its Eventarc subscription is delivering yet. The first
-verification delete ran shortly after the deploy and produced **no function log
-entry whatsoever** — not an error, not an invocation — while the same operation
-3 minutes later succeeded in 3 seconds, and twice more on re-check. The event was
-never delivered; the code was fine.
-
-The tell is the log, not the data: an invocation that ran and decided to do
-nothing still logs (this trigger logs its outcome map or its ignore reason). **No
-log line at all means the event never arrived.** Check `firebase functions:log
---only <name>` before concluding a trigger is broken, and give a newly created
-trigger a few minutes — or a warm-up delete — before the real assertions. A
-post-deploy check that runs immediately will produce a false failure and send you
-hunting a bug that isn't there.
-
-Also, deploying any function with `retry: true` requires
-`firebase deploy --force` — the CLI refuses with *"Pass the --force option to
-deploy functions with a failure policy"*. Its warning is the authoritative figure
-for the retry window: **up to 7 days**, not 24 hours.
-
 ### 🟡 `firebase deploy --only firestore:indexes` silently skips two index kinds
 
 `firebase deploy --only firestore:indexes` exits 0 with `✔ Deploy complete!` for two index shapes it never actually creates. The affected query then throws `FAILED_PRECONDITION: The query requires an index` at runtime, with no deploy-time signal that anything was wrong.
@@ -403,6 +256,24 @@ The build is near-instant on an empty collection. **Always probe new index-depen
 4. **`Cross-Origin-Opener-Policy` must be `same-origin-allow-popups`** — Firebase's popup polls `window.closed`; modern Chrome blocks that across the COOP boundary without this, breaking the popup result handshake. Symptom: many *"Cross-Origin-Opener-Policy policy would block the window.closed call"* Console errors from `vendor-firebase`. (Added 2026-05-28, commit `03083fb`.)
 
 Items 1–2 were dropped by the 2026-03-27 hardening commit (`a45da1f`), unnoticed ~7 weeks (fixed 2026-05-18, `ed108f6`+`d6b06ce`); items 3–4 were the *same* class of bug that the May fix missed (X-Frame-Options stayed `DENY`; COOP was never set), found 2026-05-28 while debugging the Lisa Bosley case. **All four live in the `/(.*)` headers block of `vercel.json` — never tighten any of them back.** Header changes need a fresh load to test, and COH is a PWA: a normal refresh serves the **stale cached shell via the service worker** — test in a brand-new incognito window. The `loginWithGoogle` catch Sentry-captures with tag `flow:google-signin`. (Minor known UX quirk after a fresh load: the first popup click can race the lazily-loaded relay iframe and need a second click; benign — `signInWithRedirect` would eliminate it if ever needed.)
+
+### Moved to the directory files (2026-10-15, to keep this file under 40k)
+
+Full text, unchanged, in the file that loads when you work there:
+
+- 🔴 Import name shadowing → TDZ crash in production → `src/CLAUDE.md`
+- 🟡 `setMonth()` rolls over on month-end dates → `src/CLAUDE.md`
+- 🟡 `toISOString()` returns UTC — wrong date in US timezones → `src/CLAUDE.md`
+- 🟡 Bare `>` in JSX text content → `src/CLAUDE.md`
+- 🟡 Pseudo-selector styles (`:focus`, `:hover`) require global CSS → `src/CLAUDE.md`
+- 🟡 Stale-chunk errors after a deploy = stale chunk, not a bug (two message variants) → `src/CLAUDE.md`
+- 🟡 Sentry "Service worker registration failed" is best-effort noise, not a server bug → `src/CLAUDE.md`
+- 🟡 Sentry "Connection to Indexed Database server lost" is benign Firebase Auth noise → `src/CLAUDE.md`
+- 🟡 A2P/TCR Compliance API is create-only — FAILED campaigns can only be fixed via Console "Fix Campaign" → `functions/CLAUDE.md`
+- 🟡 Gen-2 deploy can strip `allUsers` invoker IAM (silent 403 on webhooks) → `functions/CLAUDE.md`
+- 🟡 Server Sentry is disabled under test — a `production`-tagged event from a local/test machine is test noise → `functions/CLAUDE.md`
+- 🟡 User-facing scheduled sends run HOURLY and gate on each church's local hour — don't "fix" them back to a daily cron → `functions/CLAUDE.md`
+- 🟡 A freshly deployed Firestore trigger does not fire immediately → `functions/CLAUDE.md`
 
 ## Vercel: Ignored Build Step (docs-only commits skip the build)
 
