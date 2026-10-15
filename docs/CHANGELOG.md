@@ -4,6 +4,14 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-10-15 — Tasks/Maintenance board fills the browser width
+
+The app's main content wrapper (`src/App.jsx`) is capped at 1100px; that cap is
+now lifted for the `work`/`tasks`/`maintenance` hubs only (note: the merged
+Tasks+Maintenance view is hubKey `work`, not `tasks`). Kanban columns flex
+260–380px instead of a fixed 260–280px, so at ~2200px all six columns fit.
+Header nav still centers at 1100px (owner may want it widened on these pages).
+
 ## 2026-10-12 — Trial emails survive a deleted creator account
 
 Sentry JAVASCRIPT-REACT-1H: `processTrialExpirations` threw `auth/user-not-found`
