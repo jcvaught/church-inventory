@@ -45,6 +45,7 @@ function uidsOf(people) {
 }
 
 const VISIBILITIES = ['team', 'private', 'shared'];
+const MAX_CREATE_ATTEMPTS = 8;
 const taskPath = (churchId, bare) => `churches/${churchId}/workItems/task_${bare}`;
 const bareOf = (docId) => (docId.startsWith('task_') ? docId.slice(5) : docId);
 const nameIsLoggable = (visibility) => visibility !== 'private' && visibility !== 'shared';
@@ -168,7 +169,13 @@ function createTools(ctx) {
       } catch (err) {
         // Two creators raced for the same number (or two Completes for the same
         // marker): re-read and try again. The marker loser then returns null.
-        if (err instanceof RestError && err.kind === 'conflict' && attempt < 4) continue;
+        // Jittered backoff, like the client SDK's transaction retries: a production
+        // race of 12 simultaneous creates (6 web-client, 6 MCP) exhausted 5 tight
+        // retries once; numbering stayed correct, the request just gave up.
+        if (err instanceof RestError && err.kind === 'conflict' && attempt < MAX_CREATE_ATTEMPTS - 1) {
+          await new Promise((r) => setTimeout(r, Math.min(1000, 50 * 2 ** attempt) * (0.5 + Math.random())));
+          continue;
+        }
         throw err;
       }
     }
