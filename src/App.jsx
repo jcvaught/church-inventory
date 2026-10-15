@@ -974,7 +974,7 @@ function AppShell({ authHook }) {
 
       {/* Page content */}
       <PageErrorBoundary key={tab}>
-      <div style={{ maxWidth:1100, margin:"0 auto", padding:isMobile?"16px 14px 96px":"28px 28px 60px" }} onClick={()=>menuOpen&&setMenuOpen(false)}>
+      <div style={{ maxWidth:(tab === "hubs" && ["work", "tasks", "maintenance"].includes(hubKey)) ? "none" : 1100, margin:"0 auto", padding:isMobile?"16px 14px 96px":"28px 28px 60px" }} onClick={()=>menuOpen&&setMenuOpen(false)}>
         {tab === "dashboard" && (isVolunteerOnly(userProfile)
           ? <VolunteerHome store={store} userProfile={userProfile} onOpenJobs={(view) => { setJobsInitialView(view || null); openHub('jobs'); setTab('hubs'); }} />
           : <Dashboard store={store} userProfile={userProfile} canSeeJobHub={userCanSeeHub('jobs')} />)}

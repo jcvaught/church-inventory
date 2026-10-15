@@ -436,7 +436,7 @@ const KanbanColumn = memo(function KanbanColumn({ status, tasks, onTaskClick, on
       onDragOver={!isMobile && onDrop ? e => { e.preventDefault(); setDragOver(true); } : undefined}
       onDragLeave={!isMobile && onDrop ? () => setDragOver(false) : undefined}
       onDrop={!isMobile && onDrop ? e => { e.preventDefault(); setDragOver(false); const docId = e.dataTransfer.getData('taskDocId'); if (docId) onDrop(docId); } : undefined}
-      style={{ minWidth:isMobile ? '100%' : 260, maxWidth:isMobile ? '100%' : 280, flexShrink:0, background:dragOver ? B.tealPale : B.warmGray, borderRadius:14, padding:'12px 10px', border:'2px solid '+(dragOver ? B.teal : 'transparent'), transition:'background 0.15s, border-color 0.15s' }}
+      style={{ flex:isMobile ? '0 0 auto' : '1 0 260px', minWidth:isMobile ? '100%' : 260, maxWidth:isMobile ? '100%' : 380, background:dragOver ? B.tealPale : B.warmGray, borderRadius:14, padding:'12px 10px', border:'2px solid '+(dragOver ? B.teal : 'transparent'), transition:'background 0.15s, border-color 0.15s' }}
     >
       <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10, paddingLeft:4 }}>
         <span style={{ width:10, height:10, borderRadius:'50%', background:sc.dot, flexShrink:0 }}/>
