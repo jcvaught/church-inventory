@@ -21,6 +21,13 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 
 ## Active Tasks
 
+### COH-016 — Personal MCP server so ChatGPT can work John's tasks
+- Status: **In progress** (2026-10-15). Owner: Claude (Sonnet 5.5 builds, Codex reviews diff).
+- Branch: `claude/coh-016-chatgpt-mcp`. Plan: `docs/COH-016-CHATGPT-MCP-PLAN-2026-10-15.md`.
+- Plan review: Codex ×2 (REWORK, REWORK); every finding verified against code and folded in.
+- Acceptance: plan §8 tests green; §9 production verification against `e2e-test-church`;
+  one real ChatGPT desktop round trip by John. John-only (uid allowlist).
+
 ### COH-012 — Flat pricing, entitlement collapse, review disposition
 
 - Status: **Parts A + B COMPLETE 2026-09-18.** A.3, A.4 (0a, 0b, 1–5), A.5
