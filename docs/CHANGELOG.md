@@ -4,6 +4,12 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 ---
 
+## 2026-10-15 — COH-016: personal MCP server so ChatGPT can work the owner's tasks
+
+New Cloud Functions `mcp` (Streamable HTTP MCP endpoint), `createApiKey`, `listApiKeys`, `revokeApiKey`, plus a "Connect ChatGPT" card in Settings (owner uid only). Tools: `list_tasks`, `get_task`, `create_task`, `update_task`, `add_comment` — status/fields/comments/new tasks only; **no reassigning or re-sharing**. **Act-as-user security model:** every task, comment, `config/main` and `activityLog` access goes through the Firestore REST API with an ID token minted for the key owner (custom token -> `signInWithCustomToken`), so `firestore.rules` apply exactly as for the browser; the Admin SDK touches only `apiKeys`/`apiKeyUsage`, the custom token and the `users/{uid}` + `config/subscription` pre-checks (profile active + same church, Tasks hub, lapsed = no create). Keys: `apiKeys/{sha256}`, 90-day expiry, 5 per user, 60 req/min. New code in `functions/lib/firestoreRest.js` and `functions/lib/mcp/`; `index.js` only wires. Tests: `firestore-rest`, `mcp-schema`, `mcp-tools` (unit), `handlers/apiKeys` (emulator), `rules/apikeys`. Plan: `docs/COH-016-CHATGPT-MCP-PLAN-2026-10-15.md`. **Not deployed** — see the plan's section 9 for the deploy and production verification (Gen-2 `signBlob` IAM is the known first-call risk).
+
+---
+
 ## 2026-10-15 — Tasks/Maintenance board fills the browser width
 
 The app's main content wrapper (`src/App.jsx`) is capped at 1100px; that cap is

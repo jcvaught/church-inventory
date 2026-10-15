@@ -4827,3 +4827,55 @@ exports.twilioInbound = onRequest({ cors: false, invoker: 'public' }, async (req
 
   res.status(200).type('text/xml').send('<Response/>');
 });
+
+// ── COH-016: personal MCP server so ChatGPT can work the owner's tasks ───────
+// Thin wiring only: the logic lives in lib/mcp/ and lib/firestoreRest.js, and
+// receives Sentry / subHasHub / the Admin handles from here as parameters.
+// ACT-AS-USER MODEL: every task, comment, config/main and activityLog access in
+// `mcp` goes through the Firestore REST API with an ID token minted for the key
+// owner, so firestore.rules apply. NEVER use the Admin SDK for that data here;
+// the Admin SDK is only for apiKeys, apiKeyUsage, the custom token and the
+// users/{uid} + config/subscription pre-check reads. Plan: docs/COH-016-*.md.
+const mcpKeys = require('./lib/mcp/keys');
+const { createMcpHandler } = require('./lib/mcp/server');
+
+exports.createApiKey = onCall(
+  { cors: true },
+  wrapCall('createApiKey', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    await assertActiveCaller(req);
+    return mcpKeys.createKey({ db: getFirestore(), uid: req.auth.uid, label: (req.data || {}).label });
+  })
+);
+
+exports.listApiKeys = onCall(
+  { cors: true },
+  wrapCall('listApiKeys', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    await assertActiveCaller(req);
+    return { keys: await mcpKeys.listKeys({ db: getFirestore(), uid: req.auth.uid }) };
+  })
+);
+
+exports.revokeApiKey = onCall(
+  { cors: true },
+  wrapCall('revokeApiKey', async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Must be signed in.');
+    await assertActiveCaller(req);
+    return mcpKeys.revokeKey({ db: getFirestore(), uid: req.auth.uid, id: (req.data || {}).id });
+  })
+);
+
+// invoker:'public' pins the allUsers run.invoker IAM (Gen-2 redeploys can strip
+// it); auth is the Bearer key, checked in the handler BEFORE the MCP transport.
+exports.mcp = onRequest(
+  { invoker: 'public', cors: false, memory: '256MiB' },
+  createMcpHandler({
+    db: () => getFirestore(),
+    createCustomToken: (uid) => getAuth().createCustomToken(uid),
+    captureError: (err, tags) => Sentry.captureException(err, { tags: { fn: 'mcp', ...(tags || {}) } }),
+    subHasHub,
+    canCreate: (sub) => entitlement.canCreate(sub),
+    calculateNextDue,
+  })
+);
