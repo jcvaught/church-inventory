@@ -101,15 +101,16 @@ function createTools(ctx) {
     return d;
   }
 
-  // The addTask transaction (useFirestore.js:881-924) over REST: read
+  // The addTask transaction (useFirestore.js:881-924) over REST, as a
+  // precondition-guarded atomic commit (see below): read
   // config/main -> maxTaskNumber+1 -> TSK-### -> commit the counter bump and the
   // new doc together. `fields` carries the caller-supplied half; everything the
   // server owns (type, number, creator, uid projections, timestamps, archive
   // pair) is set here.
   //
   // `claimPath` (recurrence only): the completed source task. Its
-  // `nextRecurrenceCreatedAt` marker is checked and set INSIDE the same
-  // transaction as the counter bump and the successor create, so the three
+  // `nextRecurrenceCreatedAt` marker is checked and set in the SAME atomic
+  // commit as the counter bump and the successor create, so the three
   // commit atomically or not at all. Returns null when the marker is already
   // set (someone else made the successor). Codex diff review 2026-10-15: a
   // separate marker write + rollback could duplicate the successor when a
@@ -119,11 +120,15 @@ function createTools(ctx) {
     const configPath = `churches/${churchId}/config/main`;
     const path = taskPath(churchId, newId);
     for (let attempt = 0; ; attempt++) {
-      const tx = await rest.beginTransaction(token);
-      const cfg = await rest.getDoc(token, configPath, { transaction: tx });
+      // No REST transaction: Firestore refuses beginTransaction for an end-user
+      // ID token (403 before any rule runs; measured in production 2026-10-15).
+      // Same guarantee instead from ONE atomic commit whose every write carries
+      // a precondition on the version just read; a concurrent change fails the
+      // precondition (conflict) and the loop re-reads.
+      const cfg = await rest.getDoc(token, configPath);
       let claimWrite = null;
       if (claimPath) {
-        const src = await rest.getDoc(token, claimPath, { transaction: tx });
+        const src = await rest.getDoc(token, claimPath);
         if (!src || src.data.nextRecurrenceCreatedAt) return null;
         claimWrite = updateWrite(
           claimPath, { nextRecurrenceCreatedAt: nowIso() }, ['nextRecurrenceCreatedAt'], { updateTime: src.updateTime },
@@ -152,9 +157,10 @@ function createTools(ctx) {
       try {
         await rest.commit(token, [
           ...(claimWrite ? [claimWrite] : []),
-          updateWrite(configPath, { maxTaskNumber: maxNum }, ['maxTaskNumber']),
+          updateWrite(configPath, { maxTaskNumber: maxNum }, ['maxTaskNumber'],
+            cfg ? { updateTime: cfg.updateTime } : { exists: false }),
           createWrite(path, data),
-        ], tx);
+        ]);
         const details = { priority: data.priority };
         if (nameIsLoggable(data.visibility)) details.name = data.name;
         await logActivity('add_task', taskNumber, details);
@@ -162,7 +168,7 @@ function createTools(ctx) {
       } catch (err) {
         // Two creators raced for the same number (or two Completes for the same
         // marker): re-read and try again. The marker loser then returns null.
-        if (err instanceof RestError && err.kind === 'conflict' && attempt < 2) continue;
+        if (err instanceof RestError && err.kind === 'conflict' && attempt < 4) continue;
         throw err;
       }
     }
@@ -173,7 +179,7 @@ function createTools(ctx) {
 
   // createNextRecurringTask (WorkBoard.jsx:974-1016) over REST: build the
   // successor exactly as the board does (task branch, 984-1009), then create it
-  // in ONE transaction with the source's marker (createTaskDoc claimPath).
+  // in ONE atomic commit with the source's marker (createTaskDoc claimPath).
   // Two concurrent Completes produce exactly one successor.
   async function createNextRecurring(source, sourcePath) {
     const nextDue = ctx.calculateNextDue(source.dueDate, source.recurrence);

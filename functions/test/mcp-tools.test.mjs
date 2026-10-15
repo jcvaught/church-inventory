@@ -28,7 +28,9 @@ function fakeRest() {
       const e = store.get(path);
       return e ? { id: path.split('/').pop(), path, updateTime: e.updateTime, data: structuredClone(e.data) } : null;
     },
-    async beginTransaction() { return 'tx1'; },
+    // Production refuses REST transactions for end-user tokens (403, measured
+    // 2026-10-15), so the tools must never start one.
+    async beginTransaction() { throw new R.RestError('permission', 403, 'no transactions for end users'); },
     async commit(_t, writes) {
       commits.push(writes);
       if (f.failWhen && f.failWhen(writes)) throw new R.RestError('permission', 403, 'x');
@@ -150,6 +152,22 @@ test('create_task honours the profile’s own task defaults (not reassignment)',
   assert.equal(t.visibility, 'shared');
   assert.deepEqual(t.sharedWithUids, ['u2']);
   assert.deepEqual(t.assigneeUids, [UID]);
+});
+
+test('the counter bump carries a precondition on the version read; a concurrent bump retries', async () => {
+  const { rest, tools } = setup();
+  rest.seed(`churches/${CH}/config/main`, { maxTaskNumber: 7 });
+  let raced = false;
+  const realGet = rest.getDoc.bind(rest);
+  rest.getDoc = async (t, path) => {
+    const d = await realGet(t, path);
+    if (!raced && path.endsWith('config/main')) { raced = true; rest.seed(`churches/${CH}/config/main`, { maxTaskNumber: 8 }); }
+    return d;
+  };
+  const r = await tools.create_task({ name: 'Raced' });
+  assert.equal(r.taskNumber, 'TSK-009', 'the stale read lost the precondition and re-read');
+  const cfgWrites = rest.commits.flat().filter((w) => w.update.name.endsWith('config/main'));
+  assert.ok(cfgWrites.every((w) => w.currentDocument && w.currentDocument.updateTime));
 });
 
 test('create_task is refused for a lapsed church and writes nothing', async () => {
