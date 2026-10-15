@@ -51,10 +51,13 @@ const nameIsLoggable = (visibility) => visibility !== 'private' && visibility !=
 
 /**
  * The four authorization-shaped arms of the board (src/utils/workQueries.js
- * taskQueryArms with archived:false, max:300). Same `[field, op, value]`
+ * taskQueryArms with archived:false, max ARM_LIMIT). Same `[field, op, value]`
  * triples; functions/test/mcp-tools.test.mjs pins this against the client copy.
  */
-function taskQueryArms({ uid, max = 300 }) {
+// ARM_LIMIT: completed tasks archive after six weeks (COH-007), so active arms
+// stay far below this; if any arm hits it the result says truncated.
+const ARM_LIMIT = 1000;
+function taskQueryArms({ uid, max = ARM_LIMIT }) {
   const arm = (key, filters) => ({ key, filters: [...filters, ['archived', '==', false]], limit: max });
   return [
     arm('team', [['visibility', '==', 'team']]),
@@ -103,13 +106,29 @@ function createTools(ctx) {
   // new doc together. `fields` carries the caller-supplied half; everything the
   // server owns (type, number, creator, uid projections, timestamps, archive
   // pair) is set here.
-  async function createTaskDoc(fields) {
+  //
+  // `claimPath` (recurrence only): the completed source task. Its
+  // `nextRecurrenceCreatedAt` marker is checked and set INSIDE the same
+  // transaction as the counter bump and the successor create, so the three
+  // commit atomically or not at all. Returns null when the marker is already
+  // set (someone else made the successor). Codex diff review 2026-10-15: a
+  // separate marker write + rollback could duplicate the successor when a
+  // create's reply was lost after it committed; this has no rollback to get wrong.
+  async function createTaskDoc(fields, { claimPath } = {}) {
     const newId = autoId();
     const configPath = `churches/${churchId}/config/main`;
     const path = taskPath(churchId, newId);
     for (let attempt = 0; ; attempt++) {
       const tx = await rest.beginTransaction(token);
       const cfg = await rest.getDoc(token, configPath, { transaction: tx });
+      let claimWrite = null;
+      if (claimPath) {
+        const src = await rest.getDoc(token, claimPath, { transaction: tx });
+        if (!src || src.data.nextRecurrenceCreatedAt) return null;
+        claimWrite = updateWrite(
+          claimPath, { nextRecurrenceCreatedAt: nowIso() }, ['nextRecurrenceCreatedAt'], { updateTime: src.updateTime },
+        );
+      }
       const maxNum = ((cfg && cfg.data.maxTaskNumber) || 0) + 1;
       const taskNumber = 'TSK-' + String(maxNum).padStart(3, '0');
       const stamp = nowIso();
@@ -132,6 +151,7 @@ function createTools(ctx) {
       };
       try {
         await rest.commit(token, [
+          ...(claimWrite ? [claimWrite] : []),
           updateWrite(configPath, { maxTaskNumber: maxNum }, ['maxTaskNumber']),
           createWrite(path, data),
         ], tx);
@@ -140,7 +160,8 @@ function createTools(ctx) {
         await logActivity('add_task', taskNumber, details);
         return { id: newId, taskNumber, data };
       } catch (err) {
-        // Two creators raced for the same number: re-read and try again.
+        // Two creators raced for the same number (or two Completes for the same
+        // marker): re-read and try again. The marker loser then returns null.
         if (err instanceof RestError && err.kind === 'conflict' && attempt < 2) continue;
         throw err;
       }
@@ -150,29 +171,11 @@ function createTools(ctx) {
   const normChecklist = (items, base) =>
     (items || []).map((c, i) => ({ id: c.id || String(base + i), text: c.text, done: c.done }));
 
-  // createNextRecurringTask (WorkBoard.jsx:974-1016) over REST.
+  // createNextRecurringTask (WorkBoard.jsx:974-1016) over REST: build the
+  // successor exactly as the board does (task branch, 984-1009), then create it
+  // in ONE transaction with the source's marker (createTaskDoc claimPath).
+  // Two concurrent Completes produce exactly one successor.
   async function createNextRecurring(source, sourcePath) {
-    // 1. Claim the marker, only if absent. The transaction makes two concurrent
-    //    Completes produce exactly one successor: the loser's commit conflicts,
-    //    re-reads, sees the marker, and stops.
-    let claimed = false;
-    for (let attempt = 0; attempt < 3 && !claimed; attempt++) {
-      const tx = await rest.beginTransaction(token);
-      const snap = await rest.getDoc(token, sourcePath, { transaction: tx });
-      if (!snap || snap.data.nextRecurrenceCreatedAt) return false;
-      try {
-        await rest.commit(token, [updateWrite(
-          sourcePath, { nextRecurrenceCreatedAt: nowIso() }, ['nextRecurrenceCreatedAt'], { exists: true },
-        )], tx);
-        claimed = true;
-      } catch (err) {
-        if (err instanceof RestError && err.kind === 'conflict' && attempt < 2) continue;
-        throw err;
-      }
-    }
-    if (!claimed) return false;
-
-    // 2. Build the successor exactly as the board does (task branch, 984-1009).
     const nextDue = ctx.calculateNextDue(source.dueDate, source.recurrence);
     const vis = source.visibility || 'team';
     const fields = {
@@ -190,18 +193,7 @@ function createTools(ctx) {
       visibility: vis,
       sharedWith: vis === 'shared' ? (source.sharedWith || []) : [],
     };
-    try {
-      return await createTaskDoc(fields);
-    } catch (err) {
-      // Roll the marker back (field omitted from the data, present in the mask
-      // => deleted) so completing the task again can retry.
-      try {
-        await rest.commit(token, [updateWrite(sourcePath, {}, ['nextRecurrenceCreatedAt'], { exists: true })]);
-      } catch (rbErr) {
-        ctx.captureError(rbErr, { op: 'recurrenceRollback' });
-      }
-      throw err;
-    }
+    return createTaskDoc(fields, { claimPath: sourcePath });
   }
 
   return {
@@ -221,7 +213,7 @@ function createTools(ctx) {
         }
         throw err;
       }
-      const capped = results.some((r) => r.length >= 300);
+      const capped = results.some((r) => r.length >= ARM_LIMIT);
       const merged = new Map();
       for (const r of results) for (const d of r) merged.set(d.id, d);
       let tasks = [...merged.values()].filter((d) => d.data.type === 'task' && d.id.startsWith('task_'));

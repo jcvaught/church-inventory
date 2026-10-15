@@ -22,7 +22,7 @@ function fakeRest() {
   let clock = 0;
   const commits = [];
   const f = {
-    store, commits, failWhen: null,
+    store, commits, failWhen: null, loseReplyWhen: null,
     seed(path, data) { store.set(path, { data: structuredClone(data), updateTime: `T${++clock}` }); },
     async getDoc(_t, path) {
       const e = store.get(path);
@@ -47,6 +47,8 @@ function fakeRest() {
         for (const t of w.updateTransforms || []) data[t.fieldPath] = 'SERVER_TIME';
         store.set(path, { data, updateTime: `T${++clock}` });
       }
+      // The commit landed but the caller never hears back (network drop).
+      if (f.loseReplyWhen && f.loseReplyWhen(writes)) { f.loseReplyWhen = null; throw new Error('socket hang up'); }
       return {};
     },
     async createDocument(_t, collectionPath, data) {
@@ -96,7 +98,7 @@ function setup({ canCreate = true, profile } = {}) {
 
 test('list_tasks arms are identical to the board’s (client parity)', () => {
   const server = taskQueryArms({ uid: UID }).map((a) => ({ key: a.key, filters: a.filters, limit: a.limit }));
-  const client = clientArms({ uid: UID, archived: false, max: 300 }).map((a) => ({ key: a.key, filters: a.filters, limit: a.limit }));
+  const client = clientArms({ uid: UID, archived: false, max: 1000 }).map((a) => ({ key: a.key, filters: a.filters, limit: a.limit }));
   assert.deepEqual(server, client);
 });
 
@@ -239,14 +241,31 @@ test('completing a recurring task creates exactly one successor, once', async ()
   assert.equal(successors.length, 1);
 });
 
-test('a failed successor create rolls the marker back and errors', async () => {
+const isSuccessorCommit = (writes) => writes.some((w) => w.update.name.includes('/workItems/task_') && !w.update.name.endsWith('task_src') && w.currentDocument?.exists === false);
+
+test('a refused successor create writes neither the successor nor the marker (one atomic commit)', async () => {
   const { rest, tools } = setup();
   rest.seed(`${WI}/task_src`, baseTask({ recurrence: 'weekly' }));
-  rest.failWhen = (writes) => writes.some((w) => w.update.name.includes('/workItems/task_') && !w.update.name.endsWith('task_src') && w.currentDocument?.exists === false);
+  rest.failWhen = isSuccessorCommit;
   await assert.rejects(() => tools.update_task({ id: 'src', status: 'Complete' }));
   const src = (await rest.getDoc('t', `${WI}/task_src`)).data;
   assert.equal(src.status, 'Complete', 'the completion itself stays committed');
-  assert.equal('nextRecurrenceCreatedAt' in src, false, 'marker rolled back so a retry can succeed');
+  assert.equal('nextRecurrenceCreatedAt' in src, false, 'marker was never written, so a retry can succeed');
+  const marker = rest.commits.find(isSuccessorCommit).find((w) => w.update.name.endsWith('task_src'));
+  assert.ok(marker, 'the marker rides in the same commit as the successor');
+});
+
+test('a lost reply after the successor committed never produces a second successor (Codex 2026-10-15)', async () => {
+  const { rest, tools } = setup();
+  rest.seed(`${WI}/task_src`, baseTask({ recurrence: 'weekly' }));
+  rest.loseReplyWhen = isSuccessorCommit;
+  await assert.rejects(() => tools.update_task({ id: 'src', status: 'Complete' }));
+  assert.ok((await rest.getDoc('t', `${WI}/task_src`)).data.nextRecurrenceCreatedAt, 'marker committed with the successor');
+  await tools.update_task({ id: 'src', status: 'In Progress' });
+  const again = await tools.update_task({ id: 'src', status: 'Complete' });
+  assert.equal(again.nextRecurringTask, 'already created');
+  const successors = [...rest.store].filter(([p, v]) => p.startsWith(WI) && v.data.name === 'Existing' && p !== `${WI}/task_src`);
+  assert.equal(successors.length, 1);
 });
 
 test('a lapsed church can still complete, but no successor is created', async () => {

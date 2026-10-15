@@ -133,7 +133,7 @@ async function rateLimit({ db, hash, now = new Date(), limit = RATE_LIMIT, windo
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const cur = snap.exists ? snap.data() : null;
-    if (!cur || t - cur.windowStart > windowMs) {
+    if (!cur || t - cur.windowStart >= windowMs) {
       tx.set(ref, { windowStart: t, count: 1 });
       return { ok: true };
     }

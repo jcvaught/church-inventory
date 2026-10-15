@@ -63,7 +63,7 @@ function buildServer({ tools, keyId, captureError, log }) {
   };
 
   register('list_tasks',
-    'List my tasks (open ones by default). Filters: status, assignedToMe, dueBefore (YYYY-MM-DD, strictly before), includeComplete. Returns up to 100, newest first, plus a truncated flag.',
+    'List my tasks (open ones by default). Filters: status, assignedToMe, dueBefore (YYYY-MM-DD, strictly before), includeComplete. Returns up to 100, newest first, plus a truncated flag (if truncated is true, some matching tasks were not considered; narrow the filters).',
     s.listTasksSchema, { readOnlyHint: true });
   register('get_task',
     'Get one task in full (fields and comments) by its id.',
