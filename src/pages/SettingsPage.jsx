@@ -16,6 +16,7 @@ import { app, db, storage } from '../firebase.js';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { resizeImageForUpload } from '../utils/imageResize.js';
 import * as entitlement from '../lib/entitlement.js';
+import { ConnectChatGPTCard, CHATGPT_KEY_UID } from '../components/ConnectChatGPTCard.jsx';
 
 // Manage Spaces form — kept as one constant so every reset site stays in sync.
 const EMPTY_ROOM_FORM = { name:'', capacity:'', location:'', description:'', amenities:'', photoUrl:'', approverUids:[], blackoutDates:[], blockedWindows:[], color:'', defaultSetupMinutes:'', defaultTeardownMinutes:'', bookingPolicy:'request' };
@@ -566,6 +567,9 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
           )}
         </div>
       </div>
+
+      {/* COH-016 — Connect ChatGPT. Owner uid only; the server allowlist is the real gate. */}
+      {user?.uid === CHATGPT_KEY_UID && <ConnectChatGPTCard />}
 
       {/* Notifications — Audit 2026-05-24 Phase 3 (item 5): broken out from
           the My Profile card so the page reads as Identity / Notifications /

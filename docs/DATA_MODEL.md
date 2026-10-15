@@ -38,6 +38,8 @@ All church data is namespaced under `churches/{churchId}/`. `churchId` is always
 | `churches/{churchId}/shepherdAudit/{entryId}` | **Shepherd Hub**: append-only audit log; fields: `action` (`view_person`/`edit_private_note`/`append_care`/`delete_care`/`reassign`), `personId`, `personName`, `actorUid`, `actorName`, `actorEmail`, `at`, `detail` (e.g. `{from,to}` for reassign) |
 | `churches/{churchId}/config/shepherdRoster` | **Shepherd Hub**: editable elder roster (single source for the claim grant + PCO name-matching + roster UI). Fields: `elders[{key,name,surname,emails[],match[],active,sabbatical}]`, `former[{key,match[]}]`. Seeded from `functions/lib/roster.js` DEFAULT_ROSTER. Read elder/John; write John only |
 | `churches/{churchId}/config/shepherdSync` | **Shepherd Hub**: sync status doc; `{lastSyncAt, source, totalFetched, stored, deleted, assigned, orphaned, perElderLoad{}, unmappedValues[], fieldDefs{}}`. Admin-SDK-write-only |
+| `apiKeys/{sha256hex}` | **COH-016** (top level, Admin SDK only — rules deny all client access). A ChatGPT MCP API key; doc id = sha-256 of the plaintext (`coh_` + 32 random bytes base64url, shown once, never stored). Fields: `uid`, `churchId`, `label`, `createdAt`, `expiresAt` (createdAt + 90d, immutable), `lastUsedAt` (stamped at most once a minute), `revokedAt`. Written by `createApiKey`/`revokeApiKey`; read by `listApiKeys` and the `mcp` endpoint. Max 5 live keys per uid; only uids in `API_KEY_ALLOWLIST` (`functions/lib/mcp/keys.js`) may hold one |
+| `apiKeyUsage/{sha256hex}` | **COH-016** (top level, Admin SDK only). Per-key rate-limit counter `{windowStart (ms), count}`; fixed 60s window, 60 requests; one doc per key |
 
 ## Firestore Rules Summary
 

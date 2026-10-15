@@ -904,5 +904,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── COH-016 — ChatGPT MCP API keys. Admin SDK only (the createApiKey /
+    //    listApiKeys / revokeApiKey callables and the mcp endpoint). Clients can
+    //    never read or write them: a key doc holds the owner uid and church, and
+    //    apiKeyUsage is the per-key rate-limit counter. Explicit even though the
+    //    absence of a match already denies — do not relax.
+    match /apiKeys/{docId} {
+      allow read, write: if false;
+    }
+    match /apiKeyUsage/{docId} {
+      allow read, write: if false;
+    }
+
   }
 }
