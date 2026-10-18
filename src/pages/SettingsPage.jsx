@@ -10,7 +10,8 @@ import { UndoToast } from '../components/primitives/UndoToast.jsx';
 import { EmojiIcon } from '../components/primitives/EmojiIcon.jsx';
 import { getPerson, makeRef, expiryStatus } from '../lib/people.js';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { collection, getDocs, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, updateDoc } from 'firebase/firestore';
+import { onSnapshotResilient } from '../utils/resilientSnapshot.js';
 import { enablePush, pushSupported } from '../utils/push.js';
 import { app, db, storage } from '../firebase.js';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -214,7 +215,7 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
   // snapshot fires, so in-progress edits aren't clobbered.
   useEffect(() => {
     if (!isOwner) return;
-    const unsub = onSnapshot(doc(db, 'appConfig', 'banner'), (snap) => {
+    const unsub = onSnapshotResilient('settings:banner', doc(db, 'appConfig', 'banner'), (snap) => {
       const d = snap.exists() ? snap.data() : null;
       setBannerActive(!!d?.active);
       setBannerType(d?.type === 'maintenance' ? 'maintenance' : 'info');

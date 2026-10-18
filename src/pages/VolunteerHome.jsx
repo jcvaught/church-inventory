@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useContext } from 'react';
-import { collectionGroup, onSnapshot, query, where } from 'firebase/firestore';
+import { collectionGroup, query, where } from 'firebase/firestore';
+import { onSnapshotResilient } from '../utils/resilientSnapshot.js';
 import { db } from '../firebase.js';
 import { B, f1, f2, btnP, btnS } from '../components/brand/tokens.js';
 import { MobileCtx } from '../hooks/useMobile.js';
@@ -21,7 +22,7 @@ export function VolunteerHome({ store, userProfile, onOpenJobs }) {
 
   useEffect(() => {
     if (!userId) return undefined;
-    const unsub = onSnapshot(
+    const unsub = onSnapshotResilient('volunteer:signups',
       query(collectionGroup(db, 'signups'), where('uid', '==', userId)),
       snap => setMySignupIds(new Set(snap.docs.map(d => d.ref.parent.parent.id))),
       err => console.error('[ChurchOpsHub] VolunteerHome signups subscription failed', err),

@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   doc, setDoc, getDoc, deleteDoc, getDocs,
-  collection, onSnapshot, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction, writeBatch, startAfter,
+  collection, addDoc, updateDoc, query, orderBy, arrayUnion, where, limit, runTransaction, writeBatch, startAfter,
   serverTimestamp, Timestamp
 } from 'firebase/firestore';
+import { onSnapshotResilient } from './utils/resilientSnapshot.js';
+import { RETRYABLE_LISTENER_CODES } from './lib/resilientListener.js';
 import * as Sentry from '@sentry/react';
 import { db, storage } from './firebase.js';
 import { ref as stRef, deleteObject } from 'firebase/storage';
@@ -132,22 +134,18 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
   }
 
   function handleErr(err, ctx = {}) {
-    // Transient real-time-listener errors (2026-06-11): Firestore onSnapshot
-    // subscriptions surface backend/transport blips — deadline-exceeded,
-    // unavailable, cancelled, aborted, and the generic internal/unknown — when
-    // a mobile tab is backgrounded (iOS Safari suspends its sockets) or the
-    // network briefly drops. The SDK auto-reconnects the listener on its own and
-    // re-delivers the snapshot, so there is no broken feature behind them; they
-    // were paging Sentry overnight purely via captureConsole. For the listener
-    // path (ctx.listener) log at warn — below captureConsole's 'error' threshold
-    // — and skip captureException + setError. `internal`/`unknown` are treated
-    // as transient ONLY here; on writes/callables they still report in full,
-    // since there they can signal a real bug.
-    const TRANSIENT_LISTENER_CODES = new Set([
-      'deadline-exceeded', 'unavailable', 'cancelled', 'aborted', 'internal', 'unknown',
-    ]);
-    if (ctx.listener && TRANSIENT_LISTENER_CODES.has(err?.code)) {
-      console.warn('[ChurchOpsHub] transient listener error (auto-recovers):', err?.code || err);
+    // Retryable listener errors (corrected 2026-10-18; the 2026-06-11 version
+    // said the SDK auto-reconnects — it does not). A Firestore listener that
+    // reaches its error callback has been DISCARDED by the SDK; transport
+    // blips are retried internally and never get here. Every listener runs
+    // through onSnapshotResilient, which resubscribes on these codes with
+    // backoff and reports each drop to Sentry with the listener's label — so
+    // here, on the listener path, log at warn (below captureConsole's 'error'
+    // threshold) and skip captureException + setError. One shared code list
+    // with the retry wrapper. `internal`/`unknown` are retryable ONLY for
+    // listeners; on writes/callables they still report in full.
+    if (ctx.listener && RETRYABLE_LISTENER_CODES.has(err?.code)) {
+      console.warn('[ChurchOpsHub] listener dropped (resubscribing):', err?.code || err);
       return;
     }
     // Audit overnight 2026-05-12 / Error-resilience #1: this is the single
@@ -214,7 +212,7 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     setChurch(null);
 
     // Config (config/main)
-    unsubs.push(onSnapshot(doc(db, 'churches', churchId, 'config', 'main'), (snap) => {
+    unsubs.push(onSnapshotResilient('config:main', doc(db, 'churches', churchId, 'config', 'main'), (snap) => {
       if (snap.exists()) setConfigMain(snap.data());
       checkDone();
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
@@ -222,25 +220,25 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     // Church (the parent document — authoritative for churchName/churchCode).
     // Rules allow `get` here for any ACTIVE member, not just admins
     // (firestore.rules), which matters because every page reads the name.
-    unsubs.push(onSnapshot(doc(db, 'churches', churchId), (snap) => {
+    unsubs.push(onSnapshotResilient('church', doc(db, 'churches', churchId), (snap) => {
       if (snap.exists()) setChurch(snap.data());
       checkDone();
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Settings
-    unsubs.push(onSnapshot(doc(db, 'churches', churchId, 'config', 'settings'), (snap) => {
+    unsubs.push(onSnapshotResilient('config:settings', doc(db, 'churches', churchId, 'config', 'settings'), (snap) => {
       if (snap.exists()) setSettings(snap.data());
       checkDone();
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Items
-    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'items'), (snap) => {
+    unsubs.push(onSnapshotResilient('items', collection(db, 'churches', churchId, 'items'), (snap) => {
       setItems(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Supplies
-    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'supplies'), (snap) => {
+    unsubs.push(onSnapshotResilient('supplies', collection(db, 'churches', churchId, 'supplies'), (snap) => {
       setSupplies(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
@@ -250,7 +248,7 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     // unbounded subscription was costing ~14M reads/month for a 2-year-old
     // 100-user church on app-mount alone. The page's "Load older" button
     // calls loadOlderActivityLog() below for one-shot deeper fetches.
-    unsubs.push(onSnapshot(
+    unsubs.push(onSnapshotResilient('activityLog',
       query(collection(db, 'churches', churchId, 'activityLog'), orderBy('timestamp', 'desc'), limit(100)),
       (snap) => {
         const logs = snap.docs.map(activityDoc);
@@ -261,19 +259,19 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     ));
 
     // Reservations
-    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'reservations'), (snap) => {
+    unsubs.push(onSnapshotResilient('reservations', collection(db, 'churches', churchId, 'reservations'), (snap) => {
       setReservations(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Vendors
-    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'vendors'), (snap) => {
+    unsubs.push(onSnapshotResilient('vendors', collection(db, 'churches', churchId, 'vendors'), (snap) => {
       setVendors(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Users — scoped to this church via query (real-time)
-    unsubs.push(onSnapshot(query(collection(db, 'users'), where('churchId', '==', churchId)), (snap) => {
+    unsubs.push(onSnapshotResilient('users', query(collection(db, 'users'), where('churchId', '==', churchId)), (snap) => {
       // Test/E2E accounts (@churchopshub.com) live in the prod church for the
       // E2E suite but must never surface in member lists, pickers, or seat
       // counts. Filtered at the single source so every consumer inherits it.
@@ -282,25 +280,25 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Bundles
-    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'bundles'), (snap) => {
+    unsubs.push(onSnapshotResilient('bundles', collection(db, 'churches', churchId, 'bundles'), (snap) => {
       setBundles(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Notification config
-    unsubs.push(onSnapshot(doc(db, 'churches', churchId, 'config', 'notifications'), (snap) => {
+    unsubs.push(onSnapshotResilient('config:notifications', doc(db, 'churches', churchId, 'config', 'notifications'), (snap) => {
       setNotificationConfig(snap.exists() ? snap.data() : {});
       checkDone();
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Audits
-    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'audits'), (snap) => {
+    unsubs.push(onSnapshotResilient('audits', collection(db, 'churches', churchId, 'audits'), (snap) => {
       setAudits(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Public Requests
-    unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'publicRequests'), where('status', '==', 'pending')), (snap) => {
+    unsubs.push(onSnapshotResilient('publicRequests', query(collection(db, 'churches', churchId, 'publicRequests'), where('status', '==', 'pending')), (snap) => {
       const reqs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
       reqs.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       setPublicRequests(reqs);
@@ -368,7 +366,7 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
       if (state.settled && !workSettled) { workSettled = true; checkDone(); }
     };
     for (const [key, q] of workQueries) {
-      unsubs.push(onSnapshot(q, (snap) => {
+      unsubs.push(onSnapshotResilient(`work:${key}`, q, (snap) => {
         // `_docId` is the bare id (prefix stripped) so downstream link fields and
         // CRUD calls speak bare ids; the merge key is the real document id.
         const next = new Map();
@@ -383,7 +381,7 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     }
 
     // Rooms/Spaces
-    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'rooms'), (snap) => {
+    unsubs.push(onSnapshotResilient('rooms', collection(db, 'churches', churchId, 'rooms'), (snap) => {
       const r = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
       r.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setRooms(r);
@@ -398,7 +396,7 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     // scopes) silently undercount signups whose parent job fell off the
     // window — same silent-drop behavior as deleted jobs. Real fix is a
     // lazy one-shot fetch in the Reports tab; queued as a follow-up.
-    unsubs.push(onSnapshot(
+    unsubs.push(onSnapshotResilient('jobListings',
       query(collection(db, 'churches', churchId, 'jobListings'), orderBy('createdAt', 'desc'), limit(500)),
       (snap) => {
         setJobListings(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
@@ -408,7 +406,7 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     ));
 
     // Job Announcements
-    unsubs.push(onSnapshot(collection(db, 'churches', churchId, 'jobAnnouncements'), (snap) => {
+    unsubs.push(onSnapshotResilient('jobAnnouncements', collection(db, 'churches', churchId, 'jobAnnouncements'), (snap) => {
       const ann = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
       ann.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
       setJobAnnouncements(ann);
@@ -416,7 +414,7 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
 
     // Task Templates
-    unsubs.push(onSnapshot(query(collection(db, 'churches', churchId, 'taskTemplates'), orderBy('name')), (snap) => {
+    unsubs.push(onSnapshotResilient('taskTemplates', query(collection(db, 'churches', churchId, 'taskTemplates'), orderBy('name')), (snap) => {
       setTaskTemplates(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
       checkDone();
     }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
@@ -443,17 +441,17 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     const unsubs = [];
 
     if (elevated) {
-      unsubs.push(onSnapshot(
+      unsubs.push(onSnapshotResilient('accessPeople',
         query(collection(db, 'churches', churchId, 'accessPeople'), orderBy('name')),
         snap => setAccessPeople(snap.docs.map(d => ({ _docId: d.id, ...d.data() }))),
         err => handleErr(err, { listener: true, hub: 'people_access' }),
       ));
-      unsubs.push(onSnapshot(
+      unsubs.push(onSnapshotResilient('accessRecords',
         query(collection(db, 'churches', churchId, 'accessRecords'), orderBy('createdAt', 'desc')),
         snap => setAccessRecords(snap.docs.map(d => ({ _docId: d.id, ...d.data() }))),
         err => handleErr(err, { listener: true, hub: 'people_access' }),
       ));
-      unsubs.push(onSnapshot(
+      unsubs.push(onSnapshotResilient('timeEntries',
         query(collection(db, 'churches', churchId, 'timeEntries'), orderBy('date', 'desc')),
         snap => setTimeEntries(snap.docs.map(d => ({ _docId: d.id, ...d.data() }))),
         err => handleErr(err, { listener: true, hub: 'people_access' }),
@@ -467,7 +465,7 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
         recordUnsubs = [];
         recordsByPerson.clear();
       };
-      unsubs.push(onSnapshot(
+      unsubs.push(onSnapshotResilient('accessPeople:self',
         query(collection(db, 'churches', churchId, 'accessPeople'), where('userId', '==', userProfile.uid)),
         snap => {
           clearRecordSubscriptions();
@@ -483,7 +481,7 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
             setAccessRecords(all);
           };
           people.forEach(person => {
-            recordUnsubs.push(onSnapshot(
+            recordUnsubs.push(onSnapshotResilient('accessRecords:self',
               query(
                 collection(db, 'churches', churchId, 'accessRecords'),
                 where('personId', '==', person._docId),

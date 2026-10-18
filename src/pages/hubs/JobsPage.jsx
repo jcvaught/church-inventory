@@ -1,7 +1,8 @@
 import { useState, useMemo, useContext, useEffect, useLayoutEffect, useRef, memo } from 'react';
 import { LinkedTaskRef } from '../../components/board/LinkedTaskRef.jsx';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { collection, collectionGroup, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
+import { collection, collectionGroup, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { onSnapshotResilient } from '../../utils/resilientSnapshot.js';
 import * as Sentry from '@sentry/react';
 import { db } from '../../firebase.js';
 import { B, f1, f2, inp, btnP, btnS, btnD } from '../../components/brand/tokens.js';
@@ -779,12 +780,12 @@ export function JobsPage({ store, userProfile, initialView }) {
   // the firestore.rules; audit H1, 2026-05-22).
   useEffect(() => {
     if (!userId) return undefined;
-    const subSignups = onSnapshot(
+    const subSignups = onSnapshotResilient('jobs:mySignups',
       query(collectionGroup(db, 'signups'), where('uid', '==', userId)),
       snap => setMySignupJobIds(new Set(snap.docs.map(d => d.ref.parent.parent.id))),
       err => console.error('[ChurchOpsHub] mySignups subscription failed', err),
     );
-    const subWaitlist = onSnapshot(
+    const subWaitlist = onSnapshotResilient('jobs:myWaitlist',
       query(collectionGroup(db, 'waitlist'), where('uid', '==', userId)),
       snap => setMyWaitlistJobIds(new Set(snap.docs.map(d => d.ref.parent.parent.id))),
       err => console.error('[ChurchOpsHub] myWaitlist subscription failed', err),

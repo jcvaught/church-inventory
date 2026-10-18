@@ -1,7 +1,8 @@
 import { useState, useEffect, useContext, useRef, useMemo, memo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { collection, doc, onSnapshot, query as fsQuery, orderBy, runTransaction, updateDoc, deleteField } from 'firebase/firestore';
+import { collection, doc, query as fsQuery, orderBy, runTransaction, updateDoc, deleteField } from 'firebase/firestore';
+import { onSnapshotResilient } from '../../utils/resilientSnapshot.js';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebase.js';
 import { notify } from '../../utils/notify.js';
@@ -771,7 +772,7 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
       collection(db, 'churches', churchId, 'workItems', `${docPrefix}${showDetail._docId}`, 'comments'),
       orderBy('createdAt', 'asc')
     );
-    const unsub = onSnapshot(q, snap => {
+    const unsub = onSnapshotResilient('wb:comments', q, snap => {
       setComments(snap.docs.map(d => ({ id:d.id, ...d.data() })));
       setCommentsLoading(false);
     }, () => {
@@ -789,7 +790,7 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
     if (!showDetail?._docId || !churchId) { setRemoteUpdate(null); return; }
     setRemoteUpdate(null);
     const initialRef = { current: true };
-    const unsub = onSnapshot(
+    const unsub = onSnapshotResilient('wb:detailSync',
       doc(db, 'churches', churchId, 'workItems', `${docPrefix}${showDetail._docId}`),
       snap => {
         if (!snap.exists()) {

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, orderBy, limit, onSnapshot, doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { onSnapshotResilient } from '../utils/resilientSnapshot.js';
 import { db } from '../firebase.js';
 
 // Subscribes to the current user's in-app notification inbox (most recent 30).
@@ -18,7 +19,7 @@ export function useNotifications(churchId, uid) {
       orderBy('createdAt', 'desc'),
       limit(30),
     );
-    const unsub = onSnapshot(
+    const unsub = onSnapshotResilient('notifications',
       q,
       (snap) => setItems(snap.docs.map((d) => ({ _docId: d.id, ...d.data() }))),
       () => setItems([]),

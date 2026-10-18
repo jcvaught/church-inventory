@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc } from 'firebase/firestore';
+import { onSnapshotResilient } from '../utils/resilientSnapshot.js';
+import { RETRYABLE_LISTENER_CODES } from '../lib/resilientListener.js';
 import { db } from '../firebase.js';
 import * as entitlement from '../lib/entitlement.js';
 
@@ -13,7 +15,7 @@ export function useSubscription(churchId) {
 
   useEffect(() => {
     if (!churchId) return;
-    const unsub = onSnapshot(
+    const unsub = onSnapshotResilient('subscription',
       doc(db, 'churches', churchId, 'config', 'subscription'),
       (snap) => {
         if (snap.exists()) {
@@ -25,7 +27,12 @@ export function useSubscription(churchId) {
         }
         setLoading(false);
       },
-      (err) => { console.error(err); setLoading(false); }
+      (err) => {
+        // Retryable drops are resubscribed + reported by onSnapshotResilient.
+        if (RETRYABLE_LISTENER_CODES.has(err?.code)) console.warn('[ChurchOpsHub] subscription listener dropped (resubscribing):', err.code);
+        else console.error('[ChurchOpsHub] subscription listener failed', err);
+        setLoading(false);
+      }
     );
     return () => unsub();
   }, [churchId]);

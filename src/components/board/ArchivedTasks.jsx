@@ -10,7 +10,8 @@
 // that quietly reports nothing is worse than one that reports an error: the user
 // concludes the history is gone. Every one of them gets its own message here.
 import { useState, useEffect, useMemo, useCallback, useContext } from 'react';
-import { collection, onSnapshot, query as fsQuery, orderBy } from 'firebase/firestore';
+import { collection, query as fsQuery, orderBy } from 'firebase/firestore';
+import { onSnapshotResilient } from '../../utils/resilientSnapshot.js';
 import { db } from '../../firebase.js';
 import { B, f1, inp, btnP, btnS } from '../brand/tokens.js';
 import { Modal } from '../primitives/Modal.jsx';
@@ -81,7 +82,7 @@ export function ArchivedTasks({ churchId, userId, users = [], canOperate, loadAr
       collection(db, 'churches', churchId, 'workItems', `task_${detail._docId}`, 'comments'),
       orderBy('createdAt', 'asc')
     );
-    return onSnapshot(q, snap => {
+    return onSnapshotResilient('archive:comments', q, snap => {
       setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setCommentsLoading(false);
       setCommentsError(null);

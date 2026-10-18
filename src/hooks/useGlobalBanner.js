@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc } from 'firebase/firestore';
+import { onSnapshotResilient } from '../utils/resilientSnapshot.js';
 import { db } from '../firebase.js';
 
 // Subscribes to the single global app-wide banner doc (appConfig/banner).
@@ -12,7 +13,7 @@ import { db } from '../firebase.js';
 export function useGlobalBanner() {
   const [banner, setBanner] = useState(null);
   useEffect(() => {
-    const unsub = onSnapshot(
+    const unsub = onSnapshotResilient('globalBanner',
       doc(db, 'appConfig', 'banner'),
       (snap) => setBanner(snap.exists() ? snap.data() : null),
       () => setBanner(null),
