@@ -650,11 +650,27 @@ export function JobsPage({ store, userProfile, initialView }) {
   // hours later. Now: explicit toast + Sentry capture with callable name and
   // recipient context. Returns the callable result on success, null on failure.
   async function invokeEmailCF(name, payload, { context, userMsgOnFail } = {}) {
+    // Backgrounded-timeout carve-out (2026-10-18, Sentry JAVASCRIPT-REACT-1K):
+    // iOS Safari suspends a hidden tab, and the callable's client-side 70s
+    // timer fires on resume even when the server already returned 200 — the
+    // outcome is unknown, not failed. If the tab was hidden at ANY point during
+    // the call (sticky on purpose: the timer fires after it becomes visible
+    // again), log at warn and skip captureException. A timeout with the tab
+    // visible throughout still reports in full — that's a real hang.
+    let wasHidden = document.visibilityState === 'hidden';
+    const onVisibility = () => { if (document.visibilityState === 'hidden') wasHidden = true; };
+    document.addEventListener('visibilitychange', onVisibility);
     try {
       const fn = httpsCallable(getFunctions(), name);
       const { data } = await fn(payload);
       return data ?? null;
     } catch (err) {
+      if (err?.code === 'functions/deadline-exceeded' && wasHidden) {
+        console.warn(`[ChurchOpsHub] CF ${name} timed out while the app was backgrounded (server outcome unknown)`, err?.code);
+        Sentry.addBreadcrumb({ category: 'jobs-hub-email', level: 'warning', message: `${name} backgrounded timeout`, data: { cf: name, context } });
+        if (userMsgOnFail) flash("Couldn't confirm the email went out — the app was in the background.", true);
+        return null;
+      }
       console.error(`[ChurchOpsHub] CF ${name} failed`, err);
       Sentry.captureException(err, {
         tags: { area: 'jobs-hub-email', cf: name, errorCode: err?.code || 'unknown' },
@@ -662,6 +678,8 @@ export function JobsPage({ store, userProfile, initialView }) {
       });
       if (userMsgOnFail) flash(userMsgOnFail, true);
       return null;
+    } finally {
+      document.removeEventListener('visibilitychange', onVisibility);
     }
   }
 
