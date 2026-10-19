@@ -25,7 +25,8 @@ export function VolunteerHome({ store, userProfile, onOpenJobs }) {
     const unsub = onSnapshotResilient('volunteer:signups',
       query(collectionGroup(db, 'signups'), where('uid', '==', userId)),
       snap => setMySignupIds(new Set(snap.docs.map(d => d.ref.parent.parent.id))),
-      err => console.error('[ChurchOpsHub] VolunteerHome signups subscription failed', err),
+      // willRetry: onSnapshotResilient resubscribes + reports; warn stays below captureConsole.
+      (err, { willRetry } = {}) => (willRetry ? console.warn : console.error)('[ChurchOpsHub] VolunteerHome signups subscription failed', willRetry ? err?.code : err),
     );
     return () => unsub();
   }, [userId]);

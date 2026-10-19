@@ -86,7 +86,9 @@ export function ArchivedTasks({ churchId, userId, users = [], canOperate, loadAr
       setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setCommentsLoading(false);
       setCommentsError(null);
-    }, (err) => {
+    }, (err, { willRetry } = {}) => {
+      // A retryable drop is resubscribed by onSnapshotResilient: keep the thread.
+      if (willRetry) return;
       // Clearing and falling silent here would render "No comments yet" — the
       // one thing this view must never say about a discussion it could not read
       // (review M3). The archive's whole promise is that the history is intact,

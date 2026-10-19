@@ -16,6 +16,7 @@ import { monthMatrix, windowGroups } from '../../utils/calendarGrid.js';
 import { printJobRoster } from '../../utils/print.js';
 import { exportJobsICS } from '../../utils/ical.js';
 import { formatTimeRange } from '../../utils/time.js';
+import { EMAIL_UNCONFIRMED, NO_EMAIL_OUTCOME, tallyEmailResults, emailOutcomeNote, emailOutcomeIsProblem } from '../../lib/emailOutcome.js';
 import { EmojiIcon } from '../../components/primitives/EmojiIcon.jsx';
 
 function formatJobDate(dateStr) {
@@ -650,7 +651,7 @@ export function JobsPage({ store, userProfile, initialView }) {
   // delivery failed, and nobody knew until "did the email go out?" came up
   // hours later. Now: explicit toast + Sentry capture with callable name and
   // recipient context. Returns the callable result on success, null on failure.
-  async function invokeEmailCF(name, payload, { context, userMsgOnFail } = {}) {
+  async function invokeEmailCF(name, payload, { context, userMsgOnFail, userMsgOnUnconfirmed } = {}) {
     // Backgrounded-timeout carve-out (2026-10-18, Sentry JAVASCRIPT-REACT-1K):
     // iOS Safari suspends a hidden tab, and the callable's client-side 70s
     // timer fires on resume even when the server already returned 200 — the
@@ -669,8 +670,10 @@ export function JobsPage({ store, userProfile, initialView }) {
       if (err?.code === 'functions/deadline-exceeded' && wasHidden) {
         console.warn(`[ChurchOpsHub] CF ${name} timed out while the app was backgrounded (server outcome unknown)`, err?.code);
         Sentry.addBreadcrumb({ category: 'jobs-hub-email', level: 'warning', message: `${name} backgrounded timeout`, data: { cf: name, context } });
-        if (userMsgOnFail) flash("Couldn't confirm the email went out — the app was in the background.", true);
-        return null;
+        // EMAIL_UNCONFIRMED, not null: null means "failed and reported", and
+        // callers word their toasts on that difference (lib/emailOutcome.js).
+        if (userMsgOnFail) flash(userMsgOnUnconfirmed || "Couldn't confirm the email went out — the app was in the background.", true);
+        return EMAIL_UNCONFIRMED;
       }
       console.error(`[ChurchOpsHub] CF ${name} failed`, err);
       Sentry.captureException(err, {
@@ -690,6 +693,7 @@ export function JobsPage({ store, userProfile, initialView }) {
     invokeEmailCF('sendJobAnnouncementEmails', { churchId: userProfile?.churchId, title, body }, {
       context: 'announcement-post',
       userMsgOnFail: 'Announcement posted, but the email notification failed. Admins were notified.',
+      userMsgOnUnconfirmed: "Announcement posted, but we couldn't confirm the email went out (the app was in the background).",
     });
   }
 
@@ -783,12 +787,12 @@ export function JobsPage({ store, userProfile, initialView }) {
     const subSignups = onSnapshotResilient('jobs:mySignups',
       query(collectionGroup(db, 'signups'), where('uid', '==', userId)),
       snap => setMySignupJobIds(new Set(snap.docs.map(d => d.ref.parent.parent.id))),
-      err => console.error('[ChurchOpsHub] mySignups subscription failed', err),
+      (err, { willRetry } = {}) => (willRetry ? console.warn : console.error)('[ChurchOpsHub] mySignups subscription failed', willRetry ? err?.code : err),
     );
     const subWaitlist = onSnapshotResilient('jobs:myWaitlist',
       query(collectionGroup(db, 'waitlist'), where('uid', '==', userId)),
       snap => setMyWaitlistJobIds(new Set(snap.docs.map(d => d.ref.parent.parent.id))),
-      err => console.error('[ChurchOpsHub] myWaitlist subscription failed', err),
+      (err, { willRetry } = {}) => (willRetry ? console.warn : console.error)('[ChurchOpsHub] myWaitlist subscription failed', willRetry ? err?.code : err),
     );
     return () => { subSignups(); subWaitlist(); };
   }, [userId]);
@@ -1004,26 +1008,30 @@ export function JobsPage({ store, userProfile, initialView }) {
         const { count, affected } = await updateJobListingSeries(editJobSeriesGroupId, editJobFromDate, data, userId, userName);
         // On a series cancellation, fan out per-job emails to existing signups.
         // sendJobCancelledEmails has a 1-hour debounce so a re-fire is safe.
+        // The email outcome joins the ONE final toast — flash() replaces, so a
+        // separate failure toast here was never seen (2026-10-18).
+        let emailOutcome = NO_EMAIL_OUTCOME;
         if (jobForm.status === 'cancelled' && affected) {
           const withSignups = affected.filter((a) => a.signupCount > 0);
           if (withSignups.length > 0) {
             const results = await Promise.allSettled(withSignups.map((a) =>
               invokeEmailCF('sendJobCancelledEmails', { churchId: userProfile?.churchId, jobDocId: a.docId }, { context: 'series-cancellation' })
             ));
-            const failed = results.filter(r => r.status === 'fulfilled' && r.value === null).length;
-            if (failed > 0) flash(`${failed} of ${withSignups.length} cancellation email${withSignups.length !== 1 ? 's' : ''} failed to send. Admins were notified.`, true);
+            emailOutcome = tallyEmailResults(results);
           }
         }
-        flash(`${count} job${count !== 1 ? 's' : ''} updated.`);
+        flash(`${count} job${count !== 1 ? 's' : ''} updated.` + emailOutcomeNote(emailOutcome), emailOutcomeIsProblem(emailOutcome));
         setShowNewJob(false);
         setEditJobId(null);
       } else if (editJobId) {
         await updateJobListing(editJobId, data, userId, userName, existingJob?.jobNumber);
+        let cancelEmail = null;
         if (willNotify) {
           // Awaited so the user sees a real outcome before the flash() below.
-          await invokeEmailCF('sendJobCancelledEmails', { churchId: userProfile?.churchId, jobDocId: editJobId }, {
+          cancelEmail = await invokeEmailCF('sendJobCancelledEmails', { churchId: userProfile?.churchId, jobDocId: editJobId }, {
             context: 'single-cancellation',
             userMsgOnFail: 'Job updated, but the cancellation email failed to send. Admins were notified.',
+            userMsgOnUnconfirmed: "Job updated, but we couldn't confirm the cancellation email went out (the app was in the background).",
           });
         }
         // Notify original poster if a co-admin cancelled their job
@@ -1036,7 +1044,11 @@ export function JobsPage({ store, userProfile, initialView }) {
             churchId: userProfile?.churchId, jobDocId: editJobId, event: 'cancellation', actorUid: userId, actorName: userName,
           }, { context: 'poster-cancellation' });
         }
-        flash('Job updated.' + (willNotify ? ' Signups notified.' : ''));
+        // invokeEmailCF already showed its own fail/unconfirmed toast; flash()
+        // replaces, so only flash success when the email actually succeeded.
+        if (!willNotify || (cancelEmail !== null && cancelEmail !== EMAIL_UNCONFIRMED)) {
+          flash('Job updated.' + (willNotify ? ' Signups notified.' : ''));
+        }
         setShowNewJob(false);
         setEditJobId(null);
       } else if (isRecurring) {
@@ -1065,7 +1077,7 @@ export function JobsPage({ store, userProfile, initialView }) {
       context: 'notify-signups',
       userMsgOnFail: 'Failed to send notifications. Admins were notified.',
     });
-    if (data === null) return;
+    if (data === null || data === EMAIL_UNCONFIRMED) return; // invokeEmailCF already said so
     if (data?.skipped) flash('Already notified recently — no new emails sent.');
     else flash('Signups notified.');
   }
@@ -1073,15 +1085,16 @@ export function JobsPage({ store, userProfile, initialView }) {
   // Fires sendJobCancelledEmails for each affected job that has signups.
   // Awaited so the CF reads the still-existing doc before the delete commits.
   // The CF has a 1-hour debounce, so a soft-cancel-then-delete won't double-fire.
+  // Returns the outcome instead of flashing: every caller flashes "…deleted."
+  // right after, which replaced (hid) any toast from here (2026-10-18).
   async function notifySignupsForDelete(affectedJobs) {
-    if (!notificationConfig?.enabled) return;
+    if (!notificationConfig?.enabled) return NO_EMAIL_OUTCOME;
     const withSignups = affectedJobs.filter(j => (j.signupCount || 0) > 0);
-    if (withSignups.length === 0) return;
+    if (withSignups.length === 0) return NO_EMAIL_OUTCOME;
     const results = await Promise.allSettled(withSignups.map(j =>
       invokeEmailCF('sendJobCancelledEmails', { churchId: userProfile?.churchId, jobDocId: j._docId }, { context: 'pre-delete-cancellation' })
     ));
-    const failed = results.filter(r => r.status === 'fulfilled' && r.value === null).length;
-    if (failed > 0) flash(`${failed} of ${withSignups.length} cancellation email${withSignups.length !== 1 ? 's' : ''} failed to send. Admins were notified.`, true);
+    return tallyEmailResults(results);
   }
 
   async function handleDeleteJob(job) {
@@ -1100,10 +1113,10 @@ export function JobsPage({ store, userProfile, initialView }) {
       danger: true,
     })) return;
     try {
-      await notifySignupsForDelete([job]);
+      const emailOutcome = await notifySignupsForDelete([job]);
       await deleteJobListing(job._docId, userId, userName, job.jobNumber);
       setShowJobDetail(null);
-      flash('Job deleted.');
+      flash('Job deleted.' + emailOutcomeNote(emailOutcome), emailOutcomeIsProblem(emailOutcome));
     } catch { flash('Failed to delete job.', true); }
   }
 
@@ -1124,10 +1137,10 @@ export function JobsPage({ store, userProfile, initialView }) {
       danger: true,
     })) return;
     try {
-      await notifySignupsForDelete(seriesJobs);
+      const emailOutcome = await notifySignupsForDelete(seriesJobs);
       await deleteJobListingSeries(job.recurrenceGroupId, userId, userName);
       setShowJobDetail(null);
-      flash('Series deleted.');
+      flash('Series deleted.' + emailOutcomeNote(emailOutcome), emailOutcomeIsProblem(emailOutcome));
     } catch { flash('Failed to delete series.', true); }
   }
 
@@ -1148,10 +1161,10 @@ export function JobsPage({ store, userProfile, initialView }) {
       danger: true,
     })) return;
     try {
-      await notifySignupsForDelete(seriesJobs);
+      const emailOutcome = await notifySignupsForDelete(seriesJobs);
       await deleteJobListingSeriesFrom(job.recurrenceGroupId, job.scheduledDate, userId, userName);
       setShowJobDetail(null);
-      flash('This and future series jobs deleted.');
+      flash('This and future series jobs deleted.' + emailOutcomeNote(emailOutcome), emailOutcomeIsProblem(emailOutcome));
     } catch { flash('Failed to delete series jobs.', true); }
   }
 

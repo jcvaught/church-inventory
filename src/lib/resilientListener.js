@@ -15,6 +15,8 @@
 // `aborted` is deliberately absent: its only SDK source is terminate(), and a
 // terminated instance cannot be resubscribed. The app never terminates, so an
 // `aborted` here is unexpected and is reported as permanent.
+import { isMissingIndexError } from './sentryFilter.js';
+
 export const RETRYABLE_LISTENER_CODES = new Set([
   'deadline-exceeded', 'unavailable', 'internal', 'unknown', 'resource-exhausted', 'cancelled',
 ]);
@@ -78,14 +80,19 @@ export function createResilientListener({ label, subscribe, onNext, onError, env
     // late event from it must not reach the caller after a resubscribe.
     generation++;
     stopCurrent();
-    try { onError?.(err); } catch { /* caller's handler must not wedge the retry */ }
     const code = err?.code;
-    if (!RETRYABLE_LISTENER_CODES.has(code)) {
-      if (!UNREPORTED_LISTENER_CODES.has(code)) report({ level: 'error', label, code: code || 'none', outcome: 'permanent' });
+    const retryable = RETRYABLE_LISTENER_CODES.has(code);
+    if (retryable) failures++;
+    // Decide BEFORE telling the caller, so it can act on the outcome: a caller
+    // that ignores a drop must not keep ignoring it once we have given up.
+    const willRetry = retryable && failures <= MAX_FAILURES;
+    try { onError?.(err, { willRetry }); } catch { /* caller's handler must not wedge the retry */ }
+    if (closed) return; // the caller tore us down from inside onError
+    if (!retryable) {
+      if (!UNREPORTED_LISTENER_CODES.has(code) || isMissingIndexError(code, err?.message)) report({ level: 'error', label, code: code || 'none', outcome: 'permanent' });
       return;
     }
-    failures++;
-    if (failures > MAX_FAILURES) {
+    if (!willRetry) {
       report({ level: 'error', label, code, outcome: 'gave-up', attempt: failures - 1 });
       return;
     }

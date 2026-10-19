@@ -16,7 +16,8 @@ export function useGlobalBanner() {
     const unsub = onSnapshotResilient('globalBanner',
       doc(db, 'appConfig', 'banner'),
       (snap) => setBanner(snap.exists() ? snap.data() : null),
-      () => setBanner(null),
+      // Keep the current banner through a retryable drop (onSnapshotResilient resubscribes).
+      (_err, { willRetry } = {}) => { if (!willRetry) setBanner(null); },
     );
     return () => unsub();
   }, []);

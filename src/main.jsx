@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import * as Sentry from '@sentry/react';
+import { shouldDropForCode } from './lib/sentryFilter.js';
 import { HelmetProvider } from 'react-helmet-async';
 import { importWithRetry } from './utils/lazyWithRetry.js';
 import UpdateBanner from './components/UpdateBanner.jsx';
@@ -53,11 +54,11 @@ Sentry.init({
     // session) — that's the system *working*, not breaking. Filtering
     // here keeps the Sentry feed dominated by `internal`/`unknown`/
     // unhandled exceptions, where real bugs live.
+    // A missing composite index is the one failed-precondition that IS a bug
+    // (handleErr captures it as 'fatal' + missingIndex) — shouldDropForCode
+    // lets it through (2026-10-18; before that this filter ate the alert).
     const code = (exc && exc.code) || '';
-    if (code === 'permission-denied' || code === 'failed-precondition' ||
-        code === 'unauthenticated' || code === 'not-found' ||
-        code === 'functions/permission-denied' || code === 'functions/failed-precondition' ||
-        code === 'functions/unauthenticated' || code === 'functions/not-found') {
+    if (shouldDropForCode(code, exc && exc.message)) {
       return null;
     }
     return event;

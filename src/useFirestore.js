@@ -145,7 +145,8 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     // with the retry wrapper. `internal`/`unknown` are retryable ONLY for
     // listeners; on writes/callables they still report in full.
     if (ctx.listener && RETRYABLE_LISTENER_CODES.has(err?.code)) {
-      console.warn('[ChurchOpsHub] listener dropped (resubscribing):', err?.code || err);
+      // Wrapper reports retry vs give-up to Sentry; this line is just the console trail.
+      console.warn('[ChurchOpsHub] listener dropped:', err?.code || err);
       return;
     }
     // Audit overnight 2026-05-12 / Error-resilience #1: this is the single
@@ -353,6 +354,12 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
         .map(arm => [arm.key, query(workRef, ...armConstraints(arm))]),
     ];
     const workStore = createWorkStore(workQueries.map(([key]) => key));
+    // Sources that have delivered at least once. A retryable drop of one of
+    // these keeps its data on the board while onSnapshotResilient resubscribes;
+    // fail() would blank every board + raise the incomplete banner for the
+    // retry window (Codex review 2026-10-18). Before a first delivery, fail()
+    // still runs so the store settles and the loading screen can end.
+    const workDelivered = new Set();
     let workSettled = false;
     const publishWork = () => {
       const state = workStore.read();
@@ -371,10 +378,12 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
         // CRUD calls speak bare ids; the merge key is the real document id.
         const next = new Map();
         for (const d of snap.docs) next.set(d.id, { _docId: stripWorkPrefix(d.id), ...d.data() });
+        workDelivered.add(key);
         workStore.snapshot(key, next);
         publishWork();
-      }, (err) => {
+      }, (err, { willRetry } = {}) => {
         handleErr(err, { listener: true });
+        if (willRetry && workDelivered.has(key)) return;
         workStore.fail(key, err?.code);
         publishWork();
       }));

@@ -243,6 +243,56 @@ test('an error delivered synchronously inside subscribe closes that listener', (
   assert.deepEqual(unsubbed, [0]);
 });
 
+test('onError receives willRetry: true while a resubscribe is scheduled', () => {
+  const seen = [];
+  const opens = [];
+  const timers = [];
+  createResilientListener({
+    label: 't', subscribe: (n, e) => { opens.push(e); return () => {}; }, onNext() {},
+    onError: (e, info) => seen.push(info),
+    env: { setTimeout: (fn) => { timers.push(fn); return 1; }, clearTimeout() {}, isHidden: () => false, onVisible: () => () => {}, report() {}, random: () => 0 },
+  });
+  for (let i = 0; i < MAX_FAILURES; i++) { opens[i](err('unavailable')); timers[i](); }
+  assert.deepEqual(seen.map(x => x.willRetry), Array(MAX_FAILURES).fill(true));
+  opens[MAX_FAILURES](err('unavailable'));           // the give-up
+  assert.equal(seen.at(-1).willRetry, false);
+  assert.equal(timers.length, MAX_FAILURES);          // nothing new scheduled
+});
+
+test('onError receives willRetry: false for a permanent code', () => {
+  const seen = [];
+  const opens = [];
+  createResilientListener({
+    label: 't', subscribe: (n, e) => { opens.push(e); return () => {}; }, onNext() {},
+    onError: (e, info) => seen.push(info),
+    env: { setTimeout() { throw new Error('must not schedule'); }, clearTimeout() {}, isHidden: () => false, onVisible: () => () => {}, report() {}, random: () => 0 },
+  });
+  opens[0](err('permission-denied'));
+  assert.deepEqual(seen, [{ willRetry: false }]);
+});
+
+test('unsubscribing from inside onError schedules nothing and reports nothing', () => {
+  let unsub;
+  const timers = [];
+  const reports = [];
+  const opens = [];
+  unsub = createResilientListener({
+    label: 't', subscribe: (n, e) => { opens.push(e); return () => {}; }, onNext() {},
+    onError: () => unsub(),
+    env: { setTimeout: (fn) => { timers.push(fn); return 1; }, clearTimeout() {}, isHidden: () => false, onVisible: () => () => {}, report: (r) => reports.push(r), random: () => 0 },
+  });
+  opens[0](err('unavailable'));
+  assert.equal(timers.length, 0);
+  assert.equal(reports.length, 0);
+});
+
+test('a missing-index failed-precondition IS reported (not a rules code)', () => {
+  const h = harness();
+  h.opens[0].error(Object.assign(new Error('The query requires an index. You can create it here: https://console.firebase.google.com/x'), { code: 'failed-precondition' }));
+  assert.equal(h.timers.length, 0);
+  assert.deepEqual(h.reports, [{ level: 'error', label: 't', code: 'failed-precondition', outcome: 'permanent' }]);
+});
+
 // ── Source guard ────────────────────────────────────────────────────────────
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src');
 const BINDING = join('utils', 'resilientSnapshot.js');

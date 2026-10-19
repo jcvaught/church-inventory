@@ -4,6 +4,12 @@
 // tag: 'New' | 'Improved' | 'Fixed'. Keep it about what the user gets, not how.
 export const WHATS_NEW = [
   {
+    date: '2026-10-18',
+    tag: 'Fixed',
+    title: 'An open task stays open when someone else edits it',
+    body: "If someone else changed a task or maintenance ticket while you had it open, it used to close on you with a message saying your access was removed. Now it stays open and shows their change. If you were in the middle of editing, you'll see the usual note that it was updated. Messages after cancelling or deleting a job are also clearer about whether the emails went out.",
+  },
+  {
     date: '2026-10-01',
     tag: 'Fixed',
     title: 'You can delete your own task after others comment on it',

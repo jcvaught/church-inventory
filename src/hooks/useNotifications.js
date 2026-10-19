@@ -22,7 +22,8 @@ export function useNotifications(churchId, uid) {
     const unsub = onSnapshotResilient('notifications',
       q,
       (snap) => setItems(snap.docs.map((d) => ({ _docId: d.id, ...d.data() }))),
-      () => setItems([]),
+      // Keep the list through a retryable drop (onSnapshotResilient resubscribes).
+      (_err, { willRetry } = {}) => { if (!willRetry) setItems([]); },
     );
     // Reset on teardown / dep change (clears items when churchId/uid go missing
     // too — avoids a synchronous setState in the effect body).

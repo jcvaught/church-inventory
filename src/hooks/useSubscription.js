@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { doc } from 'firebase/firestore';
 import { onSnapshotResilient } from '../utils/resilientSnapshot.js';
-import { RETRYABLE_LISTENER_CODES } from '../lib/resilientListener.js';
 import { db } from '../firebase.js';
 import * as entitlement from '../lib/entitlement.js';
 
@@ -27,9 +26,10 @@ export function useSubscription(churchId) {
         }
         setLoading(false);
       },
-      (err) => {
-        // Retryable drops are resubscribed + reported by onSnapshotResilient.
-        if (RETRYABLE_LISTENER_CODES.has(err?.code)) console.warn('[ChurchOpsHub] subscription listener dropped (resubscribing):', err.code);
+      (err, { willRetry } = {}) => {
+        // While a retry is coming, warn (onSnapshotResilient reports it); a
+        // permanent code or the give-up is a real failure.
+        if (willRetry) console.warn('[ChurchOpsHub] subscription listener dropped (resubscribing):', err?.code);
         else console.error('[ChurchOpsHub] subscription listener failed', err);
         setLoading(false);
       }

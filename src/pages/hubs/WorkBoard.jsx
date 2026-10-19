@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, doc, query as fsQuery, orderBy, runTransaction, updateDoc, deleteField } from 'firebase/firestore';
 import { onSnapshotResilient } from '../../utils/resilientSnapshot.js';
+import { stableStringify } from '../../lib/stableStringify.js';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../../firebase.js';
 import { notify } from '../../utils/notify.js';
@@ -775,7 +776,10 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
     const unsub = onSnapshotResilient('wb:comments', q, snap => {
       setComments(snap.docs.map(d => ({ id:d.id, ...d.data() })));
       setCommentsLoading(false);
-    }, () => {
+    }, (_err, { willRetry } = {}) => {
+      // A retryable drop is resubscribed by onSnapshotResilient — keep showing
+      // what we have rather than blanking the thread until it reconnects.
+      if (willRetry) return;
       // Clear rather than keep showing comments this listener can no longer
       // confirm — gate 4 gates comments on the parent's visibility, so a denial
       // here becomes a real case (gate-3 review M-1).
@@ -789,18 +793,31 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
   useEffect(() => {
     if (!showDetail?._docId || !churchId) { setRemoteUpdate(null); return; }
     setRemoteUpdate(null);
-    const initialRef = { current: true };
+    // Last delivered state: undefined = nothing yet, '' = doc absent, else a
+    // key-sorted JSON of its data. The first fire only sets the baseline (as
+    // before), and a snapshot identical to the last one is ignored — after a
+    // resubscribe the new listener re-delivers the same document, which must
+    // not raise a conflict banner over unsaved edits (2026-10-18).
+    let lastSeen;
     const unsub = onSnapshotResilient('wb:detailSync',
       doc(db, 'churches', churchId, 'workItems', `${docPrefix}${showDetail._docId}`),
       snap => {
+        const seen = snap.exists() ? stableStringify(snap.data()) : '';
+        const first = lastSeen === undefined;
+        const unchanged = seen === lastSeen;
+        lastSeen = seen;
+        if (first || unchanged) return;
         if (!snap.exists()) {
-          if (initialRef.current) { initialRef.current = false; return; }
           setShowDetail(null);
           flash(`This ${noun} was deleted by another user.`, true);
           return;
         }
-        if (initialRef.current) { initialRef.current = false; return; } // skip first fire
-        const remote = { _docId: snap.id, ...snap.data() };
+        // Bare id, like every other copy of a work item (useFirestore strips the
+        // prefix). snap.id is `task_…`/`mnt_…`; putting that into showDetail
+        // re-keyed this effect and the comments listener onto `task_task_…`
+        // after any remote edit (pre-existing since the workItems cutover;
+        // found by the 2026-10-18 Gemini review).
+        const remote = { _docId: snap.id.startsWith(docPrefix) ? snap.id.slice(docPrefix.length) : snap.id, ...snap.data() };
         if (isDirtyRef.current) {
           // User has unsaved edits — surface conflict banner
           setRemoteUpdate(remote);
@@ -819,7 +836,11 @@ export function WorkBoard({ store, userProfile, type = 'task' }) {
       // modal open on data you can no longer read, with no explanation. Close it
       // and say why. Any other listener failure closes too rather than silently
       // freezing on a stale document.
-      err => {
+      (err, { willRetry } = {}) => {
+        // A retryable drop is resubscribed by onSnapshotResilient. Closing here
+        // would unmount this effect, cancel that retry and throw away unsaved
+        // edits — so only close once the listener is really gone (2026-10-18).
+        if (willRetry) return;
         setShowDetail(null);
         setRemoteUpdate(null);
         flash(err?.code === 'permission-denied'

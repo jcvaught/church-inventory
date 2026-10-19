@@ -10,7 +10,16 @@ The code-side changes those rules rely on are already deployed:
 - `src/main.jsx` `beforeSend` filters expected `permission-denied` /
   `failed-precondition` / `unauthenticated` / `not-found` codes from both
   Firebase callables and the Firestore client SDK, so the issue feed is no
-  longer dominated by intentional rule-blocks.
+  longer dominated by intentional rule-blocks. **Exception (2026-10-18):** a
+  Firestore `failed-precondition` whose message says "requires an index" is
+  let through (`src/lib/sentryFilter.js`). Until then this filter silently ate
+  the `missingIndex` fatal alert. An alert rule on tag `missingIndex:true` now
+  actually fires. Expect one during an index build too: Firestore's
+  "currently building" rejection carries the same code.
+- Listener drops arrive as message `Firestore listener dropped` with tags
+  `listener`, `code`, `outcome` (`retry` | `gave-up` | `permanent`). Alert on
+  `outcome:gave-up` (a hub's live data stopped for that session); `retry` is
+  the frequency measurement.
 - `src/useFirestore.js` `handleErr` now tags every Firestore-write capture
   with `area`, `op`, optional `hub`, and the underlying Firestore `errorCode`.
 - `src/pages/hubs/JobsPage.jsx` tags every Jobs Hub email-callable failure

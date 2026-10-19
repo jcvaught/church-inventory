@@ -5,6 +5,28 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 ---
 
 
+
+## 2026-10-18 — Six review-found bugs: false email toasts, listener callbacks, missing-index alert
+
+Found by the first Gemini-vs-Codex review trial (plus #3 while reading the code). Reviewed by Gemini then Codex, spec and diff.
+1. Unconfirmed (backgrounded-timeout) email results returned `null`, the same as failures, so series cancellation and job/series
+   deletes said "failed to send. Admins were notified." Both parts were false. Now there's a separate `EMAIL_UNCONFIRMED` sentinel with
+   honest wording. Those failure toasts were also never visible: each was immediately replaced by a "…deleted." / "N jobs updated."
+   / "Signups notified." flash. The outcome now goes into that one final toast, and single-job cancellation no longer claims "Signups notified." after a failure.
+2. JobsPage/VolunteerHome signups listeners `console.error`'d every drop (captureConsole paged on retryable ones).
+3. WorkBoard detail sync closed the task modal on ANY listener error. With resubscription, that discarded unsaved edits and cancelled the retry.
+4. WorkBoard detail sync raised a false conflict banner after a resubscribe re-delivered the same document.
+5. `beforeSend` dropped every `failed-precondition`, including the `missingIndex` fatal alert, so it never fired.
+6. **WorkBoard detail sync put the PREFIXED doc id (`task_…`) into `showDetail._docId`** on every remote edit (pre-existing since
+   the workItems cutover). The effect re-keyed onto `task_task_…`, which the rules deny, so the modal closed with "Your access to this
+   task was removed." **Measured on the emulator:** old code = the modal closed after one outside edit and its comments vanished; fixed = two
+   outside edits applied live, comments intact. Found by Gemini's diff review.
+Codex round 1 also caught that a retryable work-item drop blanked every board (`workStore.fail`) during the retry window. Sources that
+have delivered now keep their data while `willRetry`. Bell, global banner and archived comments got the same guard.
+New: `onSnapshotResilient` error callbacks receive `{ willRetry }`; pure `src/lib/{emailOutcome,stableStringify,sentryFilter}.js` with tests.
+
+---
+
 ## 2026-10-18 — Listener resilience: an onSnapshot error is permanent (corrects 2026-06-11)
 
 The 2026-06-11 entry below said the SDK "auto-reconnects" a listener after `deadline-exceeded`/`unavailable`/… reach its
