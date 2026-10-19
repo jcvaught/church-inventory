@@ -197,12 +197,19 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
   useEffect(() => {
     if (!churchId) return;
     const unsubs = [];
-    let loaded = 0;
     // Tasks + maintenance come from one `workItems` subscription (split by type).
     // People Access and time-entry subscriptions are role-aware in the
     // dedicated effect below. They must not block the rest of app startup.
     const totalSubs = 18;
-    const checkDone = () => { loaded++; if (loaded >= totalSubs) setLoading(false); };
+    // Once per listener, keyed by label: a busy collection firing twice, or an
+    // error followed by a successful resubscribe, must not count as another
+    // listener arriving. An error settles its slot too, so a dead listener
+    // cannot hold the app on the spinner.
+    const settled = new Set();
+    const checkDone = (label) => {
+      settled.add(label);
+      if (settled.size >= totalSubs) setLoading(false);
+    };
 
     // The two documents behind `config` arrive independently, so a church
     // transition could otherwise combine the new church's config/main with the
@@ -211,38 +218,43 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
     // mixed.
     setConfigMain(null);
     setChurch(null);
+    // AppShell mounts with churchId + uid already set, so this effect runs once
+    // per mount. If either ever changed in place, show the spinner again. That
+    // alone would NOT protect App's onboarding check, which runs in the same
+    // commit and still sees the old loading=false.
+    setLoading(true);
 
     // Config (config/main)
     unsubs.push(onSnapshotResilient('config:main', doc(db, 'churches', churchId, 'config', 'main'), (snap) => {
       if (snap.exists()) setConfigMain(snap.data());
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('config:main');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('config:main'); }));
 
     // Church (the parent document — authoritative for churchName/churchCode).
     // Rules allow `get` here for any ACTIVE member, not just admins
     // (firestore.rules), which matters because every page reads the name.
     unsubs.push(onSnapshotResilient('church', doc(db, 'churches', churchId), (snap) => {
       if (snap.exists()) setChurch(snap.data());
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('church');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('church'); }));
 
     // Settings
     unsubs.push(onSnapshotResilient('config:settings', doc(db, 'churches', churchId, 'config', 'settings'), (snap) => {
       if (snap.exists()) setSettings(snap.data());
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('config:settings');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('config:settings'); }));
 
     // Items
     unsubs.push(onSnapshotResilient('items', collection(db, 'churches', churchId, 'items'), (snap) => {
       setItems(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('items');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('items'); }));
 
     // Supplies
     unsubs.push(onSnapshotResilient('supplies', collection(db, 'churches', churchId, 'supplies'), (snap) => {
       setSupplies(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('supplies');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('supplies'); }));
 
     // Activity Log — capped at 100 most-recent entries to avoid unbounded
     // reads as churches age. Audit overnight 2026-05-12 / Perf #1:
@@ -254,22 +266,22 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
       (snap) => {
         const logs = snap.docs.map(activityDoc);
         setActivityLog(logs);
-        checkDone();
+        checkDone('activityLog');
       },
-      (err) => { handleErr(err, { listener: true }); checkDone(); }
+      (err) => { handleErr(err, { listener: true }); checkDone('activityLog'); }
     ));
 
     // Reservations
     unsubs.push(onSnapshotResilient('reservations', collection(db, 'churches', churchId, 'reservations'), (snap) => {
       setReservations(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('reservations');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('reservations'); }));
 
     // Vendors
     unsubs.push(onSnapshotResilient('vendors', collection(db, 'churches', churchId, 'vendors'), (snap) => {
       setVendors(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('vendors');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('vendors'); }));
 
     // Users — scoped to this church via query (real-time)
     unsubs.push(onSnapshotResilient('users', query(collection(db, 'users'), where('churchId', '==', churchId)), (snap) => {
@@ -277,34 +289,34 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
       // E2E suite but must never surface in member lists, pickers, or seat
       // counts. Filtered at the single source so every consumer inherits it.
       setUsers(excludeTestAccounts(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('users');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('users'); }));
 
     // Bundles
     unsubs.push(onSnapshotResilient('bundles', collection(db, 'churches', churchId, 'bundles'), (snap) => {
       setBundles(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('bundles');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('bundles'); }));
 
     // Notification config
     unsubs.push(onSnapshotResilient('config:notifications', doc(db, 'churches', churchId, 'config', 'notifications'), (snap) => {
       setNotificationConfig(snap.exists() ? snap.data() : {});
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('config:notifications');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('config:notifications'); }));
 
     // Audits
     unsubs.push(onSnapshotResilient('audits', collection(db, 'churches', churchId, 'audits'), (snap) => {
       setAudits(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('audits');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('audits'); }));
 
     // Public Requests
     unsubs.push(onSnapshotResilient('publicRequests', query(collection(db, 'churches', churchId, 'publicRequests'), where('status', '==', 'pending')), (snap) => {
       const reqs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
       reqs.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       setPublicRequests(reqs);
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('publicRequests');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('publicRequests'); }));
 
     // Work Items (unified Tasks + Maintenance) — COH-006 gate 3.
     //
@@ -370,7 +382,7 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
       // answer; the spinner ends on `settled` either way, so a dead listener
       // cannot hang the app.
       setWorkItemsError(state.complete ? null : state.error);
-      if (state.settled && !workSettled) { workSettled = true; checkDone(); }
+      if (state.settled && !workSettled) { workSettled = true; checkDone('work'); }
     };
     for (const [key, q] of workQueries) {
       unsubs.push(onSnapshotResilient(`work:${key}`, q, (snap) => {
@@ -394,8 +406,8 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
       const r = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
       r.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setRooms(r);
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('rooms');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('rooms'); }));
 
     // Job Listings — capped at 500 most-recently-created to avoid unbounded
     // reads as churches age (audit 2026-05-23 perf H-3). Mirrors the
@@ -409,9 +421,9 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
       query(collection(db, 'churches', churchId, 'jobListings'), orderBy('createdAt', 'desc'), limit(500)),
       (snap) => {
         setJobListings(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
-        checkDone();
+        checkDone('jobListings');
       },
-      (err) => { handleErr(err, { listener: true }); checkDone(); }
+      (err) => { handleErr(err, { listener: true }); checkDone('jobListings'); }
     ));
 
     // Job Announcements
@@ -419,14 +431,14 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
       const ann = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
       ann.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
       setJobAnnouncements(ann);
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('jobAnnouncements');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('jobAnnouncements'); }));
 
     // Task Templates
     unsubs.push(onSnapshotResilient('taskTemplates', query(collection(db, 'churches', churchId, 'taskTemplates'), orderBy('name')), (snap) => {
       setTaskTemplates(snap.docs.map(d => ({ _docId: d.id, ...d.data() })));
-      checkDone();
-    }, (err) => { handleErr(err, { listener: true }); checkDone(); }));
+      checkDone('taskTemplates');
+    }, (err) => { handleErr(err, { listener: true }); checkDone('taskTemplates'); }));
 
     return () => unsubs.forEach(u => u());
     // userProfile.uid is a dependency now: three of the work-item listeners are

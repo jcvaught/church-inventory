@@ -316,3 +316,23 @@ test('no raw onSnapshot( in src/ outside the binding', () => {
   }
   assert.deepEqual(offenders, [], 'use onSnapshotResilient(label, …) from src/utils/resilientSnapshot.js');
 });
+
+// The core loading screen ends when `settled.size >= totalSubs` (useFirestore.js).
+// A listener added without its own label, or without bumping totalSubs, would
+// end it early or never.
+test('useFirestore: checkDone labels match totalSubs', () => {
+  const src = readFileSync(join(SRC, 'useFirestore.js'), 'utf8');
+  const total = Number(src.match(/const totalSubs = (\d+);/)[1]);
+  assert.ok(!/checkDone\(\s*\)/.test(src), 'every checkDone call needs its listener label');
+  const labels = new Set([...src.matchAll(/checkDone\('([^']+)'\)/g)].map(m => m[1]));
+  assert.equal(labels.size, total);
+  // Every listener call site in the effect is one slot (the work-items loop is one
+  // call site, settled once); catches a listener that never calls checkDone.
+  const effect = src.slice(src.indexOf('// Subscribe to all collections'), src.indexOf('return () => unsubs.forEach'));
+  assert.equal((effect.match(/onSnapshotResilient\(/g) || []).length, total);
+  // Each plain listener settles from both callbacks; the work-items slot settles once.
+  for (const l of labels) {
+    const n = src.split(`checkDone('${l}')`).length - 1;
+    assert.equal(n, l === 'work' ? 1 : 2, `checkDone('${l}') should appear ${l === 'work' ? 1 : 2}x, saw ${n}`);
+  }
+});

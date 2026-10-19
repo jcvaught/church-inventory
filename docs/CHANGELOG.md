@@ -6,6 +6,16 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 
 
+## 2026-10-19 — Loading screen waits for every core listener
+
+`checkDone()` in `useFirestore`'s core-subscription effect counted callbacks, not listeners, so one listener firing twice (a busy
+collection, or an error then a successful resubscribe) could clear `loading` before others delivered. The visible risk was App's
+onboarding check (`!loading && !onboardingComplete && items.length === 0`, sticky), which could show an established church's
+admin the new-church wizard. Now `checkDone(label)` fills a `Set` against `totalSubs`; an error still settles its slot. Also
+`setLoading(true)` at effect start (defensive; AppShell mounts with churchId + uid set). Source guard in
+`functions/test/resilient-listener.test.mjs`: call sites = distinct labels = `totalSubs`, each label settled from both callbacks.
+Reviewed by Gemini then Codex (combined spec + diff).
+
 ## 2026-10-18 — Six review-found bugs: false email toasts, listener callbacks, missing-index alert
 
 Found by the first Gemini-vs-Codex review trial (plus #3 while reading the code). Reviewed by Gemini then Codex, spec and diff.
