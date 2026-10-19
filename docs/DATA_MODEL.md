@@ -7,7 +7,7 @@ All church data is namespaced under `churches/{churchId}/`. `churchId` is always
 | Path | Contents |
 |------|----------|
 | `churches/{churchId}` | Church name, code, createdAt, createdBy (uid); `welcomeEmailSentAt` (set by `sendWelcomeEmail` CF for idempotency) |
-| `churches/{churchId}/config/main` | Church metadata |
+| `churches/{churchId}/config/main` | Church metadata; counters `maxTaskNumber` / `maxTicketNumber` / `maxJobNumber`; `lastTaskDocId` (real `task_…` id of the task whose create last bumped `maxTaskNumber` — what the rules check to admit a plain member's bump, 2026-10-19) |
 | `churches/{churchId}/config/settings` | `locations[]`, `ministries[]`, `tags[]`, `jobsRosterVisibility` (`'admin'`/`'signups'`/`'all'`, default `'signups'` — controls who can see signup names in Job Hub) |
 | `churches/{churchId}/config/subscription` | Plan, hubs[], maxUsers, status (`active`/`trialing`/`past_due`/`canceled`), Stripe IDs, grandfathered; trial fields: `trialStartedAt`, `trialEndsAt`, `trialHubs[]`, `freeHubsSelected` (null during trial; string[] after expiry — auto-selected top-2 hubs by activity log), `trialWarningEmailSentAt` |
 | `churches/{churchId}/items` | Equipment inventory items. Core: `itemId`, `description`, `location` (free-text, from `settings.locations`), `ministry`, `status`, `condition`, `tags[]`, `photoUrl`, `assignedTo`, financial fields. **Room-scoped inventory (Shape A, 2026-06-24):** optional `roomDocId` (FK → a `rooms` doc) + denormalized `roomName` — links an item to a reservable Space; powers the Inventory Space filter, the Manage-Spaces per-room item count, and the Phase 6 equipment-hold ⭐ match. Additive; coexists with free-text `location` (the full place-model convergence was deliberately deferred) |
@@ -46,6 +46,7 @@ All church data is namespaced under `churches/{churchId}/`. `churchId` is always
 Granular per-subcollection rules (no wildcard). All church-scoped membership checks reject profiles with explicit `active:false`; missing `active` defaults to true for legacy profiles. Key constraints:
 
 - `config/subscription` — client create only at church creation time; no client updates (webhook/Admin SDK only)
+- `config/main` — admin/manager update, except `memberTaskNumberBump`: any active member may raise `maxTaskNumber` by exactly 1 (plus `lastTaskDocId`, nothing else) in the same commit that creates a NEW task of theirs at `lastTaskDocId` carrying that exact `TSK-###` (2026-10-19; `functions/test/rules/member-task-number.test.mjs`)
 - `activityLog` — immutable; active members can create only with their own uid/profile name and `request.time`, and nobody can update or delete
 - `accessPeople` / `accessRecords` — admins/managers can read the full hub; ordinary members can read only their linked person document(s) and those people's compliance records; writes remain admin/manager-only
 - `workItems` / `workItems/comments` are the canonical Tasks and Maintenance paths; the four obsolete `tasks`/`tasks/comments`/`maintenanceTickets`/`maintenanceTickets/comments` rule blocks were removed, while `taskTemplates` remains supported

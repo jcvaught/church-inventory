@@ -326,13 +326,36 @@ service cloud.firestore {
     //    isChurchAdminOrManager — rules in a batch are evaluated against
     //    pre-batch state). Matches the existing self-creator pattern on
     //    config/subscription above. ────────────────────────────────────────
+    // A plain member may raise maxTaskNumber by exactly 1, and only in the same
+    // commit that creates a NEW task of theirs carrying that number
+    // (`lastTaskDocId` names it). Without this, addTask's counter bump made every
+    // task create fail for role 'user' (measured 2026-10-15 + 2026-10-19). A
+    // member gains nothing they could not already do; they cannot lower, skip or
+    // reset the counter, or touch any other config/main field.
+    function memberTaskNumberBump(churchId) {
+      let after = request.resource.data;
+      let prev = resource.data.get('maxTaskNumber', 0);
+      let n = after.get('maxTaskNumber', null);
+      let id = after.get('lastTaskDocId', null);
+      let path = /databases/$(database)/documents/churches/$(churchId)/workItems/$(id);
+      return isMember(churchId)
+        && after.diff(resource.data).affectedKeys().hasOnly(['maxTaskNumber', 'lastTaskDocId'])
+        && prev is int && n is int && n == prev + 1
+        && id is string && id.matches('task_[A-Za-z0-9]+')
+        && !exists(path) && existsAfter(path)
+        && getAfter(path).data.type == 'task'
+        && getAfter(path).data.createdBy == request.auth.uid
+        && getAfter(path).data.taskNumber
+             == (n < 10 ? 'TSK-00' : (n < 100 ? 'TSK-0' : 'TSK-')) + string(n);
+    }
     match /churches/{churchId}/config/main {
       allow read:           if isMember(churchId);
       allow create:         if request.auth != null && (
                                 request.auth.uid + '-church' == churchId
                                 || isChurchAdminOrManager(churchId)
                               );
-      allow update, delete: if isChurchAdminOrManager(churchId);
+      allow update:         if isChurchAdminOrManager(churchId) || memberTaskNumberBump(churchId);
+      allow delete:         if isChurchAdminOrManager(churchId);
     }
 
     // ── Config/settings — same pattern as config/main ───────────────────────

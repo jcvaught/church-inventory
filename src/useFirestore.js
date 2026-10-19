@@ -909,7 +909,9 @@ export function useFirestore(churchId, userProfile, createGuard = null) {
         const configSnap = await t.get(configRef);
         const maxNum = (configSnap.data()?.maxTaskNumber || 0) + 1;
         taskNumber = 'TSK-' + String(maxNum).padStart(3, '0');
-        t.set(configRef, { maxTaskNumber: maxNum }, { merge: true });
+        // lastTaskDocId (the REAL doc id) lets the rules admit this bump for a
+        // plain member: +1 only, alongside creating that task (firestore.rules).
+        t.set(configRef, { maxTaskNumber: maxNum, lastTaskDocId: newDocRef.id }, { merge: true });
         t.set(newDocRef, {
           ...task,
           type: 'task',

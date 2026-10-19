@@ -8,6 +8,7 @@
 //
 // Then start the app against the sandbox:  npm run dev:emulator
 // Sign in with:  admin@test.local  /  Test1234!
+//   (plain member: member@test.local, same password)
 
 process.env.FIRESTORE_EMULATOR_HOST ||= '127.0.0.1:8080';
 process.env.FIREBASE_AUTH_EMULATOR_HOST ||= '127.0.0.1:9099';
@@ -32,6 +33,7 @@ const db = admin.firestore();
 
 const EMAIL = 'admin@test.local';
 const PASSWORD = 'Test1234!';
+const MEMBER_EMAIL = 'member@test.local';
 
 const iso = (d) => d.toISOString();
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -49,6 +51,15 @@ async function main() {
   // 2. User profile (no allowedHubs field = full hub access)
   await db.doc(`users/${uid}`).set({
     name: 'Test Admin', email: EMAIL, role: 'admin', churchId, active: true, createdAt: NOW,
+  });
+
+  // 2b. A plain member (role 'user') in the same church, for checking what
+  // non-admins can do. No allowedHubs = every hub visible, as for legacy members.
+  let member;
+  try { member = await auth.getUserByEmail(MEMBER_EMAIL); }
+  catch { member = await auth.createUser({ email: MEMBER_EMAIL, password: PASSWORD, displayName: 'Test Member', emailVerified: true }); }
+  await db.doc(`users/${member.uid}`).set({
+    name: 'Test Member', email: MEMBER_EMAIL, role: 'user', churchId, active: true, createdAt: NOW,
   });
 
   // 3. Church + config (grandfathered → every hub unlocked, no Stripe)
@@ -140,6 +151,7 @@ async function main() {
   console.log('✓ Seeded sandbox church:');
   console.log(`  church : ${churchId}`);
   console.log(`  login  : ${EMAIL} / ${PASSWORD}`);
+  console.log(`  member : ${MEMBER_EMAIL} (role user, same password)`);
   console.log('  data   : 4 tasks · 3 maintenance · 2 jobs · 2 reservations · 1 item · 1 low supply · 1 contractor (+2 time entries) · 1 expiring cert');
   console.log('  (3 recurring items across tasks/maintenance/jobs/reservations to exercise the recurrence util)');
 }

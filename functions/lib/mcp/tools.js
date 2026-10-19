@@ -158,7 +158,9 @@ function createTools(ctx) {
       try {
         await rest.commit(token, [
           ...(claimWrite ? [claimWrite] : []),
-          updateWrite(configPath, { maxTaskNumber: maxNum }, ['maxTaskNumber'],
+          // lastTaskDocId: what the rules check to admit a plain member's bump.
+          updateWrite(configPath, { maxTaskNumber: maxNum, lastTaskDocId: `task_${newId}` },
+            ['maxTaskNumber', 'lastTaskDocId'],
             cfg ? { updateTime: cfg.updateTime } : { exists: false }),
           createWrite(path, data),
         ]);

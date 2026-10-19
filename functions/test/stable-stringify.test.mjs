@@ -31,3 +31,14 @@ test('empty/absent distinctions survive', () => {
   assert.notEqual(s({ a: [] }), s({ a: {} }));
   assert.notEqual(s({ a: '' }), s({ a: null }));
 });
+
+test('createChangeDetector: first snapshot applies, a resubscribe repeat does not, a real change does', async () => {
+  const { createChangeDetector } = await import('../../src/lib/stableStringify.js');
+  const changed = createChangeDetector();
+  assert.equal(changed({ active: true, message: 'Hi', type: 'info' }), true);
+  assert.equal(changed({ type: 'info', message: 'Hi', active: true }), false); // same data, other key order
+  assert.equal(changed({ active: true, message: 'Hi there', type: 'info' }), true);
+  assert.equal(changed(null), true);   // document deleted
+  assert.equal(changed(undefined), false); // still absent
+  assert.equal(createChangeDetector()(null), true); // first sight of an absent doc still applies
+});

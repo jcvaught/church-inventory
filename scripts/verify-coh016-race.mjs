@@ -69,7 +69,7 @@ async function clientAddTask(uid, name, i) {
     const s = await t.get(configRef);
     const maxNum = (s.data()?.maxTaskNumber || 0) + 1;
     taskNumber = 'TSK-' + String(maxNum).padStart(3, '0');
-    t.set(configRef, { maxTaskNumber: maxNum }, { merge: true });
+    t.set(configRef, { maxTaskNumber: maxNum, lastTaskDocId: ref.id }, { merge: true }); // = addTask's shape
     const now = new Date().toISOString();
     t.set(ref, {
       name, type: 'task', taskNumber, createdBy: uid, createdByName: 'Race main', status: 'Backlog', priority: 'Medium',

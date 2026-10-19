@@ -6,6 +6,29 @@ Archive of completed phases, resolved checklist items, and fixed issues. Moved h
 
 
 
+## 2026-10-19 — Plain members can create tasks again; banner editor keeps typing across a reconnect
+
+**Members (role `user`) could not create tasks at all.** `addTask` bumps `config/main.maxTaskNumber` in the same
+transaction as the create, and `config/main` update was admin/manager-only, so the commit was refused (measured over REST in
+production 2026-10-15; reproduced 2026-10-19 in the local UI with a new seeded `member@test.local`: form stayed open,
+permission-denied). Every client create path funnels through `addTask` (board New Task / quick add / paste, the recurring
+successor on Complete, Reservations and Jobs "create task"). Fix: rules function `memberTaskNumberBump` — a member may raise
+the counter by exactly 1, writing only `maxTaskNumber` + `lastTaskDocId`, when `lastTaskDocId` names a `task_…` doc that did
+not exist before the commit and does after, `type:'task'`, created by them, carrying exactly `TSK-` + the padded number.
+`addTask`, the MCP `create_task` REST commit and the race probe now write `lastTaskDocId`. Rejected: server-side numbering via a
+callable (a cold-start round trip on every create for no safety gain). Rules tests `member-task-number.test.mjs` (18 cases:
+the batch and transaction paths, first-ever number, 3–4 digit padding, the recurring 3-write commit, and every bypass —
+bump alone, ±/skip, wrong/loose number, existing or other doc, subcollection path, other config fields, stale client, malformed
+counter, inactive, outsider). `scripts/verify-coh016.cjs` step 7 is now a pass/fail check (expects ALLOW).
+Local UI on the emulator, new rules + client: member Create Task → "Task created!", task on the board.
+
+**Settings → global banner editor (owner-only)** overwrote unsaved typing when `onSnapshotResilient` resubscribed after a drop
+(the new first snapshot repeats the saved data). New `createChangeDetector()` in `src/lib/stableStringify.js` skips unchanged
+snapshots; unit-tested. Not exercised against a real reconnect (no component harness; the detector lives in the effect, which a
+resubscribe does not re-run).
+
+Reviewed by Gemini (deep) then Codex (deep), spec and diff.
+
 ## 2026-10-19 — Loading screen waits for every core listener
 
 `checkDone()` in `useFirestore`'s core-subscription effect counted callbacks, not listeners, so one listener firing twice (a busy

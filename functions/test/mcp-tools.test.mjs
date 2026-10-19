@@ -109,7 +109,12 @@ test('create_task numbers from config/main and writes the addTask shape', async 
   rest.seed(`churches/${CH}/config/main`, { maxTaskNumber: 6 });
   const r = await tools.create_task({ name: ' Order paper ', priority: 'High', checklist: [{ text: 'call', done: false }] });
   assert.equal(r.taskNumber, 'TSK-007');
-  assert.equal((await rest.getDoc('t', `churches/${CH}/config/main`)).data.maxTaskNumber, 7);
+  const cfg = (await rest.getDoc('t', `churches/${CH}/config/main`)).data;
+  assert.equal(cfg.maxTaskNumber, 7);
+  // The rules admit a plain member's bump only when it names the new task.
+  assert.equal(cfg.lastTaskDocId, `task_${r.id}`);
+  const cfgWrite = rest.commits.flat().find(w => w.update?.name?.endsWith('config/main'));
+  assert.deepEqual([...cfgWrite.updateMask.fieldPaths].sort(), ['lastTaskDocId', 'maxTaskNumber']);
 
   const t = (await rest.getDoc('t', `${WI}/task_${r.id}`)).data;
   assert.equal(t.type, 'task');

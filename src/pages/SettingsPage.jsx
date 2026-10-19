@@ -12,6 +12,7 @@ import { getPerson, makeRef, expiryStatus } from '../lib/people.js';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, getDocs, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { onSnapshotResilient } from '../utils/resilientSnapshot.js';
+import { createChangeDetector } from '../lib/stableStringify.js';
 import { enablePush, pushSupported } from '../utils/push.js';
 import { app, db, storage } from '../firebase.js';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -212,11 +213,14 @@ export function SettingsPage({ store, userProfile, subscription, user, canAdd, d
 
   // Load the current global banner into the owner editor (owner only). The
   // snapshot reflects the owner's own saves; while typing (no save yet) no
-  // snapshot fires, so in-progress edits aren't clobbered.
+  // snapshot fires, so in-progress edits aren't clobbered. A reconnect DOES
+  // re-deliver the same data, so unchanged snapshots are skipped (2026-10-19).
   useEffect(() => {
     if (!isOwner) return;
+    const changed = createChangeDetector();
     const unsub = onSnapshotResilient('settings:banner', doc(db, 'appConfig', 'banner'), (snap) => {
       const d = snap.exists() ? snap.data() : null;
+      if (!changed(d)) return;
       setBannerActive(!!d?.active);
       setBannerType(d?.type === 'maintenance' ? 'maintenance' : 'info');
       setBannerMessage(d?.message || '');

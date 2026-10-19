@@ -70,7 +70,7 @@ A fully-isolated local backend for testing UI/data changes with **zero connectio
 
 ```bash
 npm run emulators        # 1. start Auth+Firestore+Storage emulators (UI at localhost:4000)
-npm run seed:emulator    # 2. seed a grandfathered test church + sample data (login: admin@test.local / Test1234!)
+npm run seed:emulator    # 2. seed a grandfathered test church + sample data (login: admin@test.local / Test1234!; plain member: member@test.local, same password)
 npm run dev:emulator     # 3. Vite with VITE_USE_EMULATORS=true → app talks to the local emulators
 ```
 

@@ -153,10 +153,11 @@ async function outcome(fn) {
       if (open.length === 1) check('successor is due one week later', open[0].data().dueDate === '2026-11-09', open[0].data().dueDate);
     }
 
-    // 7. MEASUREMENT (not pass/fail): can a role-user member create a task? (backlog 2026-10-15)
+    // 7. A role-user member can create a task (DENIED when measured 2026-10-15; the
+    // config/main member-bump rule fixed it 2026-10-19 — firestore.rules).
     const ac = await outcome(() => T.a.create_task(schemas.createTaskSchema.parse({ name: `MCP member create ${ts}` })));
     if (ac.ok) createdTaskIds.add(ac.value.id);
-    console.log(`\nMEASUREMENT member-A (role user) create_task: ${ac.ok ? 'ALLOWED' : 'DENIED — ' + ac.msg}`);
+    check('member-A (role user) create_task allowed', ac.ok, ac.msg || '');
   } finally {
     for (const id of createdTaskIds) await db.recursiveDelete(db.doc(`churches/${E2E}/workItems/task_${id}`)).catch(() => {});
     for (const p of seeded) await db.recursiveDelete(db.doc(p)).catch(() => {});

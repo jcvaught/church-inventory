@@ -17,3 +17,17 @@ function normalize(v) {
   }
   return out;
 }
+
+// Returns a function that answers "is this snapshot different from the last one
+// seen?" (true the first time). A resubscribe after a dropped listener delivers
+// the same data again; applying it would overwrite unsaved edits (2026-10-19,
+// Settings banner editor). `data` null/undefined = the document doesn't exist.
+export function createChangeDetector() {
+  let last;
+  return (data) => {
+    const seen = data == null ? '' : stableStringify(data);
+    if (seen === last) return false;
+    last = seen;
+    return true;
+  };
+}
