@@ -80,7 +80,7 @@ Error callbacks are unchanged.
   never a raw `onSnapshot`", plus a `docs/CHANGELOG.md` entry correcting the 2026-06-11 one.
 
 ### Known, not fixing here
-`checkDone()` counts every callback, not one per listener, so `loading` can clear before every **(Fixed 2026-10-19: per-label Set.)**
+**(Fixed 2026-10-19: per-label Set; see CHANGELOG.)** `checkDone()` counts every callback, not one per listener, so `loading` can clear before every
 listener has delivered. That's existing behaviour. A resubscribe adds more counts, which can only make it clear sooner,
 never hang it. Noted for the backlog.
 
