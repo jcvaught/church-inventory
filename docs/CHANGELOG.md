@@ -21,6 +21,8 @@ the batch and transaction paths, first-ever number, 3–4 digit padding, the rec
 bump alone, ±/skip, wrong/loose number, existing or other doc, subcollection path, other config fields, stale client, malformed
 counter, inactive, outsider). `scripts/verify-coh016.cjs` step 7 is now a pass/fail check (expects ALLOW).
 Local UI on the emulator, new rules + client: member Create Task → "Task created!", task on the board.
+**Production (2026-10-19):** rules deployed before the client push; `scripts/verify-coh016.cjs` 27/27 against the live rules, incl.
+"member-A (role user) create_task allowed" (DENIED on 2026-10-15). `functions:mcp` redeployed; no-key POST → 401 JSON (invoker intact).
 
 **Settings → global banner editor (owner-only)** overwrote unsaved typing when `onSnapshotResilient` resubscribed after a drop
 (the new first snapshot repeats the saved data). New `createChangeDetector()` in `src/lib/stableStringify.js` skips unchanged
