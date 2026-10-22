@@ -22,7 +22,7 @@ replace `docs/backlog.md`, which remains the canonical product backlog.
 ## Active Tasks
 
 ### COH-016 — Personal MCP server so ChatGPT can work John's tasks
-- Status: **Deployed + verified 2026-10-15** — functions + rules live, signBlob IAM granted (owner-approved), live MCP round trip with a temporary key passed (44 tasks listed; reassign / bad status refused at the MCP layer). Remaining: John creates his key in Settings and does one real ChatGPT desktop round trip. Owner: Claude (Sonnet 5.5 built; Codex reviewed plan ×2 and diff ×3).
+- Status: **Deployed + verified 2026-10-15** — functions + rules live, signBlob IAM granted (owner-approved), live MCP round trip with a temporary key passed (44 tasks listed; reassign / bad status refused at the MCP layer). **In daily use:** John's real ChatGPT desktop round trips 2026-10-19/20, then broke when a reboot wiped the `launchctl setenv` key; fixed 2026-10-22 with Keychain + LaunchAgent (see functions/CLAUDE.md), round trip re-confirmed in mcp logs. Live key `00a7b355…` expires 2027-01-20 (calendar reminder 01-13). Open: John revokes the orphaned 10-15 key `ded1d5a1…`. Owner: Claude (Sonnet 5.5 built; Codex reviewed plan ×2 and diff ×3).
 - Branch: `claude/coh-016-chatgpt-mcp`. Plan: `docs/COH-016-CHATGPT-MCP-PLAN-2026-10-15.md`.
 - Plan review: Codex ×2 (REWORK, REWORK); every finding verified against code and folded in. Diff review ×3 (REWORK each): atomic recurrence, honest list cap, rate-limit boundary fixed; transaction→precondition rewrite after production refused REST transactions; final round settled by production measurement (`verify-coh016.cjs` 26/26, `verify-coh016-race.mjs` 8/8 ×2).
 - Acceptance: plan §8 tests green; §9 production verification against `e2e-test-church`;
